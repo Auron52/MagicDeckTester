@@ -772,6 +772,70 @@ public:
     // MTG_M2_FIXPOINT=0 (explicitly set) hard-disables an opt-in for A/B.
     virtual int M2FixpointOptIn() const { return 0; }
 
+    // SolveChargeWeightOptIn -- the per-deck ADOPTION hook for charging the GREEDY SUBSET WALK
+    // against the search budget (MTG_SOLVE_CHARGE / MTG_SOLVE_CHARGE_W; GreedyChargeGuard in
+    // TurnSolver.cpp, resolver SolveChargeWeightFor in DecisionProviders.h). 0 = no opt-in, the
+    // default, byte-identical to the lever not existing. N > 0 = charge one budget unit per N
+    // subset visits on this deck.
+    //
+    // WHY THIS IS PER DECK and not a fleet-wide default. The budget counts one unit per simulated
+    // turn-step and the walk inside SolveUncached charged nothing, so a decision's real spend is
+    // `nodes + visits/N` against an allowance calibrated on nodes alone. How much that matters is a
+    // property of the DECK's cost shape, and the 48,384-game sweep of 2026-10-01
+    // (docs/design/snow-cost-2026-10-01.md §8.4) measured the two ends of it:
+    //   * Snow is WALK-dominated -- one of its decisions builds 20 M subsets against a 9,000-unit
+    //     budget -- so a weight prices the thing that actually costs: 0.74x core-ms at N=16 with the
+    //     quality column a null at the metric's quantum on two of its three cells.
+    //   * the combo searches (hinata, melira, minotaur) are NODE-dominated: a tight weight takes
+    //     their budget away from the nodes that find the kill and gives back almost no CPU --
+    //     hinata lost 11 games per 128 at N=1 for 0.995x, i.e. pure loss.
+    // A single fleet-wide N therefore buys one deck's speed with another's play, which is why this
+    // is an opt-in hook rather than a `SearchBudget` constant. Raising the BUDGET instead does not
+    // substitute: it relaxes the node term too, so it buys node-dominated decks more search (a
+    // uniform 4x measured 1.21-1.55x DEARER on every deck but Snow).
+    //
+    // The env lever stays the experiment control, same convention as M2FixpointOptIn above:
+    // MTG_SOLVE_CHARGE_W set nonzero overrides the hook, and a per-job `"flags":
+    // {"MTG_SOLVE_CHARGE": false}` hard-disables an opt-in so both arms of an A/B share one pool.
+    virtual int SolveChargeWeightOptIn() const { return 0; }
+
+    // FoldSearchOdometerOptIn -- the per-deck ADOPTION hook for applying the CANONICAL-PREFIX FOLD
+    // to the SEARCH's own subset walk (MTG_FOLD_SEARCH_ODO; FoldSearchOdometerOn in TurnSolver.cpp,
+    // resolver FoldSearchOdometerFor below). false = no opt-in, the default, byte-identical.
+    //
+    // THE DEFECT IT CLOSES. `EnumeratePlans` and `SolveUncached` each keep a private copy of the
+    // subset walk. The greedy copy declares its selections "came off an odometer", so the fold --
+    // the largest single filter in the walk -- applies there. The search copy never set the flag,
+    // so the deduplication everyone assumes is collapsing Snow's four interchangeable Scrying
+    // Sheets has never once been applied where the width is actually counted. Measured on HEAD,
+    // snow seed 910045 d3/b10:
+    //     bf_foldsite greedy calls=994,616 from_odometer=994,616 (100.0%)
+    //     bf_foldsite search calls=710,080 from_odometer=144,040 ( 20.3%)
+    //     bf_width NON-BP raw=152,424 distinct_srcblind=98,834  copyaxis_share=0.352
+    // i.e. 35.2% of base plans differ from another base plan ONLY in which interchangeable
+    // permanent they touch. Armed: search from_odometer 86.3%, base plans 152,424 -> 64,364,
+    // copyaxis_share -> EXACTLY 0. At the heaviest turn's root the base-plan list goes 172 scanned
+    // / 136 distinct (1.26x) -> 111 / 111 (1.00x) and tails run 111 -> 73.
+    //
+    // WHY IT IS PER DECK. The fold needs same-named interchangeable permanents on the board for
+    // the search to be enumerating redundantly, which is a property of the DECK. The 36,000-game
+    // fleet screen of 2026-10-01 (26 decks, d3/b10, 400 games/arm/cell) found it INERT on every
+    // deck but Snow -- `units` EXACTLY 1.000 and every digest unmoved -- bar kitty (0.997) and
+    // selesnya (0.988), both untaken. So a fleet-wide default would move GT on three decks to buy
+    // the saving on one.
+    //
+    // WHY IT PAYS ONLY NOW, when snow-intractable-games.md priced it at 1.018x SLOWER: the greedy
+    // walk used to be UNCHARGED, so removing visits lowered wall per unit but freed no budget and
+    // the cell spent its ceiling regardless. With MTG_SOLVE_CHARGE adopted (SolveChargeWeightOptIn
+    // above) a removed visit is a unit never spent. The 2x2 that proves it is the mechanism rather
+    // than drift, 8,000 games: fold core-ms 0.923 charged vs 0.977 uncharged.
+    //
+    // SOUNDNESS IS VERIFIED, NOT ARGUED. The fold deletes a line outright when its canonical twin
+    // is not enumerable (knights gi497 lost a turn-4 kill that way), so adoption is gated on
+    // MTG_FOLD_VERIFY, which builds the twin of every rejection and counts the unrecoverable ones:
+    // recoverable=210,097 UNRECOVERABLE=0 on this engine.
+    virtual bool FoldSearchOdometerOptIn() const { return false; }
+
     // GradesNoWinLeaf -- DEFAULT ON. When the rollout reaches the horizon with no win, publish the
     // resulting position's OPPONENT LIFE as the tie-break instead of letting every hopeless line
     // score the identical `max_turns + 1` and fall through to `plan.value`. See
@@ -1052,6 +1116,27 @@ public:
     // a Cartesian explosion. Human play picks off the board from the full rules-legal set.
     virtual int LifegainCounterTarget(const GameState& s, int controller) const
     { (void)s; (void)controller; return -1; }
+
+    // LifegainCountersSpendCount -- Nykthos Paragon's "you MAY put that many +1/+1 counters on each
+    // creature you control. Do this only once each turn": HOW MANY of the unused copies to spend on
+    // THIS life-gain event, 0..copies_unused. Declining does not consume a use (Scryfall ruling 1),
+    // so banking a small gain's use for a bigger gain later in the same turn is a real line -- this
+    // is a genuine decision, not a dominated "may".
+    // Decided ONCE PER EVENT, not once per copy: every unused copy puts the same `amount` on the
+    // same recipient set and nothing can happen between two of them, so WHICH copies are spent is
+    // unobservable and only the COUNT is a decision.
+    // A RESOLUTION heuristic returning ONE pick, deliberately NOT a searched branch -- a lifegain
+    // deck fires this several times a turn and a per-event spend axis is a Cartesian explosion, the
+    // same reason LifegainCounterTarget above is one pick.
+    // CONTRACT, exactly LifegainCounterTarget's: NEGATIVE = no override, use the generic default
+    // (DefaultLifegainCountersSpendCount in SpellEffects.h -- greedy, spend them all). `0` is a real
+    // answer meaning DECLINE this event, which does NOT consume a use -- so the two must not be
+    // conflated, and a provider that means "no opinion" must return -1 rather than 0.
+    // The generic default being the PERMISSIVE end keeps the "only a deck provider may narrow the
+    // search" invariant; any narrowing belongs in an override and owes a measurement.
+    virtual int LifegainCountersSpendCount(const GameState& s, int controller,
+                                           int amount, int copies_unused) const
+    { (void)s; (void)controller; (void)amount; (void)copies_unused; return -1; }
 
     // SearchesWalkerCastActivation -- emit "cast this planeswalker AND activate ability #k this
     // turn" as extra CastFromHand plan variants (Action::loyalty_ability), applied right after the
@@ -2107,6 +2192,69 @@ public:
                 legends.push_back(nm);
             }
             out.push_back(nm);
+        }
+        return out;
+    }
+
+    // GenesisWavePutPicks -- Genesis Wave's "you may put ANY NUMBER of permanent cards with mana
+    // value X or less from among them onto the battlefield" (reveal_x_put_permanents).
+    //
+    // `candidates` = the revealed cards that are ALREADY LEGAL (permanent card, mana value <= X),
+    // in REVEAL ORDER, one entry per copy -- the caller (PerformGenesisWave) does the legality
+    // filter, so this hook only decides WHICH of the legal ones to take. Returns indices into
+    // `candidates`. `x` is the chosen X, for a provider that wants to reason about the cap.
+    //
+    // NOTE the cards are LIBRARY placeholders with EMPTY type masks, so every type / mana-value
+    // test here MUST go through LookupCached (the ExileTop trap) -- `lc.IsCreature()` is silently
+    // false for all of them.
+    //
+    // "Any number" is a real choice, NOT "all", and it is a DECISION rather than a searched axis:
+    // a searched subset is 2^X mutually-exclusive plan variants, and Turntimber Symbiosis' SINGLE
+    // named put already measured as this engine's #1 branching driver. X stays the only searched
+    // axis (the {X} cast branch), which is what keeps a card castable at X = 12 finite.
+    //
+    // DEFAULT (a deliberate, disclosed rule, the PutCreaturesFromLibraryPicks precedent): take
+    // every legal revealed permanent EXCEPT
+    //   (a) a second copy of a LEGENDARY name we already control or have already selected this
+    //       resolution -- the legend rule bins one of them at once (CR 704.5j), so the put is a
+    //       pure loss (the card would be better left in the graveyard than exiled from choice);
+    //   (b) a creature whose MANDATORY enter-trigger destroys one of OUR OWN permanents
+    //       (etb_destroy_artifact_enchantment_land always -- the passive opponent controls none;
+    //       etb_destroy_nonartifact_nonblack only when the opponent offers no legal victim).
+    // A Karoo (etb_bounce_land) IS taken: worst case its mandatory bounce returns itself to hand,
+    // which still beats the graveyard. Everything else is weakly better on the battlefield than
+    // milled -- in a goldfish more bodies attack, more lands cast, and nothing here prices a
+    // thinner library. Human play picks freely, with this subset PRESELECTED (never topped back up).
+    virtual std::vector<int> GenesisWavePutPicks(const GameState& s, int controller,
+                                                 const std::vector<Card>& candidates, int x) const
+    {
+        (void)x;
+        std::vector<std::string> legends;
+        bool opp_victim = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index == controller)
+            {
+                if (q.card.HasSupertype(Supertype::Legendary)) { legends.push_back(q.card.m_name.str()); }
+            }
+            else if (q.card.IsCreature() && !q.card.HasType(CardType::Artifact)
+                     && !q.card.HasColor(Color::Black)) { opp_victim = true; }
+        }
+        std::vector<int> out;
+        out.reserve(candidates.size());
+        for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(candidates[static_cast<std::size_t>(i)]);
+            if (d == nullptr) { continue; }
+            if (d->params.etb_destroy_artifact_enchantment_land) { continue; }
+            if (d->params.etb_destroy_nonartifact_nonblack && !opp_victim) { continue; }
+            if (d->card.HasSupertype(Supertype::Legendary))
+            {
+                const std::string nm = candidates[static_cast<std::size_t>(i)].m_name.str();
+                if (std::find(legends.begin(), legends.end(), nm) != legends.end()) { continue; }
+                legends.push_back(nm);
+            }
+            out.push_back(i);
         }
         return out;
     }

@@ -34,6 +34,21 @@ inline bool EnvSet(const char* key)
     return std::getenv(key) != nullptr;
 }
 
+// PATH-valued flag: the variable's value, or nullptr when unset/empty. Not a truthiness reader --
+// a path flag has no "=0 means off" form, its value IS the destination.
+//
+// It is a shared helper rather than a local getenv at each site because a path flag can gate more
+// than the code that writes the file: MTG_TURN_CENSUS (see src/ai/TurnCensus.h) also has to force
+// the counter gates its columns read, and those live in other translation units. Two independent
+// "is the census on?" tests are two things that can disagree, and the disagreement's signature is
+// a perfectly well-formed table of zeros -- the exact defect
+// `census-flag-needs-its-printer-flag` records.
+inline const char* EnvPath(const char* key)
+{
+    const char* e = std::getenv(key);
+    return (e != nullptr && *e != '\0') ? e : nullptr;
+}
+
 // Integer knob: the variable's value, or dflt when unset/empty.
 inline int EnvInt(const char* key, int dflt)
 {

@@ -786,6 +786,21 @@ using AttackModeChooser = std::function<int(const GameState& state, int controll
                                             const std::string& source, int heuristic_default)>;
 extern thread_local AttackModeChooser* g_play_attack_mode_chooser;
 
+// ---- Human-play "spend the once-each-turn team wave?" chooser (Nykthos Paragon) --------------
+// "Whenever you gain life, you MAY put that many +1/+1 counters on each creature you control. Do
+// this only once each turn." Asked ONCE per life-gain EVENT (not once per copy -- which copies are
+// spent is unobservable, only the count is a decision), only while at least one unused copy is out.
+// `source` names the triggering card, `amount` is the life this event gained, `copies_unused` is how
+// many uses are available, and `heuristic_count` is what the provider would spend (greedy = all).
+// Returns 0..copies_unused; anything outside that range keeps the heuristic. DECLINING (0) does not
+// consume a use, so banking it for a bigger gain later in the turn is expressible.
+// Nulled by RevealLogPause for every search/rollout scope, so the autonomous engine keeps the
+// provider's count and stays byte-identical.
+using LifegainCountersChooser = std::function<int(const GameState& state, int controller,
+                                                 const std::string& source, int amount,
+                                                 int copies_unused, int heuristic_count)>;
+extern thread_local LifegainCountersChooser* g_play_lifegain_counters_chooser;
+
 // ---- Human-play ETB tutor chooser (Goblin Matron entering OFF a cast) ----------------------
 // A tutor resolved from a CAST already has its target decided: the search enumerates one plan
 // variant per candidate, so the human picks it in the viewer's variant dialog and PerformTutor
@@ -934,6 +949,7 @@ inline bool AllPlayHooksNull()
         && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr
         && g_play_loyalty_chooser == nullptr
         && g_play_attack_mode_chooser == nullptr
+        && g_play_lifegain_counters_chooser == nullptr
         && g_play_fling_chooser == nullptr;
 }
 
@@ -979,6 +995,7 @@ struct RevealLogPause
     FreeCastChooser* saved_freecastchooser;
     DemonstrateChooser* saved_demochooser = nullptr;
     AttackModeChooser* saved_atkmodechooser = nullptr;
+    LifegainCountersChooser* saved_lgcchooser = nullptr;
     BounceChooser* saved_flingchooser = nullptr;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
@@ -1030,6 +1047,7 @@ struct RevealLogPause
         saved_freecastchooser = g_play_free_cast_chooser;
         saved_demochooser = g_play_demonstrate_chooser;
         saved_atkmodechooser = g_play_attack_mode_chooser;
+        saved_lgcchooser = g_play_lifegain_counters_chooser;
         saved_flingchooser = g_play_fling_chooser;
         saved_lpchooser = g_play_lightpaws_chooser;
         saved_fbchooser = g_play_firebreathe_chooser;
@@ -1054,6 +1072,7 @@ struct RevealLogPause
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
         g_play_demonstrate_chooser = nullptr;
         g_play_attack_mode_chooser = nullptr;
+        g_play_lifegain_counters_chooser = nullptr;
         g_play_fling_chooser = nullptr;
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
@@ -1082,6 +1101,7 @@ struct RevealLogPause
                         g_play_free_cast_chooser = saved_freecastchooser;
                         g_play_demonstrate_chooser = saved_demochooser;
                         g_play_attack_mode_chooser = saved_atkmodechooser;
+                        g_play_lifegain_counters_chooser = saved_lgcchooser;
                         g_play_fling_chooser = saved_flingchooser;
                         g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
@@ -1131,6 +1151,7 @@ struct ComboOffApplyPause
     LightPawsChooser* c20; FirebreatheChooser* c21; StorageHoldChooser* c22; TutorChooser* c23;
     BounceChooser* c24; FirebreatheChooser* c25; TapPrefChooser* c26; LoyaltyTargetChooser* c27;
     AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
+    LifegainCountersChooser* c31;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1150,6 +1171,7 @@ struct ComboOffApplyPause
         c28 = g_play_attack_mode_chooser;
         c29 = g_play_fling_chooser;
         c30 = g_play_treasurify_chooser;
+        c31 = g_play_lifegain_counters_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1167,6 +1189,7 @@ struct ComboOffApplyPause
         g_play_attack_mode_chooser = nullptr;
         g_play_fling_chooser = nullptr;
         g_play_treasurify_chooser = nullptr;
+        g_play_lifegain_counters_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1187,6 +1210,7 @@ struct ComboOffApplyPause
         g_play_attack_mode_chooser = c28;
         g_play_fling_chooser = c29;
         g_play_treasurify_chooser = c30;
+        g_play_lifegain_counters_chooser = c31;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;
@@ -1241,6 +1265,58 @@ inline bool HumanPlayActive()
 bool WildPipAuditOn();
 extern std::atomic<long> g_ritual_uncolored_float;   // rituals floating mana with no colour
 extern std::atomic<long> g_wild_prepay_excess;       // prepaid wild beyond the batch's generic pips
+
+// ---- DROPPED trailing-ACTIVATION audit (MEASUREMENT ONLY; MTG_ACT_DROP_AUDIT) -----------------
+// The activation twin of the affordability audit above. An enumerated plan can carry a trailing
+// activation the trailing pass then silently declines to make, and unlike a dropped CAST there is no
+// `drops` disclosure and no log line for it (Plan::would_drop is populated only in the cast-ORDERING
+// expansion, so an unaffordable ACTIVATION is structurally unlabelled). It is therefore invisible --
+// which is how a 2-of land's entire payoff clause went unreachable on SelesnyaLifegain for a whole
+// onboarding. FOUR reasons, and only TWO are defects -- splitting them is what makes the number
+// honest, because the first cut read 28% on Snow and most of that was legitimate:
+//   tapped  (DEFECT) PermAbilitySourceLive failed because a cast payment had already tapped the
+//           source for MANA, nullifying the {T} half of its own cost. Source ends TAPPED.
+//   unpaid  (DEFECT) the {T} half was paid, then the mana half failed and rolled back -- a pip
+//           (usually coloured) the casts spent and the activation still needed. Ends UNTAPPED.
+//   gone    the source left the battlefield before the trailing pass (sacrificed to an earlier cost,
+//           bounced, blinked). It was never activatable here. NOT a defect.
+//   noTap   summoning-sick (CR 302.6) or activation-restricted (Bilbo's life gate). NOT a defect.
+// The two defects are enumeration-vs-execution divergences, not mana shortages: in every
+// SelesnyaLifegain case the turn was jointly payable and the engine simply could not find the
+// allocation. Level 2 adds one line per drop (turn, card, cost, reason). Purely additive -- every
+// digest is byte-identical whether or not the audit is on, which is what lets it run over a tier.
+//     MTG_ACT_DROP_AUDIT=1 ./build/Release/mtg <deck> ... 2>&1 | grep ACT_DROP
+bool ActDropAuditOn();
+int  ActDropAuditLevel();
+extern std::atomic<long> g_act_drop_tapped;      // DEFECT: source already tapped for mana
+extern std::atomic<long> g_act_drop_unpaid;      // DEFECT: {T} paid, mana half failed, rolled back
+extern std::atomic<long> g_act_drop_gone;        // source had left the battlefield
+extern std::atomic<long> g_act_drop_notap;       // summoning-sick / activation-restricted
+extern std::atomic<long> g_act_fired;            // activations that DID resolve (the denominator)
+// reason: 0 = gone, 1 = tapped, 2 = noTap (PermAbilityDeadReason's own encoding), 3 = unpaid -- the
+// mana-half failure, which that classifier never sees. `cost_mv` / `turn` feed the level-2 line.
+void NoteActDrop(int reason, const char* card, int turn, int cost_mv);
+// PER-DROP SINK, the twin of g_play_dropped_cast_sink (which captures dropped CASTS). When non-null
+// NoteActDrop appends "<card> <reason>" to it, so a caller that applies one plan on a copy of the
+// state can report exactly WHICH activations that plan silently loses -- the question the aggregate
+// counters above cannot answer. Null everywhere by default; armed only by the decision dump
+// (MTG_PLAN_DUMP, src/ai/TurnSolver.cpp). thread_local because games play concurrently.
+extern thread_local std::vector<std::string>* g_act_drop_sink;
+// COST side of the same audit. Closing the hole is not free: a non-zero reserve mask buys a HELD
+// payment attempt, and when that attempt fails the contract re-solves unrestricted -- two DFS solves
+// plus two snapshot/restores where there was one. On a deck whose cost IS payment call volume (Snow)
+// that doubling is the whole price, so the diagnosis needs the rate, not a guess.
+//   pay_calls  payments reaching the reserve-mask rung of TapForCostSharedImpl (the denominator)
+//   hold_mask  ActLineHoldMask returned non-zero (the lever actually held something)
+//   hold_solo  ...and it was the ONLY contributor to rmask, so the held attempt exists because of it
+//   hold_retry a held attempt failed while the lever was holding -> one extra solve
+//   solo_retry ...and the lever was rmask's sole contributor: an extra solve it is wholly answerable
+//              for. solo_retry / pay_calls is the lever's added-solve rate.
+extern std::atomic<long> g_act_pay_calls;
+extern std::atomic<long> g_act_hold_mask;
+extern std::atomic<long> g_act_hold_solo;
+extern std::atomic<long> g_act_hold_retry;
+extern std::atomic<long> g_act_solo_retry;
 
 bool AffordAuditOn();
 extern std::atomic<long> g_afford_rollout_fails;

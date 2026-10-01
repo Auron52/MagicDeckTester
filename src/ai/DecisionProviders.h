@@ -1577,6 +1577,43 @@ public:
     { return { CertState::Implemented, "ProvenWinlessThisTurn is overridden below" }; }
     const char* Name() const override { return "Snow"; }
     bool GradesNoWinLeaf() const override { return false; }
+    // CHARGE THE GREEDY WALK, one unit per 16 subset visits (see
+    // DecisionProvider::SolveChargeWeightOptIn, and docs/design/snow-cost-2026-10-01.md for the
+    // measurements). This deck is why the lever exists: ~45% of its CPU is mana payment, there is
+    // one payment per scored subset, and the walk that scores them was not billed against the
+    // budget at all -- so 63.6% of its decisions ran past their allowance and 36.4% ran past 10x it.
+    //
+    // 16 is chosen from the held-out sweep (800 games per arm per cell, seeds 1305000+1000i,
+    // bottoming pinned off on both arms), which prices the whole exchange rate:
+    //
+    //   N     core-ms vs uncharged      quality cost (avg winning turn)
+    //   1     0.476x                    +0.0137  = +33 games of 2400
+    //   4     0.575x                    +0.0092  = +22 games
+    //   8     0.662x                    +0.0054  = +13 games
+    //   16    0.742x                    +0.0012  = +3 games  <-- one quantum; d2 and d3 are 0
+    //
+    // i.e. the trade is real and monotone in N at every weight -- a 128-game read of this said
+    // "zero cost at every N", which was the metric's own quantum hiding 33 games. 16 is the point
+    // where the cost column reaches that quantum while still paying for the completeness fix
+    // (MTG_ACT_LINE_HOLD, re-measured at 1.288x): 1.288 x 0.742 = 0.956, so Snow ends up faster
+    // than it was BEFORE that fix landed rather than 29% slower. Going to 8 or 4 buys a further
+    // 8-17pp of CPU for 10-19 more games in 2400, which is a judgement about this deck's
+    // speed-vs-play balance and belongs to the user, not to this constant.
+    int SolveChargeWeightOptIn() const override { return 16; }
+    // ...and the lever that COMPOSES with it: the canonical-prefix fold on the search's own subset
+    // walk. See DecisionProvider::FoldSearchOdometerOptIn for the defect (35.2% of this deck's base
+    // plans differ from another base plan only in which interchangeable Scrying Sheets / Frost
+    // Augur they touch, and the fold that exists to collapse exactly that reached 20.3% of the
+    // search's selections), and for why the charge is what finally makes it pay.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, 3,200 games over d3/b10 + d5/b20 against a null arm
+    // that read 1.002 core-ms / units 1.000: core-ms 0.923, units 0.916, quality a NULL -- the two
+    // independent 1,600-game samples disagree in sign (-6.0 and +2.0 games), which is the metric's
+    // quantum, not an effect. On the HEAVY TAIL the census named (12 worst games, paired per seed)
+    // it is core-ms 0.854 / units 0.757, with units down on 12 of 12 and the worst game 0.682 while
+    // winning a turn SOONER -- the tail being the population the value-leaf and mulligan
+    // generations actually pay for. Lossless: MTG_FOLD_VERIFY recoverable=210,097 UNRECOVERABLE=0.
+    bool FoldSearchOdometerOptIn() const override { return true; }
     // Scrying Sheets holds its tap for the {1}{S} look ability while the board can still PAY that
     // ability without it -- the plain ladder ranks a {C}-only land 5 ("spend it FIRST"), which is
     // exactly backwards for a land whose tap has a second, better use. USER 2026-09-08, found while
@@ -1925,6 +1962,55 @@ public:
     // later enter this turn; cast after them it catches none. MTG_CRITTER_WATCHER_ORDER=0 restores
     // Generic for the A/B.
     int CastOrderRank(const GameState&, const CardDefinition&) const override;
+};
+
+// SelesnyaLifegain (GW "whenever you gain life" ramp-into-fatties: Wellwisher / Blighted Steppe /
+// Blossoming Sands / Feed the Clan / Verdant Sun's Avatar generating the life, Ageless Entity and
+// Nykthos Paragon converting it into +1/+1 counters, Accomplished Alchemist converting it into
+// mana, Genesis Wave and Craterhoof Behemoth closing). Exists FIRST for routing correctness, and it
+// had to clear TWO existing signatures, not one:
+//   * `stompy` -- Craterhoef's etb_team_pump_per_creature AND Elvish Archdruid's creature-side
+//     mana_per_creature_subtype EACH set it alone, so this deck rode StompyProvider from the moment
+//     its first card was implemented, inheriting another deck's cast order and cleanup-discard
+//     buckets. Measured, not theorised: provider_audit reported Stompy for this decklist.
+//   * `critter` -- the mono-white lifegain deck's signature, which a naive modelling of Ageless
+//     Entity ("put that many +1/+1 counters on this creature") or Nykthos Paragon ("...on each
+//     creature you control") would have set via lifegain_self_counters /
+//     lifegain_each_own_creature_counters. Avoided at the SOURCE as well as here: both cards got
+//     their own explicit `*_that_many` params instead of the legacy ints, so the critter signature
+//     is never set in the first place. Belt and braces, because the two mitigations fail
+//     differently -- a future card reaching for the legacy int would be caught by this branch.
+// That is the archetype-NEUTRAL-param misroute class, now on its eighth and ninth occurrences
+// (Mirrorwing, StompySurprise, Minotaur, Dragons, Melira Pod, Pirates, Knights, + these two).
+//
+// Signature = OR-ed across NINE params from EIGHT different cards, every one new in the 2026-09-29
+// onboarding and carried by no other card in cards.json, so no single deckbuilding swap can
+// silently lose the routing. Deliberately EXCLUDES the archetype-neutral terms this deck also
+// carries: own_creature_enters_lifegain_toughness and creature_enters_includes_self (Righteous
+// Valkyrie and Vaultborn Tyrant already carry them -- keying on those would capture Angels),
+// etb_lifegain / etb_bounce_land (gain-lands and Karoos are staples of many decks),
+// mana_per_creature_subtype / mana_per_creature_count_all (Elf-ramp staples -- that is precisely
+// the term that mis-captured this deck into Stompy), and etb_team_pump_per_creature (Craterhoof is
+// a green finisher any list may add -- the Lightning Greaves exclusion).
+//
+// Holds NO judgement hook: an EMPTY DeckProvider derivation, so every heuristic is byte-for-byte
+// the Generic one and this is play-neutral by construction (verified by smoke play-changed=0).
+// What it adds is a place for a proof and a name in the audit. Deriving from CritterLifegainProvider
+// or StompyProvider was considered and REJECTED -- the skill forbids deriving from a thematically
+// related deck's provider, because that imports unmeasured narrowing, which is the very thing this
+// class exists to undo. Candidates for its first real hooks, all deliberately left UNMEASURED for
+// now and disclosed in Stage 6a: Accomplished Alchemist's ManaSourceRank (tap the life-scaled dork
+// LAST, since its yield can only grow within the turn), a CastOrderRank putting the lifegain
+// ENGINE (Verdant Sun's Avatar) before the PAYOFFS (Ageless Entity / Nykthos Paragon) the way
+// CritterLifegainProvider's measured order does, LifegainCountersSpendCount (the Paragon's
+// once-each-turn "you may" -- the greedy default's one systematic loss is a 1-life gain-land
+// eating all four uses on a big-gain turn), and Genesis Wave's pass-2 trigger ORDER.
+class SelesnyaLifegainProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? Note this deck answers NO to the second half -- Craterhoof Behemoth grants itself haste and Wirewood Lodge untaps an Elf -- so a winless-this-turn bound must price a same-turn Craterhoof (team +X/+X where X is the creature count) and the Lodge's extra activation. See SnowProvider/FungusProvider for the worked shape." }; }
+    const char* Name() const override { return "SelesnyaLifegain"; }
 };
 
 // Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
@@ -2292,6 +2378,34 @@ inline int M2FixModeFor(const GameState& s)
     static const int env_mode = (e != nullptr && *e != '\0') ? std::atoi(e) : -1;   // -1 unset
     if (env_mode >= 0) { return env_mode; }
     return ResolveProvider(s).M2FixpointOptIn();
+}
+
+// Greedy-walk charge weight for THIS deck, in VISITS PER CHARGED UNIT; 0 = this deck does not
+// charge (see DecisionProvider::SolveChargeWeightOptIn for why it is per deck). Precedence matches
+// M2FixModeFor: an EXPLICITLY SET env value wins (the A/B control, and =0 hard-disables an opt-in),
+// then the provider's adopted opt-in. The per-JOB numeric override lives one layer up, in
+// TurnSolver.cpp's GreedyChargeWeight, because it reads valuearm::t_arm -- which this header does
+// not see. Env unset + no opt-in = 0 = byte-identical off.
+inline int SolveChargeWeightFor(const GameState& s)
+{
+    static const char* e = std::getenv("MTG_SOLVE_CHARGE_W");
+    static const int env_w = (e != nullptr && *e != '\0') ? std::atoi(e) : -1;   // -1 unset
+    if (env_w >= 0) { return env_w; }
+    return ResolveProvider(s).SolveChargeWeightOptIn();
+}
+
+// Canonical-prefix fold on the SEARCH's own subset walk for THIS deck (see
+// DecisionProvider::FoldSearchOdometerOptIn for the measurement and why it is per deck).
+// Precedence matches the two resolvers above: an EXPLICITLY SET env value wins (the A/B control,
+// and "=0" hard-disables an opt-in per the =0-means-off convention), then the provider's adopted
+// opt-in. The per-JOB heurarm override lives one layer up in TurnSolver.cpp's
+// FoldSearchOdometerOn, so a pooled A/B can pin either arm. Env unset + no opt-in = false.
+inline bool FoldSearchOdometerFor(const GameState& s)
+{
+    static const char* e = std::getenv("MTG_FOLD_SEARCH_ODO");
+    static const int env_v = (e != nullptr && *e != '\0') ? std::atoi(e) : -1;   // -1 unset
+    if (env_v >= 0) { return env_v != 0; }
+    return ResolveProvider(s).FoldSearchOdometerOptIn();
 }
 
 // Searched dork attack/hold contested test (MTG_DORK_ATK_SEARCH; DecisionProviders.cpp).

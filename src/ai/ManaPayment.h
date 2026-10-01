@@ -384,6 +384,13 @@ extern thread_local std::vector<int> g_plan_reserved_sources;
 // in scope and PlanTraits::act_c_pips > 0). Defined in ManaPayment.cpp; also a prepay-ladder rung.
 std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost);
 
+// ACTIVATION LINE HOLD mask (MTG_ACT_LINE_HOLD): the untapped {T} SOURCES and COLOURED providers the
+// current plan's own trailing activations still need beyond `cost` and the float (0 unless the lever
+// is on, a plan apply is in scope and PlanTraits carries an activation). Defined in ManaPayment.cpp;
+// also a rung of the BatchPrepayMainCasts ladder, which is what makes it cover the whole-turn
+// pre-payment as well as the per-cast greedy. See ActLineHoldEnabled for the measured drop rates.
+std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost);
+
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
 // value on scope exit (nested plan applications -- a rollout inside an apply -- restore correctly).
 // Release() drops the reservation early, which the unlock hoist calls the moment the dork is hasted:

@@ -367,6 +367,28 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // "no such land in this plan" and 0 is the ordinary decline, and both print as they always
         // did, so every deck without such a land is byte-identical.
         if (plan.rad_mode == 1) { os << " (enters tapped, +rad)"; }
+        // MDFC LAND FACE (Branchloft // Boulderloft Pathway) -- the SAME defect the rad_mode note
+        // above describes, and found the same way: a Stage 5d claude-play sweep in which SEVEN
+        // independent player agents each reported the Pathway's two faces as byte-identical menu
+        // entries. The axis is real and searched (Plan::land_face, TurnSolver.h) and both faces
+        // resolve correctly -- SummarizePlan simply never read it, and `land_to_play` holds the
+        // FRONT name for both faces, so picking the wrong twin silently commits the manabase to the
+        // wrong COLOUR. On this deck that is a live trap rather than a cosmetic one: 4 of 17 lands
+        // are Pathways, the commitment is irreversible, and the only white costs in the list are
+        // Nykthos Paragon's {4}{W}{W} and Blighted Steppe's {3}{W}.
+        //
+        // Only the BACK face is annotated: in every zone but the battlefield a double-faced card IS
+        // its front face (CR 712.2), so a front-face plan reads exactly as it always did and every
+        // deck without an MDFC land is byte-identical. The browser viewer was never affected -- it
+        // routes land_face through CheckLine as an explicit `face` sub-choice -- so this fixes the
+        // `--claude-play` plan menu specifically, which is the surface the sweeps read.
+        if (plan.land_face == "back")
+        {
+            const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
+            if (ld != nullptr && !ld->params.mdfc_back_name.empty())
+            { os << " -> " << ld->params.mdfc_back_name << " (back face)"; }
+            else { os << " (back face)"; }
+        }
         os << "; ";
     }
     else if (plan.land_decided)                           { os << "land=none; "; }
@@ -676,6 +698,16 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + ": animate (becomes a creature)"; break;
             case Action::Kind::TapForTokenPay:
                 tag = a.card_name + ": tap for a token"; break;
+            // UntapCreature (Wirewood Lodge: "{G}, {T}: Untap target Elf") was LEFT BEHIND when the
+            // two sinks above were given cases -- it rendered as "Wirewood Lodge (other)", which is
+            // exactly the ambiguity that comment describes: it reads as CASTING a land and says
+            // nothing about untapping anything. Found by a Stage 5d claude-play sweep agent that
+            // went looking for the activation in the menu and could not identify it.
+            // The TARGET is deliberately not named here: it is an auto-target (the highest-yield
+            // tapped Elf), disclosed on the card and with a human chooser listed as DEFERRED, so
+            // naming a target the human cannot change would overstate the decision.
+            case Action::Kind::UntapCreature:
+                tag = a.card_name + ": untap an Elf"; break;
             // Channel is a from-HAND ability, so "(other)" was indistinguishable from casting the
             // creature -- the exact ambiguity the `channel=` verb exists to remove.
             case Action::Kind::Channel:
@@ -1894,6 +1926,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 }
                 else if (ac.kind == Action::Kind::AnimateLand)    { os << ", \"verb\": \"animate\""; }
                 else if (ac.kind == Action::Kind::TapForTokenPay) { os << ", \"verb\": \"taptoken\""; }
+                // Wellwisher's "{T}: gain 1 life for each Elf". The FIRST verb keyed on an
+                // ability_mode rather than an Action::Kind, because the whole PermAbilityMode family
+                // shares one kind -- and only this mode needs one: the deck runs two copies, so
+                // `cast=Wellwisher` cannot say whether the human meant the board activation or a
+                // hard cast of the copy in hand (see LineSpec::tap_lifes). Every OTHER mode of this
+                // kind keeps the legacy verbless `cast=<source>` matching, so no saved reference and
+                // no other deck's line changes.
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::TapLifegain)
+                { os << ", \"verb\": \"taplife\""; }
                 // Birthing Pod: names the SOURCE artifact (never castable), carries the fetch on
                 // tutor_target (already serialised) + the victim id, so the GUI writes
                 // `pod=<fetch>#<victim>` instead of an ambiguous `cast=Birthing Pod`.
@@ -2923,6 +2965,52 @@ static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
     d.Note("reply 0 for the damage mode or 1 for the impulse mode. The card you keep in mode 1 is a separate `dig` decision.");
 }
 
+// Nykthos Paragon's once-each-turn team wave: "Whenever you gain life, you MAY put that many +1/+1
+// counters on each creature you control. Do this only once each turn." Asked at the SHARED resolution
+// site (FireLifegainWatchers), once per life-gain EVENT, only while an unused copy is out. Reply is
+// HOW MANY of the unused copies to spend, 0..copies_unused; 0 declines and does NOT consume a use,
+// so banking it for a bigger gain later this turn is expressible. Enumerated indices, so it rides
+// the existing integer --choices stream with no new input model.
+static void WriteLifegainCountersDecisionJson(std::ostream& os, const GameState& s,
+                                             const std::string& source, int amount,
+                                             int copies_unused, int heuristic_count,
+                                             int decision_index,
+                                             const std::vector<PlayReveal>& reveals = {})
+{
+    DecisionJson d(os, decision_index);
+    d.Type("lifegain_counters").Source(source).Turn(s.turn_number).Board(s)
+     .HeuristicDefault(heuristic_count);
+    // DecisionJson contract (see the class comment, and WriteAttackModeDecisionJson's scar): the
+    // PRECEDING field already wrote its own ",\n", so this one opens with a bare "  \"...\"" and
+    // must write its own TRAILING ",\n". An earlier attack_mode draft opened with ",\"options\""
+    // and closed with a bare "]", emitting a DOUBLE comma before the array and NO separator after
+    // it -- invalid JSON, so tools/play/server.js's JSON.parse threw on every such decision.
+    os << "  \"amount\":" << amount << ",\n";
+    os << "  \"copies_unused\":" << copies_unused << ",\n";
+    os << "  \"options\":[";
+    for (int k = 0; k <= copies_unused; ++k)
+    {
+        if (k > 0) { os << ","; }
+        os << "{\"index\":" << k << ",\"text\":";
+        if (k == 0)
+        {
+            JsonStr(os, "Decline (the use is NOT consumed -- bank it for a bigger gain this turn)");
+        }
+        else
+        {
+            JsonStr(os, "Spend " + std::to_string(k) + " of " + std::to_string(copies_unused)
+                        + "  ->  +" + std::to_string(k * amount) + "/+"
+                        + std::to_string(k * amount) + " on each creature you control");
+        }
+        os << "}";
+    }
+    os << "],\n";
+    EmitRevealsField(os, reveals);
+    d.Note("reply how many unused copies to spend on this life-gain event (0 declines without "
+           "consuming a use; each spent copy adds `amount` +1/+1 counters to every creature you "
+           "control). Default = the AI's count (greedy: spend them all).");
+}
+
 // Tutor pick: the player picks WHICH card to search up, or declines. TWO routes reach here.
 //   * ETB off a PUT (a Lackey combat cheat / Vial deploy / Muxus reveal dropping a Goblin Matron):
 //     no plan variant existed, so this path used to pick silently.
@@ -2968,8 +3056,12 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
         os << "{ \"index\": " << i << ", \"def\": " << (is_def[i] ? "true" : "false")
            << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
     });
-    d.Note("reply one int per candidate (1 = put this Dragon), up to max_puts total. "
-           "The engine keeps the rule's play order. Default = the AI's pick.");
+    // Note generalised: this emitter is THE generic multi-pick and is reused by Bilbo ("any number
+    // of creature cards") and Genesis Wave ("any number of permanent cards with mana value X or
+    // less"), neither of which puts a Dragon. Display-only -- the decision JSON is protocol, not
+    // play, so no digest moves.
+    d.Note("reply one int per candidate (1 = put this card onto the battlefield), up to max_puts "
+           "total. The engine keeps the rule's play order. Default = the AI's pick.");
 }
 
 // Defense of the Heart upkeep sac-tutor decision: the player picks WHICH library creature cards
@@ -3371,6 +3463,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
+        else if (key == "taplife")   { ls.tap_lifes.push_back(val); }     // Wellwisher "{T}: gain 1 per Elf"
         // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
         else if (key == "pod")
         {
@@ -3611,6 +3704,7 @@ g_play_lackey_chooser = nullptr;
 g_play_free_cast_chooser = nullptr;
 g_play_demonstrate_chooser = nullptr;
 g_play_attack_mode_chooser = nullptr;
+g_play_lifegain_counters_chooser = nullptr;
 g_play_fling_chooser = nullptr;
 g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
@@ -3869,6 +3963,7 @@ struct ClaudePlayHarness
     FreeCastChooser       free_cast_chooser;
     DemonstrateChooser    demonstrate_chooser;
     AttackModeChooser     attack_mode_chooser;
+    LifegainCountersChooser lifegain_counters_chooser;
     BounceChooser         fling_chooser;
     TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
@@ -4989,6 +5084,47 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_attack_mode_chooser = &attack_mode_chooser;
+
+    // Nykthos Paragon's once-each-turn "you may put that many +1/+1 counters on each creature you
+    // control". Wired at the SHARED resolution site (FireLifegainWatchers in SpellEffects.h, reached
+    // from the one GainLife hook every controller-side lifegain routes through), not the autonomous
+    // path -- a chooser added only to the autonomous side compiles, stays byte-identical, and never
+    // fires in the viewer. Fires ONCE per life-gain event (which copies are spent is unobservable,
+    // only the count is a decision), and only while at least one unused copy is out.
+    lifegain_counters_chooser =
+        [this](const GameState& s, int controller, const std::string& source, int amount,
+               int copies_unused, int heuristic_count) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+        claude_retry_lgc:  // --interactive: new picks arrived on stdin
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                const int count = (chosen >= 0 && chosen <= copies_unused) ? chosen
+                                                                           : heuristic_count;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << count << ", \"decision\": ";
+                    WriteLifegainCountersDecisionJson(ss, s, source, amount, copies_unused,
+                                                      heuristic_count, di, reveal_log);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                reveal_log.clear();
+                return count;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteLifegainCountersDecisionJson(std::cout, s, source, amount, copies_unused,
+                                              heuristic_count, di, reveal_log);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_lgc; }
+            std::exit(70);
+        };
+    g_play_lifegain_counters_chooser = &lifegain_counters_chooser;
 
     // Tutor pick: the human picks WHICH card to search up, or -1 to decline ("you MAY search").
     // Fires both for an ETB off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin
@@ -7196,10 +7332,18 @@ int main(int argc, char* argv[])
                               static_cast<unsigned long long>(r.case_digest));
                 char avgbuf[32];
                 std::snprintf(avgbuf, sizeof(avgbuf), "%.4f", r.avg_turns);
+                // UNITS, the budget's own currency, beside the core-ms. `ms` is the only figure a
+                // charging convention cannot game, but it is also the only one the box's other
+                // tenants can move; units are deterministic for a (seed, arm) pair, so a work A/B
+                // is readable off ONE pooled batch instead of per-arm processes. The per-game
+                // vector already existed (BatchJobResult::units, written for the slow-game and
+                // ceiling reports) -- only the sum was missing from the line every sweep parses.
+                // Appended LAST: every reader is an unanchored `played=... ms=(\d+)` match.
                 std::cout << r.name << ": played=" << r.games_played
                           << " avg=" << avgbuf
                           << " digest=" << dbuf
-                          << " ms=" << r.elapsed_ms << "\n" << std::flush;
+                          << " ms=" << r.elapsed_ms
+                          << " units=" << r.units_total << "\n" << std::flush;
             };
             std::vector<BatchJobResult> results =
                 BatchRunner::RunManifest(manifest, num_threads, on_job_done, game_trace_dir);

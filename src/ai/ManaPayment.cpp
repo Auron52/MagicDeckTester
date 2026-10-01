@@ -183,6 +183,10 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.loyalty_activated_this_turn != b.loyalty_activated_this_turn) { fail(i, "loyalty_activated_this_turn"); }
         if (a.equipped_to != b.equipped_to)           { fail(i, "equipped_to"); }
         if (a.colored_cast_lifegain_used_this_turn != b.colored_cast_lifegain_used_this_turn) { fail(i, "colored_cast_lifegain"); }
+        // Nykthos Paragon's once-each-turn flag. Like the two until-EOT grants noted below, no
+        // payment path can set it, so this is a completeness fix to a CHECKER and not a behaviour
+        // change: it can only turn a silent divergence into a loud one.
+        if (a.lifegain_counters_used_this_turn != b.lifegain_counters_used_this_turn) { fail(i, "lifegain_counters_used"); }
         if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
         if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }
         if (a.temp_haste != b.temp_haste)             { fail(i, "temp_haste"); }
@@ -341,7 +345,14 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     const bool made_c = std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end();
     auto retire_wild_c = [&](int n)
     { if (available && made_c) { available->wild_c = std::max(0, available->wild_c - n); } };
-    if (amt > 1 && prod.size() > 1)
+    // Accomplished Alchemist is amt>1 across a multi-colour `produces` but is NOT a one-of-each
+    // bundle: "Add X mana of any ONE color". So it must take the single-colour branch below, and
+    // there it must debit `wild` rather than the colour -- AddSourceToPool credited a multi-colour
+    // source as `amt` wild, and debiting the COLOUR for a 7-unit burst would drive that colour to
+    // -7 while leaving the wild untouched. Same fix required in the backtracker (SpellEffects.cpp);
+    // fixing only one leaves the documented greedy/backtracker split.
+    const bool one_colour_burst = IsSingleColorBurstSource(def);
+    if (amt > 1 && prod.size() > 1 && !one_colour_burst)
     {
         for (Color c : prod) { floating.Add(c, 1); }
         if (available) { available->wild -= consumed; }
@@ -350,7 +361,12 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     else
     {
         floating.Add(col, amt);
-        if (available) { available->Add(col, -consumed); }
+        if (available)
+        {
+            if (one_colour_burst && prod.size() > 1)
+            { available->wild = std::max(0, available->wild - consumed); }
+            else { available->Add(col, -consumed); }
+        }
         if (prod.size() > 1) { retire_wild_c(consumed); }
     }
     // "Whenever enchanted land is tapped for mana, its controller adds an additional <X>" --
@@ -3583,6 +3599,125 @@ std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost
     return mask;
 }
 
+// ACTIVATION LINE HOLD (MTG_ACT_LINE_HOLD -- see ActLineHoldEnabled in SpellEffects.h for the
+// measured drop rates this closes). While a plan apply is paying, hold back BOTH halves of what the
+// plan's own trailing activations still owe:
+//   * their {T} SOURCES, so a cast payment cannot tap one for mana and thereby nullify the {T} half
+//     of that activation's own cost (the source ends up TAPPED and the branch no-ops silently);
+//   * enough providers of each COLOUR their costs need, beyond this payment's own pips and the
+//     float, narrowest provider first (a mono source before a dual whose other colour a later cast
+//     may want; tie: lower battlefield index -- deterministic).
+// Counts, not "every provider when scarce": LineColorlessHoldMask's shape rather than
+// ScarceColorHoldMask's, because holding more than the activation needs only makes the held attempt
+// fail and costs a second solve. Same reserved-first / unrestricted-retry contract as every mask
+// here, so a cast that genuinely needs a held source still gets it and no cast is ever lost.
+//
+// NOT gated on HumanPlayActive(). LineColorlessHoldMask above does stand down there, because its
+// hold is a tap-ORDER preference and a replayed reference would drift off its recorded picks. This
+// one is different in kind: the human explicitly CHOSE a plan containing the activation, so paying
+// that plan in a way that silently deletes the activation is not a preference being overridden, it
+// is the plan not being executed. The reference corpus is verified instead of standing down.
+std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
+{
+    if (!ActLineHoldEnabled()) { return 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (!pt) { return 0; }
+    if (pt->act_src_count == 0
+        && pt->act_pips[0] + pt->act_pips[1] + pt->act_pips[2]
+         + pt->act_pips[3] + pt->act_pips[4] == 0) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    const int active = state.active_player_index;
+
+    // How many providers of each colour the activations still want. An activation's pips are demand
+    // ALONGSIDE this payment's own, never demand this payment satisfies -- so `cost` is NOT
+    // subtracted. Only float that SURVIVES this payment is supply the activation can spend without
+    // tapping anything; every other pip it owes has to come from a source held back here.
+    //
+    // THE `- cur[c]` THIS REPLACED IS WHY THE LEVER MEASURED AS A LOSS (found 2026-09-30; see
+    // docs/design/trailing-activation-payment-hole.md). It treated the cast's COMPETING demand as
+    // supply, so whenever a cast wanted at least as many pips of a colour as the activation did --
+    // the common case -- the coloured half of the hold silently did NOTHING while part (a) above
+    // still held the {T} source. That is the worst of the three states: enough hold to spoil the
+    // casts' tap assignment, not enough to make the activation payable. The {T} then gets paid and
+    // the mana half rolls back -- case B, MANUFACTURED by the fix meant to close case A. It is why
+    // `unpaid` inflated on every deck whose activations want a coloured pip (snow 62,479 ->
+    // 440,066, selesnya 3,270 -> 11,352) while Prevent Damage, whose activations want none, was the
+    // one deck it fell on. Worked repro: SelesnyaLifegain seed 4011 (batch s4004 gi 7) d0 T3 held a
+    // Wirewood Lodge for its "{G}, {T}: untap target Elf", paid {1}{G}{G} by tapping the attacking
+    // Priest of Titania instead of the Lodge, then could not raise the {G} -- no untap AND no
+    // attack, and the win slipped T6 -> T7.
+    //
+    // The prepay rung calls this with an EMPTY cost, so that call site is byte-identical; only the
+    // per-cast path (which a single-cast turn always takes -- the prepay declines, ManaPayment.cpp
+    // "single-cast turns DECLINE the prepay") changes behaviour.
+    const int cur[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+    const int fl[5]  = { state.floating_mana.white, state.floating_mana.blue,
+                         state.floating_mana.black, state.floating_mana.red,
+                         state.floating_mana.green };
+    int need[5]; bool any_pip = false;
+    for (int c = 0; c < 5; ++c)
+    {
+        const int float_left = fl[c] > cur[c] ? fl[c] - cur[c] : 0;
+        need[c] = pt->act_pips[c] - float_left;
+        if (need[c] < 0) { need[c] = 0; }
+        if (need[c] > 0) { any_pip = true; }
+    }
+
+    std::uint64_t mask = 0;
+    // (a) the {T} sources. Untapped only: an already-tapped source is not supply, and -- the part
+    // that makes this self-limiting -- an activation that has already fired this trailing pass owns
+    // a tapped source, so it drops out and only the PENDING activations are held.
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        for (int k = 0; k < pt->act_src_count; ++k)
+        { if (p.card.m_number == pt->act_src_nums[k]) { mask |= (1ull << i); break; } }
+    }
+    if (!any_pip) { return mask; }
+
+    // (b) the coloured pips. Build the untapped provider list once with each source's breadth, then
+    // let each colour take its `need` narrowest. A source already held by (a) is skipped rather than
+    // counted: its {T} is owed to an activation, so it is not supply for a pip either.
+    struct Prov { int idx; int breadth; int colors; };
+    Prov prov[64]; int np = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool dork = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
+                          && GraveyardFuelLive(state, active, *d);
+        if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+        int seen = 0, breadth = 0;
+        for (Color c : EffectiveProducesFor(state, active, *d, &p))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 5 || (seen & (1 << ci))) { continue; }
+            seen |= (1 << ci); ++breadth;
+        }
+        if (seen == 0) { continue; }
+        prov[np++] = { i, breadth, seen };
+    }
+    if (np == 0) { return mask; }
+    std::sort(prov, prov + np, [](const Prov& a, const Prov& b)
+    { return a.breadth != b.breadth ? a.breadth < b.breadth : a.idx < b.idx; });
+    for (int c = 0; c < 5; ++c)
+    {
+        int left = need[c];
+        for (int k = 0; k < np && left > 0; ++k)
+        {
+            if (!(prov[k].colors & (1 << c))) { continue; }
+            const std::uint64_t bit = 1ull << prov[k].idx;
+            if (mask & bit) { continue; }        // already held -- owed to another pip or a {T}
+            mask |= bit; --left;
+        }
+    }
+    return mask;
+}
+
 static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                  ManaPool* available, bool honor_legacy_cco)
 {
@@ -3657,10 +3792,25 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         return false;
     }
 
+    // `act_hold` is split out of the fold ONLY so MTG_ACT_DROP_AUDIT can price the lever (see
+    // g_act_pay_calls in GameLogger.h): the extra solve a failed held attempt buys is the whole cost
+    // question, and attributing it needs to know whether this mask was rmask's sole contributor.
+    // The value folded in is identical, and with the audit off nothing below it executes.
+    const std::uint64_t act_hold = ActLineHoldMask(state, cost_in);
     const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
                               | OneShotHoldMask(state) | PayloadReserveMask(state)
                               | ScarceColorHoldMask(state, cost_in)
-                              | LineColorlessHoldMask(state, cost_in);
+                              | LineColorlessHoldMask(state, cost_in)
+                              | act_hold;
+    if (ActDropAuditOn())
+    {
+        g_act_pay_calls.fetch_add(1, std::memory_order_relaxed);
+        if (act_hold != 0)
+        {
+            g_act_hold_mask.fetch_add(1, std::memory_order_relaxed);
+            if (rmask == act_hold) { g_act_hold_solo.fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
     // One HELD attempt: pay with `mask` reserved; on failure restore everything the attempt
     // touched (battlefield pay fields, float, the executor's accounting pool, the graveyard --
     // a Deathrite tap's exile -- both lives and the opponent-lost-life flag) and report false.
@@ -3693,7 +3843,16 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         state.opponent_lost_life_this_turn = oll;
         return false;
     };
-    if (rmask != 0 && held_attempt(rmask, "impl.rmask")) { return true; }
+    if (rmask != 0)
+    {
+        if (held_attempt(rmask, "impl.rmask")) { return true; }
+        // Fell through: this payment now costs a SECOND full solve. Attribute it (audit only).
+        if (ActDropAuditOn() && act_hold != 0)
+        {
+            g_act_hold_retry.fetch_add(1, std::memory_order_relaxed);
+            if (rmask == act_hold) { g_act_solo_retry.fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
     // PUMP-TARGET NARROW RUNG (MTG_MINT_CREDIT_EXACT). The whole-turn prepay's reserve ladder
     // retreats from "hold every dork" to "hold the projected pump target alone" before it
     // releases everything (ReserveCreatureHold); this per-cast path had no such rung, so on a

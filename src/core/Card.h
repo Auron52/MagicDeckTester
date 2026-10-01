@@ -501,6 +501,21 @@ struct Card
     bool IsSorcery()  const { return HasType(CardType::Sorcery); }
     bool IsEnchantment() const { return HasType(CardType::Enchantment); }
 
+    // "A PERMANENT CARD" (CR 110.4a / 109.2): a card with one of the six permanent types. Written
+    // as the explicit disjunction rather than !(Instant || Sorcery) so a card with NO types set
+    // reads false (the safe direction) instead of "permanent".
+    //
+    // CALLERS MUST PASS A DEFINITION CARD (CardDatabase::LookupCached(raw)->card). A card sitting
+    // in a library or graveyard is a NAME-ONLY PLACEHOLDER with an EMPTY type mask, so this returns
+    // false for every one of them (the ExileTop / ApplyRadMill trap) -- which for Genesis Wave
+    // would mean putting nothing at all, and for an inverted test everything.
+    bool IsPermanentCard() const
+    {
+        return IsCreature() || IsLand() || IsEnchantment()
+            || HasType(CardType::Artifact) || HasType(CardType::Planeswalker)
+            || HasType(CardType::Battle);
+    }
+
     bool HasType(CardType t)       const { return (m_type_mask      & Bit(t)) != 0; }
     bool HasSupertype(Supertype s) const { return (m_supertype_mask & Bit(s)) != 0; }
     bool HasColor(Color c)         const { return (m_color_mask     & Bit(c)) != 0; }

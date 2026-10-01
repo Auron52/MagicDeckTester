@@ -1210,6 +1210,12 @@ public:
     // the board to answer. Callers on the cast hot path all have it.
     static bool BreakpointHandSnapshotWanted(const GameState& state);
 
+    // BREAKPOINT SITE 8's playability gate (full rationale at the definition). ONE body shared by
+    // the rollout's trailing-activation branch and the executor's resolve_draw_breakpoint arm, so
+    // the two worlds cannot disagree about whether the occurrence is counted -- a disagreement
+    // shifts every later bp_at index. `fd` is the card the tap-draw just found (hand.back()).
+    static bool SnowLookFoundPlayable(const GameState& state, const CardDefinition& fd);
+
     // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
     // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds
     // the same snapshot under the same condition -- the lockstep pair -- and the reader lives with
@@ -1339,6 +1345,13 @@ public:
     // executor's fallback breakpoint re-solve (AIEngine::resolve_draw_breakpoint) MUST use this,
     // never EnumerateMainPlans, or the realised play would drift from the searched one.
     static std::vector<Plan> EnumerateBreakpointPlans(const GameState& state, bool is_pre_combat);
+    // DECISION DUMP (MTG_PLAN_DUMP=<turn>; see the definition at the bottom of TurnSolver.cpp).
+    // Prints the board / hand / library, the enumerated main-plan list with the casts AND
+    // activations each plan loses when applied, and the breakpoint continuation list. Diagnostic
+    // only -- it enumerates and applies plans that play does not, so never read a timing or a
+    // census off a run with it on.
+    static void              PlanDumpAt(const GameState& state, bool is_pre_combat, int depth,
+                                        long long budget_units);
 
     // THE SAME LIST, WITHOUT COPYING IT OUT OF THE ENUM MEMO. EnumerateBreakpointPlans returns by
     // value, so every call deep-copies the memoised result -- each Plan copying its whole
@@ -1494,6 +1507,16 @@ public:
     // Only run when PlanTraitsWanted() (some consumer lever on); otherwise the scope holds nullptr
     // and every consumer behaves exactly as before.
     static PlanTraits ComputePlanTraits(const GameState& state, const std::vector<Action>& acts);
+
+    // MTG_ACT_HOLD_OUTER -- carry the OUTER plan's still-pending trailing-activation {T} SOURCES into
+    // a breakpoint continuation's traits. Called at all three continuation installs (the rollout's
+    // ApplyPlanDirect, the executor's resolve_draw_breakpoint and its record replay) so the fix cannot
+    // be applied in one world and not the other. Full rationale at the definition; the one-line
+    // version is that those sites deliberately REPLACE the main plan's traits, which is right for
+    // every other field and wrong for this one -- the base plan's unfired activations are still owed
+    // their {T} while the continuation pays its casts, and a continuation cast that taps one drops the
+    // activation silently. `outer` may be null (levers off / no plan in scope) -> no-op.
+    static void CarryPendingActivations(PlanTraits& into, const PlanTraits* outer);
 
     // SAC-COLOUR FOLD (MTG_SAC_COLOR_FOLD, default OFF -- see docs/design/
     // lump-mana-sources-as-payment-sources.md). With the fold ON, a SacForMana source emits ONE
@@ -1738,6 +1761,19 @@ public:
         // a line that does not mention them is unchanged.
         std::vector<std::string> animates;
         std::vector<std::string> tap_tokens;
+        // "taplife=<source name>": Wellwisher's "{T}: You gain 1 life for each Elf on the
+        // battlefield", one entry per activation.
+        //
+        // Its own verb because `cast=Wellwisher` is genuinely AMBIGUOUS -- the Deathrite Shaman
+        // `gyexile=` case verbatim. The action names the SOURCE, and the deck runs TWO copies, so
+        // with one in hand and one on the battlefield the plain cast multiset cannot distinguish
+        // "hard-cast the second copy" from "tap the one already out": both plans produce
+        // orderNames == {"Wellwisher"} and CheckLine matches whichever sorts first. (The board_acts
+        // affordability probe does not disambiguate them either -- it only picks up activations
+        // whose cost has a positive mana value, and this one's cost is {T} alone.)
+        //
+        // EMPTY keeps the legacy card-name-in-casts matching, so no saved reference moves.
+        std::vector<std::string> tap_lifes;
         // "pod=<fetch name>[#<victim m_number>]": a Birthing Pod activation, one entry per
         // activation. Its own verb for the same reason `equip=` has one -- the action names the
         // SOURCE artifact, so `cast=Birthing Pod` is ambiguous with hard-casting a copy from

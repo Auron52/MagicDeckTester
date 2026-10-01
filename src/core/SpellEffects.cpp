@@ -634,6 +634,230 @@ void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp)
     }
 }
 
+// Genesis Wave: "Reveal the top X cards of your library. You may put any number of permanent cards
+// with mana value X or less from among them onto the battlefield. Then put all cards revealed this
+// way that weren't put onto the battlefield into your graveyard." (reveal_x_put_permanents)
+//
+// `x` is the value the ENUMERATION scored, threaded through Action/StackEntry chosen_x. It gates the
+// reveal depth AND the mana-value cap, and is clamped here to >= 0 so the executor's
+// `entry.chosen_x.value_or(-1)` and the rollout's raw int reach the same resolution. NEVER re-derive
+// X from the mana spent (the tutor_mv_max_is_x discipline).
+//
+// FIVE THINGS THIS FUNCTION GETS RIGHT ON PURPOSE:
+//
+//  1. SIMULTANEITY IS THE CARD, not a refinement. "Put ... onto the battlefield" is ONE event, so
+//     every entrant's watchers are already live when any enter-TRIGGER resolves (the paired-Soul-
+//     Warden ruling, CR 603.6d). Hence TWO passes: pass 1 appends every selected permanent, pass 2
+//     fires the cascades in reveal order (CR 603.3b -- the controller orders their own simultaneous
+//     triggers; reveal order is the disclosed, deterministic choice). Copying
+//     PerformTutorToBattlefield's per-put sequential loop instead would silently UNDERCOUNT every
+//     (watcher-entered-after-entrant) pair, and on this deck that IS the payoff: a Wave putting N
+//     creatures with A Verdant Sun's Avatars live must gain life A x N times (each Avatar sees every
+//     simultaneous entrant AND itself), and each of those is a separate life-gain EVENT (CR 119.10)
+//     through the shared GainLife -- so a separate +1/+1 counter batch on each Ageless Entity and a
+//     separate Nykthos Paragon look. PerformUpkeepSacTutor is the precedent; this is its shape.
+//  2. PASS 2 RE-FINDS BY PER-COPY CARD NUMBER, never battlefield.back(): an earlier entrant's
+//     cascade can append tokens or erase lower slots (a sweep, a Karoo bounce), so a cached index is
+//     stale. A permanent that is GONE by its turn in pass 2 (a land its own neighbour's mandatory
+//     Karoo bounce returned to hand) is skipped -- it did not stay.
+//  3. LIBRARY CARDS ARE NAME-ONLY PLACEHOLDERS WITH EMPTY TYPE MASKS. Every type and mana-value
+//     test goes through LookupCached (the ExileTop / ApplyRadMill trap). `raw.IsCreature()` here is
+//     silently false for everything, which would make the Wave put nothing at all.
+//  4. LANDS GO THROUGH EnterLand, NOT the land drop -- a land put by an effect is not PLAYED, so
+//     lands_played_this_turn is untouched BY CONSTRUCTION. Their own triggered ETBs (Karoo bounce,
+//     land lifegain) are deferred to PASS 2 via ResolveLandEnterEtbExtras for reason 1: Blossoming
+//     Sands' 1 life must be seen by an Ageless Entity that entered alongside it. (A put land also
+//     does not trigger landfall, which the engine models off lands_played_this_turn -- no landfall
+//     card in this deck.) A put MDFC enters FRONT face up (CR 712.12): the library card IS the front.
+//  5. NO SHUFFLE. This is not a search. Both neighbouring helpers (PerformTutorToBattlefield,
+//     PerformUpkeepSacTutor) end in ShuffleAfterSearch; inheriting that would be a rules error AND
+//     would scramble the library the clairvoyant search depends on.
+void PerformGenesisWave(GameState& state, int controller, int x, const std::string& source_name)
+{
+    // `controller` is the ACTIVE player at both call sites (a Sorcery resolves on its controller's
+    // own main phase: the executor passes entry.controller_index, the rollout state.active_player_index).
+    // That matters for the land path: EnterLand builds its permanent under state.active_player_index,
+    // so pass 2's re-find -- which matches on `controller` -- relies on the two being the same.
+    x = std::max(0, x);   // see the header note: clamps the executor's value_or(-1)
+    Player& ap = state.players[static_cast<std::size_t>(controller)];
+    if (x <= 0 || ap.library.empty()) { return; }
+
+    // Reveal the top X (DrawN removes them and caps at the library size). The cards leave the
+    // library regardless of the subset chosen below, so the post-Wave library is a function of x
+    // alone -- identical in both worlds, and the clairvoyant top both of them read stays equal.
+    std::vector<Card> revealed;
+    ap.library.DrawN(x, revealed);
+    if (revealed.empty()) { return; }
+
+    // Legality, off the DEFINITION card: a permanent card (Card::IsPermanentCard) whose mana value
+    // is <= x. Lands are mana value 0, so every land qualifies at any x >= 1 -- the Wave's floor is
+    // "put your lands and dorks", never a whiff.
+    std::vector<int>  legal_rev;   // indices into `revealed`
+    std::vector<Card> candidates;  // the same cards, for the provider + the human chooser
+    legal_rev.reserve(revealed.size());
+    candidates.reserve(revealed.size());
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        if (d == nullptr) { continue; }
+        if (!d->card.IsPermanentCard()) { continue; }
+        if (d->card.m_mana_cost.ManaValue() > x) { continue; }
+        legal_rev.push_back(i);
+        candidates.push_back(revealed[static_cast<std::size_t>(i)]);
+    }
+
+    // "You may put ANY NUMBER" -- ONE provider call per resolution (never per entrant). Indices into
+    // `candidates`. Not a searched axis: see DecisionProvider::GenesisWavePutPicks.
+    std::vector<int> picks;
+    if (!candidates.empty())
+    { picks = ResolveProvider(state).GenesisWavePutPicks(state, controller, candidates, x); }
+
+    // Human-play multi-pick, reusing the generic `dragon` chooser (already reused by Bilbo for "any
+    // number of creature cards"). The provider's subset is a PRESELECTED DEFAULT, not a plan pin, so
+    // an EMPTY reply STANDS (put nothing) and the engine never tops the selection back up. The
+    // pointer is nulled by RevealLogPause for every search/rollout/enumeration scope, so autonomous
+    // play and the search are byte-identical to the rule above.
+    if (g_play_dragon_chooser != nullptr && !candidates.empty())
+    {
+        const int max_puts = static_cast<int>(candidates.size());   // "any number"
+        std::vector<int> heur = picks;
+        std::sort(heur.begin(), heur.end());
+        heur.erase(std::unique(heur.begin(), heur.end()), heur.end());
+        const std::string src = source_name.empty() ? std::string("Genesis Wave") : source_name;
+        std::vector<int> chosen =
+            (*g_play_dragon_chooser)(state, controller, src, candidates, max_puts, heur);
+        std::sort(chosen.begin(), chosen.end());
+        chosen.erase(std::unique(chosen.begin(), chosen.end()), chosen.end());
+        picks.clear();
+        for (int c : chosen)
+        { if (c >= 0 && c < static_cast<int>(candidates.size())) { picks.push_back(c); } }
+    }
+
+    // Reveal-order put flags over `revealed` (the provider/human may return indices in any order).
+    std::vector<bool> put_flag(revealed.size(), false);
+    for (int c : picks)
+    {
+        if (c < 0 || c >= static_cast<int>(legal_rev.size())) { continue; }
+        put_flag[static_cast<std::size_t>(legal_rev[static_cast<std::size_t>(c)])] = true;
+    }
+
+    // Report WHAT THE WAVE DID, with explicit per-card dispositions -- the Muxus precedent, and
+    // MANDATORY rather than cosmetic: without the split the viewer history shows X cards revealed
+    // with no indication of what happened to any of them. This is a public REVEAL (not Turntimber's
+    // "look at"), so showing the human exactly these cards leaks nothing. Gated on RevealVisible()
+    // (g_reveal_logger ALONE is wrong -- it is null in the mode a human is watching), and computed
+    // before the puts mutate the battlefield.
+    if (RevealVisible())
+    {
+        std::vector<int>         rev_nums, put_nums, gy_nums;
+        std::vector<std::string> rev_names, labels;
+        for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+        {
+            const Card& rc = revealed[static_cast<std::size_t>(i)];
+            rev_nums.push_back(rc.m_number);
+            rev_names.push_back(rc.m_name.str());
+            (put_flag[static_cast<std::size_t>(i)] ? put_nums : gy_nums).push_back(rc.m_number);
+            labels.push_back(put_flag[static_cast<std::size_t>(i)]
+                             ? "\xE2\x86\x92 battlefield" : "\xE2\x86\x92 graveyard");
+        }
+        EmitReveal(state.turn_number,
+                   (source_name.empty() ? std::string("Genesis Wave") : source_name)
+                       + " (reveal X=" + std::to_string(x) + ")",
+                   rev_nums, rev_names, put_nums, gy_nums, /*dispositions*/ labels);
+    }
+
+    // ---- PASS 1: every selected permanent enters SIMULTANEOUSLY (no triggers yet) ----------------
+    struct Placed { InternedName name; int number; const CardDefinition* def; bool is_land; };
+    std::vector<Placed> placed;
+    placed.reserve(picks.size());
+    int n_put = 0;
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
+        const Card&           raw = revealed[static_cast<std::size_t>(i)];
+        const CardDefinition* d   = CardDatabase::Instance().LookupCached(raw);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand())
+        {
+            // resolve_full_etb stays FALSE: the Karoo bounce and the land lifegain are TRIGGERED
+            // abilities and belong in pass 2, with everything else's (see header note 4).
+            EnterLand(state, *d, raw.m_number);
+        }
+        else
+        {
+            Permanent perm;
+            perm.card              = d->card;
+            perm.card.m_number     = raw.m_number;
+            perm.controller_index  = controller;
+            perm.owner_index       = controller;
+            perm.entered_this_turn = true;   // summoning sick: the Wave's board cannot attack today
+            state.battlefield.push_back(perm);
+        }
+        placed.push_back(Placed{ raw.m_name, raw.m_number, d, d->card.IsLand() });
+        ++n_put;
+    }
+
+    // "Then put all cards revealed this way that weren't put onto the battlefield into your
+    // graveyard" -- part of the SPELL's resolution, so before the enter-triggers resolve. Reveal
+    // order. Nothing in this deck reads the graveyard, but the MILL is real: it removes cards the
+    // clairvoyant search reads and bins our own Genesis Waves and Feed the Clans.
+    int n_milled = 0;
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        if (put_flag[static_cast<std::size_t>(i)]) { continue; }
+        ap.graveyard.push_back(revealed[static_cast<std::size_t>(i)]);
+        ++n_milled;
+    }
+
+    // ---- PASS 2: now the enter-triggers, in reveal order ----------------------------------------
+    auto find_slot = [&](const Placed& pl) -> int {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index == controller && !q.is_token
+                && q.card.m_number == pl.number && q.card.m_name == pl.name)
+            { return i; }
+        }
+        return -1;   // gone (e.g. a neighbour's mandatory Karoo bounce returned it to hand)
+    };
+    for (const Placed& pl : placed)
+    {
+        int slot = find_slot(pl);
+        if (slot < 0) { continue; }
+        FireEtbWatchers(state, controller, slot);    // the universal cascade: Avatars see the entrant
+        slot = find_slot(pl);
+        if (slot < 0) { continue; }
+        // kEtbKxHeuristic: a PUT entry carries no searched destroy-K axis, so project K at
+        // resolution (the Natural Order / Turntimber put convention).
+        FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+        if (pl.is_land)
+        {
+            slot = find_slot(pl);
+            if (slot < 0) { continue; }
+            ResolveLandEnterEtbExtras(state, *pl.def, slot);
+        }
+    }
+
+    // A legend-rule event is possible in principle (two copies of one legendary name entering at
+    // once, or one entering beside a live copy) even though the default subset above declines the
+    // duplicate and this deck runs no legend. Once, after the puts -- not per put (they entered
+    // simultaneously, CR 704.5j).
+    EnforceLegendRule(state, controller);
+
+    // NO ShuffleAfterSearch -- see header note 5.
+
+    if (g_play_event_sink != nullptr && !g_tap_speculating)
+    {
+        // kind "tutor" (an existing history class: cards moved from the library onto the
+        // battlefield). The per-card dispositions ride the EmitReveal above.
+        EmitPlayEvent(state.turn_number, "tutor",
+                      (source_name.empty() ? std::string("Genesis Wave") : source_name)
+                          + " (X=" + std::to_string(x) + "): " + std::to_string(n_put)
+                          + " permanent(s) onto the battlefield, " + std::to_string(n_milled)
+                          + " to the graveyard");
+    }
+}
+
 // ETB library dig (Acclaimed Contender: "if you control another Knight, look at the top
 // five, you may reveal a Knight and put it into your hand; put the rest on the bottom").
 // `self` is the permanent that just entered (excluded from the "control another <subtype>"
@@ -1229,6 +1453,21 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     }
     c.m_is_staged = false;
     c.m_def = nullptr;
+    // A double-faced card is only "a face" while it is on the battlefield; in every other zone it
+    // is the whole card, front face up (CR 712.2). So a bounced BACK face (Boulderloft Pathway)
+    // must return to hand as its FRONT (Branchloft Pathway), keeping the modal land-play choice it
+    // is entitled to. Without this the synthesized back -- which has no further face -- goes to
+    // hand locked to its one colour, silently deleting a real option. Gated on the synthesis-only
+    // mdfc_front_name, so this is byte-identical for every non-MDFC card, i.e. for every deck that
+    // does not pair an MDFC with a bounce effect (no shipped deck does; SelesnyaLifegain is the
+    // first, with 4 Branchloft Pathway against 2 Selesnya Sanctuary).
+    if (const CardDefinition* bd = CardDatabase::Instance().LookupCached(c);
+        bd != nullptr && !bd->params.mdfc_front_name.empty())
+    {
+        c.m_name = InternedName(bd->params.mdfc_front_name);
+        c.m_def  = nullptr;
+        c.RehashName();
+    }
     EnterHand(state, controller, c, HandEntryReason::Bounce);
     state.battlefield.erase(state.battlefield.begin() + pick);
 }
@@ -2994,7 +3233,13 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // the mispricing the domain_mana branch above calls out, and the same rule
                 // tap_source (ManaPayment.cpp) already applies on the greedy path; the backtracker
                 // was the unfixed twin, so the greedy refused these and the fallback allowed them.
-                const bool bundle_src = (amt > 1 && produces.size() > 1);
+                // ...but Accomplished Alchemist is "Add X mana of any ONE color": amt > 1 across a
+                // multi-colour produces that is NOT a bundle. It must fall through to the
+                // per-colour loop, which prices exactly amt-of-one-colour. Twin of the same clause
+                // in TapSourceIntoFloat -- fixing one payer and not the other is the split this
+                // comment block records.
+                const bool bundle_src = (amt > 1 && produces.size() > 1
+                                         && !IsSingleColorBurstSource(*def));
                 if (bundle_src && !LegacyKarooPay())
                 {
                     ManaPool f = floating;

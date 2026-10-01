@@ -160,6 +160,64 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     cannot use this turn, systematically collapsing the branch toward the damage mode.
         if (def->params.attack_trigger_impulse_exile > 0) { return true; }
 
+        //   * ACCOMPLISHED ALCHEMIST (life-gained mana source): "{T}: Add X mana of any one color,
+        //     where X is the amount of life you gained this turn". life_gained_this_turn is
+        //     cumulative across the turn and reset only at the untap, so the Alchemist's yield in the
+        //     POST-combat main is everything main 1 AND COMBAT gained -- and life gained during
+        //     combat (Blossoming Bogbeast's "whenever this creature attacks, you gain 2 life") is a
+        //     resource GENERATED DURING COMBAT (2c-bis) that no pre-combat main can spend. With no
+        //     searched second main the engine converts none of it: it taps the Alchemist for its
+        //     floor of 1 in main 1 and the card reads as a 4-mana 2/5, i.e. its scaled mode is
+        //     structurally UNREACHABLE rather than merely mis-sequenced. Same shape as
+        //     attack_draw_cards / combat_damage_free_cast above.
+        //
+        //     Behind a heurarm lever (not a bare static const bool) because the searched m2 is not
+        //     free -- MTG_FORCE_USES_M2 measured 4.25x at d1/b3 -- and both arms must ride ONE pooled
+        //     batch. DEFAULT ON because this is reachability rather than a sequencing preference;
+        //     MTG_SL_SECOND_MAIN=0 is the arm that prices it.
+        //
+        //   * BLOSSOMING BOGBEAST (attack-trigger lifegain), added 2026-09-30: "Whenever this
+        //     creature attacks, you gain 2 life" -- the life is gained DURING COMBAT, so it is the
+        //     resource the Alchemist clause above was written in anticipation of, and the SECOND,
+        //     INDEPENDENTLY SUFFICIENT reason this deck wants m2. Each param alone flips the arm:
+        //     the Bogbeast term does not require the Alchemist (the Shroofus rule -- detection must
+        //     not be parasitic on another card; mid-combat life is a resource for ANY
+        //     life_gained_this_turn reader, and this deck has two more in Ageless Entity and Nykthos
+        //     Paragon, which turn it into permanent +1/+1 counters), and the Alchemist term does not
+        //     require the Bogbeast (main 1's own gains are still on the counter in main 2).
+        //
+        //     BOTH SHARE THE ONE LEVER, and that is the load-bearing part rather than tidiness: the
+        //     lever exists to PRICE the searched m2 for this deck, and a term outside it would keep
+        //     m2 on in the =0 arm and silently turn the A/B into a null -- which is exactly what an
+        //     unconditional Bogbeast clause did on its first draft. When the first attempt at this
+        //     measurement was run (2026-09-29) the deck's ONLY combat lifegain source -- Blossoming
+        //     Bogbeast -- was not yet implemented, so m2 uniquely unlocked nothing and the arm
+        //     measured 1.62x CPU for 0.000 turns: the right number for the wrong deck. Re-measure
+        //     with the card in.
+        //     RE-MEASURED 2026-09-30 WITH BOGBEAST IN, AND THE DEFAULT IS NOW **OFF**. One pooled
+        //     batch, 2 arms x 120 paired games, seed 990001, d3, max_turns 12:
+        //       m2 ON  -> avg win turn 5.3833, 645,936 core-ms, 48.7M search units
+        //       m2 OFF -> avg win turn 5.3833, 300,834 core-ms, 31.0M search units
+        //     Win turns were identical in 120 of 120 games -- a ZERO paired difference, not merely a
+        //     non-significant one -- for 2.15x the CPU. Play genuinely changed (10/120 digests differ),
+        //     it just never changed the turn the game was won.
+        //
+        //     THE REACHABILITY ARGUMENT ABOVE IS STILL SOUND; it is simply not worth 2.15x on THIS
+        //     deck, and the honest reason is the clock: at a 5.4-turn average the deck races past its
+        //     own five-drop, so Blossoming Bogbeast lands in only 3 of 20 sampled games (the Alchemist
+        //     is cast in 8 of 20). The mana m2 unlocks mostly arrives after the game is already won.
+        //     Flipped rather than argued because the metric is the bar: identical quality at less than
+        //     half the cost is a clean win, and this deck must clear suite_gate's 3x cost rule where
+        //     m2 was more than half its search cost.
+        //
+        //     =1 RE-ARMS IT, and the two cases worth re-running the A/B for are (a) a slower, more
+        //     grindy list where the Bogbeast and the Alchemist both land before the race ends, and
+        //     (b) a deeper search shape, since Genesis Wave's play is measurably depth-sensitive.
+        static const bool s_sl_m2 = EnvOn("MTG_SL_SECOND_MAIN", false);  // DEFAULT OFF (measured); =1 arms
+        if ((def->params.mana_per_life_gained || def->params.attack_trigger_lifegain > 0)
+            && heurarm::Flag(heurarm::SL_SECOND_MAIN, s_sl_m2))
+        { return true; }
+
         //   * MAELSTROM ARCHANGEL (combat-damage free cast): connecting banks a free cast
         //     (free_casts_available) that is only spendable in the post-combat main -- without the
         //     second main the resource silently evaporates each turn.
@@ -317,6 +375,14 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (p.power_bonus > 0 || p.tough_bonus > 0)                          { return true; }
         if (p.scales_per_matching || p.affects_all_creatures
             || p.domain_self_pump || p.power_equals_creature_count)          { return true; }
+        // Blossoming Bogbeast: "Then creatures you control get +X/+X until end of turn, where X is
+        // the amount of life you gained this turn" -- so every PRE-COMBAT life-gain source in the
+        // deck (Feed the Clan, Verdant Sun's Avatar's enter trigger, Wellwisher's tap, the
+        // gain-lands) feeds the attack, and this function's param list covers no lifegain param at
+        // all today. Disclosed: SelesnyaLifegain already reads true via Craterhoof Behemoth's Haste
+        // above, so this clause is belt-and-braces -- but a signal that depends on one card can be
+        // lost by a list revision, and this function's own comment says the WIDE direction is safe.
+        if (p.attack_team_pump_per_life_gained)                              { return true; }
         if (p.life_threshold_pump_life > 0)                                  { return true; }   // Serra Ascendant's +5/+5
         if (p.static_artifact_threshold > 0)                                 { return true; }   // Goblin Tomb Raider's +1/+0 + haste
         if (p.pt_equals_snow_permanents_you_control
@@ -1066,6 +1132,23 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             mx = std::max(mx, std::max(1, d->params.endstep_lifegain_threshold));
         }
         return mx;
+    }();
+    // Does anything in this deck read life_gained_this_turn FROM THE BATTLEFIELD, mid-turn
+    // (Accomplished Alchemist's "{T}: Add X mana ... where X is the amount of life you gained this
+    // turn")? Gates the life_gained_this_turn key fold only -- see
+    // GameState::deck_reads_lifegain_in_play, which documents why this is a separate gate from the
+    // hand scan and the end-step threshold. A LIST, meant to grow: each battlefield reader adds one
+    // `||` term here and one in BuildSimKey's fold -- widen BOTH, or the stamp gates a fold that
+    // then does not fire. Entry 2 (2026-09-30): Blossoming Bogbeast's attack pump, which reads the
+    // counter at declare-attackers to size its team +X/+X.
+    state.deck_reads_lifegain_in_play = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && (d->params.mana_per_life_gained
+                      || d->params.attack_team_pump_per_life_gained)) { return true; }
+        }
+        return false;
     }();
     // ETB-cascade presence gates (see the block on GameState). FireEtbWatchers walks the whole
     // battlefield once for devotion, once per player for ascend and once to count Dragons, on

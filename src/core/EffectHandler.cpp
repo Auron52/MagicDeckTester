@@ -352,6 +352,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 // "Create N tokens" as the spell's resolution (Fungus Frolic). Lockstep twin of
                 // the rollout's apply_one ApplyCastCreatesTokens call.
                 ApplyCastCreatesTokens(state, entry.controller_index, def);
+                // "You gain N life" as an untargeted spell's resolution (Feed the Clan), with the
+                // ferocious upgrade decided off the board AS IT RESOLVES. Lockstep twin of the
+                // rollout's apply_one ApplyCastLifegain call -- same function, both worlds.
+                ApplyCastLifegain(state, entry.controller_index, def);
                 if (def.params.tutor_to_hand || def.params.tutor_to_top)
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the
@@ -383,6 +387,18 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     PerformLookTopPutCreature(state, entry.controller_index, def.params,
                                               entry.tutor_target, def.card.m_name.str());
+                }
+                // Genesis Wave: "Reveal the top X cards of your library. You may put any number of
+                // permanent cards with mana value X or less from among them onto the battlefield.
+                // Then put all cards revealed this way that weren't put onto the battlefield into
+                // your graveyard." Lockstep with TurnSolver::apply_one -- ONE shared helper, so the
+                // reveal, the put subset, the simultaneous enter cascades and the mill cannot drift.
+                // value_or(-1) is safe ONLY because PerformGenesisWave clamps with std::max(0, x);
+                // a chosen X of 0 reaches here as 0 because AIEngine's chosen_x gate lists this param.
+                if (def.params.reveal_x_put_permanents)
+                {
+                    PerformGenesisWave(state, entry.controller_index, entry.chosen_x.value_or(-1),
+                                       def.card.m_name.str());
                 }
                 // Unearth: "Return target creature card with mana value 3 or less from your
                 // graveyard to the battlefield." Lockstep with TurnSolver::apply_one.

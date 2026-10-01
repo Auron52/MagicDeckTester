@@ -11,6 +11,7 @@
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
 #include "SearchBudget.h"
+#include "TurnCensus.h"   // per-decision census: the `site` tag for the executor's RE-SOLVE roots
 #include "Profiler.h"
 #include "../cards/CardDatabase.h"
 #include "../core/GameEngine.h"
@@ -1527,6 +1528,11 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
 {
     RevealLogPause _rlp;  // rollout: suppress scry/dig reveal logging (real play only)
     HumanPlaySuppress _hps;  // rollout: play autonomously even under --claude-play (bottoming/keep parity)
+    // Census `probe` column (TurnCensus.h). This is a WHOLE TRIAL GAME played to label a decision,
+    // not the game in progress -- and its decisions ARE census roots (the root predicate reads
+    // TurnSolver's g_rollout_nest, which this path leaves at 0), so without the tag a bottoming
+    // pass's 17 trial games read as 17 replays of ordinary main-phase volume on every turn.
+    turncensus::ProbeTag _tcp;
     GameLogger* saved = m_logger;
     m_logger          = nullptr;
     m_in_rollout      = true;
@@ -2194,6 +2200,7 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
         if (actionable)
         {
             SearchBudget resolve_budget = DecisionBudget();
+            turncensus::SiteTag _tcs(turncensus::kSiteM2);   // census: mode-2 post-draw re-solve
             TurnSolver::Plan p2 = TurnSolver::SolveWithLookahead(
                 state, /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
                 &resolve_budget, true, m_search_post_combat, m_shared_tt);
@@ -2232,6 +2239,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // makes budgeted play structurally -- not merely measurably -- untouched. Scoped, because
     // BottomEvalScope re-enters with a different budget.
     UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    // MTG_FD_TRACE: how many times the executor ENTERS a decision for ONE phase. GameEngine's
+    // MainPhase calls this at most twice per phase (the `may_draw_spells` second opportunity), so a
+    // count above two names a re-entry source -- and every entry is handed its OWN
+    // DecisionBudget(), which is why a turn's total can run 100x a "per-decision" budget while no
+    // single root looks more than 25x over. The per-decision census carries the same fact as its
+    // `site` column (TurnCensus.h); this print is the executor-side half, for naming the caller.
+    if (s_fd_trace)
+    {
+        static thread_local int s_last_turn = -1, s_last_pre = -1, s_entry = 0;
+        const int pre_i = is_pre_combat_main ? 1 : 0;
+        if (state.turn_number != s_last_turn || pre_i != s_last_pre)
+        { s_last_turn = state.turn_number; s_last_pre = pre_i; s_entry = 0; }
+        std::fprintf(stderr, "[fd] T%d pre=%d ENTER #%d cast=%d hand=%d committed=%d\n",
+                     state.turn_number, pre_i, s_entry++, state.spells_cast_this_turn,
+                     static_cast<int>(state.ActivePlayer().hand.size()),
+                     static_cast<int>(m_committed_line.size()));
+    }
     {   // MTG_EXEC_TAP_TRACE: the REAL state at TakeTurn entry (diagnosis only, default off)
         static const bool s_tr = EnvOn("MTG_EXEC_TAP_TRACE");
         if (s_tr)
@@ -4238,6 +4262,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (rec_pt == 0 && a.rec_pump_target != 0) { rec_pt = a.rec_pump_target; }
         }
         if (PlanTraitsWanted() && rec_mc > 0) { _rec_traits.mana_casts = rec_mc; }
+        // MTG_ACT_HOLD_OUTER (third of three continuation installs -- the RECORD replay). Same
+        // reasoning as the other two: the records are the continuation, and the main plan's unfired
+        // trailing activations still own their {T} while these casts are paid.
+        if (PlanTraitsWanted())
+        { TurnSolver::CarryPendingActivations(_rec_traits, CurrentPlanTraits()); }
         PlanTraitsScope  _rec_scope(PlanTraitsWanted() ? &_rec_traits : nullptr);
         TapKeepLastScope _rec_keep(PumpTargetHoldEnabled()
                                        ? (rec_pt != 0 ? rec_pt : _rec_traits.pump_target_card) : 0);
@@ -4427,6 +4456,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (execgreedy::Enabled())
                 { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
                 SearchBudget bp_budget = DecisionBudget();
+                // Census: this root is a BREAKPOINT RE-SOLVE, not the executor's own decision, and
+                // it carries a full fresh DecisionBudget() -- so the turn's cost is the sum over
+                // these and the `root`/host column cannot tell them apart. See TurnCensus.h.
+                turncensus::SiteTag _tcs(turncensus::kSiteBpResolve);
                 extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                        m_lookahead_depth, m_max_turns,
                                                        &bp_budget, true,
@@ -4462,7 +4495,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // not the main plan's still-open scopes (which the rollout's continuation never saw; the
         // mirrorwing gi43 divergent-Draught-payment class). Null scope (levers off) = unchanged.
         PlanTraits _cont_traits;
-        if (PlanTraitsWanted()) { _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions); }
+        if (PlanTraitsWanted())
+        {
+            _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions);
+            // MTG_ACT_HOLD_OUTER (lockstep with ApplyPlanDirect's continuation install): the main
+            // plan's unfired trailing activations are still owed their {T} while this continuation
+            // pays its casts. Read before the scope replaces CurrentPlanTraits().
+            TurnSolver::CarryPendingActivations(_cont_traits, CurrentPlanTraits());
+        }
         PlanTraitsScope  _cont_scope(PlanTraitsWanted() ? &_cont_traits : nullptr);
         TapKeepLastScope _cont_keep(PumpTargetHoldEnabled() ? _cont_traits.pump_target_card : 0);
         // Lotus Bloom: apply any SacForMana (float the chosen colour) / Suspend this re-solve chose BEFORE
@@ -5358,6 +5398,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             if (execgreedy::Enabled())
                             { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
                             SearchBudget bp_budget = DecisionBudget();
+                            turncensus::SiteTag _tcs(turncensus::kSitePodBp);   // census: pod twin
                             extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                                    m_lookahead_depth, m_max_turns,
                                                                    &bp_budget, true,
@@ -5514,9 +5555,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 ManaPool avail = AvailableManaPool(state);
                 if (!TapForCost(state, a.cost, avail, /*for_creature=*/false))
-                { if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); } }
+                {
+                    if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
+                    // MTG_ACT_DROP_AUDIT "unpaid": the mana half failed and rolled back, so a pip the
+                    // casts already spent is what lost this activation. Counter only -- see GameLogger.h.
+                    if (ActDropAuditOn())
+                    { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
+                }
                 else
                 {
+                    if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input (lockstep twin of the rollout's): did the gated
                     // look-at-top (Scrying Sheets / Frost Augur) move a card into hand?
                     const bool snow_look = a.ability_mode == Action::AbilityMode::TapDraw
@@ -5586,18 +5634,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const Player& lap = state.players[state.active_player_index];
                         const CardDefinition* fd =
                             CardDatabase::Instance().LookupCached(lap.hand.back());
-                        if (fd && fd->card.IsLand())
-                        {
-                            snow_look_worth =
-                                lap.lands_played_this_turn < 1 + lap.bonus_land_drops_this_turn;
-                        }
-                        else if (fd)
-                        {
-                            ManaPool have2 = AvailableManaPool(state);
-                            have2.AddPool(state.floating_mana);
-                            snow_look_worth = static_cast<int>(have2.Total())
-                                           >= fd->card.m_mana_cost.ManaValue();
-                        }
+                        // SHARED BODY with the rollout (was a copy-pasted twin kept aligned by
+                        // comment discipline) -- see TurnSolver::SnowLookFoundPlayable. The two
+                        // worlds must agree exactly or bp_seen counting diverges.
+                        if (fd) { snow_look_worth = TurnSolver::SnowLookFoundPlayable(state, *fd); }
                     }
                     if (snow_look_worth)
                     {
@@ -5620,6 +5660,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                 }
             }
+            // MTG_ACT_DROP_AUDIT: the source was NOT live. PermAbilityDeadReason splits the defect
+            // (tapped for mana, so the {T} half of its own cost was spent by a cast) from the two
+            // benign answers (it left the battlefield; it is summoning-sick). See GameLogger.h.
+            else if (ActDropAuditOn() && a.def != nullptr)
+            { NoteActDrop(PermAbilityDeadReason(state, state.active_player_index, a.sac_source_id,
+                                                a.ability_mode),
+                          a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
         }
         else if (a.kind == Action::Kind::ActivatePump)
         {
@@ -5673,8 +5720,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     ApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
                                        ud->params.untap_creature_subtype);
+                    if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                 }
+                // MTG_ACT_DROP_AUDIT "unpaid": the source was live and had a target, so the mana
+                // half is what lost this untap. Nothing to roll back -- ApplyUntapCreature pays the
+                // {T} and this branch never reached it.
+                else if (ActDropAuditOn())
+                { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
             }
+            // MTG_ACT_DROP_AUDIT: the precondition failed. Split so "the casts tapped the Lodge"
+            // (defect) is not pooled with "no tapped Elf to untap" (benign). See GameLogger.h.
+            else if (ActDropAuditOn() && ud != nullptr)
+            { NoteActDrop(UntapCreatureDeadReason(state, state.active_player_index, a.sac_source_id),
+                          a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
         }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         {
@@ -6378,8 +6436,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // Kitesail Larcenist (etb_treasurify_each_player) likewise: chosen_x is the searched own-side
     // Treasure target's m_number, 0 = "none", and the human-only kEtbKxHeuristic = "choose on
     // resolution" -- all three must reach FireOwnEtbTriggers exactly as the rollout passes them.
+    // Genesis Wave (reveal_x_put_permanents) is the third: X is the SEARCHED cast axis (reveal depth
+    // AND mana-value cap), and X = 0 is a legal cast that must resolve as a clean no-op. Dropped
+    // from the entry it would arrive at EffectHandler as value_or(-1) -> clamped to 0 by the helper,
+    // so this is belt AND braces rather than the only guard -- but it is the same bug class the
+    // comment above documents, so the param is listed rather than relying on the clamp.
+    // Param-gated: no other deck's stack entries move.
     if (chosen_x > 0 || chosen_x == kEtbKxHeuristic || def->params.etb_blink_permanent
-        || def->params.etb_treasurify_each_player)
+        || def->params.etb_treasurify_each_player
+        || def->params.reveal_x_put_permanents)
     { entry.chosen_x = chosen_x; }
     // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig
     // exiles the same N cards and kills the same own creatures as the rollout (lockstep).

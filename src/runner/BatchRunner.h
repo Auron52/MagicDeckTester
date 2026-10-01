@@ -29,6 +29,13 @@ struct BatchJobResult
     // milliseconds for the same reason the ceiling is in units -- a wall-clock calibration would
     // pick a different threshold on every machine and under every load.
     std::vector<long long> units;
+    // SUM of the per-game units over the games this job COUNTED (the same set as win_turns, so an
+    // abandoned or skipped game is excluded exactly as it is from avg_turns). Always populated,
+    // unlike the vector above: a work A/B needs the budget's own currency beside `ms`, and gating
+    // the only cheap source of it on a dump flag meant every sweep read work from a process-wide
+    // `units_total=` line -- which forces one process per arm, the per-arm wave pattern CLAUDE.md
+    // forbids. One long long per job is free; see main.cpp's `units=` on the per-job result line.
+    long long              units_total = 0;
     // GLOBAL indices of games ABANDONED at the per-game work ceiling. NOT derivable from the gap
     // between `game_indices` and the job's range: a short job has two different kinds of hole, and
     // they mean opposite things. An ABANDONED game is degenerate -- every cell of that (deck, seed)

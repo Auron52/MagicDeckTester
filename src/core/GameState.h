@@ -307,6 +307,35 @@ struct GameState
     //     rollout's own-death exit and the executor's main-phase break.
     bool                     dmg_events_armed = false;
     bool                     own_death_live   = false;
+    // Does this deck run a card that reads Player::life_gained_this_turn FROM THE BATTLEFIELD,
+    // mid-turn? Deck-level stamp (GoldFishRunner::StampDeckTraits), same shape and same rationale as
+    // the end-step threshold just below, and it exists for the same reason: the counter is
+    // future-determining for such a deck and must join the sim key, but ONLY for such a deck, or
+    // every lifegain deck's keys would shift for a value none of them reads.
+    //
+    // It is a SEPARATE gate from the hand scan and the end-step threshold because the readers are a
+    // different KIND. The Fortifying Draught fold scans the HAND (the reader is a spell about to be
+    // cast); the Ocelot Pride fold is an END-STEP trigger; this one covers readers that sit on the
+    // BATTLEFIELD and convert the counter into something spendable THIS turn:
+    //   * Accomplished Alchemist (mana_per_life_gained) -- "{T}: Add X mana of any one color, where
+    //     X is the amount of life you gained this turn", i.e. two states with the same life total
+    //     but different life_gained_this_turn have DIFFERENT MANA AVAILABLE. A live divergence
+    //     source for exactly that is ordinary (Brushland: "{T}: Add {G} or {W}. This land deals 1
+    //     damage to you" -- gain one and pain-tap four, or gain none and pain-tap three, and both
+    //     land on the same life total with a different X).
+    //   * (to come) Blossoming Bogbeast's attack trigger, "+X/+X ... where X is the amount of life
+    //     you gained this turn" -- the same counter read off the battlefield, at combat.
+    // THIS IS A LIST, and it is meant to grow: a new battlefield reader adds a term to the stamp's
+    // scan in StampDeckTraits AND to the reader list in BuildSimKey's fold, and nothing else.
+    //
+    // DEFAULT FALSE is correct (unlike the ETB-cascade gates below, whose safe direction is true): a
+    // false stamp only costs memo HITS for a deck that has no such card, and cannot drop a trigger
+    // or change any outcome -- the counter itself always runs.
+    //
+    // Placed HERE, in the two bools' padding, deliberately: it keeps sizeof(GameState) at 832 (see
+    // the size ledger above Dominance.h's static_assert) so the search's per-node copy does not grow
+    // by 8 bytes for a deck constant.
+    bool                     deck_reads_lifegain_in_play = false;
     // Deck-level stamp (GoldFishRunner::SetupGame), same shape and same rationale as
     // The LARGEST CardParams::endstep_lifegain_threshold over the cards in this deck that carry
     // endstep_lifegain_tokens, i.e. over everything that actually READS

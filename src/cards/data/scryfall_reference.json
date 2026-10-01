@@ -19,6 +19,15 @@
     "toughness": "3",
     "type_line": "Creature — Human Knight"
   },
+  "Accomplished Alchemist": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "{T}: Add one mana of any color.\n{T}: Add X mana of any one color, where X is the amount of life you gained this turn.",
+    "power": "2",
+    "toughness": "5",
+    "type_line": "Creature — Elf Druid"
+  },
   "Accorder Paladin": {
     "cmc": 2.0,
     "keywords": [
@@ -87,6 +96,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Ageless Entity": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}{G}",
+    "oracle_text": "Whenever you gain life, put that many +1/+1 counters on this creature.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Elemental"
   },
   "Ajani's Pridemate": {
     "cmc": 2.0,
@@ -440,6 +458,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Blighted Steppe": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{3}{W}, {T}, Sacrifice this land: You gain 2 life for each creature you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Blood Crypt": {
     "cmc": 0.0,
     "keywords": [],
@@ -483,6 +510,24 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {B} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Blossoming Bogbeast": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "Whenever this creature attacks, you gain 2 life. Then creatures you control gain trample and get +X/+X until end of turn, where X is the amount of life you gained this turn.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Beast"
+  },
+  "Blossoming Sands": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {G} or {W}.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
@@ -1249,6 +1294,17 @@
     "toughness": "2",
     "type_line": "Creature — Minotaur Shaman"
   },
+  "Feed the Clan": {
+    "cmc": 2.0,
+    "keywords": [
+      "Ferocious"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "You gain 5 life.\nFerocious — You gain 10 life instead if you control a creature with power 4 or greater.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Felidar Guardian": {
     "cmc": 4.0,
     "keywords": [],
@@ -1483,6 +1539,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Human Wizard"
+  },
+  "Genesis Wave": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{X}{G}{G}{G}",
+    "oracle_text": "Reveal the top X cards of your library. You may put any number of permanent cards with mana value X or less from among them onto the battlefield. Then put all cards revealed this way that weren't put onto the battlefield into your graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Ghalta, Stampede Tyrant": {
     "cmc": 8.0,
@@ -2109,6 +2174,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Cat Cleric"
   },
+  "Kinsbaile Cavalier": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{W}",
+    "oracle_text": "Knight creatures you control have double strike.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Kithkin Knight"
+  },
   "Kitchen": {
     "cmc": 0.0,
     "keywords": [
@@ -2716,6 +2790,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Planeswalker — Bolas"
+  },
+  "Nykthos Paragon": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{W}{W}",
+    "oracle_text": "Whenever you gain life, you may put that many +1/+1 counters on each creature you control. Do this only once each turn.",
+    "power": "4",
+    "toughness": "6",
+    "type_line": "Enchantment Creature — Human Soldier"
   },
   "O-Naginata": {
     "cmc": 1.0,
@@ -3403,6 +3486,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Selesnya Sanctuary": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {G}{W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Seraph Sanctuary": {
     "cmc": 0.0,
@@ -4309,6 +4401,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Verdant Sun's Avatar": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "Whenever this creature or another creature you control enters, you gain life equal to that creature's toughness.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Dinosaur Avatar"
+  },
   "Vexing Shusher": {
     "cmc": 2.0,
     "keywords": [],
@@ -4362,6 +4463,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Spirit Cleric"
+  },
+  "Wellwisher": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "{T}: You gain 1 life for each Elf on the battlefield.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf"
   },
   "Wild Growth": {
     "cmc": 1.0,

@@ -9986,6 +9986,7 @@ namespace
     const SnowProvider           g_snow;
     const FungusProvider         g_fungus;
     const CritterLifegainProvider g_critter;
+    const SelesnyaLifegainProvider g_selesnya_lifegain;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -11399,6 +11400,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // lifegain doubler is exactly what a CritterLifegain / Angels list would plausibly add, which
     // is the class of term this block must not key on.
     bool prevent_damage = false;
+    // SELESNYA LIFEGAIN (GW gain-into-counters ramp). MUST return ABOVE BOTH `stompy` and `critter`
+    // -- see SelesnyaLifegainProvider's declaration for the two signatures it had to clear and why
+    // the terms below deliberately exclude the Elf-ramp and Craterhoof params this deck also carries.
+    bool selesnya = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -11408,6 +11413,22 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.noncreature_damage_lifegain || p.land_tap_damage_each_player > 0
             || p.lifegain_target_opp_loses_that_much || p.lifegain_each_opp_loses > 0)
         { prevent_damage = true; }
+
+        // SelesnyaLifegain -- NINE params across EIGHT different cards (Ageless Entity, Nykthos
+        // Paragon x2, Accomplished Alchemist, Feed the Clan, Blighted Steppe, Wellwisher, Blossoming
+        // Bogbeast, Genesis Wave). Every one is new + gated (0/false/empty inert) and verified
+        // carried by NO other card in cards.json, so no existing deck's routing moves and no single
+        // deckbuilding swap can lose this one. See the provider's declaration for the exclusions.
+        if (p.lifegain_self_counters_that_many
+            || p.lifegain_each_own_creature_counters_that_many
+            || p.lifegain_counters_once_each_turn
+            || p.mana_per_life_gained
+            || p.cast_lifegain_ferocious > 0
+            || p.sac_lifegain_per_creature > 0
+            || !p.tap_lifegain_per_subtype.empty()
+            || p.attack_team_pump_per_life_gained
+            || p.reveal_x_put_permanents)
+        { selesnya = true; }
 
         // NOTE: `is_land_aura` is deliberately NOT a term here -- see the flag's declaration.
         if (p.blink_cost.has_value() || p.etb_untap_lands > 0) { eldrazi = true; }
@@ -11798,6 +11819,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
     if (prevent_damage) { return g_prevent_damage; }
+    // SelesnyaLifegain ABOVE BOTH `stompy` and `critter`, and that position is load-bearing twice
+    // over -- below EITHER one this deck would silently ride another deck's judgement hooks. It was
+    // measurably riding StompyProvider before this branch existed (Craterhoof's team pump and Elvish
+    // Archdruid's scaled Elf mana each set `stompy` alone). Placed this high because the signature
+    // is carried by no other deck, so the position is free.
+    if (selesnya)    { return g_selesnya_lifegain; }
     if (angels)      { return g_angels; }
     // WhiteKnights ABOVE Knights, and that order is the whole point: WhiteKnights trips BOTH
     // signatures (it shares the Knight Exemplar / Worthy Knight / Acclaimed Contender core), so

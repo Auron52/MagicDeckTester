@@ -690,6 +690,10 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("memo_orderfree_verified_only")) { j.arm.memo_orderfree_verified_only = jspec["memo_orderfree_verified_only"].get<bool>() ? 1 : 0; }
     if (jspec.contains("fsl_split_keys"))     { j.arm.fsl_split_keys     = jspec["fsl_split_keys"].get<bool>() ? 1 : 0; }
     if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
+    // Visits per charged unit for the greedy-walk charge (see ValueArm.h / GreedyChargeGuard). Paired
+    // with "flags": {"MTG_SOLVE_CHARGE": true} -- the flag says WHETHER to charge, this says HOW MUCH,
+    // and the sweep needs both varying inside one pool.
+    if (jspec.contains("solve_charge_w")) { j.arm.solve_charge_w = jspec["solve_charge_w"].get<int>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).
     // An UNKNOWN name throws rather than being ignored: a silently-dropped flag reads as "this arm was
@@ -1329,6 +1333,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             wt_played.push_back(win_turns[j][i]);
             dg_played.push_back(digests[j][i]);
             gi_played.push_back(gidx);
+            r.units_total += units[j][i];
             if (s_dump_units) { r.units.push_back(units[j][i]); }
         }
         r.games_played = static_cast<int>(wt_played.size());

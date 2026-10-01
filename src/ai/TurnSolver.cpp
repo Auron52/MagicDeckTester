@@ -10,6 +10,7 @@
 #include "EngineFlags.h"
 #include "TranspositionTable.h"
 #include "Dominance.h"              // EOT state dominance (MTG_DOM_CENSUS / MTG_DOM_PRUNE)
+#include "TurnCensus.h"             // per-DECISION work census (MTG_TURN_CENSUS)
 #include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
 #include "Profiler.h"
 #include "../core/ManaPool.h"
@@ -99,7 +100,12 @@ TurnSolver::SearchLeafDepthScope::~SearchLeafDepthScope()
 // turn-steps this process. A CONTENTION-PROOF measure of rollout work (wall-clock is not, under shared
 // machine load), so truncated-rollout (MTG_ROLLOUT_HORIZON) speedups can be read as a step-count ratio.
 // Flag-gated so the shared counters never touch the rollout hot loop (cross-thread atomic contention) when off.
-static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS");
+// MTG_TURN_CENSUS implies it: the per-decision census (TurnCensus.h) DIFFS these very counters, so
+// without this a census run would emit a full, well-formed table of zeros. That is not a
+// hypothetical -- `census-flag-needs-its-printer-flag` records MTG_BF_CENSUS counting into a
+// printer that only ran under MTG_ROLLOUT_STATS, and the silent-zero table it produced. A census
+// flag must never depend on the operator also remembering its counter gate.
+static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS") || turncensus::On();
 // Separate from s_rollout_stats: the why-not histogram re-evaluates several gate predicates per
 // consultation (BpTurnManaSettled, BpSlotIsAfterSite -> a provider CastOrderRank lookup), which is
 // far too expensive to carry on every stats run. Diagnostic only; counters, no behaviour.
@@ -378,6 +384,29 @@ static std::atomic<long long> g_dedup_k0_dup_other[2][2]; // duplicate, but of s
 static std::atomic<long long> g_w0_unif_collapsed{0};
 // ...and MTG_BP_W0_NOBP's.
 static std::atomic<long long> g_w0_nobp_skipped{0};
+// The SAME two arms as carried into FSLineWin's plan loop (MTG_BP_W0_FSW), plus the chain arm's own
+// collapse (MTG_BP_W0_CHAIN_COLLAPSE). Counted separately from the pair above on purpose: the two
+// hosts are different populations, and the whole point of the port is that the numbers here were
+// previously ZERO while being 94.6% of the work. See the w0collapse namespace.
+static std::atomic<long long> g_fsw_nobp_skipped{0};
+static std::atomic<long long> g_fsw_unif_collapsed{0};
+static std::atomic<long long> g_w0_chain_collapsed{0};   // both hosts
+static std::atomic<long long> g_w0_chain_prescans{0};    // rank-0 walks that published a ci
+// WHY A COLLAPSE MISSED (MTG_ROLLOUT_STATS). This is the coverage question, and it is the only
+// thing that can distinguish the two explanations for a surviving duplicate apply: a skip that
+// could not see enough to fire, versus a candidate the identity does not cover because the apply
+// really does reach a second breakpoint (where uniform k and rank k are DIFFERENT lines and
+// declining one deletes it). The first is a lever; the second is not, and no amount of measured
+// post-apply duplication makes it one.
+static std::atomic<long long> g_w0_unif_miss_nomemo{0};  // rank sibling never reported a count
+static std::atomic<long long> g_w0_unif_miss_multi{0};   // it reported 2+ class-on breakpoints
+static std::atomic<long long> g_w0_chain_miss_noci{0};   // rank 0 never published a ci
+static std::atomic<long long> g_w0_chain_miss_pastw{0};  // ci >= W -- the case the arm EXISTS for
+static std::atomic<long long> g_w0_chain_miss_neg{0};    // ci < 0 -- resolves EMPTY, not collapsed
+static std::atomic<long long> g_w0_chain_miss_nbp{0};    // ci < W but rank ci saw 2+ breakpoints
+// MTG_BP_W0_FSW_VERIFY: did the NOBP arm's claim hold? `bad` > 0 refutes the identity outright.
+static std::atomic<long long> g_w0_nobp_verify_ok{0};
+static std::atomic<long long> g_w0_nobp_verify_bad{0};
 // CHAIN-SLOT OUTCOME (see g_bp_chain_ci_last). The three cells want three different answers:
 //   covered = the scan landed INSIDE wave 0's own window (ci < W), so rank ci already scored that
 //             exact continuation -> a pure duplicate, losslessly skippable.
@@ -499,7 +528,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.echo_resolved ? 4096ull : 0ull)
          | (p.temp_double_strike ? 8192ull : 0ull)     // Valiant Knight until-EOT team grant
          | (p.skip_next_untap ? 16384ull : 0ull)       // EXERT (CR 701.38): will miss its next untap
-         | (p.animated_printed_types ? 32768ull : 0ull));  // typed animation, NOT all creature types
+         | (p.animated_printed_types ? 32768ull : 0ull)   // typed animation, NOT all creature types
+         | (p.lifegain_counters_used_this_turn ? 65536ull : 0ull));  // Nykthos Paragon once-each-turn
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -743,6 +773,7 @@ static std::atomic<long long> g_bp_condemn_drops_exec{0};
 // indistinguishable from a working one that happens to be cheap.
 static int BpCondemnDropMode();                          // defined with the mode's documentation
 static int BpSearchWidth();                              // wave-0 width W (defined far below)
+static int PlanDumpTurn();                               // MTG_PLAN_DUMP gate (defined at EOF)
 static bool BpCondemnNewOptByNameEnabled();              // defined with the guard it refines
 static bool BpCondemnNoWinTrunc();                       // defined with the watermark it gates
 // MTG_NOWIN_VERIFY -- recompute every NO-WIN cache hit fresh and report any that a real search
@@ -802,6 +833,40 @@ static std::atomic<long long> g_bp_condemn_act_drops{0};
 // every drop is a candidate removed from the odometer, so the subsets over it are never enumerated.
 static std::atomic<long long> g_dig_mana_last_drops{0};
 static bool DigManaLastOn();   // defined with the predicate, beside AnyHandCastableNow
+// BREAKPOINT SITE 8 PLAYABILITY CENSUS (see TurnSolver::SnowLookFoundPlayable). The shipped gate is
+// a MANA-VALUE test -- `have.Total() >= fd->card.m_mana_cost.ManaValue()` -- so it is COLOUR-BLIND:
+// a found Marit Lage's Slumber ({1}{U}) passes on two Scrying Sheets ({C}{C}) that can never cast it.
+// Every pass opens a full nested Solve of the rest of the turn, so a colour-blind pass that no
+// continuation could use is a whole re-solve spent for nothing.
+//   opens       gate reached with a NONLAND find (the MV test's denominator; lands take the
+//               land-drop branch and are already tight)
+//   mv_pass     ...passed the shipped MV test
+//   color_fail  ...and the COLOUR test would additionally reject it -- the lever's exact ceiling,
+//               counted even with the lever OFF so the size is readable with ZERO behaviour change.
+static std::atomic<long long> g_snow_look_opens{0};
+static std::atomic<long long> g_snow_look_mv_pass{0};
+static std::atomic<long long> g_snow_look_color_fail{0};
+static bool SnowLookColorGateOn();   // defined with the gate, beside PostEntryBreakpointClassOn
+// WHICH continuation action takes a base plan's pending activation source? (MTG_ACT_DROP_AUDIT only.)
+// The MTG_BP_SEARCH=0 control shows the whole remaining `tapped` drop class is caused by SEARCHED
+// breakpoint continuations, and the two possible causes have OPPOSITE fixes:
+//   g_cont_tap_act   the continuation's own action list ACTIVATES that same physical source -- a
+//                    DOUBLE-BOOKING. The continuation is a fresh Solve over a board where the base
+//                    plan's un-fired activation sources are still untapped, so it happily enumerates
+//                    activating one. Fix is enumeration-side (exclude the base plan's pending
+//                    activations from the continuation's candidate list), not a bigger hold.
+//   g_cont_tap_mana  the source got tapped for MANA and no continuation action names it -- a hold gap,
+//                    which is what MTG_ACT_HOLD_OUTER was built for (and which measured ~4 drops, so
+//                    this bucket is expected to be the small one).
+static std::atomic<long long> g_cont_tap_act{0};
+static std::atomic<long long> g_cont_tap_mana{0};
+// The EXACT join, which the two counters above can only bound: per plan apply, the sources a
+// breakpoint continuation activated. Checked at the drop site so `tapped` splits into "its own
+// continuation activated this very permanent" and everything else. Cleared at ApplyPlanDirect entry;
+// only touched under the audit, so a ship config never allocates.
+static thread_local std::vector<int> t_cont_act_srcs;
+static std::atomic<long long> g_tapped_by_cont_act{0};
+static std::atomic<long long> g_tapped_other{0};
 // MTG_FS_PRE_STATE_SKIP firing counter: ORDINARY plans (bp_choice < 0) skipped on FSLineWin's frontier
 // because an earlier sibling already scored the same post-apply state. Zero with the lever on means the
 // rule never fired -- the standing trap in this family ([[digest-equality-can-mean-broken]]).
@@ -1086,12 +1151,15 @@ enum Site
     kEscEval,              // SolveWithLookahead: condemnation escalation re-evaluation
     kFsBpNode,             // FullSearchLine: breakpoint-NODE continuation children (MTG_BP_NODE)
     kFsM2Wave,             // FSLineTail m2 loop: deferred wave variants (MTG_M2_WAVES)
+    // APPEND LAST ONLY -- see the enum's note below; these ordinals index a persisted name table
+    // and the census's u_* column order.
+    kGreedyWalk,           // EnumeratePlans' subset walk, one unit per W visits (MTG_SOLVE_CHARGE)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
-    "fs_m2_wave"
+    "fs_m2_wave", "greedy_walk"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -1429,6 +1497,50 @@ namespace
                           << "  (uniform variants that ARE their rank sibling: the apply reached"
                              " <= 1 enabled-class breakpoint)\n";
             }
+            if (g_w0_unif_miss_nomemo.load() > 0 || g_w0_unif_miss_multi.load() > 0)
+            {
+                const long long mn = g_w0_unif_miss_nomemo.load();
+                const long long mm = g_w0_unif_miss_multi.load();
+                std::cerr << "[rollout-stats] w0_unif_miss nomemo=" << mn << " multi=" << mm
+                          << " nomemo_share=" << ((mn + mm) ? static_cast<double>(mn) / (mn + mm)
+                                                            : 0.0)
+                          << "  (nomemo = coverage, a lever; multi = 2+ class-on breakpoints, where"
+                             " uniform k is NOT rank k and declining it deletes a line)\n";
+            }
+            // The SAME two arms inside FSLineWin (MTG_BP_W0_FSW), reported separately because the
+            // point of the port is that these were ZERO while that host did 94.6% of the work.
+            if (g_fsw_nobp_skipped.load() > 0 || g_fsw_unif_collapsed.load() > 0)
+            {
+                std::cerr << "[rollout-stats] w0_fsw nobp=" << g_fsw_nobp_skipped.load()
+                          << " unif=" << g_fsw_unif_collapsed.load()
+                          << "  (the same two identities, in FSLineWin's plan loop)\n";
+            }
+            if (g_w0_nobp_verify_ok.load() > 0 || g_w0_nobp_verify_bad.load() > 0)
+            {
+                const long long vo = g_w0_nobp_verify_ok.load();
+                const long long vb = g_w0_nobp_verify_bad.load();
+                std::cerr << "[rollout-stats] w0_nobp_verify ok=" << vo << " MISMATCH=" << vb
+                          << " bad_share=" << ((vo + vb) ? static_cast<double>(vb) / (vo + vb)
+                                                         : 0.0)
+                          << "  (MISMATCH > 0 REFUTES the NOBP identity: the declined variant does"
+                             " NOT reach its base plan's state)\n";
+            }
+            if (g_w0_chain_collapsed.load() > 0 || g_w0_chain_prescans.load() > 0)
+            {
+                std::cerr << "[rollout-stats] w0_chain_collapse skipped="
+                          << g_w0_chain_collapsed.load()
+                          << " prescans=" << g_w0_chain_prescans.load()
+                          << "  (chain variants whose scan lands at ci < W, i.e. on a continuation"
+                             " rank ci already scored; prescans = rank-0 walks that published a ci)"
+                             "\n";
+                std::cerr << "[rollout-stats] w0_chain_miss noci=" << g_w0_chain_miss_noci.load()
+                          << " empty=" << g_w0_chain_miss_neg.load()
+                          << " past_w=" << g_w0_chain_miss_pastw.load()
+                          << " multi=" << g_w0_chain_miss_nbp.load()
+                          << "  (noci = rank 0 published nothing -> coverage; empty = ci < 0,"
+                             " deliberately not collapsed; past_w = the case the arm exists for;"
+                             " multi = rank ci saw 2+ breakpoints)\n";
+            }
             if (DedupCensusOn())
             {
                 const long long ds = g_dedup_seen.load(), dd = g_dedup_dup.load();
@@ -1694,6 +1806,45 @@ namespace
                              " from hand and the pool could not fund both)\n";
                 if (g_dig_mana_last_drops.load() == 0)
                 { std::cerr << "  NO POWER -- the rule never fired.\n"; }
+            }
+            if (g_cont_tap_act.load() + g_cont_tap_mana.load() > 0)
+            {
+                const long long ca = g_cont_tap_act.load(), cm = g_cont_tap_mana.load();
+                std::cerr << "[rollout-stats] cont_taps ACTIVATED_same_source=" << ca
+                          << " tapped_for_MANA=" << cm
+                          << " (" << (100.0 * static_cast<double>(ca) / (ca + cm))
+                          << "% double-booking)\n"
+                          << "  a source the BASE plan still owes a {T} to, taken by its own"
+                             " breakpoint continuation. ACTIVATED = the continuation re-solved and"
+                             " activated the same physical permanent (fix is enumeration-side);"
+                             " MANA = a continuation cast paid with it (a hold gap)\n";
+                const long long tb = g_tapped_by_cont_act.load(), to = g_tapped_other.load();
+                std::cerr << "[rollout-stats] tapped_why by_cont_ACTIVATION=" << tb
+                          << " other=" << to
+                          << " (" << ((tb + to) ? 100.0 * static_cast<double>(tb) / (tb + to) : 0.0)
+                          << "% of the `tapped` drop class is this plan's own continuation"
+                             " DOUBLE-BOOKING the source)\n";
+            }
+            if (g_snow_look_opens.load() > 0)
+            {
+                const long long so = g_snow_look_opens.load();
+                const long long sm = g_snow_look_mv_pass.load();
+                const long long sc = g_snow_look_color_fail.load();
+                std::cerr << "[rollout-stats] snow_look_gate nonland_finds=" << so
+                          << " mv_pass=" << sm
+                          << " (" << (so ? 100.0 * static_cast<double>(sm) / so : 0.0) << "%)"
+                          << "  COLOUR_would_reject=" << sc
+                          << " (" << (sm ? 100.0 * static_cast<double>(sc) / sm : 0.0)
+                          << "% of mv_pass)"
+                          << (SnowLookColorGateOn() ? " [gate ARMED]" : " [gate off -- census only]")
+                          << "\n  every mv_pass opens a nested Solve of the rest of the turn;"
+                             " COLOUR_would_reject is the share of those the found card's PIPS"
+                             " provably cannot use (MTG_SNOW_LOOK_COLOR)\n";
+                if (sc == 0)
+                {
+                    std::cerr << "  NO POWER -- the colour test never disagreed with the MV test,"
+                                 " so the lever cannot save anything on this deck/config.\n";
+                }
             }
             if (g_fs_pre_state_skips.load() > 0 || FsPreStateSkipOn())
             {
@@ -2701,7 +2852,8 @@ static thread_local int g_rollout_nest = 0;
 // SolveUncached charged NOTHING -- so a "20 ms" rollout could legally burn minutes inside one
 // combo-board enumeration (Melira keepgen discovery measured 35-152 s rollouts against 20 ms
 // budgets; suite game gi32/s1033 spent 289 s deciding a t5 win). One subset visit costs ~1-2 us,
-// one budget unit is calibrated at ~1.1 us (900/virtual-ms), so the honest exchange rate is 1:1:
+// one budget unit is calibrated at ~1.1 us (900/virtual-ms), so the nominal exchange rate is 1:1
+// (and MTG_SOLVE_CHARGE_W makes that rate a dial -- see GreedyChargeWeight below):
 // each consider() visit consumes one unit from the ACTIVE budget, and when that budget exhausts
 // the walk stops and keeps best-so-far (the combo/persist-loop cuts pre-seed lethal lines first,
 // so kills stay found). Deterministic: unit-counted, no wall clock. Installed by every budget-
@@ -2711,17 +2863,74 @@ static thread_local int g_rollout_nest = 0;
 // them -- enable per-run (generation drivers; Melira probes) and flip the default only with a
 // rebaseline.
 static thread_local SearchBudget* g_greedy_charge_budget = nullptr;
-static bool GreedyChargeEnabled()
+static bool GreedyChargeEnabled(const GameState& state)
 {
-    static const bool v = EnvOn("MTG_SOLVE_CHARGE");
-    return v;
+    // Per-JOB overridable (heurarm slot SOLVE_CHARGE): the env static alone makes a process ONE
+    // arm, which forces a sweep into per-arm batches -- the pattern CLAUDE.md forbids. Read at
+    // GreedyChargeGuard construction (once per budget-holding host frame), not per subset visit.
+    //
+    // The DEFAULT the per-job flag overrides is "env on, OR this deck adopted a weight" -- so a
+    // deck's opt-in (DecisionProvider::SolveChargeWeightOptIn) turns the charge on for that deck,
+    // and a job that pins `"flags": {"MTG_SOLVE_CHARGE": false}` still gets a true uncharged arm on
+    // it. Both halves matter: without the first the opt-in would set a weight nothing reads, and
+    // without the second the A/B that justified the opt-in could no longer be run.
+    static const bool env = EnvOn("MTG_SOLVE_CHARGE");
+    return heurarm::Flag(heurarm::SOLVE_CHARGE, env || SolveChargeWeightFor(state) > 0);
 }
+// THE EXCHANGE RATE, as a dial instead of an assertion (MTG_SOLVE_CHARGE_W, default 1 = today).
+//
+// The 1:1 rate above is a calibration claim ("a visit costs ~1-2 us, a unit is ~1.1 us") and it is
+// the one number in the charge that was never measured. W = VISITS PER CHARGED UNIT makes it a
+// parameter: the walk's allowance becomes W x (whatever the budget grants it), while a turn-step
+// still costs exactly one unit. That asymmetry is the point, because it is what separates this from
+// simply enlarging the budget. A decision's charge is  nodes + visits/W  against a limit B, so:
+//   * raising B relaxes BOTH terms -- it buys a node-dominated deck more search (measured: a uniform
+//     4x knob made every deck but Snow 1.21-1.55x DEARER, buying quality nobody asked for here);
+//   * raising W relaxes only the walk, so a deck whose cost is nodes barely notices while Snow --
+//     whose heaviest decision is 20 M visits against ~9,000 units of node work -- is bounded by it.
+// So W is the knob that lets ONE fleet-wide default cap Snow's walk without re-pricing the fleet's
+// search, and the sweep is over W at the decks' SHIPPED budgets. (If it turns out to want different
+// values per deck it belongs in the sidecar's value_play beside escalation_r and fit_alpha; do not
+// add that until a sweep says a single W cannot serve.)
+static inline int GreedyChargeWeight(const GameState& state)
+{
+    // Per-JOB numeric override first (valuearm::Arm -- heurarm is boolean-only), then the env/deck
+    // resolver. Both ends of that chain exist for the same reason the flag's does: the weight is
+    // what a sweep VARIES, so pinning it per process would make a (weight x deck) matrix one batch
+    // per cell. Resolved once per budget-holding host frame, never per visit.
+    const int job = valuearm::t_arm.solve_charge_w;
+    if (job > 0) { return job; }
+    const int w = SolveChargeWeightFor(state);
+    return w > 1 ? w : 1;
+}
+// Residual visits toward the next unit. SCOPED TO THE GUARD -- saved, zeroed, restored -- rather
+// than left to run on, because a thread_local that survives a host frame carries work between
+// GAMES in a batch worker, and which games preceded this one on this thread is a scheduling fact.
+// That would make the charge (and so the play it bounds) depend on thread timing, which is exactly
+// the nondeterminism SearchBudget exists to remove. Per-frame residual loses at most W-1 visits.
+static thread_local int g_greedy_charge_w   = 1;
+static thread_local int g_greedy_charge_acc = 0;
 struct GreedyChargeGuard
 {
     SearchBudget* prev;
-    explicit GreedyChargeGuard(SearchBudget* b) : prev(g_greedy_charge_budget)
-    { if (GreedyChargeEnabled()) { g_greedy_charge_budget = b; } }
-    ~GreedyChargeGuard() { g_greedy_charge_budget = prev; }
+    int           prev_w;
+    int           prev_acc;
+    GreedyChargeGuard(const GameState& state, SearchBudget* b)
+        : prev(g_greedy_charge_budget), prev_w(g_greedy_charge_w), prev_acc(g_greedy_charge_acc)
+    {
+        if (GreedyChargeEnabled(state))
+        {
+            g_greedy_charge_budget = b;
+            g_greedy_charge_w      = GreedyChargeWeight(state);
+            g_greedy_charge_acc    = 0;
+        }
+    }
+    ~GreedyChargeGuard()
+    {
+        g_greedy_charge_budget = prev;
+        g_greedy_charge_w      = prev_w;
+        g_greedy_charge_acc    = prev_acc;
+    }
 };
 static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahead frame
 
@@ -3711,6 +3920,11 @@ static bool BpActivationAbilityUnambiguous(const CardParams& p)
     if (p.ice_counter_cost)         { ++n; }
     if (p.lifelink_grant_cost)      { ++n; }
     if (p.life_gated_put_creatures_cost) { ++n; }
+    // Blighted Steppe and Wellwisher each carry exactly ONE of these, so both count 1 and the
+    // "same ability, identical card" inference stays exact for them. (Consumer
+    // MTG_BP_CONDEMN_ACTIVATION is default OFF -- this is correctness-for-later, not a live path.)
+    if (p.sac_lifegain_per_creature_cost) { ++n; }
+    if (p.tap_lifegain_cost)              { ++n; }
     return n == 1;
 }
 
@@ -4037,6 +4251,10 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::PayToken,       &sd.params.pay_token_cost          },
         { PermAbilityMode::PingAll,        &sd.params.ping_all_cost           },
         { PermAbilityMode::LifeGatedPutCreatures, &sd.params.life_gated_put_creatures_cost },
+        // Appended LAST, and in the SAME order as the other two ModeSpec tables (Blighted Steppe
+        // then Wellwisher) -- see CollectActivationKeys, whose slots are kActModeBase + table INDEX.
+        { PermAbilityMode::SacLifePerCreature, &sd.params.sac_lifegain_per_creature_cost },
+        { PermAbilityMode::TapLifegain,        &sd.params.tap_lifegain_cost              },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -5152,7 +5370,7 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
                                                 TranspositionTable* tt, bool in_rollout)
 {
     struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
-    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // MTG_NO_M2_SOLVE=1 -- TEMPORARY MEASUREMENT LEVER (default off). Return an empty plan instead
     // of solving the post-combat main at all. This is the UPPER BOUND for "skip the search where it
     // is unproductive" (USER 2026-08-19): whatever this arm loses per game is the most any
@@ -7161,6 +7379,14 @@ static int PendingAttackDamage(const GameState& state)
         { dmg += (bc_total - bc_of[i]) * (ds_of[i] ? 2 : 1); }
         dmg += bc_total * tok_count;   // tokens: no lord grants them double strike
     }
+
+    // Blossoming Bogbeast's team pump. Runs LAST for the same reason battle cry does: it needs the
+    // final attacker set, the ds flags and tok_count. Without it the search under-rates attacking by
+    // (X x every attacker) -- and that is not a rounding error here, it is the input to the searched
+    // dork attack/hold (MTG_DORK_ATK_SEARCH, default ON), which would otherwise price a released
+    // Llanowar Elves swing at 1 instead of 1+X. Mirrors ApplyAttackLifegainTeamPump; returns 0 with
+    // no such attacker, so every other deck's projection is byte-identical.
+    dmg += CountAttackLifegainTeamPump(state, active, attackers, ds_of, tok_count);
     return dmg;
 }
 
@@ -7429,9 +7655,16 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         // Daxos), exactly the size it is the instant it resolves. Counted by watcher PERMANENT,
         // not life amount (counters are per event). Param-gated -> 0 for every other creature.
         int lifegain_deck_credit = 0;
-        if (def.params.lifegain_self_counters > 0 || def.params.lifegain_each_own_creature_counters > 0
+        if (def.params.lifegain_self_counters > 0 || def.params.lifegain_self_counters_that_many
+            || def.params.lifegain_each_own_creature_counters > 0
+            || def.params.lifegain_each_own_creature_counters_that_many   // Nykthos Paragon
             || def.params.lifegain_target_own_counter || def.params.creature_requires_devotion > 0)
         {
+            // Ageless Entity's "that many" reads the AMOUNT of each gain, not the event count, so
+            // its entry credit is the LIFE its own entry would gain rather than a per-watcher
+            // tally. Hoisted so the extra scan work is one bool test for every other deck.
+            const bool that_many = def.params.lifegain_self_counters_that_many;
+            int entry_gain = 0;
             int watchers = 0, own_creatures = 0, own_recipients = 0;
             for (const Permanent& q : state.battlefield)
             {
@@ -7444,8 +7677,23 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
                 const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
                 if (qd && (qd->params.any_creature_enters_lifegain > 0
                            || qd->params.own_creature_enters_lifegain > 0)) { ++watchers; }
+                if (that_many && qd)
+                {
+                    // The life THIS body's own entry would gain: a flat enter-watcher by its N, a
+                    // TOUGHNESS watcher (Verdant Sun's Avatar) by this creature's toughness --
+                    // printed + lord bonus, since it is not on the battlefield yet to read live.
+                    const CardParams& qp = qd->params;
+                    entry_gain += qp.any_creature_enters_lifegain + qp.own_creature_enters_lifegain;
+                    if (qp.own_creature_enters_lifegain_toughness)
+                    { entry_gain += def.card.m_toughness.value_or(0) + lord_tb; }
+                }
             }
             dyn += def.params.lifegain_self_counters * watchers;
+            // DELIBERATELY LINEAR. The true value COMPOUNDS across sequential enter-watcher
+            // triggers (four Verdant Sun's Avatars grow an entering Entity 4+8+16+32), and the
+            // SEARCH owns that -- the same leaf/search split the Archangel of Thune credit below
+            // documents. Under-crediting is the safe direction for a greedy leaf.
+            if (that_many) { dyn += entry_gain; }
             // Archangel of Thune: one gain event = +1/+1 on the whole team it joins -- price one
             // event's worth of permanent team growth so the greedy leaf deploys the deck's payoff
             // ahead of a vanilla five-drop; the search owns the multi-event valuation. Lyra,
@@ -7453,11 +7701,23 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             // would actually take a counter (own_recipients == own_creatures when the filter is
             // empty, which is what keeps Thune byte-identical), and count the watcher itself only
             // when it matches its own filter.
-            if (def.params.lifegain_each_own_creature_counters > 0)
+            if (def.params.lifegain_each_own_creature_counters > 0
+                || def.params.lifegain_each_own_creature_counters_that_many)
             {
                 const int self = LifegainCounterSubtypeOk(def.params, def.card) ? 1 : 0;
-                lifegain_deck_credit += def.params.lifegain_each_own_creature_counters
-                                      * (own_recipients + self) * DMG;
+                // Nykthos Paragon's "THAT MANY" form leaves the int at 0, so without a substitute
+                // per-recipient count this whole credit would be ZERO and the greedy leaf would
+                // price the deck's payoff -- a six-drop whose one gain can put +10/+10 on the whole
+                // team -- as a vanilla 4/6 body. That is a CORRECTNESS floor, not an ordering prior.
+                // 2 deliberately, as a FLOOR: it is the smallest gain any PAYOFF source in this list
+                // produces (Blossoming Bogbeast's 2, Blighted Steppe's 2-per-creature), and
+                // over-crediting is the dangerous direction for a greedy leaf. The real search
+                // simulates the actual gains, so this only affects shallow/greedy deployment ORDER.
+                // The 2 is a MEASUREMENT CANDIDATE for the heuristic-optimization loop, not a
+                // tuned constant. Gated on the new bool -> every existing deck is byte-identical.
+                const int per = def.params.lifegain_each_own_creature_counters_that_many
+                              ? 2 : def.params.lifegain_each_own_creature_counters;
+                lifegain_deck_credit += per * (own_recipients + self) * DMG;
             }
             // Heliod: a counter per gain event on one body -- a flat engine credit.
             if (def.params.lifegain_target_own_counter) { lifegain_deck_credit += 2 * DMG; }
@@ -8796,13 +9056,15 @@ namespace foldcensus
 {
 enum : int {
     kDamage = 0, kAttached, kMarked, kTempPT, kChargeVerseStorage, kStorageHold, kGarth, kLoyalty,
-    kCastLifegain, kChosenColor, kIceAge, kSporeQuest, kTempHasteEtc, kChosenSubtype, kAnimatedToken,
+    kCastLifegain, kLifegainCountersUsed, kChosenColor, kIceAge, kSporeQuest, kTempHasteEtc,
+    kChosenSubtype, kAnimatedToken,
     kCopyName, kAttachedScan, kPlain, kReasonCount
 };
 static const char* kReasonNames[kReasonCount] = {
     "damage/death-trigger/counters", "aura-or-equip-on-self", "marked_for_destruction",
     "temp_power/toughness", "charge/verse/storage counters", "storage_hold_this_turn",
-    "garth_chosen_mask", "loyalty", "colored_cast_lifegain_used", "chosen_color (locked mana rock)",
+    "garth_chosen_mask", "loyalty", "colored_cast_lifegain_used",
+    "lifegain_counters_used (Nykthos Paragon)", "chosen_color (locked mana rock)",
     "ice/age counters", "spore/quest counters", "temp_haste/lifelink/double_strike/exile_at_end",
     "chosen_subtype_id", "is_animated/is_token/echo_resolved", "copy_printed_name",
     "something ATTACHED to it", "PLAIN (folded)"
@@ -8905,6 +9167,11 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     if (p.loyalty != 0 || p.loyalty_activated_this_turn) { return false; }
     why = foldcensus::kCastLifegain;
     if (p.colored_cast_lifegain_used_this_turn) { return false; }
+    // Nykthos Paragon: a spent copy and an unspent one are NOT interchangeable -- one can still put
+    // `amount` counters on the whole team this turn and the other cannot even trigger. Never set for
+    // any other deck, so this refusal is byte-identical everywhere else.
+    why = foldcensus::kLifegainCountersUsed;
+    if (p.lifegain_counters_used_this_turn) { return false; }
     why = foldcensus::kChosenColor;
     if (p.chosen_color != -1) { return false; }
     why = foldcensus::kIceAge;
@@ -9520,10 +9787,13 @@ inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; re
 // Per-JOB (heurarm) so the control and the armed arm pool into ONE batch instead of one invocation
 // each: this lever's A/B population is Snow's slowest games, where a per-arm split would idle the
 // box against a 13-minute tail twice over.
-static bool FoldSearchOdometerOn()
+// Resolution order, matching GreedyChargeEnabled below: a per-JOB heurarm override wins (so both
+// arms of a pooled A/B share one pool), then the env/provider resolver -- FoldSearchOdometerFor
+// reads an explicitly-set MTG_FOLD_SEARCH_ODO first ("=0" hard-disables an adopted opt-in) and
+// falls back to the deck's FoldSearchOdometerOptIn. No opt-in and no env = false = byte-identical.
+static bool FoldSearchOdometerOn(const GameState& state)
 {
-    static const bool env_on = EnvOn("MTG_FOLD_SEARCH_ODO");
-    return heurarm::Flag(heurarm::FOLD_SEARCH_ODO, env_on);
+    return heurarm::Flag(heurarm::FOLD_SEARCH_ODO, FoldSearchOdometerFor(state));
 }
 
 static bool FoldVerifyOn()
@@ -9563,6 +9833,29 @@ enum : unsigned
     kDupPermAbil = 1u << 6,   // two {T} ability activations on one source
     kDupAll      = ~0u
 };
+
+// WHICH CLAUSE of SubsetHasDuplicateSacSource actually rejected. The function's NAME is about sac
+// sources, but it is a nine-clause "one use per source per plan" rule and on a deck with no sacrifice
+// outlet at all it can still reject most of the walk -- Snow's first census run attributed 73.9% of
+// every subset visit to this one predicate, which is not believable as a statement about sacrifice
+// and cannot be acted on until the clause is named. (The canonical-prefix clause is gated on
+// `from_odometer`, i.e. on MTG_FOLD_SEARCH_ODO, which is DEFAULT OFF -- so on the search's own walk
+// it cannot be the cause, and the remaining candidate is the per-source {T} rule.)
+//
+// Indexed by clause in source order; `kDupClauseNames` must stay in lockstep with the return sites.
+namespace dupclause
+{
+    enum : int { kSacForMana = 0, kFreeSlot, kPaidFreePair, kLoyalty, kGarth, kBlink,
+                 kPermAbility, kFoldPrefix, kPod, kCount };
+    inline constexpr const char* kNames[kCount] = {
+        "sac_for_mana", "free_slot", "paid_free_pair", "loyalty", "garth", "blink",
+        "perm_ability_tap", "fold_prefix", "pod" };
+    inline std::atomic<std::uint64_t> g_hits[kCount];
+    // Gated on the same flag as the rest of the walk funnel (set by MTG_BRANCH_SHAPE or the census),
+    // declared here because this predicate sits far above namespace shapestats.
+    bool Enabled();
+    inline void Hit(int c) { if (Enabled()) { g_hits[c].fetch_add(1, std::memory_order_relaxed); } }
+}
 
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
@@ -9696,7 +9989,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::SacForMana
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kSacForMana); return true; }
             }
         }
         // Free-cast bank slots (Maelstrom Archangel): two free casts may not share a slot, so a
@@ -9706,7 +10000,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].free_cast
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kFreeSlot); return true; }
             }
         }
         // Free variants live in their bank-SLOT group (PlanGroupKey), not their card's group, so
@@ -9720,7 +10015,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             {
                 if (cands[sel[b]].kind == Action::Kind::CastFromHand
                     && cands[sel[b]].hand_index == cands[sel[a]].hand_index
-                    && cands[sel[b]].free_cast != cands[sel[a]].free_cast) { return true; }
+                    && cands[sel[b]].free_cast != cands[sel[a]].free_cast) 
+                { dupclause::Hit(dupclause::kPaidFreePair); return true; }
             }
         }
         // Planeswalkers: one loyalty ability per walker per turn (CR 606.3).
@@ -9729,7 +10025,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::ActivateLoyalty
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kLoyalty); return true; }
             }
         }
         // Garth One-Eye: one activation per Garth per plan (the {T} cost).
@@ -9738,7 +10035,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::GarthActivate
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kGarth); return true; }
             }
         }
         // Blink: one outlet does ONE thing per plan. Two variants of the same Displacer would be
@@ -9749,7 +10047,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::ActivateBlink
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kBlink); return true; }
             }
         }
         // Permanent ability: one {T} per source across every mode (the Deathrite precedent).
@@ -9758,7 +10057,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::ActivatePermAbility
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kPermAbility); return true; }
             }
         }
         // INTERCHANGEABLE SOURCES -> CANONICAL PREFIX. Among activations sharing a nonzero
@@ -9822,6 +10122,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
                     bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
                     bfcensus::g_fold_reject_site[site & 1].fetch_add(1, std::memory_order_relaxed);
                 }
+                dupclause::Hit(dupclause::kFoldPrefix);
                 return true;   // non-canonical arrangement
             }
         }
@@ -9831,7 +10132,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::ActivatePod
-                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) 
+                { dupclause::Hit(dupclause::kPod); return true; }
             }
         }
     }
@@ -11882,6 +12184,112 @@ static inline bool FungibleEquipCopyViolated(const std::vector<int>& class_of,
     return false;
 }
 
+// ---- FOLD PREFIX: hoist the canonical-prefix rejection into the odometer -----------------------
+// Same move as EquipPieceDepViolated below, for the rule that dominates Snow.
+//
+// SubsetHasDuplicateSacSource's INTERCHANGEABLE-SOURCES clause (dupclause::kFoldPrefix) keeps one
+// representative per size among activations sharing an `equiv_tag`: a selection is canonical only
+// if the ords it holds form a PREFIX {0..k-1}. It is enforced at the subset LEAF, which means the
+// odometer first picks a non-canonical combination of group digits, then runs its entire inner
+// 2^num_ind independent-mask loop, building `sel` and calling consider() for every one of them --
+// and every one is rejected by the same clause for the same reason, decided before the inner loop
+// ever started.
+//
+// MEASURED on Snow's heaviest decision (seed 934087 turn 3, 225,185 units = 25x its budget, 14.4 s
+// single-threaded): sub_entered 20,002,295, of which dupc_fold_prefix rejects 13,004,839 = 65.0%.
+// Only 16.4% of the walk's visits are ever scored. Snow is the deck that provokes it because it
+// runs 4 Scrying Sheets + 4 Frost Augur and each activation is its own odometer GROUP
+// (ActivationFamilyKey -> -1000 - sac_source_id), so two classes of four give 2^4 x 2^4 = 256
+// digit combinations of which only the 5 x 5 prefix ones can survive.
+//
+// BYTE-IDENTICAL BY CONSTRUCTION, on the EquipPieceDeps argument: this rejects a SUBSET of what the
+// leaf clause rejects, and the leaf clause still runs. The one way a digit-level skip could delete
+// a canonical selection is if a tagged action could enter `sel` from outside the choice vector --
+// an independent bit or an auto-selected action supplying the missing predecessor ord -- so the
+// precompute DISARMS ENTIRELY when it sees a tagged action in either place, rather than trying to
+// reason about it per position.
+static constexpr int kMaxFoldPrefixClasses = 16;
+
+struct FoldPrefixMap
+{
+    // Parallel to `groups`: per option, (class << 8) | ord, or -1 for untagged.
+    std::vector<std::vector<int>> opt;
+    int classes = 0;
+    bool Empty() const { return classes == 0; }
+};
+
+// Choice-INDEPENDENT precompute (once per enumeration, like BuildFungibleEquipClasses). Returns the
+// class count; 0 means the predicate can never fire and callers skip the per-position walk.
+static int BuildFoldPrefixMap(const std::vector<Action>& cands,
+                              const std::vector<std::vector<int>>& groups,
+                              const std::vector<int>& independent,
+                              const std::vector<int>& auto_sel,
+                              FoldPrefixMap& out)
+{
+    out.opt.clear();
+    out.classes = 0;
+    // A tagged action outside the odometer can supply a predecessor ord, so the choice vector alone
+    // would no longer decide the rule. Disarm rather than approximate.
+    for (int j : independent) { if (cands[j].equiv_tag != 0) { return 0; } }
+    for (int j : auto_sel)    { if (cands[j].equiv_tag != 0) { return 0; } }
+
+    int  tags[kMaxFoldPrefixClasses];
+    int  n   = 0;
+    bool any = false;
+    out.opt.assign(groups.size(), std::vector<int>());
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        out.opt[g].assign(groups[g].size(), -1);
+        for (std::size_t k = 0; k < groups[g].size(); ++k)
+        {
+            const Action& a = cands[groups[g][k]];
+            if (a.equiv_tag == 0) { continue; }
+            if (a.equiv_ord < 0 || a.equiv_ord >= 32) { return 0; }   // ord outside the mask
+            int ci = -1;
+            for (int i = 0; i < n; ++i) { if (tags[i] == a.equiv_tag) { ci = i; break; } }
+            if (ci < 0)
+            {
+                if (n >= kMaxFoldPrefixClasses) { return 0; }
+                tags[n] = a.equiv_tag;
+                ci      = n++;
+            }
+            out.opt[g][k] = (ci << 8) | a.equiv_ord;
+            any = true;
+        }
+    }
+    out.classes = any ? n : 0;
+    return out.classes;
+}
+
+// Per-CHOICE check: the ords this position selects, per class, must form a prefix. A mask is a
+// prefix iff it is 2^k - 1, i.e. `m & (m + 1)` is 0 (which also passes the empty mask).
+static inline bool FoldPrefixViolated(const FoldPrefixMap& f, const std::vector<int>& choice)
+{
+    std::uint32_t seen[kMaxFoldPrefixClasses] = { 0 };
+    for (std::size_t g = 0; g < f.opt.size() && g < choice.size(); ++g)
+    {
+        if (choice[g] <= 0) { continue; }
+        const int p = f.opt[g][static_cast<std::size_t>(choice[g] - 1)];
+        if (p < 0) { continue; }
+        seen[p >> 8] |= 1u << (p & 0xff);
+    }
+    for (int c = 0; c < f.classes; ++c)
+    {
+        const std::uint32_t m = seen[c];
+        if ((m & (m + 1)) != 0) { return true; }
+    }
+    return false;
+}
+
+// Default ON: it removes work the leaf clause removes anyway, so there is no behaviour to adopt --
+// the hatch is a cost A/B, not a quality one (the EquipPieceDepsEnabled precedent). Per-JOB so one
+// pooled batch runs both arms.
+static bool FoldOdoSkipEnabled()
+{
+    static const bool env = EnvOn("MTG_FOLD_ODO_SKIP", true);
+    return heurarm::Flag(heurarm::FOLD_ODO_SKIP, env);
+}
+
 // ---- Equip PIECE dependency: hoist the stranded-equip rejection into the odometer ---------------
 // USER, 2026-08-22: "If no creature is on board or played, there should be no equip action."
 //
@@ -13792,6 +14200,72 @@ bool TurnSolver::PostEntryBreakpointClassOn()
     return v;
 }
 
+// MTG_SNOW_LOOK_COLOR -- tighten breakpoint site 8's playability gate from MANA VALUE to a real
+// COLOUR test. Default OFF until measured; `=1` arms it.
+static bool SnowLookColorGateOn()
+{
+    // Routed through heurarm so BOTH arms fit ONE pooled batch: a bare `static const bool` is read
+    // once per process and forces the per-arm wave the batching rule forbids (the BpAbilityDeltaOn
+    // precedent).
+    static const bool env = EnvOn("MTG_SNOW_LOOK_COLOR");
+    return heurarm::Flag(heurarm::SNOW_LOOK_COLOR, env);
+}
+
+// BREAKPOINT SITE 8 PLAYABILITY GATE -- ONE function, called by BOTH worlds (ApplyPlanDirect's
+// trailing ActivatePermAbility branch and AIEngine's resolve_draw_breakpoint arm). It was two
+// copy-pasted bodies; they MUST agree exactly, because the gate decides whether the occurrence is
+// counted and a disagreement shifts every later bp_at index -- the executor/rollout lockstep failure
+// mode this repo keeps re-learning (site 7's counting-order caveat, the PodBreakpointClassOn
+// lesson). Sharing the body makes drift impossible rather than a comment-discipline promise.
+//
+// THE SHIPPED TEST, unchanged when the lever is off: a LAND find needs the drop still open; a
+// NONLAND find needs its mana value to fit the remaining pool. Both are necessary conditions for
+// the continuation to do anything with the card, so a gate-skip means the re-solve would have found
+// nothing -- which is what makes skipping it lossless rather than a narrowing. Without any gate the
+// greedy Solve fired 521k times in ONE d3 game.
+//
+// WHY THE MV TEST IS NOT TIGHT ENOUGH (MTG_SNOW_LOOK_COLOR). `have.Total() >= ManaValue()` ignores
+// colour entirely, and on this deck that is not a corner case: the activation that just fired paid
+// its own {1}{S} and TAPPED a Scrying Sheets, so the pool left behind is small and skewed toward
+// {C} (4 Sheets and Boreal Druid all produce {C}). A found Frost Augur ({U}), Boreal Druid ({G}),
+// Ice-Fang Coatl ({G}{U}) or Marit Lage's Slumber ({1}{U}) then passes a Total()>=MV read off
+// colourless mana that provably cannot cast it, and the pass buys a full nested Solve of the rest
+// of the turn.
+//
+// IT IS THE SAME NECESSARY CONDITION EVERY CAST ALREADY FACES, so it cannot delete a reachable
+// line: ManaPool::CanPay is the enumerator's own payability test, and it is deliberately
+// OPTIMISTIC (every multi-colour source counts as one `wild` that satisfies any single pip), so a
+// CanPay failure means no assignment of the untapped sources pays this cost at all. Priced against
+// the EFFECTIVE cost, not the printed one, so a same-turn reducer cannot make it reject a castable
+// find (the conservative direction for a prune: a lower cost passes more).
+//
+// WHAT IT STILL DOES NOT MODEL, stated so the next reader does not over-claim it: the continuation
+// may cast something OTHER than the found card. That is out of scope by the gate's own doctrine --
+// site 8 exists because the found card must be playable this turn (USER 2026-09-06, "we need to be
+// able to play it"), and anything else the continuation could cast was already available to the base
+// plan. This tightens the existing question; it does not change which question is asked.
+bool TurnSolver::SnowLookFoundPlayable(const GameState& state, const CardDefinition& fd)
+{
+    const Player& lap = state.players[state.active_player_index];
+    if (fd.card.IsLand())
+    { return lap.lands_played_this_turn < 1 + lap.bonus_land_drops_this_turn; }
+
+    ManaPool have = AvailableManaPool(state);
+    have.AddPool(state.floating_mana);
+    const bool census = s_rollout_stats;
+    if (census) { g_snow_look_opens.fetch_add(1, std::memory_order_relaxed); }
+    if (static_cast<int>(have.Total()) < fd.card.m_mana_cost.ManaValue()) { return false; }
+    if (census) { g_snow_look_mv_pass.fetch_add(1, std::memory_order_relaxed); }
+
+    // Counted whether or not the lever is armed, so one instrumented run sizes the ceiling without
+    // moving a single digest (the [[digest-equality-can-mean-broken]] discipline: a lever whose
+    // census is zero never fired, and that must be visible before adoption, not after).
+    const bool color_ok = have.CanPay(EffectiveCost(fd, state));
+    if (!color_ok && census)
+    { g_snow_look_color_fail.fetch_add(1, std::memory_order_relaxed); }
+    return SnowLookColorGateOn() ? color_ok : true;
+}
+
 // THE DELTA RULE (USER 2026-09-19). *"I would actually like to change our approach for breakpoints
 // to be 100% general: 1. Hand or staged cards changed. 2. New ability can be activated."* --
 // *"It is exactly when there are new options to consider"*, and *"ability status meaning we have a
@@ -13893,6 +14367,8 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         // re-key every mode after it.
         { PermAbilityMode::PingAll,        &pp.ping_all_cost           },
         { PermAbilityMode::LifeGatedPutCreatures, &pp.life_gated_put_creatures_cost },   // appended LAST
+        { PermAbilityMode::SacLifePerCreature, &pp.sac_lifegain_per_creature_cost },     // appended LAST
+        { PermAbilityMode::TapLifegain,        &pp.tap_lifegain_cost              },     // appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -14312,6 +14788,279 @@ static thread_local std::uint64_t g_bp_classon_last = 0;
 // here, -1 = the scan found no chainable continuation (so the slot fell through to EMPTY), >= 0 =
 // the index it took. Reset by the candidate loop before each apply, like g_bp_cands_last.
 static thread_local int g_bp_chain_ci_last = -2;
+
+// ...and the same answer as a PLAY CHANNEL rather than a census one (MTG_BP_W0_CHAIN_COLLAPSE).
+// Kept SEPARATE from g_bp_chain_ci_last above for the reason g_bp_cands_has_empty's comment gives:
+// a census may widen its scan freely, a channel a host reads in order to SKIP a candidate may not.
+// Written by rank 0's apply at the FIRST class-on breakpoint it reaches, read by the collapse in
+// the host's candidate loop. -2 = this apply has not resolved a continuation list yet; -1 = the
+// list holds no further chainable continuation at that slot; >= 0 = the index the scan would take.
+enum : int { kBpChainMemoSlots = 4 };
+static thread_local int g_bp_chain_ci0[kBpChainMemoSlots] = { -2, -2, -2, -2 };
+
+// ---- A SEARCHED-ONLY SITE WAS SUPPRESSED IN THIS APPLY -----------------------------------------
+//
+// THE HOLE IN THE NOBP IDENTITY, MEASURED AND NAMED (2026-10-01). `MTG_BP_W0_NOBP` rests on "a
+// variant differs from its base plan ONLY at a breakpoint, so no breakpoint occurrence means no
+// read, which means the identical result -- there is nothing for a missing condition to hide in."
+// **Site 9 is that missing condition.** It is SEARCHED-ONLY by deliberate design: its raise
+// condition begins `plan.bp_choice >= 0` (see the long note at the site, and the Dragonstorm gi117
+// regression that put it there), so a BASE plan is structurally blind to it. Its zero reading
+// therefore does not mean "there is nothing to decide here", it means "base plans cannot see this".
+//
+// REFUTED BY VERIFICATION, not by argument: with the skip carried into FSLineWin's plan loop,
+// MTG_BP_W0_FSW_VERIFY reports **25 of 41 declined variants reaching a DIFFERENT post-apply state
+// than their base plan**, every one of them with `var_any_delta=1` -- the variant's apply fired a
+// breakpoint its base plan's apply did not, on a byte-identical action list. Two hand-built
+// fixtures lose a whole turn to it (critter_heliod_post_entry_lifelink_grant and
+// whiteknights_gideon_emblem_anthem, both 6 -> 7) and they lose it at an UNBOUNDED budget, so it is
+// a deleted line and not budget re-spend.
+//
+// Set during a BASE plan's apply when site 9's gate holds -- i.e. exactly when the apply's zero is
+// uninformative. A NOBP consumer must refuse such a plan. Per-apply, so it resets like
+// g_bp_cands_last. Costs one battlefield scan per base-plan apply and is therefore only evaluated
+// when a consumer asks for it (w0collapse::NobpSite9Watch), keeping the default path free.
+static thread_local bool g_bp_searchonly_suppressed = false;
+
+// ---- THE WAVE-0 VARIANT COLLAPSES, SHARED BY BOTH HOSTS ---------------------------------------
+//
+// Declared HERE, far above either host, for one reason: there are TWO candidate loops that apply
+// wave-0 variants -- FSLineWin's plan loop and SolveWithLookahead's -- and every skip in this
+// family so far has been written into one of them and not the other. That is not a hypothetical
+// drift risk, it is the measured state of the code (see BpW0FswOn below). One implementation,
+// two call sites.
+namespace w0collapse
+{
+    // Which arm declined a candidate, for the per-arm counters. Order is the test order.
+    enum : int { kNone = 0, kNobp = 1, kUnif = 2, kChain = 3 };
+
+    // ---- MTG_BP_W0_FSW: the two adopted collapses, in the host that does the work --------------
+    //
+    // MTG_BP_W0_NOBP and MTG_BP_W0_UNIF_COLLAPSE (both DEFAULT ON since 2026-09-23, both with
+    // -12%..-19% units behind them) live in exactly ONE candidate loop: SolveWithLookahead's.
+    // FSLineWin's plan loop has never had either, and FSLineWin is where a budgeted decision's work
+    // actually happens. MEASURED, snow d3/b10, 1,280 games (docs/design/per-decision-work-census.md):
+    // the outermost frame is FullSearchLineHybrid -- hence FSLineWin -- for 94.6% of ALL charged
+    // units, so the two adopted collapses have been running on about a twentieth of the problem.
+    // Per-arm duplicate rates among the applies that remain: uniform 98.8%, chain 99.8%,
+    // rank 76.7%; chain + uniform alone are 309,407 of 1,351,443 applies (23%) at ~99% duplicate.
+    // MTG_CAND_DEDUP cannot reach any of it -- it keys on the POST-APPLY state, so a duplicate must
+    // be applied before it can be recognised, which is exactly the work the user asked to stop
+    // doing (*"Them being in there is somewhat okay as long as the dump marks them as duplicates
+    // ... and doesn't actually do a bunch of work for them"*, 2026-10-01).
+    //
+    // WHY THIS IS NOT A COPY-PASTE: THE ORDER PREMISE IS DIFFERENT HERE, AND THAT IS WHY IT WAS
+    // SKIPPED. Both memos are keyed POSITIONALLY on Plan::bp_base and are sound only while base
+    // plans precede their own variants and rank variants precede the uniform ones.
+    // SolveWithLookahead gets that for free -- EnumeratePlansWithLandUncached sorts BEFORE
+    // AppendBreakpointVariants appends, and nothing reorders afterwards, which is exactly what
+    // BpW0UnifCollapseOn's "ORDER DEPENDENCE" paragraph says. FSLineWin SORTS AFTER the append:
+    // the stale-index hazard its own bp_self remap exists for.
+    //
+    // THE PREMISE SURVIVES THERE ANYWAY, for a different reason, and this is the load-bearing
+    // argument of the whole port. MoveOrderPlans is a STABLE sort, and a variant is `Plan v = p`
+    // with only bp_choice / bp_at / bp_all / bp_base / bp_sched overwritten -- so every field the
+    // comparator reads (wins_this_turn, pump_waste, atk_forfeit, value) is BYTE-COPIED from the
+    // base plan. A whole family therefore compares EQUAL and keeps its emission order: base plan
+    // (indices 0..n-1) before its variants (appended at the end), ranks before uniform before
+    // chain. The ONE comparator key a variant does change is `bp_sched`, which
+    // AppendBreakpointVariants sets on the RANK arm only -- so MTG_BP_VARIANT_FIRST would hoist
+    // ranks above their own base plans and break the NOBP half. The host therefore refuses to arm
+    // when it is set, rather than relying on it being off (it is: default OFF, REJECTED 2026-09-17).
+    // The escalation beam's value-ranked reorder runs after the remap and permutes `pre` outright;
+    // the host refuses to arm then too.
+    //
+    // A BITMASK, not a boolean, because the two arms turned out to behave differently here and a
+    // single switch could not say which: 1 = the NOBP skip, 2 = the uniform collapse, 3 = both.
+    //
+    // DEFAULT 0 (off). The two identities are already adopted in the OTHER host and were proved
+    // byte-identical unbudgeted on 7 decks there; neither claim transfers, and MEASUREMENT SAYS SO
+    // -- see the scenario regressions recorded in docs/design/per-decision-work-census.md.
+    inline int FswMask()
+    {
+        static const int m = EnvInt("MTG_BP_W0_FSW", 0);
+        return m;
+    }
+
+    // MTG_BP_W0_FSW_VERIFY -- DO NOT SKIP, CHECK. The NOBP identity claims a variant whose base
+    // plan's apply reached no breakpoint lands on the base plan's own post-apply state. That is a
+    // checkable claim, and an "identity" that regresses a hand-built fixture at an UNBOUNDED budget
+    // (where there is no freed work to re-spend) has to be checked rather than argued about. With
+    // this on, every candidate the NOBP arm WOULD have declined is applied normally and its
+    // post-apply dedup key compared against its base plan's -- so the run's play is the arm-off
+    // play, and the counters say whether the arm would have been right.
+    inline bool FswVerifyOn()
+    {
+        static const bool on = EnvOn("MTG_BP_W0_FSW_VERIFY");
+        return on;
+    }
+
+    // ---- MTG_BP_NOBP_SITE9: close the hole in the SHIPPED arm too -------------------------------
+    //
+    // The fix itself (refuse a base plan whose apply suppressed a searched-only site; see
+    // g_bp_searchonly_suppressed) is UNCONDITIONAL in the new FSLineWin path -- that path is default
+    // off and must not ship a known-false identity. The SHIPPED arm in SolveWithLookahead is a
+    // different decision: `MTG_BP_W0_NOBP` has been default ON since 2026-09-23, and tightening it
+    // skips strictly LESS, which moves the committed line on every budgeted cell of every deck.
+    //
+    // Measured before leaving it off: with the shipped arm DISABLED outright
+    // (`MTG_BP_W0_NOBP=0`), all 118 hand-built fixtures produce byte-identical win turns. So the
+    // hole is latent there, not active -- the arm escapes because the fixtures' committed decision
+    // is taken in FSLineWin, which is the host the shipped skip never reached. That is a reason to
+    // gate the correction behind a flag rather than to leave the identity undocumented.
+    inline bool NobpSite9FixOn()
+    {
+        static const bool on = EnvOn("MTG_BP_NOBP_SITE9");
+        return on;
+    }
+
+    // Does anything need to KNOW whether a base plan's apply suppressed a searched-only site? The
+    // answer costs a battlefield scan per base-plan apply, so the default path does not pay it.
+    inline bool NobpSite9Watch()
+    {
+        return ((FswMask() & 1) != 0) || NobpSite9FixOn();
+    }
+
+    // ---- MTG_BP_W0_CHAIN_COLLAPSE: the chain arm has no collapse at all ------------------------
+    //
+    // The chain slot (kBpChainChoice + j) resolves at apply time to the j-th continuation that
+    // itself opens a further breakpoint. It exists for a chainable continuation ranked PAST W
+    // (Dragonstorm's rank 32 of 47) -- and when the scan lands BELOW W, wave 0's own rank variant
+    // already scored that exact entry. MEASURED on snow (one game, seed 910671, dedup_why_chain):
+    // of the chain arm's applies, the 80,883 that resolved to 0 <= ci < W were 100% duplicates of a
+    // state a sibling had already reached.
+    //
+    // THE IDENTITY is the uniform collapse's identity with `ci` in place of `k`. A chain variant
+    // carries bp_all -- "take the chain at EVERY breakpoint" -- while rank ci means "take ci at
+    // breakpoint 0, canon elsewhere"; the two differ only at a breakpoint whose index is not 0, so
+    // when the apply reaches ONE enabled-class breakpoint they are the same candidate. The count
+    // comes from where the uniform arm gets it: rank ci's own apply, which took the SAME
+    // continuation at breakpoint 0 and so walked the same path from there.
+    //
+    // HOW THE HOST LEARNS `ci` WITHOUT APPLYING THE CHAIN VARIANT. BpChainCandIndex is a walk over
+    // the MEMOISED continuation list with PlanOpensBreakpoint per entry -- no enumeration and no
+    // re-solve (kBpChainChoice's own "NO NEW ENUMERATION" property). Rank 0's apply is standing at
+    // the same breakpoint with the same list in hand, so it does the walk once and publishes the
+    // answer on g_bp_chain_ci0, exactly as it already publishes the list's LENGTH on
+    // g_bp_cands_last. One vector walk per rank-0 apply replaces one ApplyPlanDirect per chain slot.
+    //
+    // WHAT IS DELIBERATELY *NOT* COLLAPSED: ci < 0. Those applies measure 99.98% duplicate too
+    // (109,841 of 109,860) and are the larger half, but the mechanism is NOT established and the
+    // obvious identity is FALSE. "ci < 0 falls through to EMPTY, which is what the base plan takes
+    // there" stopped being true when MTG_BP_BASE_CANON went to 1: outside a rollout a BASE plan at
+    // a class-on breakpoint is handed ncands.front(), while a chain variant (bp_choice >= 0, and
+    // bp_all so the nested-canon branch skips it too) still takes EMPTY. So the two are different
+    // candidates, and whatever the measured duplicate rate is against has not been named yet.
+    // Declining a line on an unexplained statistic is the mistake understand-why-before-discarding
+    // exists to prevent: the ci < 0 half stays, and the half that has a proof goes.
+    //
+    // DEFAULT OFF (measuring); =1 arms it in BOTH hosts.
+    inline bool ChainOn()
+    {
+        static const bool on = EnvOn("MTG_BP_W0_CHAIN_COLLAPSE");
+        return on;
+    }
+
+    // Per-node memo. Allocates nothing until something is inserted, and nothing is inserted unless
+    // an arm is on, so an unarmed node is byte-identical and pays only three empty containers.
+    struct Memo
+    {
+        // (base plan index << 24 | k) -> enabled-class breakpoints rank variant k's apply reached.
+        // Same key shape and same semantics as SolveWithLookahead's w0_unif_nbp, deliberately.
+        std::unordered_map<std::uint64_t, int> rank_nbp;
+        // (base plan index << 8 | j) -> chain slot j's resolved continuation index, as measured by
+        // rank 0's apply (-1 = the list offers no chainable continuation at that slot).
+        std::unordered_map<std::uint64_t, int> chain_ci;
+        // Base plans whose own apply reached NO breakpoint occurrence of ANY class.
+        std::unordered_set<int> nobp;
+        // VERIFY ONLY (MTG_BP_W0_FSW_VERIFY): each base plan's post-apply dedup key, so a
+        // would-be-declined variant can be compared against the state the identity says it reaches.
+        std::unordered_map<int, TranspositionTable::Key> base_key;
+    };
+
+    // Harvest what THIS candidate's apply just measured. `self` is the candidate's own index in the
+    // host's plan vector (only read for base plans, which is how the NOBP memo is keyed); the two
+    // counters are the monotonic globals' values from immediately BEFORE the apply.
+    inline void Record(Memo& m, const TurnSolver::Plan& pl, int self,
+                       std::uint64_t any_before, std::uint64_t classon_before,
+                       bool nobp_on, bool unif_on, bool chain_on)
+    {
+        if (pl.bp_choice < 0)
+        {
+            // ...AND the apply must not have SUPPRESSED a searched-only site (see
+            // g_bp_searchonly_suppressed). Without this the zero is uninformative at site 9 and the
+            // skip deletes real lines -- verified at 25 mismatches of 41, two fixtures losing a
+            // turn at an unbounded budget. This is unconditional here: the FSLineWin path is new,
+            // so it ships with the identity repaired rather than with a flag to repair it.
+            if (nobp_on && self >= 0 && g_bp_any_last == any_before
+                && !g_bp_searchonly_suppressed) { m.nobp.insert(self); }
+            return;
+        }
+        // RANK variants only: bp_at 0 (the index every collapse here is about), a real rank, and
+        // not bp_all -- i.e. exactly the arm AppendBreakpointVariants emits first.
+        if (pl.bp_base < 0 || pl.bp_all || pl.bp_at != 0
+            || pl.bp_choice >= kBpEmptyChoice) { return; }
+        if (unif_on || chain_on)
+        {
+            m.rank_nbp[(static_cast<std::uint64_t>(pl.bp_base) << 24)
+                       | static_cast<std::uint64_t>(pl.bp_choice)] =
+                static_cast<int>(g_bp_classon_last - classon_before);
+        }
+        if (chain_on && pl.bp_choice == 0)
+        {
+            for (int j = 0; j < kBpChainMemoSlots; ++j)
+            {
+                if (g_bp_chain_ci0[j] == -2) { break; }   // this apply never reached a list
+                m.chain_ci[(static_cast<std::uint64_t>(pl.bp_base) << 8)
+                           | static_cast<std::uint64_t>(j)] = g_bp_chain_ci0[j];
+            }
+        }
+    }
+
+    // Which arm (if any) can decline this candidate BEFORE its GameState copy and ApplyPlanDirect.
+    // A missing memo entry NEVER skips -- every arm here can only decline a candidate it has
+    // positive evidence about, which is the property that makes the fallback "current behaviour".
+    inline int SkipReason(const Memo& m, const TurnSolver::Plan& p, int w,
+                          bool nobp_on, bool unif_on, bool chain_on)
+    {
+        if (p.bp_choice < 0 || p.bp_base < 0) { return kNone; }
+        // 1. NOBP. The base plan's own apply reached no breakpoint of any class, and a variant
+        //    differs from its base plan ONLY at a breakpoint. Covers all three arms at once, which
+        //    is why it is tested first.
+        if (nobp_on && m.nobp.count(p.bp_base) != 0) { return kNobp; }
+        // 2. UNIFORM. uniform k IS rank k whenever the apply reaches at most one class-on
+        //    breakpoint, and rank k's apply has already reported that count for this base plan.
+        if (unif_on && p.bp_all && p.bp_choice < kBpEmptyChoice)
+        {
+            const auto it = m.rank_nbp.find((static_cast<std::uint64_t>(p.bp_base) << 24)
+                                            | static_cast<std::uint64_t>(p.bp_choice));
+            if (it != m.rank_nbp.end() && it->second <= 1) { return kUnif; }
+        }
+        // 3. CHAIN. The scan landed inside wave 0's own window, so the entry it resolves to has
+        //    already been scored as rank `ci` -- provided that path reaches one breakpoint, the
+        //    same condition the uniform arm needs and from the same memo.
+        if (chain_on && p.bp_choice >= kBpChainChoice)
+        {
+            const int j = p.bp_choice - kBpChainChoice;
+            if (j < 0 || j >= kBpChainMemoSlots) { return kNone; }
+            const auto ic = m.chain_ci.find((static_cast<std::uint64_t>(p.bp_base) << 8)
+                                            | static_cast<std::uint64_t>(j));
+            // Miss attribution (see g_w0_chain_miss_noci): which of the four reasons, because the
+            // shares decide whether what is left is a lever or a line.
+            if (ic == m.chain_ci.end())
+            { g_w0_chain_miss_noci.fetch_add(1, std::memory_order_relaxed); return kNone; }
+            if (ic->second < 0)
+            { g_w0_chain_miss_neg.fetch_add(1, std::memory_order_relaxed); return kNone; }
+            if (ic->second >= w)
+            { g_w0_chain_miss_pastw.fetch_add(1, std::memory_order_relaxed); return kNone; }
+            const auto ir = m.rank_nbp.find((static_cast<std::uint64_t>(p.bp_base) << 24)
+                                            | static_cast<std::uint64_t>(ic->second));
+            if (ir != m.rank_nbp.end() && ir->second <= 1) { return kChain; }
+            g_w0_chain_miss_nbp.fetch_add(1, std::memory_order_relaxed);
+        }
+        return kNone;
+    }
+}
 
 // Lockstep trace arming flag (MTG_BP_TRACE, diagnosis only). ApplyPlanDirect runs millions of times
 // inside rollouts, so an unconditional print is useless; this is set ONLY around the fd-trace's
@@ -15592,7 +16341,17 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // attacked for 43 on the spot) and is visible to the post-combat plans; an m2-cast Muxus's
     // army can do neither until next turn (3 -> 4). Same battlefield-visibility argument as the
     // sac-outlet and loyalty pulls.
-    if (!p.etb_reveal_put_subtypes.empty()) { return MP::Main1; }
+    // Genesis Wave (reveal_x_put_permanents) is the SPELL form of the same class, and the argument
+    // is if anything stronger. Its own put board CANNOT attack this turn (no haste in the deck), but
+    // everything the mass put is for only cashes in PRE-combat: each entrant is a life-gain event on
+    // every live Verdant Sun's Avatar, every one of those puts +1/+1 counters on an Ageless Entity
+    // that is ALREADY untapped and able to attack, and a put Craterhoof Behemoth pumps the existing
+    // team. Cast in Main2 all of that is a turn late. This is also why the card does NOT open a
+    // second main phase (DeckUsesSecondMain): the put creatures are summoning sick either way, so a
+    // pre-combat cast forfeits no attack -- the Birthing Pod / convoke "forfeit an attack" arguments
+    // that justify an m2 do not apply, and a searched m2 is not free (MTG_FORCE_USES_M2 measured
+    // 4.25x at d1/b3 on a deck that is already the expensive one).
+    if (!p.etb_reveal_put_subtypes.empty() || p.reveal_x_put_permanents) { return MP::Main1; }
     // DOUBT-DEFERRAL sub-lever (MTG_DOUBT_MAIN2, default OFF): the USER's one-pool placement
     // rule -- with the attack-helping classes explicit above, tutors classify as card-flow
     // (Both, like draws) and the residual doubt class defers to Main2 so the non-combat hand
@@ -15801,6 +16560,22 @@ static int OptimisticTurnMana(const GameState& state)
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && budget_can_grow(*d, /*from_hand=*/false)) { return kNoManaCeiling; }
+        // ACCOMPLISHED ALCHEMIST ("{T}: Add X mana of any one color, where X is the amount of life
+        // you gained this turn"): its yield IS this turn's life gained, which the PLAN ITSELF can
+        // raise after this bound was computed -- every lifegain in the subset (an ETB gain, a Feed
+        // the Clan, a Verdant Sun's Avatar) feeds it. No cheap upper bound exists without summing
+        // every lifegain param in hand, so decline to prune instead: the `budget_can_grow`
+        // precedent (ritual / sac outlet / Hinata reducer), for the same reason -- a bound built
+        // from static params systematically UNDER-counts and the prune then deletes a legal line.
+        // The scaled-dork growth term below CANNOT cover it: that term keys on
+        // CardHasSubtype(hand card, mana_per_creature_subtype), which is "" for this card.
+        //
+        // IN THE BATTLEFIELD LOOP, NOT `budget_can_grow`: from HAND the Alchemist is summoning-sick
+        // and cannot tap this turn at all, so a hand copy must NOT disarm the ceiling (that would
+        // throw the prune away on every turn the card is merely drawn). Requires a copy that can
+        // actually tap right now.
+        if (d && d->params.mana_per_life_gained && !p.tapped && CanTapNow(p, state.battlefield))
+        { return kNoManaCeiling; }
         // SAC-FOR-MANA (Treasure token / Lotus Bloom / Black Lotus). AvailableManaPool deliberately
         // does NOT count these -- they are modelled as an ACTION (Kind::SacForMana), not a source --
         // so without crediting them here the ceiling under-counts by exactly the mana the line means
@@ -17700,6 +18475,79 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.direct_damage  = x * heads;
                     a.is_noncreature = !def.card.IsCreature();
                     a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    actions.push_back(std::move(a));
+                }
+                continue;
+            }
+            // Genesis Wave ({X}{G}{G}{G}: reveal the top X, put any number of permanent cards with
+            // mana value X or less onto the battlefield, mill the rest -- reveal_x_put_permanents).
+            //
+            // WITHOUT THIS BRANCH THE CARD IS UNCASTABLE. The terminal `continue` immediately below
+            // drops every non-DirectDamage {X} spell from enumeration ENTIRELY (the Luxurious
+            // Libation trap -- measured symptom there: neutralising the payload changed nothing over
+            // 100 games), which is why Chord of Calling and Rolling Earthquake each carry one.
+            //
+            // X IS THE ONLY SEARCHED AXIS, deliberately. GenericProvider::XCandidates returns
+            // {max_affordable} -- one variant per cast -- and max-X is genuinely right here: a bigger
+            // X is a strictly deeper reveal AND a strictly higher mana-value cap. That single variant
+            // is also the only thing keeping a card castable at X = 12 finite. The put SUBSET is NOT
+            // an axis (it would be 2^X plan variants); it is a provider decision made at resolution
+            // (GenesisWavePutPicks). The two honest counter-arguments to max-X -- a big X mills your
+            // other Waves, and holding mana for a second spell -- are the MTG_UNPRUNED=xspell A/B.
+            if (def.params.reveal_x_put_permanents)
+            {
+                const ManaCost gbase = EffectiveCost(def, state);   // {G}{G}{G}; ManaValue ignores X
+                ManaPool gpool = AvailableManaPool(state);
+                gpool.AddPool(state.floating_mana);                 // the Rolling Earthquake shape
+                int gpips = def.card.m_mana_cost.x_pips; if (gpips < 1) { gpips = 1; }
+                const int gmax = (gpool.Total() - gbase.ManaValue()) / gpips;
+                if (gmax < 0) { continue; }   // cannot pay even the base -> uncastable now
+                // HUMAN PLAY MUST BE OFFERED EVERY LEGAL X, and that is NOT free here:
+                // GenericProvider::XCandidates' generic path returns only {max_affordable} and does
+                // NOT check HumanPlayActive() (only its tuck / sweeper branches do), so without this
+                // the viewer would show one X and main.cpp's " (X=n)" label would be decoration on a
+                // non-choice. Adding options is WIDENING, which the core invariant permits; and
+                // HumanPlayActive() is false in rollouts (HumanPlaySuppress), so the search is
+                // unchanged. X = 0 is legal but resolves to a clean no-op, so it is skipped
+                // autonomously and offered to a human.
+                std::vector<int> gxs;
+                if (HumanPlayActive())
+                { for (int v = 0; v <= gmax; ++v) { gxs.push_back(v); } }
+                else
+                {
+                    for (int v : ResolveProvider(state).XCandidates(state, def, gmax))
+                    { if (v > 0 && v <= gmax) { gxs.push_back(v); } }
+                }
+                for (int xv : gxs)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    ManaCost c = gbase; c.generic += xv * gpips;
+                    a.cost           = c;
+                    a.chosen_x       = xv;
+                    // Price the cast in the SAME unit every other candidate uses (EvalCard), summed
+                    // over the permanents this X would actually reveal-and-legalise. The search is
+                    // clairvoyant (it already reads the real top of the library), so this costs a
+                    // peek, not information. A FLAT eval is how a Wave for 11 permanents gets
+                    // ordered out behind a two-drop under a saturated budget.
+                    int gev = 0;
+                    {
+                        const auto& lib = ap.library;
+                        const int look = std::min(xv, static_cast<int>(lib.size()));
+                        for (int k = 0; k < look; ++k)
+                        {
+                            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[k]);
+                            if (ld == nullptr || !ld->card.IsPermanentCard()) { continue; }
+                            if (ld->card.m_mana_cost.ManaValue() > xv) { continue; }
+                            gev += EvalCard(*ld, state);
+                        }
+                    }
+                    a.eval           = gev;
+                    a.direct_damage  = 0;
+                    a.is_noncreature = !def.card.IsCreature();
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();   // 3; X is 0 off the stack
                     actions.push_back(std::move(a));
                 }
                 continue;
@@ -21523,6 +22371,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::PingAll,        &sd->params.ping_all_cost        },
                     { Action::AbilityMode::LifeGatedPutCreatures,
                                                            &sd->params.life_gated_put_creatures_cost },
+                    // Appended LAST, same order as the other two tables (Blighted Steppe, then
+                    // Wellwisher). Wellwisher's cost is an ALL-ZERO ManaCost, not nullopt -- the
+                    // table is keyed on has_value(), so a {T}-only ability must present a cost
+                    // object to be enumerated. PaymentManaCovers returns true at need <= 0
+                    // (FadeSaproling walks the same {0} path today).
+                    { Action::AbilityMode::SacLifePerCreature,
+                                                           &sd->params.sac_lifegain_per_creature_cost },
+                    { Action::AbilityMode::TapLifegain,    &sd->params.tap_lifegain_cost    },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -21703,6 +22559,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // death is checked before its Tamanoa gain; both-dead is a DRAW) -- lossless.
                     if (m.mode == Action::AbilityMode::PingAll
                         && !PingAllSelfSafe(state, state.active_player_index, *sd)) { continue; }
+                    // SacLifePerCreature (Blighted Steppe): with no creature the gain is 0 (GainLife
+                    // early-returns at amount <= 0), so the activation would spend {3}{W} AND destroy
+                    // a land for a guaranteed no-op. A LOSSLESS dominated-action removal -- the same
+                    // shape as the IceCounter / GrantLifelink "nothing useful to do" clamps -- so
+                    // unlike the DigManaLast narrowing above it applies in human play too. Uses the
+                    // SHARED CountOwnCreatures so the clamp and the resolver's payload cannot drift.
+                    if (m.mode == Action::AbilityMode::SacLifePerCreature
+                        && CountOwnCreatures(state, state.active_player_index) <= 0) { continue; }
                     for (int k : counts)
                     {
                         if (k <= 0) { continue; }
@@ -25223,7 +26087,11 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
 // visited SUBSET (millions per call), so a lock here would dominate the measurement it is taking.
 namespace shapestats
 {
-    inline bool Enabled() { static const bool v = EnvOn("MTG_BRANCH_SHAPE"); return v; }
+    // Forced ON by MTG_TURN_CENSUS for the same reason as enumstats::Enabled() above -- the census
+    // carries the odometer SPACE and the shared-resource rejects per decision. Same cost profile:
+    // relaxed fetch_add per subset visit, no new search work, `units` unaffected.
+    inline bool Enabled()
+    { static const bool v = EnvOn("MTG_BRANCH_SHAPE") || turncensus::On(); return v; }
     constexpr int kMaxTurn = 64;                 // turns past this fold into the last slot
     constexpr int kMaxGsz  = 9;                  // group sizes 1..8, 8 = "8 or more"
 
@@ -25254,6 +26122,11 @@ namespace shapestats
         // other and reported "8.5 subsets per plan", which is not a ratio of anything.
         std::atomic<std::uint64_t> e_entered{0}, e_rej_dup{0}, e_rej_mana{0}, e_rej_fodder{0},
                                    e_passed{0};
+        // Site 1 (the SECOND subset walk) calls the same one-use-per-source predicate but was
+        // never counted here, so the per-CLAUSE totals in dupclause spanned two call sites while
+        // `rej_dup` spanned one -- which printed a clause as 102.1% of its own denominator.
+        // Carried separately so each rate has a denominator covering exactly its own sites.
+        std::atomic<std::uint64_t> rej_dup_s1{0};
         Slot() { for (auto& g : gsz) { g.store(0); } }
     };
     inline Slot g_turn[kMaxTurn];
@@ -25622,9 +26495,20 @@ namespace shapestats
     inline Dumper g_dumper;
 }
 
+// Deferred from the forward declaration above SubsetHasDuplicateSacSource: the clause attribution
+// rides the same gate as the rest of the walk funnel.
+bool dupclause::Enabled() { return shapestats::Enabled(); }
+
 namespace enumstats
 {
-    inline bool Enabled() { static const bool v = EnvOn("MTG_ENUM_STATS"); return v; }
+    // Forced ON by MTG_TURN_CENSUS: the per-decision census carries this funnel as its BRANCHING
+    // block, and a dark funnel there would leave "what are we trimming" unanswerable on the very
+    // rows the census exists to explain. Unlike the dom/dedup censuses this adds no new search work
+    // -- only a relaxed fetch_add per subset visit -- so `units` and every other counter stay
+    // byte-identical; it costs WALL time on a very hot path, which GateNote() records so a census
+    // run's `wall_us` is never read as an uninstrumented time. See turncensus::GateNote().
+    inline bool Enabled()
+    { static const bool v = EnvOn("MTG_ENUM_STATS") || turncensus::On(); return v; }
     inline std::atomic<std::uint64_t> g_calls{0}, g_positions{0}, g_m_raw{0}, g_m_kept{0},
                                       g_m_exact{0}, g_m_bucket{0}, g_m_manastorm{0}, g_m_manaonly{0},
                                       g_calls_with_mana{0},
@@ -25632,6 +26516,13 @@ namespace enumstats
     // Greedy consider() FUNNEL: where each visited subset is rejected (Melira greedy-leaf diagnosis).
     inline std::atomic<std::uint64_t> g_c_enter{0}, g_c_rules{0}, g_c_mana{0}, g_c_color{0},
                                       g_c_feas{0}, g_c_surv{0};
+    // The SECOND walk's funnel. EnumeratePlans() has its own private copy of consider
+    // (`eval_and_push_body`) and it was never instrumented, so a decision whose branching happens
+    // there showed a completely EMPTY funnel -- which is exactly what Snow's heaviest decisions did
+    // (root=2 / FullSearchLineHybrid rows: walk_enter 0 while emitting 206,619 plans). Without these
+    // the question "what are we trimming" has no answer on the rows that matter most.
+    // Stages: enter -> saturation collapse -> the pre.* rule battery -> flat mana -> emitted.
+    inline std::atomic<std::uint64_t> g_e_enter{0}, g_e_sat{0}, g_e_rules{0}, g_e_surv{0};
     // The real-payment RESCUE (SubsetPayableWithFilters), which copies the board per call. `armed`
     // is a board/hand fact (a filter source, or a land Aura / filter still in HAND), so it can be
     // true for a whole enumeration while no individual subset can use it -- and then every flat-mana
@@ -27181,16 +28072,59 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (walk_exhausted) { return; }
         if (g_greedy_charge_budget != nullptr)
         {
-            g_greedy_charge_budget->Consume(1);
-            if (g_greedy_charge_budget->Exhausted() || g_greedy_charge_budget->Overrun())
-            { walk_exhausted = true; return; }
+            // W = visits per charged unit (MTG_SOLVE_CHARGE_W, default 1 -> the `<= 1` arm, which is
+            // the single Consume-then-test this used to be, byte-identical).
+            //
+            // THE TEST GOES WITH THE CHARGE, not on every visit, and that is a cost decision made
+            // from measurement. Consume + Exhausted + Overrun is ~15 instructions across four
+            // thread_locals (the budget, the game meter, the decision meter and its ceiling), and
+            // this runs once per subset visit -- 20 M of them in one Snow decision. Billed on every
+            // visit it cost KittyEquipment 8-14% core-ms for ZERO play change (measured 2026-10-01,
+            // wsweep3: kitty 1.08-1.14x at a digest that never moved), i.e. a deck the lever cannot
+            // help paid the accounting in full. Hoisting the test into the charge makes the common
+            // visit an increment and a compare. The cost of that: the budget can be emptied by node
+            // work this walk never billed, and the walk now notices up to W-1 visits later than it
+            // would have -- bounded, deterministic, and at the weights worth shipping (>= 8) smaller
+            // than one plan.
+            // Routed through ConsumeAt so the walk's units land in a `unitsite` bucket like every
+            // other Consume site. Without this the census's 13 u_* columns no longer sum to
+            // `units` and scripts/turn_census.py REFUSES the row ("the u_* buckets do not sum"),
+            // which is how it reported snow unanalysable the moment the charge was adopted.
+            if (g_greedy_charge_w <= 1)
+            {
+                ConsumeAt(g_greedy_charge_budget, unitsite::kGreedyWalk);
+                if (g_greedy_charge_budget->Exhausted() || g_greedy_charge_budget->Overrun())
+                { walk_exhausted = true; return; }
+            }
+            else if (++g_greedy_charge_acc >= g_greedy_charge_w)
+            {
+                g_greedy_charge_acc = 0;
+                ConsumeAt(g_greedy_charge_budget, unitsite::kGreedyWalk);
+                if (g_greedy_charge_budget->Exhausted() || g_greedy_charge_budget->Overrun())
+                { walk_exhausted = true; return; }
+            }
         }
         else if (decisionwork::Armed())
         {
             // No budget object on this host (the search's plan-scoring rollouts run unbudgeted
             // by design) -- bill the armed per-decision meter directly so those walks count too.
-            decisionwork::Add(1);
-            if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
+            // SAME exchange rate W: the meter is denominated in the same units as the budget, so
+            // letting the two paths bill at different rates would leave one binary holding two
+            // definitions of a unit -- and the generation drivers that arm this meter are precisely
+            // the callers who would then be calibrated against the wrong one. (W defaults to 1, so
+            // the unweighted single Add is still what every current caller does.)
+            const int dw = GreedyChargeWeight(state);
+            if (dw <= 1)
+            {
+                decisionwork::Add(1);
+                if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
+            }
+            else if (++decisionwork::t_charge_acc >= dw)
+            {
+                decisionwork::t_charge_acc = 0;
+                decisionwork::Add(1);
+                if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
+            }
         }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
         if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
@@ -28611,6 +29545,17 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
+        // Canonical-prefix fold, hoisted to the digit (see BuildFoldPrefixMap): 65% of this walk's
+        // subset visits on Snow are non-canonical positions whose whole inner loop is dead work.
+        // Gated on pre.dup_source as well, so the skip can never outlive the leaf clause it mirrors.
+        FoldPrefixMap fold_map;
+        const bool fold_pred_on = FoldOdoSkipEnabled() && pre.dup_source
+                               && BuildFoldPrefixMap(cands, groups, independent, auto_sel, fold_map) > 0;
+        // MTG_FOLD_ODO_VERIFY=1: do not skip; run the LEAF clause on the COMPLETE selection and
+        // report any position the digit test would have removed but the leaf would have kept. The
+        // digit test is sound only if its rejections are a SUBSET of the leaf's, and that is a claim
+        // about `sel` (auto + digits + independent bits), not about the digits alone.
+        static const bool s_fold_odo_verify = EnvOn("MTG_FOLD_ODO_VERIFY");
         bool done = false;
         while (!done)
         {
@@ -28618,8 +29563,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
+            const bool fold_viol = fold_pred_on && FoldPrefixViolated(fold_map, choice);
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
+                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
+                                || (fold_viol && !s_fold_odo_verify);
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
             if (!copy_skip && gate_on)
             {
@@ -28676,6 +29623,27 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     }
                 }
                 if (sel.empty()) { continue; }
+                // Digit-vs-leaf audit (see s_fold_odo_verify). Reports a position the digit test
+                // rejects that the leaf clause would KEEP -- the only way the hoist can be unsound.
+                if (fold_viol && s_fold_odo_verify)
+                {
+                    static thread_local int s_rep = 0;
+                    if (!SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, /*from_odometer=*/true)
+                        && s_rep < 8)
+                    {
+                        ++s_rep;
+                        std::string so;
+                        for (int q : sel)
+                        {
+                            so += cands[q].card_name.str() + "#" + std::to_string(q)
+                                + "/t" + std::to_string(cands[q].equiv_tag)
+                                + "/o" + std::to_string(cands[q].equiv_ord) + " ";
+                        }
+                        std::fprintf(stderr, "[fold-odo MISMATCH] groups=%d ind=%d sel=[%s]\n",
+                                     num_groups, num_ind, so.c_str());
+                    }
+                    continue;
+                }
                 const bool ok = gate_on
                     ? (mblock + pblock > 0
                        || mcost + pcost <= gate->pool_total + mgain + pgain
@@ -29277,6 +30245,30 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         // activations (one crank; see PlanTraits::act_c_pips).
         if (a.kind == Action::Kind::ActivateBlink && a.cost.colorless > t.act_c_pips)
         { t.act_c_pips = a.cost.colorless; }
+        // ACTIVATION LINE HOLD inputs (MTG_ACT_LINE_HOLD; see PlanTraits and ActLineHoldEnabled).
+        // Scoped to the two kinds the measured defect lives on -- a costed permanent activation and
+        // Wirewood Lodge's untap -- rather than every IsTrailingActivation kind. ActivateBlink in
+        // particular is a LOOP whose cost is per-crank and already has its own {C} hold, and summing
+        // a loop's pips here would over-hold on EDF for no reason.
+        if (ActLineHoldEnabled()
+            && (a.kind == Action::Kind::ActivatePermAbility
+                || a.kind == Action::Kind::UntapCreature))
+        {
+            t.act_pips[0] += a.cost.white; t.act_pips[1] += a.cost.blue;
+            t.act_pips[2] += a.cost.black; t.act_pips[3] += a.cost.red;
+            t.act_pips[4] += a.cost.green;
+            // The {T} half. UntapCreature always taps its source (Wirewood Lodge's "{G}, {T}");
+            // a permanent ability asks PermAbilityTaps, the single source of truth for that.
+            const bool taps = a.kind == Action::Kind::UntapCreature
+                           || PermAbilityTaps(a.ability_mode);
+            if (taps && a.sac_source_id > 0 && t.act_src_count < PlanTraits::kMaxActSrcs)
+            {
+                bool dup = false;
+                for (int k = 0; k < t.act_src_count; ++k)
+                { if (t.act_src_nums[k] == a.sac_source_id) { dup = true; break; } }
+                if (!dup) { t.act_src_nums[t.act_src_count++] = a.sac_source_id; }
+            }
+        }
         if (a.kind != Action::Kind::CastFromHand
             && a.kind != Action::Kind::CastFromGraveyard) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -29342,6 +30334,60 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     { t.pump_target_card = state.battlefield[static_cast<std::size_t>(best)].card.m_number; }
     t.attack_matters = !t.main2 && best >= 0;
     return t;
+}
+
+// MTG_ACT_HOLD_OUTER -- default OFF pending measurement; `=1` arms it. Read in exactly ONE place
+// (this TU) even though all three call sites span two files, because both worlds call this same
+// function -- the coding-conventions rule 4 shape without a shared EngineFlags entry.
+static bool ActHoldOuterEnabled()
+{
+    // heurarm-routed for the same pooling reason as SnowLookColorGateOn.
+    static const bool env = EnvOn("MTG_ACT_HOLD_OUTER");
+    return heurarm::Flag(heurarm::ACT_HOLD_OUTER, env);
+}
+
+// CARRY THE OUTER PLAN'S PENDING ACTIVATION {T} SOURCES INTO A CONTINUATION'S TRAITS.
+//
+// THE DEFECT (measured 2026-09-30; docs/design/trailing-activation-payment-hole.md). All three
+// breakpoint-continuation sites install traits derived from the CONTINUATION's own actions:
+//
+//     _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions);
+//     PlanTraitsScope _cont_scope(&_cont_traits);
+//
+// That shadowing is deliberate and must stay for every field it was built for -- deriving
+// mana_casts / pump_target / the one-shot hold from the outer plan is what caused the mirrorwing
+// gi43/242/292 divergent-payment class (a committed T5 pump line scored 12 damage and executed 5).
+// But `act_src_nums` is not like the other fields: it does not describe what the continuation DOES,
+// it describes an OBLIGATION THAT OUTLIVES IT. The base plan's trailing activations have not fired
+// yet, they are still owed their {T}, and while the continuation pays its casts they are invisible
+// to ActLineHoldMask -- so a continuation cast taps a Scrying Sheets or Frost Augur the base plan was
+// about to activate and the trailing pass silently no-ops it.
+//
+// SIZE: on snow d3/b10, 2 games, MTG_BP_SEARCH=0 (no searched continuation can apply) takes the
+// `tapped` drop class from 44,439 to ONE. So this is essentially the whole remaining case-A residual,
+// and it is invisible to fd-diverge because BOTH worlds shadow identically -- the executor and the
+// rollout drop the same activation, lockstep holds, and the better line is simply absent from both.
+//
+// ONLY THE {T} SOURCES, deliberately NOT act_pips. The source list is SELF-LIMITING: part (a) of
+// ActLineHoldMask holds untapped sources only, and an activation that has already fired owns a tapped
+// source, so carrying the whole outer list still holds exactly the pending ones. `act_pips` has no
+// such property -- the outer traits are computed once at plan apply and never decremented, so
+// carrying them would hold coloured mana for activations that already resolved. That over-hold is
+// harmless (a failed hold falls back to the unrestricted solve) but it is waste, and it is aimed at a
+// case-B drop, which is a different defect with a real cast-vs-activation trade behind it.
+void TurnSolver::CarryPendingActivations(PlanTraits& into, const PlanTraits* outer)
+{
+    if (!ActHoldOuterEnabled() || outer == nullptr) { return; }
+    for (int k = 0; k < outer->act_src_count; ++k)
+    {
+        bool dup = false;
+        for (int q = 0; q < into.act_src_count; ++q)
+        { if (into.act_src_nums[q] == outer->act_src_nums[k]) { dup = true; break; } }
+        // Overflow is SILENT by the same bare bound the builder uses (kMaxActSrcs = 8, which is
+        // exactly snow's 4 Scrying Sheets + 4 Frost Augur). Flagged in the doc as a latent cliff.
+        if (!dup && into.act_src_count < PlanTraits::kMaxActSrcs)
+        { into.act_src_nums[into.act_src_count++] = outer->act_src_nums[k]; }
+    }
 }
 
 bool TurnSolver::BatchPrepayMintPrefix(GameState& state, const std::vector<Action>& acts,
@@ -29675,6 +30721,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // the historical ladder -- so on a board with nothing else reservable (EDF: no dorks) it is one
     // extra solve, and the unrestricted fallback below is unchanged when it cannot be afforded.
     const std::uint64_t reserved_c = LineColorlessHoldMask(state, ManaCost{});
+    // ACTIVATION LINE HOLD (MTG_ACT_LINE_HOLD): the {T} sources and coloured providers the plan's own
+    // TRAILING ACTIVATIONS still need (ActLineHoldMask; 0 unless the lever is on and the plan carries
+    // one). This rung is why the lever covers the whole-turn prepay at all -- the executor installs
+    // its PlanSourceReserveScope only AFTER this call (AIEngine::TakeTurn), so MTG_ACT_TAP_RESERVE's
+    // card-number reserve is not yet in scope here and cannot stop the prepay from stealing the
+    // source. Measured: on SelesnyaLifegain seed 77617 T4 the prepay taps Blighted Steppe for Feed
+    // the Clan's {1} -- four sources tapped for a three-mana turn -- and MTG_ACT_TAP_RESERVE=1 alone
+    // does NOT fix it, precisely because of that ordering.
+    const std::uint64_t reserved_a = ActLineHoldMask(state, ManaCost{});
 
     // Solve the combined cost, HOLDING as much as the turn can spare. First try with everything
     // reservable held: if it pays wild-free, those sources are preserved for free. If holding them
@@ -29693,7 +30748,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // so the joint solve may spend the ONE body the turn needs (the attacker / pump target) on a pip
     // a SPARE dork covers identically. The attacker-only rung (MTG_TAP_ATTACKER_RUNG, default on)
     // is that missing step; see TapAttackerRungEnabled for the AL gi8 case and its verification.
-    std::uint64_t rungs[14];
+    std::uint64_t rungs[18];
     int n_rungs = 0;
     // Dedup push: a rung is emitted only when non-empty, novel, and there is room. With the
     // overhaul levers off (reserved_shot == 0, no provider narrowing) this reproduces the shipped
@@ -29701,10 +30756,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // classes are non-empty (dedup collapses them otherwise) -- byte-identical by construction.
     auto push = [&](std::uint64_t m)
     {
-        if (!m || n_rungs >= 14) { return; }
+        if (!m || n_rungs >= 18) { return; }
         for (int i = 0; i < n_rungs; ++i) { if (rungs[i] == m) { return; } }
         rungs[n_rungs++] = m;
     };
+    // ACTIVATION hold rungs FIRST, and above the line {C} rungs: losing a whole action costs strictly
+    // more than a suboptimal tap order, and the held attempt is tried before every looser rung anyway.
+    // Emitted only when the mask is non-empty, so with the lever off the ladder below is the shipped
+    // one, in the shipped order -- byte-identical by construction.
+    if (reserved_a)
+    { push(reserved | reserved_c | reserved_a); push(reserved | reserved_a); push(reserved_a); }
     if (reserved_c) { push(reserved | reserved_c); push(reserved_c); }   // line {C} hold rungs
     push(reserved);                                    // hold everything reservable
     if (DorkReserveEnabled())
@@ -31190,6 +32251,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
             // bp_choice == 0 is always emitted, so gating on it counts each occurrence exactly once.
             if (plan.bp_choice == 0) { BpCands(site, g_bp_cands_last, BpSearchWidth()); }
+            // CHAIN PRE-SCAN (MTG_BP_W0_CHAIN_COLLAPSE; see w0collapse::ChainOn). Rank 0 is
+            // standing at this breakpoint with the continuation list already in hand, and the
+            // CHAIN variant of the same base plan will resolve its slot by walking exactly this
+            // list at exactly this state -- so do the walk once, here, instead of paying a whole
+            // ApplyPlanDirect per slot to rediscover it. This is BpChainCandIndex's loop with the
+            // first kBpChainMemoSlots answers collected in one pass rather than one pass each.
+            //
+            // FIRST class-on breakpoint only (the `== -2` test), because that is the breakpoint a
+            // chain variant's own scan resolves at; rank 0 / bp_at 0 / !bp_all is the one variant
+            // guaranteed both EMITTED and ELIGIBLE here, which is what makes the channel reliable
+            // rather than opportunistic.
+            if (w0collapse::ChainOn() && plan.bp_choice == 0 && !plan.bp_all && plan.bp_at == 0
+                && g_bp_chain_ci0[0] == -2)
+            {
+                int seen = 0;
+                const int nc = static_cast<int>(cands.size());
+                for (int ci = 0; ci < nc && seen < kBpChainMemoSlots; ++ci)
+                {
+                    if (PlanOpensBreakpoint(state, cands[ci]) == 0) { continue; }
+                    g_bp_chain_ci0[seen++] = ci;
+                }
+                // -1, never -2: "scanned, found nothing" has to be distinguishable from "never
+                // scanned" or the host would read a stale answer as an absent one.
+                for (int j = seen; j < kBpChainMemoSlots; ++j) { g_bp_chain_ci0[j] = -1; }
+                g_w0_chain_prescans.fetch_add(1, std::memory_order_relaxed);
+            }
             // CHAIN SLOT (kBpChainChoice + j): resolve to the j-th continuation that opens a
             // further breakpoint. Checked before the rank test because the sentinel is deliberately
             // far past any real cands.size(), so the plain index path would read it as an overrun.
@@ -33059,6 +34146,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             PerformLookTopPutCreature(state, state.active_player_index, def.params, tutor_target,
                                       def.card.m_name.str());
         }
+        else if (def.params.reveal_x_put_permanents)
+        {
+            // Genesis Wave (rollout side, lockstep with EffectHandler). `chosen_x` is the int this
+            // plan's cast variant carries; the executor reaches the same helper through
+            // StackEntry::chosen_x (see AIEngine's gate -- the param is listed there precisely
+            // because X = 0 must survive as 0 rather than be dropped and re-read as -1).
+            PerformGenesisWave(state, state.active_player_index, chosen_x, def.card.m_name.str());
+        }
         else if (def.params.reanimate_creature_max_mv > 0)
         {
             // Unearth (rollout side, lockstep with EffectHandler): return the biggest creature
@@ -33448,6 +34543,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // "Create N tokens" as a spell's resolution (Fungus Frolic). Before the zone move below,
         // which is the order the real game resolves in. Executor twin: EffectHandler::ResolveImpl.
         ApplyCastCreatesTokens(state, state.active_player_index, def);
+
+        // "You gain N life" as an untargeted spell's resolution (Feed the Clan), with the ferocious
+        // upgrade. Here for the same reason the token call above is: BEFORE the zone move below,
+        // which is the order the real game resolves in -- and the gain must land before anything
+        // reads life_gained_this_turn. Executor twin: EffectHandler::ResolveImpl.
+        ApplyCastLifegain(state, state.active_player_index, def);
 
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
@@ -34056,6 +35157,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // the same builder -> lockstep. Null scope (levers off) = every consumer behaves as before.
     PlanTraits _plan_traits;
     if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
+    // MTG_ACT_DROP_AUDIT diagnostic: per-apply record of which sources a breakpoint CONTINUATION
+    // activated, so the drop site can join on it exactly (see t_cont_act_srcs).
+    if (ActDropAuditOn()) { t_cont_act_srcs.clear(); }
     PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
     TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
 
@@ -34305,6 +35409,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
                 {
+                    if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input: did the gated look-at-top (Scrying Sheets / Frost
                     // Augur) actually move a card into hand? Hand size is the observable -- the
                     // gated TapDraw is the only thing this apply can grow the hand with.
@@ -34371,18 +35476,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         const Player& lap = state.players[state.active_player_index];
                         const CardDefinition* fd =
                             CardDatabase::Instance().LookupCached(lap.hand.back());
-                        if (fd && fd->card.IsLand())
-                        {
-                            snow_look_worth =
-                                lap.lands_played_this_turn < 1 + lap.bonus_land_drops_this_turn;
-                        }
-                        else if (fd)
-                        {
-                            ManaPool have = AvailableManaPool(state);
-                            have.AddPool(state.floating_mana);
-                            snow_look_worth = static_cast<int>(have.Total())
-                                           >= fd->card.m_mana_cost.ManaValue();
-                        }
+                        // SHARED with the executor twin -- see TurnSolver::SnowLookFoundPlayable.
+                        if (fd) { snow_look_worth = TurnSolver::SnowLookFoundPlayable(state, *fd); }
                     }
                     // CHAIN CAP: a re-solve's continuation can activate the NEXT look source and
                     // re-enter this site (4 Sheets + 4 Augur = up to 8 nested Solves per apply --
@@ -34431,10 +35526,57 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             // "activate, then cast the find" lines. Depth-capped: a nested
                             // occurrence's variant is dropped (duplicate-of-base, never wrong).
                             ++s_snow_look_depth;
+                            // MTG_ACT_DROP_AUDIT diagnostic (measurement only -- see
+                            // g_cont_tap_act / g_cont_tap_mana). The MTG_BP_SEARCH=0 control proved
+                            // the whole remaining `tapped` drop class comes from searched
+                            // continuations, but not WHICH continuation action takes the source.
+                            // Two candidates with opposite fixes: the continuation ACTIVATED the
+                            // same physical source the base plan had already committed to (a
+                            // DOUBLE-BOOKING -- the fix is enumeration-side, exclude the base
+                            // plan's pending activations from the continuation's candidates), or a
+                            // continuation CAST paid mana with it (a hold gap). Snapshot which of
+                            // the active player's sources are untapped, diff after, attribute by
+                            // whether the continuation's own action list names that source.
+                            std::vector<int> _ct_before;
+                            if (ActDropAuditOn())
+                            {
+                                for (const Permanent& q : state.battlefield)
+                                {
+                                    if (q.controller_index == state.active_player_index && !q.tapped)
+                                    { _ct_before.push_back(q.card.m_number); }
+                                }
+                            }
                             bp_play_searched_land(extra, nullptr);
                             apply_continuation_precasts(extra);
                             apply_plan_actions(extra.actions, extra.searched_order);
                             apply_trailing_activations(extra.actions);
+                            if (ActDropAuditOn())
+                            {
+                                for (int id : _ct_before)
+                                {
+                                    bool now_tapped = false;
+                                    for (const Permanent& q : state.battlefield)
+                                    {
+                                        if (q.card.m_number != id
+                                            || q.controller_index != state.active_player_index)
+                                        { continue; }
+                                        now_tapped = q.tapped; break;
+                                    }
+                                    if (!now_tapped) { continue; }
+                                    bool named = false;
+                                    for (const Action& ea : extra.actions)
+                                    {
+                                        if (ea.kind == Action::Kind::ActivatePermAbility
+                                            && ea.sac_source_id == id) { named = true; break; }
+                                    }
+                                    if (named)
+                                    {
+                                        g_cont_tap_act.fetch_add(1, std::memory_order_relaxed);
+                                        t_cont_act_srcs.push_back(id);
+                                    }
+                                    else { g_cont_tap_mana.fetch_add(1, std::memory_order_relaxed); }
+                                }
+                            }
                             --s_snow_look_depth;
                         }
                         else if (!searched)
@@ -34472,7 +35614,33 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     { ++g_stranded_tapdraw_count; }
                     if (taps)
                     { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
+                    // MTG_ACT_DROP_AUDIT "unpaid" -- the cross-world, cross-deck twin of the
+                    // thread_local counter above (which only ever surfaces under DedupCensusOn and
+                    // only in this world). See GameLogger.h.
+                    if (ActDropAuditOn())
+                    { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
                 }
+            }
+            // MTG_ACT_DROP_AUDIT: source not live -- PermAbilityDeadReason splits "tapped for MANA by
+            // a cast payment" (the defect) from gone/summoning-sick. Nothing counted this before.
+            else if (ActDropAuditOn() && a.def != nullptr)
+            {
+                const int _why = PermAbilityDeadReason(state, state.active_player_index,
+                                                       a.sac_source_id, a.ability_mode);
+                // THE EXACT JOIN (see t_cont_act_srcs): of the `tapped` class, how much is this
+                // plan's OWN breakpoint continuation having re-solved and activated the very
+                // permanent the plan still owed a {T} to -- a DOUBLE-BOOKING, whose fix is
+                // enumeration-side rather than a bigger payment hold.
+                if (_why == 1)
+                {
+                    const bool by_cont =
+                        std::find(t_cont_act_srcs.begin(), t_cont_act_srcs.end(), a.sac_source_id)
+                        != t_cont_act_srcs.end();
+                    if (by_cont) { g_tapped_by_cont_act.fetch_add(1, std::memory_order_relaxed); }
+                    else         { g_tapped_other.fetch_add(1, std::memory_order_relaxed); }
+                }
+                NoteActDrop(_why, a.card_name.str().c_str(), state.turn_number,
+                            a.cost.ManaValue());
             }
         }
         else if (a.kind == Action::Kind::ActivatePump)
@@ -34490,15 +35658,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (a.kind == Action::Kind::UntapCreature)
         {
             // Wirewood Lodge: precondition-check FIRST so a stranded untap never pays its {G}.
+            // The nesting below is the AUDIT split only -- same three tests in the same
+            // short-circuit order, so with MTG_ACT_DROP_AUDIT off this is byte-identical.
             const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name);
             if (ud != nullptr
                 && CanApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
-                                         ud->params.untap_creature_subtype)
-                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                                         ud->params.untap_creature_subtype))
             {
-                ApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
-                                   ud->params.untap_creature_subtype);
+                if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                {
+                    ApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
+                                       ud->params.untap_creature_subtype);
+                    if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
+                }
+                // MTG_ACT_DROP_AUDIT "unpaid" (lockstep twin of the executor's): the source was live
+                // and had a target, so the mana half is what lost the untap. Nothing to roll back --
+                // the {T} is paid inside ApplyUntapCreature, which this branch never reaches.
+                else if (ActDropAuditOn())
+                { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
             }
+            // MTG_ACT_DROP_AUDIT: precondition failed -- split "a cast tapped the Lodge" (defect)
+            // from "no tapped Elf to untap" (benign). Nothing counted this kind before.
+            else if (ActDropAuditOn() && ud != nullptr)
+            { NoteActDrop(UntapCreatureDeadReason(state, state.active_player_index, a.sac_source_id),
+                          a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
         }
         else if (a.kind == Action::Kind::GraveyardExileAbility)
         {
@@ -34796,6 +35979,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // bp_at 1 as a T5 win, the executor never applied it, realised T8. Site 7 records the same
     // ordering constraint and survives only because Melira mixes no classes; site 9 is engine-wide
     // and cannot rely on that, so it stands down behind any earlier occurrence, in both worlds.
+    // A BASE PLAN IS STRUCTURALLY BLIND HERE, AND A CONSUMER HAS TO BE TOLD (see
+    // g_bp_searchonly_suppressed). The condition above short-circuits on `plan.bp_choice >= 0`, so
+    // for a base plan the gate is never even evaluated -- which is precisely why `g_bp_any_last`
+    // reads zero for a plan that has a real decision pending. Evaluated only when a NOBP consumer
+    // asks (the gate is a battlefield scan), so the default path is unchanged.
+    if (!s_human_play && plan.bp_choice < 0 && bp_seen == 0 && w0collapse::NobpSite9Watch()
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
+    {
+        g_bp_searchonly_suppressed = true;
+    }
     if (!s_human_play && plan.bp_choice >= 0 && bp_seen == 0
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
@@ -35012,7 +36205,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (Treasure held, the pump target tapped instead): mirrorwing gi43/242/292's committed T5
         // pump line scored 12 damage and executed 5. Null scope (levers off) changes nothing.
         PlanTraits _cont_traits;
-        if (PlanTraitsWanted()) { _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions); }
+        if (PlanTraitsWanted())
+        {
+            _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions);
+            // MTG_ACT_HOLD_OUTER: the outer plan's unfired activations are still owed their {T}.
+            // Read BEFORE the scope below is installed, so CurrentPlanTraits() is still the base
+            // plan's. Lockstep twin at AIEngine's two continuation installs.
+            TurnSolver::CarryPendingActivations(_cont_traits, CurrentPlanTraits());
+        }
         PlanTraitsScope  _cont_scope(PlanTraitsWanted() ? &_cont_traits : nullptr);
         TapKeepLastScope _cont_keep(PumpTargetHoldEnabled() ? _cont_traits.pump_target_card : 0);
         if (g_bp_trace_arm)   // MTG_BP_TRACE: the continuation's trait scope, for the executor diff
@@ -35322,6 +36522,11 @@ static void SimulateCombat(GameState& state)
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
     ApplyAttackDrawTriggers(state, active, atk_idx);
 
+    // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
+    // block above so tokens entering attacking are pumped, and BEFORE the damage loop reads power.
+    // Mirrors GameEngine::CombatPhase (executor) -- lockstep, ONE shared helper. Gated inert.
+    ApplyAttackLifegainTeamPump(state, active, atk_idx);
+
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, active) : 0;
@@ -35615,6 +36820,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.fresh_hold_exempt = false;   // lockstep with GameEngine::UntapStep (Permanent.h)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
+            p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
     }
@@ -37447,6 +38653,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
         const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
+        if (enumstats::Enabled()) { enumstats::g_e_enter.fetch_add(1, std::memory_order_relaxed); }
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
         // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
         // (auto_sel) ride EVERY subset by construction, so they are not a choice and must not count.
@@ -37465,6 +38672,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (chosen > sat_max_actions) { return; }
         }
+        if (enumstats::Enabled()) { enumstats::g_e_sat.fetch_add(1, std::memory_order_relaxed); }
         // MTG_DBG_MULTI=<turn> -- see the reject dump further down. Logged at ENTRY too, because the
         // two answers are different questions: "was the subset ever considered" (here) and "which
         // gate dropped it" (there). A subset the odometer never emits shows up as silence in both,
@@ -37551,7 +38759,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
-            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; } return; }
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause))
+        { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; }
+          // ...and the flat per-turn twin the census column `sub_rej_dupsrc_s1` reads. REDUNDANT with
+          // e_rej_dup above -- kept only so that column does not silently read zero. The e_* funnel is
+          // the better structure (a whole funnel per walk, not one extra counter) and the census field
+          // table should move onto it; see the note on rej_dup_s1's declaration.
+          if (shapestats::Enabled())
+          { shapestats::Bump(shapestats::g_turn[shapestats::Clamp(state.turn_number)].rej_dup_s1); }
+          return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }
@@ -38058,6 +39274,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 credited = true;
             }
         }
+        if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                  : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // FRESH-SPEND AT THE BASE (MTG_MINT_CREDIT_EXACT; see the mint block above): unpayable in
@@ -38654,6 +39871,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); });
         }
         if (BfCensusOn()) { bfcensus::g_subsets_scored[1].fetch_add(1, std::memory_order_relaxed); }
+        if (enumstats::Enabled()) { enumstats::g_e_surv.fetch_add(1, std::memory_order_relaxed); }
         plans.push_back(std::move(plan));
     };
 
@@ -38887,6 +40105,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
+        // Canonical-prefix fold at the digit -- the twin of Solve's (see BuildFoldPrefixMap), with
+        // ONE extra gate that is the whole reason this twin is not just a copy.
+        //
+        // A HOISTED PREDICATE MUST MIRROR THE LEAF'S GATE, NOT ONLY ITS TEST. The leaf clause is
+        // guarded by `from_odometer`, and THIS walk sets that flag only under MTG_FOLD_SEARCH_ODO
+        // (default OFF, a reserved decision) -- so by default the search KEEPS non-canonical
+        // arrangements here as real plans. Skipping them at the digit therefore deletes plans the
+        // engine would have scored: measured as -1,832..-58,080 enum_emitted per decision and a
+        // moved d3 digest, while d0 (greedy only, where the flag is always set) stayed byte-identical.
+        // Gated on the same predicate, this twin is inert until that lever is armed.
+        FoldPrefixMap fold_map;
+        const bool fold_pred_on = FoldOdoSkipEnabled() && FoldSearchOdometerOn(state) && pre.dup_source
+                               && BuildFoldPrefixMap(cands, groups, independent, auto_sel, fold_map) > 0;
         bool done = false;
         while (!done)
         {
@@ -38895,7 +40126,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
+                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
+                                || (fold_pred_on && FoldPrefixViolated(fold_map, choice));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
             if (!copy_skip && gate_on)
             {
@@ -38978,7 +40210,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // when its twin is not enumerable (knights gi497 lost a turn-4 kill exactly that
                 // way), and VerifyFoldRecoverable builds the twin on every rejection -- so this is
                 // a claim to CHECK at runtime, not to argue.
-                if (FoldSearchOdometerOn()) { foldsel::g_from_odometer = true; }
+                if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
                 eval_and_push(sel);
             }
             int g = 0;
@@ -40234,6 +41466,12 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
         || pp.tap_draw_cost.has_value() || pp.sac_draw_cost.has_value()
         || pp.drain_cost.has_value() || pp.exile_opponent_top_cost.has_value()
         || pp.ice_counter_cost.has_value() || pp.lifelink_grant_cost.has_value()) { return true; }
+    // Blighted Steppe / Wellwisher: once their modes are in CollectActivationKeys the site-9 gate
+    // CAN accept a key from them, and this predicate's contract is to be the SUPERSET of what the
+    // gate accepts. Wellwisher is the live one -- a creature the plan cast this turn whose {T}
+    // ability the continuation can then offer.
+    if (pp.sac_lifegain_per_creature_cost.has_value() || pp.tap_lifegain_cost.has_value())
+    { return true; }
     if (pp.blink_cost.has_value() || pp.team_pump_cost.has_value()) { return true; }
     if (pp.pod_mv_delta != 0) { return true; }
     if (pp.sac_creature_outlet) { return true; }
@@ -43595,6 +44833,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // Untap-a-creature land (Wirewood Lodge): target class + cost is the behaviour.
         if (pp.untap_creature_cost)           { s += "uc" + pp.untap_creature_cost->ToString()
                                                   + pp.untap_creature_subtype; }
+        // Sacrifice-for-lifegain land (Blighted Steppe): cost + per-creature rate IS the behaviour.
+        // land_sig rather than land_bonus, following gy_return_cost (Haven of the Spirit Dragon) --
+        // the direct precedent, and also a "{cost}, {T}, Sacrifice this land" ability. The land is
+        // CONSUMED by the activation, so it is not the strictly-optional free rider land_bonus
+        // promotes (a Mutavault animate leaves the land; this does not).
+        if (pp.sac_lifegain_per_creature_cost)
+        { s += "sl" + pp.sac_lifegain_per_creature_cost->ToString()
+             + std::to_string(pp.sac_lifegain_per_creature); }
         // NOTE: strictly-OPTIONAL extra activated abilities (Mutavault's animate, Sliver Hive's
         // token) are deliberately NOT discriminated here -- see land_bonus below. Splitting on them
         // doubles the land branch for no new line and measured +61% instructions on slivers_vial.
@@ -44965,16 +46211,56 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             { Fold(k, 0xD7A3); Fold(k, static_cast<uint64_t>(p.cards_drawn_this_turn)); }
         }
         // Fortifying Draught lifegain-count: identical shape and identical reasoning to the
-        // drawn-count fold above -- future-determining only for a SAME-TURN cast that reads it, so
-        // it is gated on the hand actually holding a pump_per_life_gained_power card AND the count
-        // being nonzero. Every deck without such a card keeps the EXACT prior key.
+        // drawn-count fold above -- future-determining only for a SAME-TURN reader, so it is gated
+        // on there actually BEING one AND the count being nonzero. Every deck without such a card
+        // keeps the EXACT prior key.
+        //
+        // TWO KINDS OF READER SHARE THIS ONE FOLD, and the value folded is the same for both, so
+        // they must not be split into two folds (that would key the same fact twice):
+        //   (a) IN HAND -- a spell about to be cast whose payload reads the counter (Fortifying
+        //       Draught, pump_per_life_gained_power). The original case.
+        //   (b) ON THE BATTLEFIELD -- a permanent that converts the counter into something spendable
+        //       THIS turn. THIS IS A LIST AND IT IS MEANT TO GROW; today it is Accomplished
+        //       Alchemist (mana_per_life_gained: "{T}: Add X mana of any one color, where X is the
+        //       amount of life you gained this turn"), and the next entry is Blossoming Bogbeast's
+        //       attack pump. A new battlefield reader adds one `||` term to the predicate below and
+        //       one to the stamp's scan in GoldFishRunner::StampDeckTraits, and nothing else.
+        // Without (b) the memo collapses two states with the SAME LIFE TOTAL but different
+        // life_gained_this_turn -- which for an Alchemist board is different MANA AVAILABLE, i.e.
+        // genuinely different futures, and the search then projects the wrong turn. (A live
+        // divergence source is ordinary: Brushland's "{T}: Add {G} or {W}. This land deals 1 damage
+        // to you" reaches the same life total by gaining one and paying four, or gaining none and
+        // paying three.)
+        // Fold the VALUE, not a marker: unlike Ocelot Pride's ">0" reading, X mana at 3 life gained
+        // and X mana at 7 are different amounts of mana.
+        // The battlefield scan is behind the DECK stamp, which is false for every existing deck --
+        // so those decks keep both their exact prior key AND their exact prior cost (no new scan).
         if (p.life_gained_this_turn > 0)
         {
             bool reads_lifegain = false;
-            for (const Card& hc : p.hand)
+            if (state.deck_reads_lifegain_in_play)
             {
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd && hd->params.pump_per_life_gained_power > 0) { reads_lifegain = true; break; }
+                for (const Permanent& bp : state.battlefield)
+                {
+                    if (bp.controller_index != pi) { continue; }
+                    const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                    // The LIST this block's comment says is meant to grow. Entry 2 (2026-09-30):
+                    // Blossoming Bogbeast's attack pump reads the counter at declare-attackers, so
+                    // two states with the same life total and different life_gained_this_turn have
+                    // combats differing by X x attackers. Brushland makes that live, not theoretical.
+                    if (bd && (bd->params.mana_per_life_gained
+                               || bd->params.attack_team_pump_per_life_gained))
+                    { reads_lifegain = true; break; }
+                }
+            }
+            if (!reads_lifegain)
+            {
+                for (const Card& hc : p.hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd && hd->params.pump_per_life_gained_power > 0)
+                    { reads_lifegain = true; break; }
+                }
             }
             if (reads_lifegain)
             { Fold(k, 0x1F5E); Fold(k, static_cast<uint64_t>(p.life_gained_this_turn)); }
@@ -45309,6 +46595,18 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.loyalty)));
             Fold(tk, perm.loyalty_activated_this_turn ? 1u : 0u);
         }
+        // Nykthos Paragon's once-each-turn team pump: FUTURE-DETERMINING WITHIN THE TURN -- a spent
+        // copy cannot pump again, an unspent one can put the next gain's whole `amount` on every
+        // creature we control. It is the SAME key-hole class as the storage-battery and walker-
+        // loyalty holes above, and unlike Ancient Cornucopia's colored_cast_lifegain_used_this_turn
+        // (which this key still folds nowhere -- a pre-existing gap that is benign there, because
+        // its payoff is 1-2 goldfish-inert life) merging a spent Paragon with an unspent one lets
+        // the search project a +N/+N team wave off a board that has already used it.
+        // BuildBreakpointKey and BuildDedupKey both call BuildSimKey on their first line, so this
+        // ONE insertion covers the mid-turn breakpoint and ordering-dedup keys too -- which is
+        // exactly what a flag that flips MID-TURN requires. Do not add a second fold there.
+        // Folded ONLY when SET, so every other deck keeps the EXACT prior key (no GT moves).
+        if (perm.lifegain_counters_used_this_turn) { Fold(tk, 0x9A8A6); }
         // Marked damage: coarse drop #3 (combat leftovers; state-based actions already ran, so
         // by the time an m2 solve sees the board the survivors' damage is history, not future).
         if (g_simkey_m2coarse == 0)
@@ -45520,7 +46818,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
     } _ro_timer{ _ro_time, _ro_t0 };
     RolloutNestGuard _rollout_nest;   // see g_rollout_nest: this rollout re-enters SolveWithLookahead
-    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks inside this rollout bill here
+    GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks inside this rollout bill here
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
@@ -46006,6 +47304,18 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
     TranspositionTable::Key k = BuildSimKey(state, 0, 0, false);
     if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
     return k;
+}
+
+// The census's `skey` column: the engine's OWN full-state identity, folded to 64 bits. Deliberately
+// BuildDedupKey and not a fresh hash -- the question the column answers is "did this root solve a
+// state another root in the same turn already solved", and the only defensible yardstick for "the
+// same state" is the one the search itself dedups on. Costs one key build per ROOT (not per
+// candidate), and returns a hard 0 with the census off so nothing is paid on a normal run.
+static unsigned long long CensusStateKey(const GameState& state)
+{
+    if (!turncensus::On()) { return 0; }
+    const TranspositionTable::Key k = BuildDedupKey(state);
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
 }
 
 // Copy-permutation signature (MTG_DEDUP_CENSUS only). The plan's actions in order, carrying every
@@ -47971,7 +49281,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 {
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
-    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     if (second_main)
     {
         // "STUCK -- PASS THE TURN", the second-main half. At `turn == cutoff` the post-combat main
@@ -48829,7 +50139,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
-    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
 #ifdef MTG_PROFILE
     if (state.turn_number >= 0 && state.turn_number < 12) { PROF_INC(fsw_by_turn[state.turn_number]); }
     if (depth >= 0 && depth < 12)                         { PROF_INC(fsw_by_depth[depth]); }
@@ -49467,11 +50777,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // probe recorded this node; otherwise (incl. beam off) `pre` keeps the static order == byte-identical.
     // Gated to depth <= g_esc_beam_leafdepth so the top plies (the committed play) keep the exact static order.
     const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
+    // Did anything REORDER `pre` after AppendBreakpointVariants stamped bp_base and the remap above
+    // fixed it up? The wave-0 collapses below are keyed positionally and read their memo from an
+    // EARLIER candidate in this same loop, so they need base-before-variants and rank-before-uniform
+    // to still hold (see w0collapse::FswOn). The reorder just below breaks both, so witness it
+    // rather than assume the flag that enables it is off.
+    bool order_perturbed = false;
     if (beam_here && !g_esc_beam_static && g_probe_plan_vals != nullptr && lc != nullptr)
     {
         ProbePlanVals::const_iterator pit = g_probe_plan_vals->find(key);
         if (pit != g_probe_plan_vals->end() && !pit->second.empty())
         {
+            order_perturbed = true;
             const std::vector<int>& vals = pit->second;
             const int nv = static_cast<int>(vals.size());
             std::vector<int> order(pre.size());
@@ -49523,6 +50840,29 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // same frontier, from that plan's own apply -- never inferred across nodes.
     const bool                             armnew_here = BpArmNewOn();
     std::unordered_map<std::uint64_t, int> bp_base_n;
+    // ---- THE WAVE-0 COLLAPSES, IN THIS HOST FOR THE FIRST TIME (see the w0collapse namespace) ---
+    // MTG_BP_W0_FSW carries the two ADOPTED skips (NOBP + uniform) into this loop, which never had
+    // either; MTG_BP_W0_CHAIN_COLLAPSE adds the chain arm's, which exists in neither host. Both
+    // default OFF. The arming predicate refuses the positional memo when anything could have
+    // reordered a family: MTG_BP_VARIANT_FIRST hoists rank variants above their own base plans, and
+    // the value-ranked beam permutes `pre` outright. `MoveOrderPlans` itself is safe -- it is a
+    // STABLE sort and a variant's comparator fields are byte-copied from its base plan, so a family
+    // keeps its emission order. (MTG_NO_MOVE_ORDER, which skips the sort entirely, is safe for the
+    // same reason the other host is.)
+    //
+    // AND IT REQUIRES THE REMAP, which is a SEPARATE flag. Plan::bp_base is stamped pre-sort and is
+    // only rewritten to post-sort positions above when BpWaveNSkipOn() is set (default ON). With
+    // MTG_BP_WAVE_NSKIP=0 the stamps address different plans than this loop does, and that is the
+    // LOSSY failure mode -- declining a variant on a measurement belonging to some other base plan,
+    // which is the index-vs-content trap MTG_BP_WAVE_NSKIP's own header paid for once already. So
+    // the arming predicate tests the remap rather than inheriting its default.
+    const bool w0_order_ok = !order_perturbed && !BpVariantFirst() && BpWaveNSkipOn();
+    const bool fsw_nobp_here  = ((w0collapse::FswMask() & 1) != 0) && w0_order_ok;
+    const bool fsw_unif_here  = ((w0collapse::FswMask() & 2) != 0) && w0_order_ok;
+    const bool fsw_chain_here = w0collapse::ChainOn() && w0_order_ok;
+    const bool fsw_w0_here    = fsw_nobp_here || fsw_unif_here || fsw_chain_here;
+    const bool fsw_verify     = fsw_nobp_here && w0collapse::FswVerifyOn();
+    w0collapse::Memo fsw_w0;
     // MTG_BP_NSKIP_GLOBAL only: this node's state dedup key, the cross-node half of the length
     // memo's key (see BpNSkipGlobalMode). Computed ONCE per node and only when the flag is on, so
     // the default path pays nothing and stays byte-identical.
@@ -49675,6 +51015,32 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 continue;
             }
         }
+        // ---- THE WAVE-0 COLLAPSES (MTG_BP_W0_FSW / MTG_BP_W0_CHAIN_COLLAPSE) -------------------
+        // BEFORE ConsumeAt and before LoadPlanState, because avoiding the APPLY is the entire
+        // point: the post-apply dedup below already keeps these candidates out of their rollouts,
+        // but only after the units and the GameState copy have been spent. Each arm's identity is
+        // at its flag; `w0collapse::SkipReason` tests them in the order the other host does.
+        if (fsw_w0_here)
+        {
+            const int why = w0collapse::SkipReason(fsw_w0, p, BpSearchWidth(),
+                                                   fsw_nobp_here, fsw_unif_here, fsw_chain_here);
+            // VERIFY MODE (MTG_BP_W0_FSW_VERIFY): fall through and APPLY instead of declining, so
+            // the post-apply comparison below can test the claim. Play is the arm-off play.
+            if (why == w0collapse::kNobp && fsw_verify) { /* fall through to the apply */ }
+            else if (why != w0collapse::kNone)
+            {
+                // Counted unconditionally, not under s_rollout_stats: a byte-identical A/B on a
+                // skip just added is a red flag, so the arm has to be able to say it did something
+                // (digest-equality-can-mean-broken).
+                if (why == w0collapse::kNobp)
+                { g_fsw_nobp_skipped.fetch_add(1, std::memory_order_relaxed); }
+                else if (why == w0collapse::kUnif)
+                { g_fsw_unif_collapsed.fetch_add(1, std::memory_order_relaxed); }
+                else
+                { g_w0_chain_collapsed.fetch_add(1, std::memory_order_relaxed); }
+                continue;
+            }
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -49695,7 +51061,62 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // byte-identical.
         const bool nskip_here = BpWaveNSkipOn();
         if (nskip_here) { g_bp_cands_last = 0; }
+        // ...and the same one-apply-measures-it convention for the wave-0 collapses. The two
+        // breakpoint counters are MONOTONIC and read as a delta (see g_bp_any_last for why a reset
+        // would be unsafe under a node-hosted re-entry); the chain channel is per-apply and so does
+        // reset, -2 meaning "this apply never reached a continuation list".
+        const std::uint64_t w0_any_before     = g_bp_any_last;
+        const std::uint64_t w0_classon_before = g_bp_classon_last;
+        if (fsw_chain_here)
+        { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+        // Per-apply, like g_bp_cands_last: "did THIS apply suppress a searched-only site".
+        if (fsw_nobp_here) { g_bp_searchonly_suppressed = false; }
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        if (fsw_w0_here)
+        {
+            w0collapse::Record(fsw_w0, p, static_cast<int>(&p - pre.data()),
+                               w0_any_before, w0_classon_before,
+                               fsw_nobp_here, fsw_unif_here, fsw_chain_here);
+        }
+        // THE NOBP IDENTITY, CHECKED (MTG_BP_W0_FSW_VERIFY; see w0collapse::FswVerifyOn). A base
+        // plan banks its post-apply key; a variant the arm WOULD have declined compares against it.
+        if (fsw_verify)
+        {
+            const TranspositionTable::Key vkey = BuildDedupKey(s);
+            if (p.bp_choice < 0)
+            { fsw_w0.base_key[static_cast<int>(&p - pre.data())] = vkey; }
+            else if (p.bp_base >= 0 && fsw_w0.nobp.count(p.bp_base) != 0)
+            {
+                const auto bk = fsw_w0.base_key.find(p.bp_base);
+                if (bk != fsw_w0.base_key.end())
+                {
+                    if (bk->second == vkey)
+                    { g_w0_nobp_verify_ok.fetch_add(1, std::memory_order_relaxed); }
+                    else
+                    {
+                        const long long n =
+                            g_w0_nobp_verify_bad.fetch_add(1, std::memory_order_relaxed);
+                        if (n < 5)
+                        {
+                            std::cerr << "[w0-verify] NOBP MISMATCH turn=" << state.turn_number
+                                      << " base=" << p.bp_base
+                                      << " arm=" << static_cast<int>(DedupArmOf(p))
+                                      << " bp_choice=" << p.bp_choice
+                                      << " bp_all=" << p.bp_all
+                                      // The claim is "no breakpoint occurred, so bp_choice was
+                                      // never read". These two deltas test it directly: nonzero on
+                                      // the VARIANT where the base plan measured zero means the
+                                      // variant reached a breakpoint its base plan did not.
+                                      << " var_any_delta=" << (g_bp_any_last - w0_any_before)
+                                      << " var_classon_delta="
+                                      << (g_bp_classon_last - w0_classon_before)
+                                      << "  base_plan=[" << DupeSig(pre[p.bp_base])
+                                      << "]  variant=[" << DupeSig(p) << "]\n";
+                        }
+                    }
+                }
+            }
+        }
         // MTG_BP_ARM_NEW: harvest what THIS base plan's apply measured, keyed by its own index in
         // `pre` so only its own variants can read it. Read here, immediately -- the tail recursion
         // below applies further plans on this thread and clears the channel.
@@ -52151,6 +53572,21 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                && g_fsline_nest == 0;
     decisionwork::Scope _dws_fs((fs_decision_root && s_dw_x_fs > 0)
                                 ? budget->Limit() * s_dw_x_fs : 0);
+    // PER-DECISION WORK CENSUS (MTG_TURN_CENSUS; TurnCensus.h). Hung on the SAME root predicate as
+    // the work ceiling above, deliberately: the ceiling's root is the definition of "one real
+    // decision" this engine already commits to, and a census with its own notion of a decision
+    // boundary would attribute work to turns the ceiling bills elsewhere. root=2 tags the hybrid
+    // host so a row can be told from SolveWithLookahead's (root=1) without inferring it.
+    turncensus::Scope _tc_fs(fs_decision_root, state.game_seed, state.turn_number,
+                             second_main ? 0 : 1, /*root_kind=*/2, depth,
+                             budget != nullptr ? budget->Limit() : 0,
+                             fs_decision_root ? CensusStateKey(state) : 0);
+    // DECISION DUMP (MTG_PLAN_DUMP=<turn>): the same root predicate again, so the dump describes
+    // exactly the decision the census bills and the work ceiling bounds -- not a rollout's copy of
+    // it. Before the search runs, so the board printed is the board the menu was built from.
+    if (fs_decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number)
+    { TurnSolver::PlanDumpAt(state, !second_main, depth,
+                             budget != nullptr ? budget->Limit() : 0); }
     static const bool s_dw_debug_fs = EnvOn("MTG_DECISION_WORK_DEBUG");
     struct DwDbgFs
     {
@@ -52161,7 +53597,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                  decisionwork::t_limit, decisionwork::t_used,
                                  decisionwork::Exceeded() ? 1 : 0); } }
     } _dwdbg_fs(s_dw_debug_fs && fs_decision_root, state.turn_number);
-    GreedyChargeGuard _gcg_fs(budget);   // MTG_SOLVE_CHARGE: root-level greedy walks bill here
+    GreedyChargeGuard _gcg_fs(state, budget);   // MTG_SOLVE_CHARGE: root-level greedy walks bill here
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
     SearchBudget  probe_cap_budget;
@@ -54100,7 +55536,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         ~SolverNestGuard() { --g_cs_solver_nest; }
     } _cs_nest;
     if (enforce_budget) { ++g_decision_epoch; }
-    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // Per-decision TOTAL work ceiling (MTG_DECISION_WORK_X, default 0 = off; DecisionWorkMeter.h):
     // limit = base budget x multiplier, armed ONLY at the outermost real budgeted decision --
     // rollout / line-walk / measurement re-entries bill the root's meter, they never re-arm it.
@@ -54109,6 +55545,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             && g_cs_solver_nest == 1 && g_rollout_nest == 0 && g_fsline_nest == 0;
     decisionwork::Scope _dws((decision_root && s_decision_work_x > 0)
                              ? budget->Limit() * s_decision_work_x : 0);
+    // PER-DECISION WORK CENSUS -- see the twin in FullSearchLineHybrid. root=1 is this host.
+    turncensus::Scope _tc(decision_root, state.game_seed, state.turn_number,
+                          is_pre_combat ? 1 : 0, /*root_kind=*/1, depth,
+                          budget != nullptr ? budget->Limit() : 0,
+                          decision_root ? CensusStateKey(state) : 0);
+    if (decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number)
+    { TurnSolver::PlanDumpAt(state, is_pre_combat, depth,
+                             budget != nullptr ? budget->Limit() : 0); }
     static const bool s_dw_debug = EnvOn("MTG_DECISION_WORK_DEBUG");
     struct DwDbg
     {
@@ -54652,11 +56096,24 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // ...and the wave-0 NOBP skip (MTG_BP_W0_NOBP), which reads `bp_nobp` below. It needs that
         // memo populated, so it forces the recording on even where BpWaveNoBpOn would not.
         const bool w0nobp_here = BpW0NoBpOn();
+        // ...and the CHAIN arm's collapse (MTG_BP_W0_CHAIN_COLLAPSE), which neither host had. The
+        // two skips above are left EXACTLY as they shipped -- they are adopted and measured, and
+        // rewriting them through the shared helper would put a default-ON path at risk for tidiness
+        // -- so the chain arm brings its own memo and records its own copy of the per-rank
+        // class-on count. One extra small map write per rank apply, only when the flag is on.
+        const bool w0chain_here = w0collapse::ChainOn();
+        w0collapse::Memo w0_chain;
         std::size_t cand_index = 0;
         std::uint64_t any_before = 0;
         std::uint64_t classon_before = 0;
         auto w0len_record = [&](const Plan& pl)
         {
+            if (w0chain_here)
+            {
+                w0collapse::Record(w0_chain, pl, static_cast<int>(cand_index),
+                                   any_before, classon_before,
+                                   /*nobp_on=*/false, /*unif_on=*/false, /*chain_on=*/true);
+            }
             if ((nobp_here || w0nobp_here) && pl.bp_choice < 0 && g_bp_any_last == any_before)
             { bp_nobp.insert(cand_index); }
             // Record what THIS apply saw, for the uniform sibling that has not run yet. Rank
@@ -54744,6 +56201,31 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ++candidates_done;
                     continue;
                 }
+                // ...and WHY NOT, when it did not fire (see g_w0_unif_miss_nomemo). The arm is
+                // 98.8% duplicate on the applies it still lets through, and the only question that
+                // matters is whether that is missing COVERAGE (the rank sibling never reported) or
+                // a candidate the identity genuinely does not cover (2+ class-on breakpoints, where
+                // uniform k and rank k are different lines).
+                if (s_rollout_stats)
+                {
+                    if (it == w0_unif_nbp.end())
+                    { g_w0_unif_miss_nomemo.fetch_add(1, std::memory_order_relaxed); }
+                    else { g_w0_unif_miss_multi.fetch_add(1, std::memory_order_relaxed); }
+                }
+            }
+
+            // ...and the CHAIN arm's collapse (MTG_BP_W0_CHAIN_COLLAPSE), same place and for the
+            // same reason: the scan this variant would run has already been run by rank 0's apply,
+            // and it landed inside wave 0's own window. See w0collapse::ChainOn for the identity
+            // and for which half of the arm is deliberately left alone.
+            if (w0chain_here
+                && w0collapse::SkipReason(w0_chain, plan, BpSearchWidth(),
+                                          /*nobp_on=*/false, /*unif_on=*/false,
+                                          /*chain_on=*/true) == w0collapse::kChain)
+            {
+                g_w0_chain_collapsed.fetch_add(1, std::memory_order_relaxed);
+                ++candidates_done;
+                continue;
             }
 
             // One work unit for this candidate's inline first turn (combat + post
@@ -54764,6 +56246,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             GameState copy = state;
             // Make g_bp_cands_last describe THIS apply (same reset FSLineWin does, same reason).
             if (w0len_here) { g_bp_cands_last = 0; }
+            // ...and the chain channel, which is per-apply for the same reason (-2 = never reached
+            // a continuation list, so the host reads nothing stale).
+            if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
             // ...and the same one-apply-measures-it convention for the no-breakpoint gate.
             cand_index = static_cast<std::size_t>(&plan - candidates.data());
             any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
@@ -56309,7 +57794,12 @@ namespace
     BpEnumProbe g_bp_enum_probe;
     inline bool BpEnumProbeOn()
     {
-        static const bool on = EnvOn("MTG_BP_ENUM_PROBE");
+        // MTG_TURN_CENSUS implies it -- the census's enum_hits / enum_misses / enum_nested_*
+        // columns ARE these counters, and they are the only per-turn read of whether the
+        // continuation memo engaged on a slow turn (the whole "is the caching dealing with it"
+        // question). The destructor's end-of-run print still checks MTG_BP_ENUM_PROBE alone, so a
+        // census run gets the counters without a second summary block on its stderr.
+        static const bool on = EnvOn("MTG_BP_ENUM_PROBE") || turncensus::On();
         return on;
     }
 
@@ -57814,6 +59304,23 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         }
     }
 
+    // --- taplife= : Wellwisher's "{T}: You gain 1 life for each Elf on the battlefield." Source
+    // presence and the ability existing on that card. NO count test: the source is itself an Elf, so
+    // X >= 1 whenever the activation is legal at all -- there is no "you control none of the thing
+    // it needs" case for this ability, unlike Sliver Hive's subtype gate above. Summoning sickness is
+    // deliberately NOT asserted here either: a Wellwisher can be untapped-but-sick right now and the
+    // line's own casts cannot change that, but the SOUNDNESS RULE at the call site is "Illegal only
+    // where no ordering could make it legal" -- and the honest grade for a sick source is
+    // LegalNotEnumerated, which is what the search's own CanTap gate already produces.
+    for (const std::string& name : spec.tap_lifes)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !d->params.tap_lifegain_cost.has_value())
+        { return "'" + name + "' has no tap-for-lifegain activated ability"; }
+    }
+
     // --- blink= : Emiel's "{3}:" / Eldrazi Displacer's "{2}{C}:" exile-and-return. Source presence,
     // the ability existing on that card, and -- when the line PINNED a target -- that the target is a
     // creature we could legally blink. A "another target creature" ability cannot take the outlet
@@ -58260,7 +59767,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
                       spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty() &&
-                      spec.eternalizes.empty()))
+                      spec.eternalizes.empty() &&
+                      // taplife= (Wellwisher). EVERY new verb must be added here or a line made up
+                      // ONLY of it silently grades `accept / plan_index -1 / "pass / cast nothing"`
+                      // -- an ACCEPT for a line the engine then does not play, which is strictly
+                      // worse than a reject because the human sees no error at all.
+                      spec.tap_lifes.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -58330,6 +59842,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::vector<std::string> sortedTapTokens = spec.tap_tokens;
     std::sort(sortedTapTokens.begin(), sortedTapTokens.end());
     const bool taptoken_declared  = !spec.tap_tokens.empty();
+    // taplife= (Wellwisher's "{T}: gain 1 life for each Elf"), the same declared-vs-legacy split
+    // every verb above uses -- an undeclared line keeps matching the action's card name in the
+    // ordinary cast multiset, so saved references are unaffected.
+    std::vector<std::string> sortedTapLifes = spec.tap_lifes;
+    std::sort(sortedTapLifes.begin(), sortedTapLifes.end());
+    const bool taplife_declared   = !spec.tap_lifes.empty();
     // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
     // split every verb above uses -- an undeclared line keeps matching the action's card name in
     // the ordinary cast multiset, so saved references are unaffected.
@@ -58393,6 +59911,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
         std::vector<LineSpec::EquipSpec> equipActs;
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames, gyPlayNames;
+        std::vector<std::string> tapLifeNames;
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
@@ -58446,6 +59965,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
             { tapTokenNames.push_back(a.card_name); continue; }
+            // Wellwisher: keyed on the MODE, not the kind -- ActivatePermAbility is shared by a dozen
+            // modes and only this one has a verb, so the others must keep falling through to the
+            // ordinary cast multiset below.
+            if (taplife_declared && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::TapLifegain)
+            { tapLifeNames.push_back(a.card_name); continue; }
             if (pod_declared && a.kind == Action::Kind::ActivatePod)
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
@@ -58563,6 +60088,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = tapTokenNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedTapTokens) { continue; }
+        }
+        if (taplife_declared)
+        {
+            std::vector<std::string> v2 = tapLifeNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedTapLifes) { continue; }
         }
         if (pod_declared && !PodsMatch(spec.pods, podActs)) { continue; }
         if (ooze_declared)
@@ -59421,6 +60952,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 { Action::AbilityMode::TapDamage,      &bd->params.tap_damage_cost      },
                 { Action::AbilityMode::TapInvestigate, &bd->params.tap_investigate_cost },
                 { Action::AbilityMode::TapDraw,        &bd->params.tap_draw_cost        },
+                // Blighted Steppe's "{3}{W}, {T}, Sacrifice this land": a real mana cost, so without
+                // it here an unaffordable Steppe activation named by `cast=` would fall through to
+                // the softer LegalNotEnumerated grade instead of a truthful Illegal -- the exact
+                // Mariposa failure this probe was added for. Wellwisher is deliberately ABSENT: its
+                // cost is {T} alone, so ManaValue() == 0 and there is nothing to reserve (and it has
+                // its own `taplife=` verb, so it never reaches this `cast=` path anyway).
+                { Action::AbilityMode::SacLifePerCreature,
+                                                       &bd->params.sac_lifegain_per_creature_cost },
             };
             for (const auto& m : modes)
             {
@@ -60382,4 +61921,590 @@ bool TurnSolver::CastOrderIsCanonical(const GameState& state, const Plan& plan)
         prev = &a;
     }
     return true;
+}
+
+// =================================================================================================
+// PER-DECISION WORK CENSUS -- the field table (see src/ai/TurnCensus.h for the whole rationale).
+//
+// Defined at the BOTTOM of this file deliberately: the counters it reads are file-static (and
+// `g_bp_enum_probe` lives in an anonymous namespace ~4000 lines above), so every one of them has
+// to be in scope, and only here are they all declared. The decision roots call the Scope through
+// the declarations in TurnCensus.h.
+//
+// ONE TABLE, TWO CONSUMERS. The column name and the counter it reads appear together on one line
+// and are expanded twice -- once into the header row, once into the snapshot. That is the whole
+// point of the X-macro: the failure this file has seen repeatedly is a tally whose label drifted
+// from the thing being tallied (the `source-only 85323 | order-only 85323` double-count, the
+// cross-tab keyed on a struct field that a second write site never set). Here a mislabelled
+// column is impossible, and a counter no longer bumped reads as a hard 0 rather than as a
+// plausible number.
+//
+// WHAT TO READ FIRST. The `u_*` block is 13 buckets that sum EXACTLY to the row's `units` (one
+// counter per SearchBudget::Consume site), so a slow turn immediately names the site that owns
+// it -- rollout leaves vs breakpoint waves vs escalation re-evaluation -- rather than leaving it
+// to be inferred from a total. Everything after that block explains WHY that site was entered so
+// often: what the two memos served, what the pruners removed, and what condemnation declined.
+#define MTG_TURN_CENSUS_CV(x) static_cast<long long>((x).load(std::memory_order_relaxed))
+// The ladder counters are depth-indexed arrays (a decision commits at exactly one depth, so its
+// own contribution lands in one slot -- but WHICH slot is part of what we are measuring, so the
+// census carries the sum and leaves the per-depth split to the aggregate printer).
+template <std::size_t N>
+static long long MtgTurnCensusSumArr(const std::array<std::atomic<long long>, N>& a)
+{
+    long long t = 0;
+    for (const std::atomic<long long>& v : a) { t += v.load(std::memory_order_relaxed); }
+    return t;
+}
+// shapestats keys its slots by TURN, but one decision's rollouts span several turns (a depth-3
+// decision on turn 7 walks turns 7..10), so the per-decision figure is the sum over every slot --
+// the diff then attributes exactly the visits this decision caused, wherever they landed.
+static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Slot::*m)
+{
+    long long t = 0;
+    for (const shapestats::Slot& s : shapestats::g_turn)
+    { t += static_cast<long long>((s.*m).load(std::memory_order_relaxed)); }
+    return t;
+}
+#define MTG_TURN_CENSUS_FIELDS(X)                                                                 \
+    /* ---- WHERE THE UNITS WENT. These 14 sum exactly to `units`, and turn_census.py ABORTS if    \
+     * they ever don't -- add a bucket with every new Consume site. ---- */                       \
+    X(u_rollout_step,     MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRolloutStep]))          \
+    X(u_fs_main2,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsMain2]))              \
+    X(u_fs_tranche,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsTranche]))            \
+    X(u_fs_pre,           MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsPre]))                \
+    X(u_fs_bp_wave,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsBpWave]))             \
+    X(u_fs_group_wave,    MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsGroupWave]))          \
+    X(u_greedy_fallback,  MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kGreedyFallback]))       \
+    X(u_la_cand,          MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kLookaheadCand]))        \
+    X(u_la_bp_wave,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kLookaheadBpWave]))      \
+    X(u_la_group_wave,    MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kLookaheadGroupWave]))   \
+    X(u_esc_eval,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEscEval]))              \
+    X(u_fs_bp_node,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsBpNode]))             \
+    X(u_fs_m2_wave,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsM2Wave]))             \
+    X(u_greedy_walk,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kGreedyWalk]))           \
+    /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
+    X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
+    /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
+     * USER 2026-09-30: *"a breakdown on the branching (what are we trimming, how the cache        \
+     * interacts and such) even better if we can also include the cost of each"*.                  \
+     *                                                                                             \
+     * `cand_scored` above counts lines the SEARCH scored. It is not the work: each one is produced \
+     * by a walk over the subset lattice that visits far more subsets than it emits plans, and the  \
+     * funnel below is where they go. The six walk_* counters are CUMULATIVE pass counts on one     \
+     * lambda (enumstats::consider), so each successive drop is exactly one predicate's rejections: \
+     *                                                                                             \
+     *   walk_enter -> subset rules -> flat mana -> SubsetPayable -> colour feasibility -> scored   \
+     *                                                                                             \
+     * NAMED BY SITE, NOT BY VARIABLE. The underlying atomics are g_c_{enter,rules,mana,color,feas, \
+     * surv} and `g_c_color` is incremented at the SubsetPayable site while `g_c_feas` is           \
+     * incremented at the colour-feasibility site -- i.e. the variable names are offset by one from \
+     * the stages. The increment sites were read before wiring these, and each column is named for  \
+     * the predicate it actually stands after. (This is the same trap that made an earlier          \
+     * `dedup_dup` column read g_dedup_exactdup and report 5.2% against a documented 64%.)          \
+     *                                                                                             \
+     * space_odo is the ODOMETER -- the product over all option groups, i.e. the size of the cross  \
+     * product the walk is a traversal of -- and space_plans is what it emitted, so space_odo /     \
+     * walk_enter / space_plans are three different denominators and a "branching" claim has to say \
+     * which one it means. sub_entered is the SAME quantity as walk_enter read through the other    \
+     * instrument (shapestats vs enumstats); it is carried deliberately as a cross-check and        \
+     * scripts/turn_census.py asserts the two agree, which is what would catch one of the two gates \
+     * silently failing to arm. */                                                                  \
+    X(walk_enter,         MTG_TURN_CENSUS_CV(enumstats::g_c_enter))                               \
+    X(walk_pass_rules,    MTG_TURN_CENSUS_CV(enumstats::g_c_rules))                               \
+    X(walk_pass_mana,     MTG_TURN_CENSUS_CV(enumstats::g_c_mana))                                \
+    X(walk_pass_payable,  MTG_TURN_CENSUS_CV(enumstats::g_c_color))                               \
+    X(walk_pass_color,    MTG_TURN_CENSUS_CV(enumstats::g_c_feas))                                \
+    X(walk_scored,        MTG_TURN_CENSUS_CV(enumstats::g_c_surv))                                \
+    X(walk_resc_call,     MTG_TURN_CENSUS_CV(enumstats::g_c_resc_call))                           \
+    X(walk_resc_ok,       MTG_TURN_CENSUS_CV(enumstats::g_c_resc_ok))                             \
+    /* THE SECOND WALK. EnumeratePlans() keeps its own copy of consider, so there are TWO subset    \
+     * walks and a decision can put all of its branching in either. The walk_* block above covers   \
+     * SolveUncached (the rollout leaf); this block covers EnumeratePlans (the main-phase decision   \
+     * list). They must not be added together or conflated: Snow's heaviest decisions run           \
+     * enum_enter in the millions while walk_enter is EXACTLY ZERO, and reading only the first block \
+     * showed those rows as having no branching at all. */                                          \
+    X(enum_enter,         MTG_TURN_CENSUS_CV(enumstats::g_e_enter))                               \
+    X(enum_pass_sat,      MTG_TURN_CENSUS_CV(enumstats::g_e_sat))                                 \
+    X(enum_pass_rules,    MTG_TURN_CENSUS_CV(enumstats::g_e_rules))                               \
+    X(enum_emitted,       MTG_TURN_CENSUS_CV(enumstats::g_e_surv))                                \
+    /* The SITUATION axis. On Fungus the branching hot spot turned out to be a situation CLASS
+     * (`groups=5-8 board=16+` = 7.2% of calls but 64.5% of the odometer space), and the per-card
+     * "driver" attribution was explicitly withdrawn there as unsound: odo is the product over ALL
+     * option groups, so many small groups and one huge group give the same odometer and are
+     * completely different problems. These three are sums -- divide by walk_calls for the averages
+     * that make the comparison. */                                                                \
+    X(walk_calls,         MtgTurnCensusShapeSum(&shapestats::Slot::calls))                        \
+    X(walk_groups,        MtgTurnCensusShapeSum(&shapestats::Slot::groups))                       \
+    X(walk_ind,           MtgTurnCensusShapeSum(&shapestats::Slot::ind))                          \
+    X(walk_board,         MtgTurnCensusShapeSum(&shapestats::Slot::board))                        \
+    X(space_odo,          MtgTurnCensusShapeSum(&shapestats::Slot::odo))                          \
+    X(space_plans,        MtgTurnCensusShapeSum(&shapestats::Slot::raw))                          \
+    X(space_dedup,        MtgTurnCensusShapeSum(&shapestats::Slot::dedup))                        \
+    X(sub_entered,        MtgTurnCensusShapeSum(&shapestats::Slot::entered))                      \
+    X(sub_passed,         MtgTurnCensusShapeSum(&shapestats::Slot::passed))                       \
+    X(sub_rej_dupsrc,     MtgTurnCensusShapeSum(&shapestats::Slot::rej_dup))                      \
+    X(sub_rej_dupsrc_s1,  MtgTurnCensusShapeSum(&shapestats::Slot::rej_dup_s1))                   \
+    /* ...and WHICH of its nine clauses did the rejecting. The predicate is named for sac sources    \
+     * but is really "one use per source per plan", so on a deck with no sacrifice outlet it can     \
+     * still own most of the walk -- Snow's first run put 73.9% of all subset visits here, which is  \
+     * unusable as evidence until the clause is named. `dupc_fold_prefix` should read 0 unless       \
+     * MTG_FOLD_SEARCH_ODO is on (that clause is gated on from_odometer). */                         \
+    X(dupc_sac_for_mana,   MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kSacForMana]))          \
+    X(dupc_free_slot,      MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kFreeSlot]))           \
+    X(dupc_paid_free,      MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kPaidFreePair]))       \
+    X(dupc_loyalty,        MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kLoyalty]))            \
+    X(dupc_garth,          MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kGarth]))              \
+    X(dupc_blink,          MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kBlink]))              \
+    X(dupc_permability,    MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kPermAbility]))        \
+    X(dupc_fold_prefix,    MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kFoldPrefix]))         \
+    X(dupc_pod,            MTG_TURN_CENSUS_CV(dupclause::g_hits[dupclause::kPod]))                \
+    X(sub_rej_sacmana,    MtgTurnCensusShapeSum(&shapestats::Slot::rej_mana))                     \
+    X(sub_rej_fodder,     MtgTurnCensusShapeSum(&shapestats::Slot::rej_fodder))                   \
+    X(rollout_calls,      MTG_TURN_CENSUS_CV(g_rollout_calls))                                    \
+    X(rollout_steps,      MTG_TURN_CENSUS_CV(g_rollout_steps))                                    \
+    X(pay_calls,          MTG_TURN_CENSUS_CV(g_act_pay_calls))                                    \
+    X(act_fired,          MTG_TURN_CENSUS_CV(g_act_fired))                                        \
+    X(dom_nodes,          MTG_TURN_CENSUS_CV(g_plandom_nodes))                                    \
+    X(dom_plans,          MTG_TURN_CENSUS_CV(g_plandom_plans))                                    \
+    /* ---- CACHING: what the two memos served, and what they had to derive. ---- */              \
+    X(enum_hits,          MTG_TURN_CENSUS_CV(g_bp_enum_probe.hits))                               \
+    X(enum_misses,        MTG_TURN_CENSUS_CV(g_bp_enum_probe.misses))                             \
+    X(enum_nested_hits,   MTG_TURN_CENSUS_CV(g_bp_enum_probe.nested_hits))                        \
+    X(enum_nested_misses, MTG_TURN_CENSUS_CV(g_bp_enum_probe.nested_misses))                      \
+    X(enum_clears,        MTG_TURN_CENSUS_CV(g_bp_enum_probe.clears))                             \
+    X(bplen_records,      MTG_TURN_CENSUS_CV(g_bplen_records))                                    \
+    X(bplen_hits,         MTG_TURN_CENSUS_CV(g_bplen_hits))                                       \
+    X(bplen_skips,        MTG_TURN_CENSUS_CV(g_bplen_skips))                                      \
+    X(lazy_hits,          MTG_TURN_CENSUS_CV(g_lazy_hits))                                        \
+    X(lazy_misses,        MTG_TURN_CENSUS_CV(g_lazy_misses))                                      \
+    /* ---- COST PRUNING / ABANDONMENT: did the ceilings engage on this decision? ---- */         \
+    X(sres_passes,        MTG_TURN_CENSUS_CV(g_sres_passes))                                      \
+    X(sres_overruns,      MTG_TURN_CENSUS_CV(g_sres_overruns))                                    \
+    X(sres_partial,       MTG_TURN_CENSUS_CV(g_sres_partial))                                     \
+    X(sres_escalated,     MTG_TURN_CENSUS_CV(g_sres_escalated))                                   \
+    X(sres_refused,       MTG_TURN_CENSUS_CV(g_sres_refused))                                     \
+    X(dom_dup,            MTG_TURN_CENSUS_CV(g_plandom_dup))                                      \
+    X(dom_capped,         MTG_TURN_CENSUS_CV(g_plandom_capped))                                   \
+    /* The PRIMARY dedup pair -- `dup / seen` is the rate MTG_DEDUP_CENSUS reports and the one   \
+     * MTG_CAND_DEDUP's comment quotes (64% on Snow). BOTH halves are carried: a rate needs its    \
+     * own denominator in the same row, and `cand_scored` is NOT that denominator (the dedup is    \
+     * consulted at two specific sites, not once per scored candidate).                            \
+     *                                                                                             \
+     * THIS FIXED A MISLABELLED COLUMN. The first cut carried one column called `dedup_dup` that   \
+     * actually read g_dedup_exactdup -- the exact-fingerprint CROSS-CHECK, a different counter on \
+     * a different denominator -- and dividing it by cand_scored produced 5.2% against the         \
+     * documented 64%. The X-macro keeps a name and its expression on one line; it cannot stop the \
+     * wrong counter being paired with a plausible name, so a column whose name implies a rate now \
+     * ships with the matching denominator beside it. */                                           \
+    X(dedup_seen,         MTG_TURN_CENSUS_CV(g_dedup_seen))                                       \
+    X(dedup_dup,          MTG_TURN_CENSUS_CV(g_dedup_dup))                                        \
+    X(dedup_copy_perm,    MTG_TURN_CENSUS_CV(g_dedup_namedup))                                    \
+    X(dedup_copy_false,   MTG_TURN_CENSUS_CV(g_dedup_namefalse))                                  \
+    X(dedup_exactdup,     MTG_TURN_CENSUS_CV(g_dedup_exactdup))                                   \
+    X(dedup_drops,        MTG_TURN_CENSUS_CV(g_dedup_drops_total))                                \
+    X(dedup_strand,       MTG_TURN_CENSUS_CV(g_dedup_strand_total))                               \
+    /* ---- RE-WORK: units this decision spent and then THREW AWAY. ----                         \
+     * The single most direct answer to "are we doing only the work that is necessary", and the      \
+     * reason the census exists at this granularity.  Iterative deepening runs a ladder of passes    \
+     * and commits ONE; `lad_warm` is every pass before it (superseded, by design) and `idwaste` is  \
+     * a pass the proportional overrun guard (kOverrunBudgetMult = 25 x budget) aborted and rolled   \
+     * back (discarded outright).  `idwaste_rescuable` is the subset where the discarded pass had    \
+     * PROVEN a better win turn than the one committed, i.e. a discard that cost play and not just   \
+     * time.  `fillin` is the order-free re-search a truncated line forces.                          \
+     * Summed over the depth-indexed arrays: a decision's ladder can commit at only one depth, so    \
+     * the sum is that decision's total and the per-depth split belongs in the aggregate block. */   \
+    X(idpass_starts,      MTG_TURN_CENSUS_CV(g_idpass_starts))                                    \
+    X(idwaste_passes,     MTG_TURN_CENSUS_CV(g_idwaste_passes))                                   \
+    X(idwaste_units,      MTG_TURN_CENSUS_CV(g_idwaste_units))                                    \
+    X(idwaste_rescuable,  MTG_TURN_CENSUS_CV(g_idwaste_rescuable))                                \
+    X(fillin_passes,      MTG_TURN_CENSUS_CV(g_fillin_passes))                                    \
+    X(fillin_units,       MTG_TURN_CENSUS_CV(g_fillin_units))                                     \
+    X(lad_warm_units,     MtgTurnCensusSumArr(g_lad_warm_units))                                  \
+    X(lad_commit_units,   MtgTurnCensusSumArr(g_lad_commit_units))                                \
+    /* ---- CONDEMNATION (USER 2026-09-30: "should also show up in there"). ----                  \
+     * The whole family, because its established failure mode is an arm that looks like            \
+     * condemnation-off from the outside whether it is working or silently inert -- so `seen`      \
+     * (consultations) is carried beside `drops`, and a row with seen>0 drops=0 is a rule that     \
+     * was asked and declined, which is a different fact from a rule never reached. */             \
+    X(condemn_drops,      MTG_TURN_CENSUS_CV(g_condemn_drops_total))                              \
+    X(condemn_greedy,     MTG_TURN_CENSUS_CV(g_condemn_drops_greedy))                             \
+    X(bp_condemn_seen,    MTG_TURN_CENSUS_CV(g_bp_condemn_seen))                                  \
+    X(bp_condemn_drops,   MTG_TURN_CENSUS_CV(g_bp_condemn_drops))                                 \
+    X(bp_condemn_greedy,  MTG_TURN_CENSUS_CV(g_bp_condemn_drops_greedy))                          \
+    X(bp_condemn_exec,    MTG_TURN_CENSUS_CV(g_bp_condemn_drops_exec))                            \
+    X(bp_condemn_emitted, MTG_TURN_CENSUS_CV(g_bp_condemn_emitted))                               \
+    X(condemn_act_drops,  MTG_TURN_CENSUS_CV(g_bp_condemn_act_drops))                             \
+    X(newonly_seen,       MTG_TURN_CENSUS_CV(g_bp_newonly_seen))                                  \
+    X(newonly_dropped,    MTG_TURN_CENSUS_CV(g_bp_newonly_dropped))                               \
+    /* ---- SILENT DROPS: the enumerated-but-unexecutable classes (MTG_ACT_DROP_AUDIT). ----      \
+     * USER standing rule 2026-09-30: "any case where we are silently dropping things is an        \
+     * indicator of problems that should be flagged". Per-turn, these say WHICH boards do it. */   \
+    X(drop_tapped,        MTG_TURN_CENSUS_CV(g_act_drop_tapped))                                  \
+    X(drop_unpaid,        MTG_TURN_CENSUS_CV(g_act_drop_unpaid))                                  \
+    X(drop_gone,          MTG_TURN_CENSUS_CV(g_act_drop_gone))                                    \
+    X(drop_notap,         MTG_TURN_CENSUS_CV(g_act_drop_notap))                                   \
+    X(hold_mask,          MTG_TURN_CENSUS_CV(g_act_hold_mask))                                    \
+    X(hold_solo,          MTG_TURN_CENSUS_CV(g_act_hold_solo))                                    \
+    X(hold_retry,         MTG_TURN_CENSUS_CV(g_act_hold_retry))                                   \
+    X(solo_retry,         MTG_TURN_CENSUS_CV(g_act_solo_retry))                                   \
+    X(cont_tap_act,       MTG_TURN_CENSUS_CV(g_cont_tap_act))                                     \
+    X(cont_tap_mana,      MTG_TURN_CENSUS_CV(g_cont_tap_mana))                                    \
+    X(tapped_by_cont,     MTG_TURN_CENSUS_CV(g_tapped_by_cont_act))                               \
+    X(tapped_other,       MTG_TURN_CENSUS_CV(g_tapped_other))                                     \
+    X(dig_mana_last,      MTG_TURN_CENSUS_CV(g_dig_mana_last_drops))                              \
+    X(snow_look_opens,    MTG_TURN_CENSUS_CV(g_snow_look_opens))                                  \
+    X(snow_look_mv_pass,  MTG_TURN_CENSUS_CV(g_snow_look_mv_pass))                                \
+    X(snow_look_colfail,  MTG_TURN_CENSUS_CV(g_snow_look_color_fail))
+
+const std::vector<const char*>& turncensus::FieldNames()
+{
+    static const std::vector<const char*> names = {
+#define MTG_TC_NAME(n, expr) #n,
+        MTG_TURN_CENSUS_FIELDS(MTG_TC_NAME)
+#undef MTG_TC_NAME
+    };
+    return names;
+}
+
+void turncensus::FillCounters(std::vector<long long>& out)
+{
+    out.clear();
+    out.reserve(turncensus::FieldNames().size());
+#define MTG_TC_READ(n, expr) out.push_back(expr);
+    MTG_TURN_CENSUS_FIELDS(MTG_TC_READ)
+#undef MTG_TC_READ
+}
+
+// Which optional counter families are LIVE (see TurnCensus.h::GateNote). Written into the census
+// file itself so a table of zeros can always be told apart from an instrument that was never armed.
+// MTG_ROLLOUT_STATS / MTG_ACT_DROP_AUDIT / MTG_BP_ENUM_PROBE are forced ON by the census flag, so
+// they are listed as `forced`; the remaining families are NOT forced because each one does REAL
+// WORK when armed (the plan-dominance census runs an O(n^2) frontier scan, the enum VERIFIER
+// re-derives every served list), and arming those would change the very unit counts the census is
+// ranking on. They read as an honest 0 and say so here.
+const std::string& turncensus::GateNote()
+{
+    static const std::string s = []{
+        std::string t = "census gates:";
+        t += " rollout_stats=forced act_drop_audit=forced bp_enum_probe=forced";
+        // enum_stats + branch_shape are forced too, and they are the two that cost WALL TIME: both
+        // do a relaxed fetch_add per SUBSET VISIT (tens of millions per heavy decision). They add no
+        // search work, so `units` and every counter stay byte-identical -- but a census row's
+        // `wall_us` is an INSTRUMENTED time and must not be quoted as the engine's own. Ranking on
+        // `units` (deterministic) is unaffected; see scripts/turn_census.py, which warns on this.
+        t += " enum_stats=forced(walk_*) branch_shape=forced(space_*,sub_*)";
+        t += " [WALL_US IS INSTRUMENTED -- per-visit atomics on the walk]";
+        // EVERY optional family, named. This list was incomplete on the first cut (it omitted the
+        // dedup census, the bplen memo probe and the lazy leaf), and three families of zeros then
+        // read as measurements rather than as dark instruments. scripts/turn_census.py additionally
+        // reports ANY all-zero column without consulting this list, which is the safeguard that
+        // does not depend on this list being right.
+        t += "  dom_census=";
+        t += (EnvOn("MTG_DOM_CENSUS") ? "ON" : "off(dom_* = 0; arming adds an O(n^2) scan)");
+        t += "  dedup_census=";
+        t += (EnvOn("MTG_DEDUP_CENSUS") ? "ON" : "off(dedup_* = 0; arming adds a BuildDedupKey hash per candidate)");
+        // Raw env, NOT BpNSkipGlobalMode(): that function is additionally scoped to
+        // UnbudgetedWorkScopeActive(), a RUNTIME condition, so evaluating it here (at static-init
+        // time) would report a state the run may never be in. Under a budget the lever is inert by
+        // design -- work a skip saves is work the budget re-spends -- so on a budgeted census
+        // bplen_* is expected to be 0 even with the flag set.
+        t += "  bplen(NSKIP_GLOBAL)=";
+        t += (EnvInt("MTG_BP_NSKIP_GLOBAL", 0) != 0
+                  ? "flag set (but scoped to UNBUDGETED runs only)"
+                  : "off(bplen_* = 0 -- a LEVER, not a probe)");
+        t += "  lazy_leaf=";
+        t += (EnvOn("MTG_LAZY_LEAF") ? "ON" : "off(lazy_* = 0)");
+        t += "  bp_probe=";
+        t += (EnvOn("MTG_BP_PROBE") ? "ON" : "off");
+        t += "  min_units=" + std::to_string(turncensus::MinUnits());
+        return t;
+    }();
+    return s;
+}
+
+// =================================================================================================
+// DECISION DUMP -- MTG_PLAN_DUMP=<turn>. Unset / 0 = OFF = byte-identical.
+//
+// USER 2026-09-30: *"Can you show me a full list of what we have in board in hand and drawable +
+// the decision list for snow?"*, then *"(and which are dropped etc.)"* and *"Ideally for the
+// breakpoints as well"*.
+//
+// The per-decision census (TurnCensus.h) says a snow decision scores 217,813 candidates and
+// silently drops 17% of its activations. Those are COUNTS; this prints the actual POSITION and the
+// actual MENU behind one of them -- board, hand, library in draw order, the enumerated main-plan
+// list, which casts and which ACTIVATIONS each plan loses when applied, and the breakpoint
+// continuation list with the same annotation.
+//
+// WHY THE DROPS NEED AN APPLY. `Plan::would_drop` is populated by the enumerator and covers dropped
+// CASTS only. A dropped ACTIVATION is only discoverable by running the plan: the {T} is spent, the
+// mana half fails, and the whole thing rolls back inside ApplyPlanDirect. So each listed plan is
+// applied to a COPY of the state with g_act_drop_sink armed (GameLogger.h), which is the only way
+// to name the losses rather than count them.
+//
+// Diagnostic only, and it is NOT free -- it enumerates and applies plans that play does not, which
+// perturbs the shared memos and every atomic counter. Never read a census or a timing off a run
+// with this on. Off, nothing below executes.
+static int PlanDumpTurn()
+{
+    // Value-carrying, so it keeps the raw EnvInt read per the coding-conventions skill.
+    static const int t = EnvInt("MTG_PLAN_DUMP", 0);
+    return t;
+}
+static int PlanDumpMax()
+{
+    static const int n = EnvInt("MTG_PLAN_DUMP_MAX", 40);
+    return n;
+}
+
+static const char* PlanDumpKindName(Action::Kind k)
+{
+    // Generated from Action::Kind's declaration order (TurnSolver.h). A kind added to the enum
+    // without a name here reads as "kind?<n>" rather than as a plausible wrong label.
+    static const char* kNames[] = {
+        "Cast", "CastFromGY", "Vial", "DiscardToLandsEdge", "PlayLand", "DigDraw", "Suspend",
+        "SacForMana", "TapForTokens", "SacCreatureOutlet", "Channel", "GarthActivate",
+        "ActivateLoyalty", "Equip", "GYReturn", "GYPlay", "GYExile", "AttachAllEquipment",
+        "PutFromHand", "JitteMode", "RevealTop", "Pump", "AnimateLand", "TapForTokenPay",
+        "UntapCreature", "Blink", "ACTIVATE", "Pod", "GYExileGrow", "ComboRoute", "Eternalize"
+    };
+    const int i = static_cast<int>(k);
+    if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
+    return "kind?";
+}
+
+static const char* PlanDumpModeName(PermAbilityMode m)
+{
+    static const char* kNames[] = {
+        "None", "TapDamage", "TapInvestigate", "TapDraw", "SacDraw", "Drain", "ExileTop",
+        "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
+        "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain"
+    };
+    const int i = static_cast<int>(m);
+    if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
+    return "mode?";
+}
+
+// One plan as a compact action list, e.g. "PlayLand:Rimewood Falls + Cast:Skred + ACTIVATE/TapDraw:Scrying Sheets".
+static std::string PlanDumpLine(const TurnSolver::Plan& p)
+{
+    std::string s;
+    if (p.land_decided && !p.land_to_play.empty()) { s += "PlayLand:" + p.land_to_play; }
+    for (const Action& a : p.actions)
+    {
+        if (!s.empty()) { s += " + "; }
+        s += PlanDumpKindName(a.kind);
+        if (a.kind == Action::Kind::ActivatePermAbility)
+        { s += std::string("/") + PlanDumpModeName(a.ability_mode); }
+        s += ":";
+        s += a.card_name.str();
+    }
+    if (s.empty()) { s = "(pass -- cast nothing)"; }
+    return s;
+}
+
+// Apply one plan on a COPY and report what it loses. Returns "" when the plan executes whole.
+static std::string PlanDumpApplyLosses(const GameState& state, const TurnSolver::Plan& p,
+                                       bool is_pre_combat, TranspositionTable::Key* out_key)
+{
+    std::vector<std::string>  drops;
+    std::vector<std::string>* saved_act  = g_act_drop_sink;
+    std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
+    std::vector<std::string>  cast_drops;
+    g_act_drop_sink           = &drops;
+    g_play_dropped_cast_sink  = &cast_drops;
+    const long fired_before = g_act_fired.load(std::memory_order_relaxed);
+    GameState copy = state;
+    TurnSolver::ApplyPlan(copy, p, is_pre_combat);
+    // THE ENGINE'S OWN DUPLICATE TEST. BuildDedupKey is the key the live dedup uses, and it is a
+    // key on the POST-APPLY STATE, not on the plan. That distinction is the whole point: deduping
+    // on a plan signature instead is recorded MEASURED UNSOUND TWICE at MTG_CAND_DEDUP's comment
+    // (a fully-widened plan signature still had a 32% FALSE rate), so a string comparison of
+    // action lists -- which is what this dump printed at first -- is not a duplicate count.
+    if (out_key != nullptr) { *out_key = BuildDedupKey(copy); }
+    const long fired = g_act_fired.load(std::memory_order_relaxed) - fired_before;
+    g_act_drop_sink          = saved_act;
+    g_play_dropped_cast_sink = saved_cast;
+
+    std::string out;
+    if (fired > 0) { out += "fired=" + std::to_string(fired); }
+    if (!cast_drops.empty())
+    {
+        out += out.empty() ? "" : " ";
+        out += "DROPPED-CASTS[";
+        for (std::size_t i = 0; i < cast_drops.size(); ++i)
+        { out += (i ? ", " : "") + cast_drops[i]; }
+        out += "]";
+    }
+    if (!drops.empty())
+    {
+        out += out.empty() ? "" : " ";
+        out += "DROPPED-ACTIVATIONS[";
+        for (std::size_t i = 0; i < drops.size(); ++i)
+        { out += (i ? ", " : "") + drops[i]; }
+        out += "]";
+    }
+    return out;
+}
+
+static void PlanDumpList(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
+                         bool is_pre_combat, const char* label)
+{
+    // DISTINCT ACTION LISTS vs total. A menu of N entries is not N plays: the enumerator emits one
+    // entry per distinct PAYMENT of the same actions too (main.cpp's display cap note measured 202
+    // emitted slots holding 49 distinct plays on one board). Printing both is the only way to read
+    // the list's real branching factor off it.
+    // TWO duplicate tests, reported side by side because they are NOT the same question and the
+    // difference is load-bearing:
+    //   action list  -- a string over (kind, mode, card). Cheap, and the test MTG_CAND_DEDUP's
+    //                   comment records as measured UNSOUND twice: most "duplicates" it finds are
+    //                   copy permutations, and a fully-widened plan signature still had a 32%
+    //                   FALSE rate. Printed only to show how misleading it is.
+    //   post-apply state (BuildDedupKey) -- the ENGINE's test, and the one MTG_DEDUP_CENSUS counts
+    //                   (64% of scored candidates on Snow). Two plans sharing this key genuinely
+    //                   reach the same board, so the second one's rollout recomputes a known result.
+    std::set<std::string> distinct_str;
+    for (const TurnSolver::Plan& p : plans) { distinct_str.insert(PlanDumpLine(p)); }
+    // unordered_set + KeyHash: Key has an operator== and a hash, but no ordering.
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> distinct_state;
+    std::vector<TranspositionTable::Key> keys(plans.size());
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        PlanDumpApplyLosses(state, plans[i], is_pre_combat, &keys[i]);
+        distinct_state.insert(keys[i]);
+    }
+    std::fprintf(stderr,
+        "\n%s: %zu enumerated\n"
+        "    distinct ACTION LISTS      %zu   (a plan-signature test -- MEASURED UNSOUND, see"
+        " MTG_CAND_DEDUP; shown only for contrast)\n"
+        "    distinct POST-APPLY STATES %zu   <-- the ENGINE's dedup test (BuildDedupKey)."
+        " %zu of %zu candidates reach a board a sibling already reached\n",
+        label, plans.size(), distinct_str.size(), distinct_state.size(),
+        plans.size() - distinct_state.size(), plans.size());
+    const int cap = PlanDumpMax();
+    if (static_cast<int>(plans.size()) > cap)
+    { std::fprintf(stderr, " (showing the first %d -- MTG_PLAN_DUMP_MAX)", cap); }
+    std::fprintf(stderr, "\n");
+    for (std::size_t i = 0; i < plans.size() && static_cast<int>(i) < cap; ++i)
+    {
+        const TurnSolver::Plan& p = plans[i];
+        std::string extra;
+        if (!p.would_drop.empty())
+        {
+            extra += " would_drop=[";
+            for (std::size_t k = 0; k < p.would_drop.size(); ++k)
+            { extra += (k ? ", " : "") + p.would_drop[k]; }
+            extra += "]";
+        }
+        if (p.bp_choice >= 0)
+        {
+            // bp_choice is a RANK into the continuation list except for two sentinels, which would
+            // otherwise print as bare magic numbers (1<<21 / 1<<20) and read as an absurd rank.
+            extra += " bp_choice=";
+            if (p.bp_choice >= TurnSolver::kBpChainChoice)
+            { extra += "CHAIN+" + std::to_string(p.bp_choice - TurnSolver::kBpChainChoice); }
+            else if (p.bp_choice >= TurnSolver::kBpEmptyChoice)
+            { extra += "EMPTY-ARM(done acting)"; }
+            else
+            { extra += "rank " + std::to_string(p.bp_choice); }
+            extra += " bp_at=" + std::to_string(p.bp_at);
+        }
+        TranspositionTable::Key key{};
+        const std::string loss = PlanDumpApplyLosses(state, p, is_pre_combat, &key);
+        int first_with_key = -1;
+        for (std::size_t q = 0; q < i; ++q)
+        { if (keys[q] == key) { first_with_key = static_cast<int>(q); break; } }
+        if (first_with_key >= 0)
+        { extra += "  [STATE-DUP of #" + std::to_string(first_with_key) + "]"; }
+        std::fprintf(stderr, "  [%3zu] %s%s\n", i, PlanDumpLine(p).c_str(), extra.c_str());
+        if (!loss.empty()) { std::fprintf(stderr, "        -> %s\n", loss.c_str()); }
+    }
+}
+
+void TurnSolver::PlanDumpAt(const GameState& state, bool is_pre_combat, int depth,
+                            long long budget_units)
+{
+    // Re-entrancy: applying a plan below re-enters the solver (a breakpoint continuation runs a
+    // full Solve), which would reach this same turn again and recurse without bound.
+    static thread_local bool busy = false;
+    if (busy) { return; }
+    // ONCE PER (turn, phase). A turn reaches a decision root more than once -- pre-combat main and
+    // second main are separate decisions, and a phase can be re-solved -- so without this the dump
+    // repeats and the reader cannot tell a genuine second decision from a re-entry of the first.
+    static thread_local int dumped_pre = -1, dumped_post = -1;
+    int& seen = is_pre_combat ? dumped_pre : dumped_post;
+    if (seen == state.turn_number) { return; }
+    seen = state.turn_number;
+    busy = true;
+
+    const Player& me  = state.players[state.active_player_index];
+    const Player& opp = state.players[1 - state.active_player_index];
+    std::fprintf(stderr,
+        "\n================================================================================\n"
+        "DECISION DUMP  seed=%llu  turn %d  %s main  depth=%d  budget=%lld units\n"
+        "================================================================================\n"
+        "LIFE  me=%d  opponent=%d      land drops used this turn: %d of %d\n",
+        static_cast<unsigned long long>(state.game_seed), state.turn_number,
+        is_pre_combat ? "pre-combat" : "second", depth, budget_units,
+        me.life, opp.life, me.lands_played_this_turn, 1 + me.bonus_land_drops_this_turn);
+
+    std::fprintf(stderr, "\nBATTLEFIELD (%zu)\n", state.battlefield.size());
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index) { continue; }
+        std::fprintf(stderr, "  [%2zu] %-28s %-9s%s%s\n", i, p.card.m_name.str().c_str(),
+                     p.tapped ? "TAPPED" : "untapped",
+                     p.card.IsLand() ? " land" : "",
+                     p.entered_this_turn ? " entered-this-turn(sick)" : "");
+    }
+    {
+        int n_opp = 0;
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index != state.active_player_index) { ++n_opp; } }
+        std::fprintf(stderr, "  (opponent controls %d permanent(s) -- passive goldfish)\n", n_opp);
+    }
+
+    std::fprintf(stderr, "\nHAND (%zu)\n", me.hand.size());
+    for (std::size_t i = 0; i < me.hand.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(me.hand[i]);
+        std::fprintf(stderr, "  [%2zu] %-28s %s\n", i, me.hand[i].m_name.str().c_str(),
+                     d ? d->card.m_mana_cost.ToString().c_str() : "");
+    }
+
+    std::fprintf(stderr, "\nLIBRARY -- DRAWABLE, in draw order (%zu remaining)\n", me.library.size());
+    for (std::size_t i = 0; i < me.library.size(); ++i)
+    {
+        std::fprintf(stderr, "  %2zu. %s\n", i + 1, me.library[i].m_name.str().c_str());
+    }
+    if (!me.graveyard.empty())
+    {
+        std::fprintf(stderr, "\nGRAVEYARD (%zu): ", me.graveyard.size());
+        for (std::size_t i = 0; i < me.graveyard.size(); ++i)
+        { std::fprintf(stderr, "%s%s", i ? ", " : "", me.graveyard[i].m_name.str().c_str()); }
+        std::fprintf(stderr, "\n");
+    }
+
+    std::vector<TurnSolver::Plan> mains = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
+    PlanDumpList(state, mains, is_pre_combat, "MAIN PLANS (the decision list)");
+
+    // BREAKPOINTS. The continuation list is what a plan's mid-turn draw re-opens; the wave scores
+    // ranks 0..W-1 of it by INDEX (see docs/design/per-decision-work-census.md Part 1 -- which is
+    // why the list's length and its contents matter separately from its size).
+    std::fprintf(stderr, "\nBREAKPOINT CONTINUATIONS  (W=%d slots scored per (plan, position);"
+                         " positions=%d)\n", BpSearchWidth(), BpSearchDepth());
+    std::vector<TurnSolver::Plan> conts = TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+    if (conts.empty())
+    {
+        std::fprintf(stderr, "  (none at this state -- no breakpoint is open here)\n");
+    }
+    else
+    {
+        std::fprintf(stderr, "  ranks 0..%d are the ones the search SCORES; the rest are reachable"
+                             " only by the deferred wave phase\n",
+                     BpSearchWidth() - 1);
+        PlanDumpList(state, conts, is_pre_combat, "  CONTINUATION LIST");
+    }
+    std::fprintf(stderr, "================================================================================\n");
+    busy = false;
 }

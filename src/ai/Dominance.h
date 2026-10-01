@@ -157,6 +157,19 @@
 // (a backstop flush runs at ApplyPlanDirect entry and at the end of every executor main phase), so a
 // state still carrying one is not at a clean boundary -- AtCleanBoundary refuses it rather than
 // comparing it. Never written on an unarmed board, so the refusal is byte-identical everywhere else.
+// 296 -> 296 (2026-09-30, SelesnyaLifegain): Permanent gained `lifegain_counters_used_this_turn`
+// (Nykthos Paragon's "Do this only once each turn", PER PERMANENT). A bool in existing padding, so
+// THE TRIPWIRE DID NOT FIRE -- recorded here for exactly the reason the temp_double_strike entry
+// above gives. Classification: an EXACT-MATCH field, folded in Build() below GATED ON SET -- and the
+// gating is the deliberate part: an unconditional mfold beside colored_cast_lifegain_used_this_turn
+// (which is how the historical once-per-turn flags are folded) would re-hash every permanent in
+// every deck and move ground truth for a field no other deck can set. Future-determining: an unused
+// copy can still put the next gain's whole amount on every creature we control, a spent one cannot
+// even trigger. NOT an axis ("unused is better" only holds in combination with a gain still to come
+// this turn, so no direction survives alone) and NOT a boundary assertion -- unlike the until-EOT
+// grants it is consumed by the untap step, not by cleanup, so it must be COMPARED rather than
+// refused. Unlike colored_cast_lifegain_used_this_turn it FLIPS MID-TURN, which is why it is also
+// folded into TurnSolver's BuildSimKey (and thus the mid-turn breakpoint and dedup keys).
 static_assert(sizeof(Permanent) == 296,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -271,6 +284,15 @@ static_assert(sizeof(Player) == 200,
 // deck_reads_mv_cast. The STATE they gate (our own death) needs no new fold either: a loss is
 // represented by parking our life at dmgev::kLostLife, and life_self is already an axis (MORE
 // dominates), so a dead line can never dominate a live one.
+// 832 -> 832 (2026-09-29, SelesnyaLifegain): GameState gained `deck_reads_lifegain_in_play` (one
+// bool placed IN the dmg_events_armed / own_death_live padding on purpose, so the tripwire did not
+// fire -- recorded here anyway, since the 824 entry above is explicit that a same-slot addition is
+// exactly the case size cannot catch). Classification: DECK CONSTANT, stamped once in
+// StampDeckTraits and never written again, so it is identical across every pair of states Build()
+// could ever compare -- nothing to fold, exactly like deck_reads_mv_cast and
+// deck_endstep_lifegain_max_threshold. The STATE it gates needs no new fold either:
+// `life_gained_this_turn` is ALREADY folded unconditionally in Build() below (it is only the
+// TurnSolver MID-TURN sim key that gates it), which is why this stamp is a sim-key concern only.
 static_assert(sizeof(GameState) == 832,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -896,6 +918,15 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // liability, but an exerted creature has already bought something with the tap, so no
         // direction can be declared. Nonzero-gated -> every deck with no exert source is unchanged.
         if (p.skip_next_untap) { mfold(0xE7E27ull); }
+        // Nykthos Paragon's "Do this only once each turn" (PER PERMANENT). An EXACT-MATCH field, the
+        // colored_cast_lifegain_used_this_turn classification directly above the axes -- but folded
+        // GATED ON SET rather than unconditionally, so every deck without a Paragon keeps its exact
+        // prior key (an unconditional mfold would re-hash every permanent in every deck and move
+        // ground truth for a field no other deck can set). Future-determining: an unused copy can
+        // still put the next gain's whole amount on every creature we control; a spent one cannot
+        // even trigger. Not an axis -- "unused" is better, but it is only better in combination with
+        // a gain still to come this turn, so no direction survives on its own.
+        if (p.lifegain_counters_used_this_turn) { mfold(0x9A8A6ull); }
         if (wired)
         {
             mfold(0xA77Aull);

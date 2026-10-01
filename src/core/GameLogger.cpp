@@ -39,6 +39,7 @@ thread_local BounceChooser*  g_play_attach_host_chooser = nullptr;
 thread_local LoyaltyTargetChooser* g_play_loyalty_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
 thread_local AttackModeChooser* g_play_attack_mode_chooser = nullptr;
+thread_local LifegainCountersChooser* g_play_lifegain_counters_chooser = nullptr;
 thread_local BounceChooser*  g_play_fling_chooser  = nullptr;
 thread_local EtbColorChooser* g_play_etb_color_chooser = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
@@ -96,6 +97,90 @@ std::atomic<long> g_afford_rollout_attempts{0};
 std::atomic<long> g_afford_real_fails{0};
 std::atomic<long> g_afford_real_attempts{0};
 bool AffordAuditOn() { static const bool on = EnvOn("MTG_AFFORD_AUDIT"); return on; }
+
+// DROPPED trailing-ACTIVATION audit (MTG_ACT_DROP_AUDIT; see GameLogger.h).
+std::atomic<long> g_act_drop_tapped{0};
+std::atomic<long> g_act_drop_unpaid{0};
+std::atomic<long> g_act_drop_gone{0};
+std::atomic<long> g_act_drop_notap{0};
+std::atomic<long> g_act_fired{0};
+// MTG_TURN_CENSUS implies the COUNTING half: the per-decision census (src/ai/TurnCensus.h) carries
+// drop_tapped / drop_unpaid / drop_gone / drop_notap / act_fired columns, and the user's standing
+// rule is that a silent drop is a defect to surface -- so a census that reported zero drops because
+// a second flag was unset would be reporting the absence of the instrument as the absence of the
+// problem. EnvPath is the shared reader, so this test cannot disagree with turncensus::On().
+//
+// The LEVEL is deliberately NOT forced: level 2 prints one stderr line per drop (hundreds of
+// thousands on a snow cell), which would bury the census's own output. A census run gets the
+// counters at level 1 and can ask for the per-drop lines explicitly.
+bool ActDropAuditOn()
+{
+    // MTG_PLAN_DUMP forces it too: the dump's whole purpose is to name WHICH activations a plan
+    // loses, and both the sink below and g_act_fired are gated here -- so without this the dump
+    // would print a menu with no drop lines and read as "this plan loses nothing".
+    static const bool on = EnvOn("MTG_ACT_DROP_AUDIT") || EnvPath("MTG_TURN_CENSUS") != nullptr
+                        || EnvInt("MTG_PLAN_DUMP", 0) != 0;
+    return on;
+}
+int  ActDropAuditLevel()
+{
+    static const int lvl = EnvOn("MTG_ACT_DROP_AUDIT") ? EnvInt("MTG_ACT_DROP_AUDIT", 1)
+                         : (ActDropAuditOn() ? 1 : 0);
+    return lvl;
+}
+void NoteActDrop(int reason, const char* card, int turn, int cost_mv)
+{
+    static const char* kWhy[4] = { "gone(left the battlefield)", "tapped(mana stole the {T})",
+                                   "noTap(sick/restricted)",     "unpaid(pip stranded)" };
+    switch (reason)
+    {
+        case 0:  g_act_drop_gone  .fetch_add(1, std::memory_order_relaxed); break;
+        case 1:  g_act_drop_tapped.fetch_add(1, std::memory_order_relaxed); break;
+        case 2:  g_act_drop_notap .fetch_add(1, std::memory_order_relaxed); break;
+        default: g_act_drop_unpaid.fetch_add(1, std::memory_order_relaxed); break;
+    }
+    if (g_act_drop_sink != nullptr)
+    {
+        g_act_drop_sink->push_back(std::string(card ? card : "?") + " "
+                                   + kWhy[(reason >= 0 && reason < 4) ? reason : 3]);
+    }
+    if (ActDropAuditLevel() >= 2)
+    {
+        std::fprintf(stderr, "ACT_DROP t%d %s mv=%d %s\n", turn, card ? card : "?", cost_mv,
+                     kWhy[(reason >= 0 && reason < 4) ? reason : 3]);
+    }
+}
+thread_local std::vector<std::string>* g_act_drop_sink = nullptr;
+std::atomic<long> g_act_pay_calls{0};
+std::atomic<long> g_act_hold_mask{0};
+std::atomic<long> g_act_hold_solo{0};
+std::atomic<long> g_act_hold_retry{0};
+std::atomic<long> g_act_solo_retry{0};
+namespace {
+struct ActDropDump
+{
+    ~ActDropDump()
+    {
+        if (!ActDropAuditOn()) { return; }
+        const long tp = g_act_drop_tapped.load(), up = g_act_drop_unpaid.load();
+        const long gn = g_act_drop_gone.load(),   nt = g_act_drop_notap.load();
+        const long f  = g_act_fired.load();
+        std::fprintf(stderr,
+            "ACT_DROP_AUDIT  DEFECTS tapped=%ld unpaid=%ld | benign gone=%ld noTap=%ld | fired=%ld  %s\n",
+            tp, up, gn, nt, f,
+            (tp == 0 && up == 0) ? "(CLEAN)"
+                                 : "<-- enumerated activations the trailing pass silently declined");
+        const long pc = g_act_pay_calls.load(), hm = g_act_hold_mask.load();
+        const long hs = g_act_hold_solo.load(), hr = g_act_hold_retry.load();
+        const long sr = g_act_solo_retry.load();
+        std::fprintf(stderr,
+            "ACT_HOLD_COST   pay_calls=%ld hold_mask=%ld (%.2f%%) hold_solo=%ld "
+            "hold_retry=%ld solo_retry=%ld (%.2f%% of pay_calls = the EXTRA solves)\n",
+            pc, hm, pc ? 100.0 * static_cast<double>(hm) / static_cast<double>(pc) : 0.0, hs, hr, sr,
+            pc ? 100.0 * static_cast<double>(sr) / static_cast<double>(pc) : 0.0);
+    }
+} g_act_drop_dump;
+}   // namespace
 
 // WILD-pays-a-COLOUR-pip audit (MTG_WILD_PIP_AUDIT; see GameLogger.h).
 std::atomic<long> g_ritual_uncolored_float{0};

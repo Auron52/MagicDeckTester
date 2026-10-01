@@ -189,6 +189,27 @@ enum class PermAbilityMode
     // exiled as part of the cost). WHICH creatures is a DecisionProvider choice at resolution
     // (PutCreaturesFromLibraryPicks) and a multi-pick decision in human play. Appended last.
     LifeGatedPutCreatures,
+    // {cost}, {T}, Sacrifice this land: You gain 2 life for each creature you control  (Blighted
+    // Steppe, "{3}{W}"; CardParams::sac_lifegain_per_creature_cost / sac_lifegain_per_creature).
+    // A {T} mode, so once per untap -- and because the {T} half is paid BEFORE the mana half
+    // (SetPermTapped, CR 602.2a) the land can never tap for mana toward its own activation. The
+    // SACRIFICE is part of the COST (CR 601.2h/602.1), so the land is in the GRAVEYARD before the
+    // ability resolves; it is a LAND, so FireSacrificeWatchers fires but the creature-dies watchers
+    // must NOT (see the resolver's note on why SacrificePermanentAt is the wrong route).
+    // "Each creature you control" is OUR SIDE ONLY, and the gain is ONE life-gain EVENT of 2xN --
+    // never N events of 2 (CR 119.10), which is what makes it worth N counters on an Ageless Entity
+    // instead of 2. Appended LAST so every existing mode keeps its numeric value (plan signatures,
+    // ActKey slots).
+    SacLifePerCreature,
+    // {T}: You gain 1 life for each Elf on the battlefield  (Wellwisher;
+    // CardParams::tap_lifegain_cost / tap_lifegain_per_subtype / tap_lifegain_count_all). The first
+    // mode whose cost is {T} and NOTHING ELSE -- tap_lifegain_cost is an all-zero ManaCost, which
+    // the payment path already handles (the FadeSaproling / Kaldring {0} precedent). A {T} mode, so
+    // summoning sickness applies (CR 302.6) and it is once per untap. X is counted AT RESOLUTION,
+    // so every Elf the plan cast earlier this turn counts; "on the battlefield" is BOTH players'
+    // (tap_lifegain_count_all), exactly Priest of Titania's mana_per_creature_count_all. ONE
+    // GainLife of the full amount, same CR 119.10 reason as the mode above. Appended LAST.
+    TapLifegain,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -207,6 +228,10 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::PayToken
         && m != PermAbilityMode::FadeSaproling
         && m != PermAbilityMode::PingAll;
+    // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
+    // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding
+    // either would make its ability repeatable within a turn and legal on an already-tapped (or
+    // summoning-sick) source, i.e. unbounded life off a single Wellwisher.
 }
 
 struct Permanent
@@ -364,6 +389,23 @@ struct Permanent
                                            // FireOnCastTriggers (both cast paths), reset at BOTH untap
                                            // sites (GameEngine::UntapStep + TurnSolver's per-turn reset)
                                            // -- rollout/executor lockstep or [fd-diverge].
+    bool      lifegain_counters_used_this_turn = false; // Nykthos Paragon's "Do this only once each
+                                           // turn" on "whenever you gain life, you may put that many
+                                           // +1/+1 counters on each creature you control". PER
+                                           // PERMANENT, not per name (Scryfall ruling 2: multiple
+                                           // Paragons each get one use) -- which is why the deck runs
+                                           // four, and why this is a Permanent field rather than a
+                                           // per-player one. Set in FireLifegainWatchers when the use
+                                           // is actually SPENT (declining does not consume it, ruling
+                                           // 1); once set the ability no longer triggers at all
+                                           // (ruling 3). Reset at BOTH untap sites (GameEngine::
+                                           // UntapStep + TurnSolver's per-turn reset) -- lockstep or
+                                           // [fd-diverge]: reset in only one and the rollout projects
+                                           // a turn where four Paragons re-fire and the executor does
+                                           // not. UNLIKE the flag above this one FLIPS MID-TURN, so it
+                                           // is folded into BuildSimKey (and thus the mid-turn
+                                           // breakpoint and dedup keys) as well as FungibilityKey /
+                                           // dominance::Build / PermIsPlainForFoldImpl.
     // "As this permanent enters, choose a color" (Coldsteel Heart), CardParams::etb_choose_color.
     // The colour is LOCKED FOR THE PERMANENT'S LIFETIME -- it is a per-OBJECT property, which is
     // exactly why it cannot live on the CardDefinition like every other `produces`: four Coldsteel

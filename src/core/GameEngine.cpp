@@ -290,6 +290,7 @@ void GameEngine::UntapStep(GameState& state)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.storage_hold_this_turn = false;  // #6: the tap-vs-charge hold is a per-turn human choice
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
+            p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
     }
@@ -678,6 +679,14 @@ void GameEngine::CombatPhase(GameState& state)
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
     ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx);
+
+    // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
+    // block above so tokens put onto the battlefield attacking receive the pump (CR 603.3b lets the
+    // controller order simultaneous attack triggers, and tokens-first is strictly dominant against
+    // an opponent that never blocks -- the ApplyBattleCry precedent), and BEFORE the damage loop
+    // reads power, so the counters the gain triggers grow this very swing. Mirrors
+    // TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
+    ApplyAttackLifegainTeamPump(state, state.active_player_index, atk_idx);
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the

@@ -4888,6 +4888,74 @@ inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
     return best >= 0 ? best : fallback;
 }
 
+// Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
+// only once each turn": how many of the UNUSED copies to spend on this life-gain event.
+// GREEDY DEFAULT -- spend every one. It is a MEASURED SIMPLIFICATION, not a claim of optimality:
+// declining does not consume a use (Scryfall ruling 1), so banking a small gain's use for a bigger
+// gain later in the same turn is a real line, and the one systematic loss in the SelesnyaLifegain
+// list is a Blossoming Sands (etb_lifegain 1) dropped on the same turn as a big gain -- the land's
+// 1 life eats all four uses for +1/+1 each where Feed the Clan would have given +10/+10 each.
+// SELF-LIMITING, because the search owns cast/activation ORDER and simulates the whole turn, so the
+// plan that gains big FIRST evaluates better; only the land drop's slot is not freely reorderable.
+// The fix path is a deck-provider override of LifegainCountersSpendCount (zero engine churn) swept
+// per .claude/skills/heuristic-optimization.md -- first variant: spend all when amount >= 2,
+// exactly one when amount == 1. Deliberately NOT a searched per-event axis (Cartesian explosion).
+inline int DefaultLifegainCountersSpendCount(const GameState& state, int controller,
+                                            int amount, int copies_unused)
+{
+    (void)state; (void)controller; (void)amount;
+    return copies_unused;
+}
+
+// How many unused Nykthos Paragons to spend on THIS life-gain event. Decided ONCE FOR THE WHOLE
+// EVENT rather than once per copy, which is a RULES-EQUIVALENT COLLAPSE and not a simplification:
+// each copy's trigger resolves separately, but every unused copy puts the SAME `amount` on the SAME
+// recipient set and nothing can happen in between (no opponent priority in this stackless engine, no
+// creature enters, nothing dies), so WHICH copies are spent is unobservable and only the COUNT is a
+// decision. It also buys one human prompt per event instead of one per copy -- 4 Paragons x 3 gains
+// is 3 asks, not 12.
+// A copy already USED is excluded: it does not merely do nothing, it does not TRIGGER at all
+// (Scryfall ruling 3). Returning 0 is a real answer -- DECLINING does not consume a use (ruling 1).
+inline int ResolveLifegainCountersOnceBudget(const GameState& state, int player, int amount)
+{
+    int unused = 0;
+    std::string src_name;
+    bool mixed = false;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != player) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd || !qd->params.lifegain_counters_once_each_turn) { continue; }
+        if (q.lifegain_counters_used_this_turn) { continue; }
+        const std::string nm = q.card.m_name.str();
+        if (src_name.empty()) { src_name = nm; } else if (src_name != nm) { mixed = true; }
+        ++unused;
+    }
+    if (unused <= 0) { return 0; }
+    // NEGATIVE from the provider = no override -> the generic greedy default. It must NOT be clamped
+    // to 0, because 0 is a real answer here (DECLINE, which does not consume a use) -- conflating
+    // "no opinion" with "decline" would silently turn every provider that has not overridden this
+    // hook into one that never uses the card. Same sentinel contract as LifegainCounterTarget.
+    int budget = ResolveProvider(state).LifegainCountersSpendCount(state, player, amount, unused);
+    if (budget < 0)
+    { budget = DefaultLifegainCountersSpendCount(state, player, amount, unused); }
+    if (budget < 0)      { budget = 0; }
+    if (budget > unused) { budget = unused; }
+    // The per-EVENT collapse above is only sound while every unused copy is the SAME CARD. Nykthos
+    // Paragon is the only card in cards.json carrying the param, so `mixed` is unreachable today; if
+    // a second such card is ever added, the HUMAN ask must become per-copy (the heuristic is
+    // unaffected -- it already reads only the count).
+    if (g_play_lifegain_counters_chooser != nullptr && !mixed)
+    {
+        const int c = (*g_play_lifegain_counters_chooser)(state, player, src_name, amount,
+                                                         unused, budget);
+        if (c >= 0 && c <= unused) { budget = c; }
+    }
+    return budget;
+}
+
 // Subtype OR-filter on the RECIPIENTS of lifegain_each_own_creature_counters. EMPTY = every
 // creature you control, so Archangel of Thune -- and every watcher that predates this filter -- is
 // byte-identical. ["Angel"] narrows it to Angels (Lyra, Archangel of Dawn). Note this filters the
@@ -4951,7 +5019,9 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
         if (!qd) { continue; }
         const CardParams& qp = qd->params;
-        if (qp.lifegain_self_counters > 0 || qp.lifegain_each_own_creature_counters > 0
+        if (qp.lifegain_self_counters > 0 || qp.lifegain_self_counters_that_many
+            || qp.lifegain_each_own_creature_counters > 0
+            || qp.lifegain_each_own_creature_counters_that_many   // Nykthos Paragon
             || qp.lifegain_target_own_counter
             || qp.lifegain_target_opp_loses_that_much || qp.lifegain_each_opp_loses > 0)
         { any = true; break; }
@@ -4968,6 +5038,16 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
     // Walk by INDEX and never add/remove a permanent: the enter-watcher loop that calls GainLife
     // holds references into the battlefield across this call.
     const int n = static_cast<int>(state.battlefield.size());
+    // Nykthos Paragon's once-each-turn "you may" (ResolveLifegainCountersOnceBudget above): how many
+    // unused copies this life-gain EVENT spends. RESOLVED LAZILY, at the first watcher carrying the
+    // param -- see the helper for the per-event-vs-per-copy rules argument.
+    // Laziness is not tidiness: this function fires 5-15 times a TURN in a lifegain deck, and an
+    // eager battlefield scan here would charge every existing lifegain deck (CritterLifegain, Angels)
+    // a full extra pass plus a LookupCached per own permanent on every life-gain event, for a
+    // question whose answer is always "no card carries it". Resolving at first use means those decks
+    // never run it at all.
+    int  once_budget   = 0;
+    bool once_resolved = false;
     for (int i = 0; i < n; ++i)
     {
         if (state.battlefield[i].controller_index != player) { continue; }
@@ -4980,35 +5060,88 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
             AddPlusCounters(state.battlefield[i], wp.lifegain_self_counters);
             if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str() + " +1/+1"; }
         }
+        // "put THAT MANY +1/+1 counters on this creature" (Ageless Entity). Same trigger and the
+        // same once-per-EVENT rule as the fixed-N line above (CR 119.10); only the COUNT differs --
+        // it is the life this event actually gained, AFTER any replacement (CR 614.1, applied in
+        // GainLife before anything reads it), which is exactly what "that many" reads. The log line
+        // names the real count rather than a bare "+1/+1" because here the amount IS the card.
+        if (wp.lifegain_self_counters_that_many && amount > 0)
+        {
+            AddPlusCounters(state.battlefield[i], amount);
+            AnnihilateCounters(state.battlefield[i]);
+            if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
+                           + " +" + std::to_string(amount) + "/+" + std::to_string(amount); }
+        }
         // "put a +1/+1 counter on each creature you control" (Archangel of Thune), or on each
         // creature of one SUBTYPE (Lyra, Archangel of Dawn: "each Angel you control"). Counters
         // land on every recipient INCLUDING the watcher itself when it matches its own filter, and
         // on bodies that entered this turn. Annihilate after each (CR 704.5r) -- a no-op unless a
         // body carries -1/-1 counters.
-        if (wp.lifegain_each_own_creature_counters > 0)
+        // The "THAT MANY" form of the same clause (Nykthos Paragon) rides this loop with `per`
+        // swapped from the fixed int to the event's `amount`, plus the once-each-turn gate below.
+        // A card sets ONE of the two params, never both (see CardParams).
+        if (wp.lifegain_each_own_creature_counters > 0
+            || (wp.lifegain_each_own_creature_counters_that_many && amount > 0))
         {
-            for (int j = 0; j < n; ++j)
+            const int per = wp.lifegain_each_own_creature_counters_that_many
+                          ? amount : wp.lifegain_each_own_creature_counters;
+            // "Do this only once each turn", PER PERMANENT (Nykthos Paragon). Used already => the
+            // ability does not trigger at all (ruling 3). Declined => the use is NOT consumed
+            // (ruling 1) and the next gain this turn asks again.
+            // A local bool + guarded block rather than `continue`: a `continue` here would silently
+            // skip the Heliod / Vito / Dina clauses further down THIS SAME iteration, so a future
+            // card carrying a once-each-turn counter clause AND a drain clause would lose half its
+            // text with no diagnostic. No card in the pool does today; the shape is what matters.
+            bool spend_ok = true;
+            if (wp.lifegain_counters_once_each_turn)
             {
-                Permanent& c = state.battlefield[j];
-                if (c.controller_index != player || !c.card.IsCreature()) { continue; }
-                if (!LifegainCounterSubtypeOk(wp, c.card)) { continue; }
-                AddPlusCounters(c, wp.lifegain_each_own_creature_counters);
-                AnnihilateCounters(c);
-            }
-            if (log)
-            {
-                std::string who = "creature";
-                if (!wp.lifegain_counters_subtypes.empty())
+                // Lazy, once per EVENT: resolved at the first watcher carrying the param (the scan
+                // inside enumerates EVERY copy, including ones later in battlefield order, so the
+                // count is complete even though we got here on the first). Triggering on an
+                // already-USED first copy is harmless -- the scan excludes used copies, so the
+                // budget covers exactly the remaining unused ones.
+                if (!once_resolved)
                 {
-                    // Join the WHOLE filter: naming only the first would tell the viewer
-                    // "+1/+1 on each Angel" for an ["Angel","Cleric"] watcher that also
-                    // counters Clerics.
-                    who.clear();
-                    for (const std::string& s : wp.lifegain_counters_subtypes)
-                    { who += (who.empty() ? "" : "/") + s; }
+                    once_resolved = true;
+                    once_budget = ResolveLifegainCountersOnceBudget(state, player, amount);
                 }
-                ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
-                    + ": +1/+1 on each " + who;
+                if (state.battlefield[i].lifegain_counters_used_this_turn || once_budget <= 0)
+                {
+                    spend_ok = false;
+                }
+                else
+                {
+                    --once_budget;
+                    state.battlefield[i].lifegain_counters_used_this_turn = true;
+                }
+            }
+            if (spend_ok)
+            {
+                for (int j = 0; j < n; ++j)
+                {
+                    Permanent& c = state.battlefield[j];
+                    if (c.controller_index != player || !c.card.IsCreature()) { continue; }
+                    if (!LifegainCounterSubtypeOk(wp, c.card)) { continue; }
+                    AddPlusCounters(c, per);
+                    AnnihilateCounters(c);
+                }
+                if (log)
+                {
+                    std::string who = "creature";
+                    if (!wp.lifegain_counters_subtypes.empty())
+                    {
+                        // Join the WHOLE filter: naming only the first would tell the viewer
+                        // "+1/+1 on each Angel" for an ["Angel","Cleric"] watcher that also
+                        // counters Clerics.
+                        who.clear();
+                        for (const std::string& s : wp.lifegain_counters_subtypes)
+                        { who += (who.empty() ? "" : "/") + s; }
+                    }
+                    // Print the REAL count: for a "that many" watcher the amount IS the card.
+                    ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
+                        + ": +" + std::to_string(per) + "/+" + std::to_string(per)
+                        + " on each " + who;
+                }
             }
         }
         // "put a +1/+1 counter on target creature or enchantment you control" (Heliod). ONE pick:
@@ -6183,6 +6316,19 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 // `entered_index` is the just-entered permanent's battlefield slot; `chosen_tutor` (optional) is a
 // search/human-chosen Goblin Matron fetch target (empty -> the provider's TutorCandidates pick).
 void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp);   // body in SpellEffects.cpp
+
+// ---- Genesis Wave (reveal_x_put_permanents) ----------------------------------------------------
+// "{X}{G}{G}{G} Sorcery: Reveal the top X cards of your library. You may put any number of
+// permanent cards with mana value X or less from among them onto the battlefield. Then put all
+// cards revealed this way that weren't put onto the battlefield into your graveyard."
+//
+// `x` is the chosen X the ENUMERATION scored, threaded from Action/StackEntry chosen_x and NEVER
+// re-derived from the mana spent (the tutor_mv_max_is_x discipline: diverging desyncs the human
+// --choices index pin). It gates BOTH the reveal depth and the MV cap, and is clamped to >= 0 here
+// so the executor's `entry.chosen_x.value_or(-1)` and the rollout's raw int agree. Called by BOTH
+// worlds so the reveal, the subset, the puts and the mill are one implementation. Body in
+// SpellEffects.cpp (a per-resolution helper -- see that file's MAY-move rule).
+void PerformGenesisWave(GameState& state, int controller, int x, const std::string& source_name);
 
 // ---- Terastodon ETB-destroy heuristic (USER 2026-08-20) ---------------------------------------
 // One lever for the whole tweak (K-set narrowing at emission + the widened victim pool at
@@ -8598,6 +8744,34 @@ inline int EquipGatePowerOf(const Permanent& host, const GameState& state)
     return pw;
 }
 
+// "You control a creature with power 4 or greater" -- the FEROCIOUS gate (Feed the Clan). Ferocious
+// is an ability word (CR 207.2c: italic, zero rules meaning of its own), so the CONDITION is the
+// whole thing to model. Checked AT RESOLUTION, per the 2014-09-20 ruling ("...as they resolve"), and
+// over OUR battlefield only ("you control"); an animated non-creature counts, exactly as
+// CanAttachEquip's host test above has it.
+//
+// Power is the FULL EFFECTIVE power EquipGatePowerOf reports -- printed + +1/+1 counters + until-EOT
+// bonuses + LORDS + auras + equipment -- and that is load-bearing, not thoroughness: every one of
+// those non-printed routes reaches 4 on a lifegain board (an Ageless Entity grown by counters; a
+// Craterhoof team pump lifting a 1/1 Llanowar Elves; three Elvish Archdruids making every OTHER Elf
+// a 4/4 off the lord term alone), so the cheaper printed-power test would read the gate OFF in
+// states where it is genuinely ON.
+//
+// min_power <= 0 means "no gate", i.e. TRUE -- which is why the amount param and not this threshold
+// is what arms the feature (see CardParams::ferocious_min_power). Early-exits on the first
+// qualifier, so the nominal O(board^2) worst case is not paid in practice.
+inline bool ControlsCreatureWithPower(const GameState& state, int controller, int min_power)
+{
+    if (min_power <= 0) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller)        { continue; }
+        if (!p.card.IsCreature() && !p.is_animated)  { continue; }
+        if (EquipGatePowerOf(p, state) >= min_power) { return true; }
+    }
+    return false;
+}
+
 inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
 
 // Will ApplyEquip below actually ATTACH, or silently no-op? One predicate, so a caller that must
@@ -8888,10 +9062,9 @@ inline bool CardHasSupertypeNamed(const Card&, const std::string&);   // defined
 inline void EnforceLegendRule(GameState& state, int controller_index);   // defined below
 inline bool GyPlayTargetLegal(const CardDefinition& def, const Card& gc)
 {
-    if (def.params.gy_play_permanent_only
-        && !(gc.IsCreature() || gc.IsLand() || gc.IsEnchantment()
-             || gc.HasType(CardType::Artifact) || gc.HasType(CardType::Planeswalker)
-             || gc.HasType(CardType::Battle))) { return false; }
+    // Card::IsPermanentCard() -- the six-type disjunction, extracted so this site and Genesis
+    // Wave's "permanent cards with mana value X or less" cannot drift. No behaviour change here.
+    if (def.params.gy_play_permanent_only && !gc.IsPermanentCard()) { return false; }
     if (!def.params.gy_play_requires_supertype.empty()
         && !CardHasSupertypeNamed(gc, def.params.gy_play_requires_supertype)) { return false; }
     return true;
@@ -10124,6 +10297,28 @@ inline bool CanApplyUntapCreature(const GameState& state, int controller, int so
             && CardHasSubtype(p.card, subtype)) { return true; }
     }
     return false;
+}
+// The honesty split for a DROPPED UntapCreature, using PermAbilityDeadReason's encoding so
+// MTG_ACT_DROP_AUDIT reports one set of reasons across both activation kinds.
+//   0 = the source had left the battlefield          (benign)
+//   1 = the source was already TAPPED for mana       (DEFECT case A -- its own {T} half was spent)
+//   2 = source live, so the miss is the TARGET half: no tapped creature of the subtype to untap
+//                                                    (benign -- nothing the ability could have done)
+//
+// WHY IT EXISTS: without it the whole UntapCreature drop path was invisible to the audit, which only
+// ever hooked the ActivatePermAbility arm. That blind spot is what let a game which demonstrably
+// dropped an untap report `fired=0 ... (CLEAN)`, and it cost a misdiagnosis of the ActLineHoldMask
+// `- cur[c]` defect (SelesnyaLifegain seed 4011 T3; see
+// docs/design/trailing-activation-payment-hole.md). An instrument that cannot see a whole action
+// kind reads as evidence of absence.
+inline int UntapCreatureDeadReason(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        return p.tapped ? 1 : 2;
+    }
+    return 0;
 }
 inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
                                const std::string& subtype)
@@ -11761,6 +11956,109 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
             }
         }
     }
+}
+
+// ---- Blossoming Bogbeast: "Whenever this creature attacks, you gain 2 life. Then creatures you
+// control gain trample and get +X/+X until end of turn, where X is the amount of life you gained
+// this turn." ------------------------------------------------------------------------------------
+// ONE printed trigger, two params (see CardParams). Self-only, once per attacking COPY, at
+// declare-attackers, in BOTH worlds (GameEngine::CombatPhase + TurnSolver::SimulateCombat) from
+// this ONE shared helper -- so there is no second implementation to drift out of lockstep.
+// Gain-then-pump inside ONE iteration ("Then" = oracle order): two attacking copies give
+// (+2, pump L+2) then (+2, pump L+4), the faithful sum of two separately-resolving triggers.
+// The gain routes through the shared GainLife so it is a real life-gain EVENT -- it bumps
+// life_gained_this_turn and fires the "whenever you gain life" watchers (Ageless Entity's counters,
+// an unused Nykthos Paragon's team wave) -- and because it lands BEFORE the damage loop reads power,
+// those counters grow the very swing that produced them.
+// The trample grant is NOT modelled -- provably inert against the never-blocking passive opponent
+// (verbatim the accepted Craterhoof Behemoth collapse); the toughness half of +X/+X is applied
+// faithfully though likewise inert in effect, because it costs nothing and a future opponent model
+// would need it.
+// Gated: an attacker leaving both params at 0/false is untouched -> other decks byte-identical.
+inline void ApplyAttackLifegainTeamPump(GameState& state, int controller,
+                                        const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        if (state.battlefield[idx].controller_index != controller) { continue; }
+        const CardDefinition* d =
+            CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+        if (!d) { continue; }
+        const CardParams& p = d->params;
+        if (p.attack_trigger_lifegain <= 0 && !p.attack_team_pump_per_life_gained) { continue; }
+        // Name copied out BEFORE GainLife, and the permanent is RE-INDEXED rather than held by
+        // reference across it: FireLifegainWatchers documents "never add/remove a permanent"
+        // precisely because callers hold references into the battlefield across it, and a future
+        // watcher that made a token would turn a held Permanent& here into a use-after-free.
+        // Do not "simplify" this back to a reference.
+        const std::string src_name = state.battlefield[idx].card.m_name.str();
+
+        if (p.attack_trigger_lifegain > 0)
+        {
+            GainLife(state, controller, p.attack_trigger_lifegain);   // bumps life_gained_this_turn
+                                                                     // AND fires the watchers
+            if (g_play_event_sink != nullptr)   // nulled by RevealLogPause -> autonomous identity
+            {
+                EmitPlayEvent(state.turn_number, "lifegain",
+                              "\xE2\x9D\xA4\xEF\xB8\x8F " + src_name + " attack trigger: gain "
+                              + std::to_string(p.attack_trigger_lifegain) + " life");
+            }
+        }
+        if (!p.attack_team_pump_per_life_gained) { continue; }
+        // X read AFTER this instance's own gain ("Then" = oracle order, the Fortifying Draught read
+        // order), so it counts the turn's OTHER gains too -- Feed the Clan, Verdant Sun's Avatar's
+        // enter trigger, Wellwisher's tap, the gain-lands -- and not just this card's 2.
+        const int x = state.players[controller].life_gained_this_turn;
+        if (x <= 0) { continue; }
+        // Craterhoof's recipient gate and loop: every creature you control, NOT attackers only --
+        // the set is read at resolution, so untapped mana dorks are legitimately pumped too.
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+            q.temp_power_bonus += x;
+            q.temp_tough_bonus += x;
+        }
+        if (g_play_event_sink != nullptr)
+        {
+            EmitPlayEvent(state.turn_number, "pump",
+                          "\xE2\x9A\xA1 " + src_name + ": creatures you control get +"
+                          + std::to_string(x) + "/+" + std::to_string(x) + " (life gained)");
+        }
+    }
+}
+
+// Projection twin of ApplyAttackLifegainTeamPump for PendingAttackDamage's const path. Must agree
+// with the function above or the search over/under-projects lethal (the fd-diverge class).
+// `weight` = what +1/+1 on every attacker is worth in damage THIS combat (double strikers twice,
+// attack-trigger tokens once), so it must be called from the SECOND pass, after ds_of and tok_count
+// exist -- the same reason battle cry runs last.
+// DISCLOSED UNDER-COUNT (the safe direction, the Piledriver precedent): the mid-combat life gain
+// also feeds the "whenever you gain life" watchers (Ageless Entity's +2/+2, an unused Nykthos
+// Paragon's team wave), whose counters this const path cannot create. On a wide board the shortfall
+// is ~2 x attackers; under-projection means lines are missed, never invented.
+inline int CountAttackLifegainTeamPump(const GameState& state, int controller,
+                                      const std::vector<const Permanent*>& attackers,
+                                      const std::vector<bool>& ds_of, int tok_count)
+{
+    int weight = tok_count;
+    for (std::size_t i = 0; i < ds_of.size(); ++i) { weight += ds_of[i] ? 2 : 1; }
+    if (weight <= 0) { return 0; }
+    int lg = state.players[controller].life_gained_this_turn;
+    int extra = 0;
+    for (const Permanent* a : attackers)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a->card);
+        if (!d) { continue; }
+        const CardParams& p = d->params;
+        if (p.attack_trigger_lifegain <= 0 && !p.attack_team_pump_per_life_gained) { continue; }
+        lg += p.attack_trigger_lifegain;                       // gain first, then read ("Then")
+        if (p.attack_team_pump_per_life_gained && lg > 0) { extra += lg * weight; }
+    }
+    return extra;
 }
 
 // ---- Inferno Titan: "Whenever this creature ... attacks, it deals 3 damage ..." -----------------
@@ -13728,6 +14026,57 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
 
+// "You gain N life" as an UNTARGETED spell's own resolution (Feed the Clan), with the ferocious
+// upgrade. ONE shared resolver, called identically by the executor (EffectHandler::ResolveImpl's
+// non-permanent custom branch) and the rollout (TurnSolver::apply_one) -- the Fungus Frolic
+// ApplyCastCreatesTokens pattern -- so the search cannot predict a different amount than the
+// executor realises. The ferocious board check is therefore lockstep BY CONSTRUCTION rather than by
+// convention: both worlds run this same function.
+inline void ApplyCastLifegain(GameState& state, int controller, const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    if (p.cast_lifegain <= 0) { return; }
+    // LOAD-BEARING, NOT DEFENSIVE. ApplyTrickPayload already applies cast_lifegain once per RESOLVED
+    // COPY (Fortifying Draught / Scale the Heights / Oracle's Restoration), so without this early
+    // return those three would gain TWICE per copy -- silent, no crash, just Mirrorwing ground truth
+    // moving. With it, this function is byte-identical for them by construction.
+    if (p.solo_target_trick) { return; }
+    // Keeps the two call sites SYMMETRIC: the executor's sits inside EffectHandler's non-permanent
+    // custom branch, while the rollout's runs for every cast including permanents. This guard is what
+    // stops that structural asymmetry from ever becoming a divergence.
+    if (!def.card.IsInstant() && !def.card.IsSorcery()) { return; }
+    const bool fero = p.cast_lifegain_ferocious > 0
+                   && ControlsCreatureWithPower(state, controller, p.ferocious_min_power);
+    const int amount = fero ? p.cast_lifegain_ferocious : p.cast_lifegain;
+    // ONE GainLife CALL -> ONE life-gain EVENT (CR 119.10) of 5 OR 10 -- never 5 then 5, and never
+    // 5+10. The ruling is explicit ("you only get the upgraded effect, not both effects"), and the
+    // distinction is MEASURABLE rather than pedantic: two 5-life events fire every "whenever you gain
+    // life" watcher twice, so an Ageless Entity would take 5 counters twice instead of 10 once and a
+    // "do this only once each turn" watcher would be HALVED.
+    //
+    // ...and this is deliberately NOT routed through the lifegain-REPLACEMENT lane
+    // (dmgev::ApplyLifegainReplacements, the Rhox Faithmender doubler path), despite the word
+    // "instead". Nothing is replacing an event here: the spell chooses its own amount as it resolves.
+    // Routing it there would apply a doubler to the gain twice. Going through the one shared GainLife
+    // hook is also what bumps Player::life_gained_this_turn (read by Accomplished Alchemist's
+    // "{T}: Add X mana ... where X is the amount of life you gained this turn") and fires the lifegain
+    // watchers exactly once.
+    //
+    // NOT multiplied by gamesetup::OpponentHeads(): WE gain, on our single player object, so 2HG does
+    // not double it -- contrast etb_opponent_lifegain, which really is per head.
+    GainLife(state, controller, amount);
+    // Viewer display only (not a decision): a human cannot otherwise see WHICH amount the gate
+    // produced, because the board does not say so. Precedent = etb_self_lifegain's event above.
+    // Nulled in search/rollout scope and suppressed while tap-speculating, so autonomous play is
+    // byte-identical.
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "lifegain",
+                      "\xE2\x9D\xA4\xEF\xB8\x8F " + def.card.m_name.str() + " -- gain "
+                      + std::to_string(amount) + " life" + (fero ? " (ferocious)" : ""));
+    }
+}
+
 // ============================================================================
 // Zada / Mirrorwing solo-target trick spells (Mirrorwing Dragon deck)
 // ============================================================================
@@ -14385,15 +14734,32 @@ inline bool CardHasSubtype(const Card& c, std::string_view sub);     // defined 
 // gates can never both match one card.
 inline bool IsScaledManaDork(const CardDefinition& def)
 {
-    return def.card.IsCreature()
-        && !def.params.mana_per_creature_subtype.empty()
+    if (!def.card.IsCreature()) { return false; }
+    // Accomplished Alchemist: the SAME SHAPE -- a creature whose one-tap yield is a live,
+    // mid-turn-mutable count -- with life gained this turn in place of a subtype count. Widening
+    // this ONE predicate is what teaches every downstream mana-accounting site the new source.
+    if (def.params.mana_per_life_gained) { return true; }
+    return !def.params.mana_per_creature_subtype.empty()
         && def.params.mana_per_creature_feeder_generic == 0;
+}
+
+// "X mana of any ONE color": amt > 1 across a multi-colour `produces`, but unlike a Karoo (which
+// adds one of EACH colour as a fixed bundle) the X mana are all ONE colour the controller picks.
+// Both payers' one-of-each bundle rule must skip such a source -- the Three Tree City precedent.
+inline bool IsSingleColorBurstSource(const CardDefinition& def)
+{
+    return def.params.mana_per_life_gained;
 }
 
 // Live yield of one scaled-dork tap: creatures matching the subtype, own side only by default,
 // both sides with mana_per_creature_count_all (Priest's "each Elf on the battlefield").
 inline int ScaledDorkCount(const GameState& state, int controller, const CardDefinition& def)
 {
+    // Accomplished Alchemist: this turn's life gained, floored at 1 because its OTHER {T} ability
+    // ("add one mana of any color") strictly dominates at X == 0. So it is never a dead source,
+    // unlike a Priest of Titania at zero Elves.
+    if (def.params.mana_per_life_gained)
+    { return std::max(1, state.players[controller].life_gained_this_turn); }
     const std::string& sub = def.params.mana_per_creature_subtype;
     int n = 0;
     for (const Permanent& q : state.battlefield)
@@ -17073,6 +17439,25 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
     return false;
 }
 
+// MTG_ACT_DROP_AUDIT support (measurement only): WHY PermAbilitySourceLive said no. Splitting this
+// is the whole difference between an honest number and an alarming one -- a source that LEFT the
+// battlefield or is summoning-sick was never activatable in the first place, whereas a source found
+// TAPPED had the {T} half of its own cost spent by an earlier mana payment, which is the defect.
+// 0 = gone from the battlefield, 1 = TAPPED (the defect signal), 2 = cannot tap / restricted.
+// Never called outside the audit, so it costs nothing in a ship config.
+inline int PermAbilityDeadReason(const GameState& state, int controller, int source_id,
+                                PermAbilityMode mode)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        if (!PermAbilityTaps(mode)) { return 2; }   // an activation RESTRICTION (Bilbo's life gate)
+        if (p.tapped)               { return 1; }
+        return 2;                                   // summoning sick (CR 302.6) / otherwise untappable
+    }
+    return 0;
+}
+
 // Set/clear the source's tapped flag by m_number. Used to pay a "{cost}, {T}" activation's TAP
 // half BEFORE its mana half, which is the only ordering that stops the source paying part of its
 // own cost -- a permanent taps once (CR 602.2a: the {T} symbol and a separate mana ability are the
@@ -17087,6 +17472,49 @@ inline bool SetPermTapped(GameState& state, int controller, int source_id, bool 
         { p.tapped = tapped; return true; }
     }
     return false;
+}
+
+// "Each creature you control" (Blighted Steppe). OUR SIDE ONLY -- contrast
+// mana_per_creature_count_all (Priest of Titania: "each Elf on the battlefield"). An animated
+// permanent counts: an animated land IS a creature you control (CR 205.3b). Same predicate as the
+// Craterhoof team pump (etb_team_pump_per_creature).
+//
+// SHARED between the ENUMERATION clamp (TurnSolver's CollectActions, which drops a zero-creature
+// activation) and the RESOLUTION payload below, on purpose: two open-coded loops with different
+// predicates (one forgetting is_animated) is the one way an integrator can make the clamp and the
+// gain disagree. SoulfireOwnCreatureCount is the same shape but omits is_animated and is
+// Soulfire-named -- deliberately not reused.
+inline int CountOwnCreatures(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    { if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)) { ++n; } }
+    return n;
+}
+
+// "each <subtype> on the battlefield" for a NON-mana effect (Wellwisher's Elf count).
+// ScaledDorkCount's loop body freed from IsScaledManaDork: setting mana_per_creature_subtype on a
+// card that produces no mana would wrongly register it as a live mana SOURCE in PermanentManaYield,
+// the pool, the backtracker and the greedy tap. `both_sides` = "on the battlefield" (Priest of
+// Titania's reading); false = "you control" (Elvish Archdruid's).
+inline int CountCreaturesWithSubtype(const GameState& state, int controller,
+                                     const std::string& sub, bool both_sides)
+{
+    if (sub.empty()) { return 0; }
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (!both_sides && q.controller_index != controller) { continue; }
+        if (q.card.IsCreature() && CardHasSubtype(q.card, sub)) { ++n; }
+    }
+    return n;
+}
+
+// Wellwisher's X. Shared by the resolver and the enumerator for the CountOwnCreatures reason above.
+inline int TapLifegainAmount(const GameState& s, int ctrl, const CardDefinition& d)
+{
+    return CountCreaturesWithSubtype(s, ctrl, d.params.tap_lifegain_per_subtype,
+                                     d.params.tap_lifegain_count_all);
 }
 
 inline const char* PermAbilityLabel(PermAbilityMode mode)
@@ -17110,6 +17538,9 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::PingAll:        return "deal damage to each creature and each player";
         case PermAbilityMode::LifeGatedPutCreatures:
                                               return "exile it: put any number of creature cards from your library onto the battlefield";
+        case PermAbilityMode::SacLifePerCreature:
+                                              return "sacrifice it: gain 2 life for each creature you control";
+        case PermAbilityMode::TapLifegain:    return "gain 1 life for each Elf on the battlefield";
         default:                              return "activate";
     }
 }
@@ -17611,6 +18042,89 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                               + (d->params.pay_token_subtypes.empty()
                                    ? std::string("token")
                                    : d->params.pay_token_subtypes[0]));
+            }
+            break;
+        }
+        case PermAbilityMode::SacLifePerCreature:
+        {
+            // Blighted Steppe: "{3}{W}, {T}, Sacrifice this land: You gain 2 life for each creature
+            // you control." The mana and the {T} are paid by the caller; the SACRIFICE is the rest
+            // of the COST (CR 601.2h/602.1), so the land leaves FIRST and the ability resolves
+            // afterwards -- which is why the creature count below cannot include the land even if it
+            // were somehow animated.
+            //
+            // It is a LAND, so the GRAVEYARD (contrast Bilbo's exile above) -- and deliberately NOT
+            // via SacrificePermanentAt, whose OnCreatureDies tail fires the "whenever a creature
+            // dies" watchers; FireSacrificeWatchers' own header states the distinction ("a
+            // sacrificed LAND is not a creature dying"). So: the Haven of the Spirit Dragon / Fiery
+            // Islet inline pattern (graveyard push + erase + attachment detach, CR 301.5c) plus the
+            // sacrifice hook, which a sac COST does owe (CR 701.17) exactly as SacDraw's Clue does.
+            // (Haven's own ApplyGraveyardReturnAbility omits that hook -- a pre-existing gap in a
+            // deck with no sacrifice watcher. Not copied here.)
+            const int per = d->params.sac_lifegain_per_creature;
+            {
+                const Permanent& sq   = state.battlefield[static_cast<std::size_t>(idx)];
+                const int        snum = sq.card.m_number;
+                const Card       dead = sq.card;
+                const bool       tok  = sq.is_token;
+                state.battlefield.erase(state.battlefield.begin() + idx);
+                for (Permanent& o : state.battlefield)   // CR 301.5c, parity with every death path
+                {
+                    if (o.equipped_to      == snum) { o.equipped_to      = 0; }
+                    if (o.aura_attached_to == snum) { o.aura_attached_to = 0; }
+                }
+                // The is_token guard is Bilbo's (see LifeGatedPutCreatures above): a token ceases to
+                // exist and must not leave a phantom card in the graveyard. Blighted Steppe is never
+                // a token today; the guard is parity with the sibling case, not speculation about it.
+                // PUSHED BEFORE the watchers fire, so a "whenever you sacrifice" trigger that reads
+                // the graveyard sees the card there (CR 701.17b).
+                if (!tok) { state.players[controller].graveyard.push_back(dead); }
+            }
+            FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
+            // ONE life-gain EVENT of per*N (CR 119.10), never N events of `per`. This is the
+            // load-bearing line on the card in THIS deck: Ageless Entity's "that many" wants 2N
+            // counters in one trigger, and Nykthos Paragon's "Do this only once each turn" would
+            // spend its whole window on a single 2 if the gain were split.
+            const int n = CountOwnCreatures(state, controller);
+            if (per > 0 && n > 0) { GainLife(state, controller, per * n); }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "lifegain",
+                              src_name + ": sacrificed -- gain " + std::to_string(per * n)
+                              + " life (" + std::to_string(n) + " creature"
+                              + (n == 1 ? "" : "s") + ")");
+            }
+            break;
+        }
+        case PermAbilityMode::TapLifegain:
+        {
+            // Wellwisher: "{T}: You gain 1 life for each Elf on the battlefield." The {T} is already
+            // paid by the caller (SetPermTapped), and there is no mana half.
+            //
+            // ONE GainLife call with the full amount -- one activation is ONE life-gain EVENT
+            // (CR 119.10). Looping GainLife(..., 1) per Elf would mint X Ageless Entity triggers and
+            // X Nykthos Paragon windows instead of one, and would make the Paragon put 1 counter
+            // where the card puts X. Routing through GainLife is also what bumps
+            // life_gained_this_turn and fires every watcher.
+            //
+            // X is counted HERE, at resolution, so every Elf the plan cast earlier this turn counts
+            // (ActivatePermAbility runs in the trailing pass, after the casts). Wellwisher counts
+            // itself. amount 0 is impossible while Wellwisher is still on the battlefield, but the
+            // guard is real -- GainLife early-returns at <= 0 and a zero gain is not an event.
+            const int amt = TapLifegainAmount(state, controller, *d);
+            if (amt > 0)
+            {
+                GainLife(state, controller, amt);
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    // The subtype is NOT pluralised: it is an arbitrary cards.json string, and
+                    // "Elf" + "s" reads as "Elfs". Written as a count of the type instead.
+                    EmitPlayEvent(state.turn_number, "lifegain",
+                                  src_name + ": gain " + std::to_string(amt) + " life ("
+                                  + std::to_string(amt) + " "
+                                  + d->params.tap_lifegain_per_subtype
+                                  + " on the battlefield)");
+                }
             }
             break;
         }
@@ -22697,6 +23211,57 @@ inline bool LineCHoldEnabled()
     return heurarm::Flag(heurarm::LINE_C_HOLD, env);
 }
 
+// ACTIVATION LINE HOLD (MTG_ACT_LINE_HOLD, heurarm slot ACT_LINE_HOLD, DEFAULT ON, adopted
+// 2026-09-30; =0 disables). The generalisation of LINE_C_HOLD above from "{C} sources for a blink's {C} pips" to
+// "whatever the plan's own trailing ACTIVATIONS still need" -- both their {T} SOURCE and their
+// COLOURED pips -- while the casts pay.
+//
+// WHAT IT FIXES, and why it is a reachability bug rather than a tap-order preference. An enumerated
+// plan carrying a trailing activation is paid casts-first by a payer that cannot see the activation,
+// so two things happen and NEITHER is disclosed (a dropped ACTIVATION gets no `drops` field -- see
+// GameLogger.h's MTG_ACT_DROP_AUDIT):
+//   * the payer taps the activation's own source for MANA, which nullifies the {T} half of that
+//     activation's cost -- PermAbilitySourceLive then fails and the branch no-ops silently;
+//   * or it spends the last provider of a colour the activation's cost needs, so the {T} is paid,
+//     TapForCost fails, and the tap is rolled back.
+// Both were measured live on the shipped binary (MTG_ACT_DROP_AUDIT, 40 games at d3, 2026-09-30):
+// Snow 1,539,268 + 62,479 drops against 3,851,912 fired activations, EldraziDisplacerFlicker
+// 214,255 + 103,753 against 414,267, SelesnyaLifegain 62,942 + 3,270 against 1,280,827, Prevent
+// Damage 0 + 12,903 against 307,307. Found on SelesnyaLifegain, where it made a 2-of land's entire
+// payoff clause unreachable on any turn that also cast a spell -- i.e. almost every turn.
+//
+// The search is not LYING to itself (rollout and executor drop identically, which is why the
+// mismatch harness reports zero fd-diverge); the strictly better line is simply absent from its
+// choice set. Same lossless contract as every other hold here -- held-first attempt, unrestricted
+// retry -- so a cast that genuinely needs the source still gets it and no cast is ever lost.
+//
+// SELF-LIMITING ACROSS A MULTI-ACTIVATION TRAILING PASS by construction: the {T} half is paid
+// BEFORE the mana half (SetPermTapped), so activation 1's source is already tapped when its own
+// payment runs and the mask -- which only ever holds UNTAPPED sources -- then holds exactly the
+// activations still to come. That is the two-Scrying-Sheets case MTG_ACT_TAP_RESERVE was written
+// for, covered here for coloured pips as well as for the tap.
+//
+// ADOPTED 2026-09-30 on a purpose-built paired A/B over held-out, NON-OVERLAPPING seeds, after the
+// first verdict against it turned out to be 7 games in 1,000 at the metric's own quantum. What the
+// evidence says (docs/design/trailing-activation-payment-hole.md has the tables):
+//   * At EVERY SEARCHED DEPTH, not one cell on any deck is significantly worse. SelesnyaLifegain
+//     pooled over d1/d2/d3/d5 is significantly BETTER (111 better / 78 worse, net -33 turns,
+//     p = 0.020); Snow is a null (90/91); Melira and Stompy diverge on ZERO games.
+//   * d0 IS worse (snow +0.0135, selesnya +0.0065) and that is a SEPARATE, pre-existing defect this
+//     fix merely stops hiding: the greedy projection over-values a trailing activation. The cliff --
+//     significant at d0, gone at d1, still gone at d5 -- is the signature of a leaf-valuation error;
+//     a payment defect would not care about depth. Two bugs had been cancelling.
+//   * CPU is +28% on Snow, +2-3% on selesnya/edf, neutral elsewhere -- and it is VOLUME, not
+//     overhead: payments +33% while cost PER payment falls 13%, because activations that resolve go
+//     up 30% and the silent drop rate halves (24.3% -> 10.3%). No tier budget is near (the
+//     regression tier moves 2.7 -> 2.8 min wall against a 45-min ceiling) and suite_gate's 3x
+//     new-deck reference is fivecolour, not Snow, so it does not tighten.
+inline bool ActLineHoldEnabled()
+{
+    static const bool env = EnvOn("MTG_ACT_LINE_HOLD", true);
+    return heurarm::Flag(heurarm::ACT_LINE_HOLD, env);
+}
+
 // Should the apply paths compute PlanTraits at all? One check so the builder costs nothing while
 // every consumer lever is off (and the scope then installs nullptr = today's behaviour).
 inline bool PlanTraitsWanted()
@@ -22705,7 +23270,8 @@ inline bool PlanTraitsWanted()
                        || OneShotReserveEnabled() || ScalerPlanBiasEnabled()
                        || ScarceColorHoldEnabled()   // ScarceColorHoldMask (ManaPayment.cpp)
                        || EnvOn("MTG_M2_PAYLOAD_RESERVE", true);   // PayloadReserveMask (ManaPayment.cpp)
-    return v || LineCHoldEnabled();   // per-job (not cached): a pooled arm must build the traits
+    // Both per-job (not cached): a pooled arm must build the traits its own flags ask for.
+    return v || LineCHoldEnabled() || ActLineHoldEnabled();
 }
 
 // ATTACKER-ONLY RUNG on the prepay reservation ladder (MTG_TAP_ATTACKER_RUNG, default ON, adopted 2026-08-26; =0 disables).
@@ -24840,6 +25406,34 @@ inline void AdvanceSagas(GameState& state)
     }
 }
 
+// ---- The land-entry ETBs the FETCH/PUT path historically dropped ------------------------------
+//
+// EnterLand resolves enters-tapped / depletion / scry / surveil / energy but NOT etb_bounce_land
+// and NOT etb_lifegain, which the LAND DROP (LandPlay.cpp) does resolve -- a real, pre-existing
+// divergence its own header already admits. This is the extracted pair, in the drop's order
+// (bounce BEFORE lifegain), so a put path can opt in without the two copies drifting.
+//
+// `self_index` is the just-entered land's battlefield slot. Separate from EnterLand (rather than
+// unconditional inside it) for TWO reasons:
+//   1. Callers that must stay byte-identical (PerformFetch, PerformLandTutorToBattlefield) keep
+//      their exact behaviour -- see EnterLand's resolve_full_etb, defaulted false.
+//   2. SIMULTANEITY. Both of these are TRIGGERED abilities ("when this land enters, ..."), so when
+//      a land enters as part of a SIMULTANEOUS multi-put (Genesis Wave) they must resolve AFTER
+//      every permanent is on the battlefield, not while the rest are still arriving. Blossoming
+//      Sands' 1 life is a gain EVENT that an Ageless Entity entering alongside it must see; a
+//      Selesnya Sanctuary's bounce is MANDATORY (skipping it gifts a free Karoo). So
+//      PerformGenesisWave calls THIS in its second pass and leaves EnterLand's flag false.
+inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& def, int self_index)
+{
+    if (self_index < 0 || self_index >= static_cast<int>(state.battlefield.size())) { return; }
+    if (def.params.etb_bounce_land)
+    { BounceKarooLand(state, state.battlefield[self_index].controller_index, self_index); }
+    // GainLife bumps life_gained_this_turn and fires every "whenever you gain life" watcher --
+    // ONE gain event, exactly as the land drop does it.
+    if (def.params.etb_lifegain > 0)
+    { GainLife(state, state.active_player_index, def.params.etb_lifegain); }
+}
+
 // ---- Fetchland resolution (Windswept Heath etc.) ------------------------------
 //
 // Puts a land described by `def` onto the active player's battlefield, resolving its
@@ -24848,7 +25442,15 @@ inline void AdvanceSagas(GameState& state)
 // its on-entry effects, so it can serve both a hand land drop (not currently wired this
 // way to keep that path byte-identical) and a fetchland pulling a land from the library.
 // `card_number` (when >= 0) stamps the permanent's card number for real-game logging.
-inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1)
+//
+// `resolve_full_etb` additionally runs ResolveLandEnterEtbExtras (Karoo bounce + land lifegain),
+// the two the land DROP resolves and this path historically did not. DEFAULTED FALSE so
+// PerformFetch and PerformLandTutorToBattlefield stay byte-identical: passing true from
+// PerformLandTutorToBattlefield would FIX a genuine bug (`Creature Giving` runs Crop Rotation AND
+// Azorius Chancery, so a Crop-Rotated Karoo currently enters without bouncing -- a free Karoo) but
+// it moves that deck's ground truth, so it is its own item with its own rebaseline.
+inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
+                      bool resolve_full_etb = false)
 {
     bool tapped = LandEntersTapped(state, def);
     Permanent perm;
@@ -24875,6 +25477,10 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     // grow it.
     if (def.params.etb_energy > 0)
     { state.players[state.active_player_index].energy_counters += def.params.etb_energy; }
+    if (resolve_full_etb)
+    {
+        ResolveLandEnterEtbExtras(state, def, static_cast<int>(state.battlefield.size()) - 1);
+    }
 }
 
 // Execute a fetchland (Windswept Heath etc.): pull `target_name` (empty -> the heuristic's
@@ -25368,10 +25974,16 @@ namespace tapstats
                 pacc ? (double)g_prepay_overtap_mana.load() / (double)pacc : 0.0,
                 (unsigned long long)g_prepay_overtap_srcs.load());
             const unsigned long long pshr = g_prepay_shrunk.load();
+            // DENOMINATED BY ACCEPTED, not by the surplus subset. `g_prepay_shrunk` counts shrinking
+            // solves among every ACCEPTED prepay, while `potc` counts only the accepted ones that
+            // still ended with surplus -- two different populations, so the old ratio printed
+            // "12951.7% of over-tapping" on a Snow game (247,248 / 1,909). A percentage over 100 in a
+            // diagnostic is read either as a bug in the behaviour or as a counter nobody can trust;
+            // here it was neither, just the wrong divisor.
             std::fprintf(stderr,
-                "=== PREPAY SHRINK: solves that gave a source back=%llu (%.1f%% of over-tapping)  "
+                "=== PREPAY SHRINK: solves that gave a source back=%llu (%.1f%% of accepted)  "
                 "sources returned=%llu ===\n",
-                pshr, potc ? 100.0 * (double)pshr / (double)potc : 0.0,
+                pshr, pacc ? 100.0 * (double)pshr / (double)pacc : 0.0,
                 (unsigned long long)g_prepay_shrunk_srcs.load());
             std::fprintf(stderr,
                 "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",

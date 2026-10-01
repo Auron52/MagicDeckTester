@@ -126,6 +126,24 @@ struct PlanTraits
     // otherwise blind to it and spends the {C} sources on generic pips; LineColorlessHoldMask
     // (ManaPayment.cpp) holds that many {C} providers, narrowest first, while the casts pay.
     int  act_c_pips            = 0;
+    // --- ACTIVATION LINE HOLD inputs (MTG_ACT_LINE_HOLD; SelesnyaLifegain seeds 77617/77513) ---
+    // What the plan's own TRAILING ACTIVATIONS still need after the casts, which the casts' payer is
+    // otherwise blind to. Two halves, because the defect has two manifestations and they fail
+    // differently (see ActLineHoldEnabled in SpellEffects.h):
+    //   act_pips     summed COLOURED pips of those activations, indexed by Color (W,U,B,R,G). The
+    //                casts spend the last provider of one -> the {T} is paid, TapForCost fails, the
+    //                tap rolls back, and the activation is lost with no disclosure.
+    //   act_src_nums card numbers of the sources whose {T} those activations must pay. The casts tap
+    //                one for MANA -> PermAbilitySourceLive fails and the branch no-ops silently.
+    // Distinct from act_c_pips above, deliberately: that one is a blink LOOP's per-crank {C} and is
+    // consumed by a different mask (LineColorlessHoldMask), on a lever with its own measurement.
+    // The source list self-limits across a multi-activation trailing pass -- the {T} half is paid
+    // before the mana half, so an activation that has already fired owns a TAPPED source and the
+    // mask, which only holds untapped ones, then covers exactly the activations still to come.
+    static constexpr int kMaxActSrcs = 8;
+    int  act_pips[5]           = {};
+    int  act_src_nums[kMaxActSrcs] = {};
+    int  act_src_count         = 0;
     // The plan casts something that can INTRODUCE a new cast mid-turn -- a Treasure mint
     // (creates_treasures opens the deferred breakpoint) or a flood-engine draw (DigDraw /
     // DrawUntilNonland, the batch-pay drawsafe class). Those follow-on casts are invisible to

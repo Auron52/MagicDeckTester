@@ -48,6 +48,13 @@ struct CardParams
     // eval (a minor, disclosed simplification for Pathway lands; the played battlefield face is exact).
     std::string        mdfc_back_name;
     std::vector<Color> mdfc_back_produces;
+    // The inverse link, set ONLY by the DB's back-face synthesis (never hand-authored in JSON): the
+    // name of the FRONT face this synthesized back belongs to. Needed because a synthesized back is
+    // a face, not a card: if it ever LEAVES the battlefield it must become the whole card again
+    // (CR 712.2 -- a double-faced card in any zone but the battlefield has its front face up).
+    // Without it, bouncing a Boulderloft Pathway to hand returns a faceless {W}-only land and
+    // silently destroys the modal choice. Empty on every real card and on every front face.
+    std::string        mdfc_front_name;
     std::vector<std::string> subtypes_affected;  // for lord effects
 
     // On-cast trigger: when the controller casts a spell with MV <= on_cast_trigger_max_mv,
@@ -75,6 +82,34 @@ struct CardParams
     // ApplyAttackSelfPumps (ApplyAttackDrawTriggers) in BOTH executor and rollout. Also flips
     // DeckUsesSecondMain (cards drawn in combat are a combat-generated resource, 2c-bis).
     int attack_draw_cards = 0;
+
+    // Blossoming Bogbeast: "Whenever this creature attacks, you gain 2 life. Then creatures you
+    // control gain trample and get +X/+X until end of turn, where X is the amount of life you
+    // gained this turn." ONE printed trigger, TWO params, so the read ORDER is structural rather
+    // than a comment: the gain must route through the shared GainLife() hook (a real life-gain
+    // EVENT -- it bumps life_gained_this_turn AND fires the "whenever you gain life" watchers)
+    // and the pump must read life_gained_this_turn AFTER it ("Then" = oracle order). Applied at
+    // declare-attackers per attacking copy in BOTH worlds from ONE shared helper
+    // (ApplyAttackLifegainTeamPump) and projected by PendingAttackDamage
+    // (CountAttackLifegainTeamPump) so the search does not under-rate attacking.
+    //   attack_trigger_lifegain          -- the "you gain N life" half. FLIPS DeckUsesSecondMain:
+    //                                       life gained during COMBAT is a resource generated
+    //                                       during combat (2c-bis) and Accomplished Alchemist
+    //                                       turns it into mana, so only a post-combat main can
+    //                                       spend it -- the attack_draw_cards class above.
+    //   attack_team_pump_per_life_gained -- the "then creatures you control get +X/+X until end of
+    //                                       turn" half, X = life_gained_this_turn read after the
+    //                                       gain. TEAM-WIDE (Craterhoof's recipient-loop shape),
+    //                                       deliberately NOT pump_per_life_gained_power/_tough,
+    //                                       which are a TARGETED single-creature trick payload
+    //                                       (ApplyTrickPayload writes one battlefield index). Also
+    //                                       the SECOND battlefield reader of life_gained_this_turn,
+    //                                       so it is a term in BuildSimKey's fold gate and in
+    //                                       GoldFishRunner's deck_reads_lifegain_in_play stamp.
+    // The trample grant is NOT modelled -- provably inert (the passive opponent never blocks; the
+    // accepted Craterhoof collapse). No choice anywhere on the card -> no viewer decision.
+    int  attack_trigger_lifegain          = 0;
+    bool attack_team_pump_per_life_gained = false;
 
     // Inferno Titan: "Whenever this creature enters OR ATTACKS, it deals 3 damage divided as you
     // choose among one, two, or three targets." The ENTERS half is etb_damage_any; this is the
@@ -1619,6 +1654,17 @@ struct CardParams
     // one combat = two events, a gain of 5 from one source = one event, a gain of 0 = no event.
     //   lifegain_self_counters              -- put N +1/+1 counters on THIS permanent (Ajani's
     //                                          Pridemate, Voice of the Blessed, the Ajani token).
+    //   lifegain_self_counters_that_many    -- the AMOUNT form of the line above: a counter for
+    //                                          EACH LIFE of the event, not a fixed N (Ageless
+    //                                          Entity's "put THAT MANY"). A 10-life Feed the Clan
+    //                                          is TEN counters here and ONE on a Pridemate, so the
+    //                                          fixed-N int provably cannot express it. Deliberately
+    //                                          an INDEPENDENT bool rather than a flag beside
+    //                                          lifegain_self_counters, because that int ALONE sets
+    //                                          the CritterLifegain archetype signature
+    //                                          (SelectDecisionProvider) -- reusing it would hijack
+    //                                          SelesnyaLifegain's routing to another deck's
+    //                                          provider, the archetype-neutral-param misroute class.
     //   lifegain_each_own_creature_counters -- ... on EACH creature you control (Archangel of Thune).
     //   lifegain_target_own_counter         -- ... on TARGET creature or enchantment you control
     //                                          (Heliod, Sun-Crowned). ONE provider pick
@@ -1628,6 +1674,7 @@ struct CardParams
     //                                          gain N" (Daxos, Blessed by the Sun's second half),
     //                                          fired from OnCreatureDies via FireCreatureDiesWatchers.
     int  lifegain_self_counters              = 0;
+    bool lifegain_self_counters_that_many    = false;
     //   counter_threshold_flying_vigilance  -- "As long as this creature has N or more +1/+1
     //                                          counters on it, it has flying and vigilance"
     //   counter_threshold_indestructible    -- same shape, indestructible at N (Voice of the
@@ -1640,6 +1687,38 @@ struct CardParams
     int  counter_threshold_flying_vigilance  = 0;
     int  counter_threshold_indestructible    = 0;
     int  lifegain_each_own_creature_counters = 0;
+    //   lifegain_each_own_creature_counters_that_many
+    //                                       -- the AMOUNT form of the int above: a counter for
+    //                                          EACH LIFE of the event on each creature you control
+    //                                          (Nykthos Paragon's "put THAT MANY +1/+1 counters on
+    //                                          each creature you control"). Exactly the
+    //                                          lifegain_self_counters_that_many split, for exactly
+    //                                          the same TWO reasons. (1) ROUTING: the int above
+    //                                          ALONE sets the CritterLifegain archetype signature
+    //                                          in DetectDecisionProvider, so setting it on a
+    //                                          Selesnya elf-ramp card would hijack that deck to
+    //                                          another deck's provider -- the archetype-neutral-
+    //                                          param misroute class, pinned as a tripwire in
+    //                                          test/unit/test_pirates_provider.cpp. (2) The int=1
+    //                                          sentinel would MISLEAD (1 reads as "one counter"
+    //                                          while meaning "the amount gained") and that int is
+    //                                          also consumed by the greedy leaf's valuation
+    //                                          arithmetic. A card sets ONE of the two, never both.
+    //   lifegain_counters_once_each_turn     -- "Do this only once each turn" on the team-counter
+    //                                          clause above (Nykthos Paragon). PER PERMANENT, not
+    //                                          per name: four copies each get one use, which is
+    //                                          why the deck runs four. Tracked on
+    //                                          Permanent::lifegain_counters_used_this_turn and
+    //                                          reset at BOTH turn-boundary sites, exactly
+    //                                          colored_cast_lifegain_used_this_turn. Two rulings
+    //                                          shape it: DECLINING does not consume the use, and
+    //                                          once a copy HAS been used it no longer TRIGGERS at
+    //                                          all. The "you may" is a provider pick
+    //                                          (LifegainCountersSpendCount) decided once per
+    //                                          life-gain EVENT, plus a `lifegain_counters` viewer
+    //                                          decision -- never a searched per-event branch.
+    bool lifegain_each_own_creature_counters_that_many = false;
+    bool lifegain_counters_once_each_turn              = false;
     //   lifegain_counters_subtypes          -- subtype OR-filter on the RECIPIENTS of the line
     //                                          above. EMPTY = every creature you control, so
     //                                          Archangel of Thune is byte-identical to before this
@@ -2043,6 +2122,26 @@ struct CardParams
     bool                     etb_reveal_put_creatures_only = false;
     int                      etb_reveal_put_max_mv = 0;
 
+    // Genesis Wave ({X}{G}{G}{G} Sorcery: "Reveal the top X cards of your library. You may put any
+    // number of PERMANENT cards with mana value X or LESS from among them onto the battlefield.
+    // Then put all cards revealed this way that weren't put onto the battlefield into your
+    // graveyard.") -- the SPELL-resolution, X-SCALED twin of the Muxus ETB params above.
+    //
+    // ONE gate flag, deliberately, rather than reusing etb_reveal_count / etb_reveal_put_max_mv:
+    // those are fixed ints, subtype-filtered, fire from an ETB and send the rest to the BOTTOM.
+    // Here the reveal COUNT and the MV CAP are the SAME chosen X (read off Action/StackEntry
+    // chosen_x, never recomputed -- the tutor_mv_max_is_x discipline) and the leftovers are MILLED.
+    // Expressing that through the Muxus flags would have taken four more of them.
+    //
+    // Resolution is the shared PerformGenesisWave (SpellEffects.cpp), called by BOTH worlds
+    // (EffectHandler + TurnSolver::apply_one) so the reveal, the put subset, the enter cascades and
+    // the mill cannot drift. The put SUBSET is a DecisionProvider decision (GenesisWavePutPicks),
+    // NOT a searched axis: a searched subset is 2^X plan variants. X *is* a searched cast axis and
+    // needs its own branch in TurnSolver's {X} block -- without it that block's terminal
+    // non-DirectDamage `continue` drops the card from enumeration entirely (the Luxurious Libation
+    // trap) and it can never be cast.
+    bool                     reveal_x_put_permanents = false;
+
     // Attack self-pump, base = other ATTACKING matching creatures (Goblin Piledriver: "Whenever
     // this attacks, it gets +2/+0 until end of turn for each other attacking Goblin"). > 0 gates
     // it; +power per OTHER declared attacker whose subtype is in subtypes_affected (self-excluded),
@@ -2440,7 +2539,27 @@ struct CardParams
     // Scale the Heights: "Put a +1/+1 counter on up to one target creature."
     int  counters_on_target = 0;
     // Scale the Heights: "You gain 2 life." (per resolved copy -- faithful escalation of life.)
+    // REUSED as the BASE amount of an untargeted "you gain N life" spell (Feed the Clan), which is
+    // the same amount semantics with no target. Safe because every OTHER reader of this field is
+    // trick-scoped -- TurnSolver's is inside the `IsSoloTargetTrick` block and DecisionProviders' is
+    // MirrorwingProvider::TrickTargetCandidates -- and it is not part of any archetype signature in
+    // DetectDecisionProvider, so reusing it cannot misroute a deck's provider.
     int  cast_lifegain = 0;
+    // FEROCIOUS (Feed the Clan): "You gain 10 life INSTEAD if you control a creature with power 4 or
+    // greater." The upgraded amount, and `ferocious_min_power` is its gate. Ferocious is an ability
+    // word (CR 207.2c: italic flavour, no rules meaning of its own), so the CONDITION is the whole
+    // thing to model, and per the 2014-09-20 ruling an "instead" ferocious spell gives you ONLY the
+    // upgraded effect, never both -- so the resolver emits ONE life-gain event of either the base or
+    // this amount, never base+this. 0 = no ferocious clause, whole feature inert.
+    //
+    // ferocious_min_power DEFAULTS TO 4, NOT 0, and that is deliberate: 4 is a printed constant of
+    // the ability word, and the ARMING term is `cast_lifegain_ferocious > 0` (the
+    // endstep_lifegain_tokens / endstep_lifegain_threshold precedent, where the threshold likewise
+    // defaults nonzero and the count is what arms it). Do NOT "fix" it to 0 to match the
+    // 0-is-inert convention: ControlsCreatureWithPower returns true for min_power <= 0, so a 0
+    // default would turn the gate permanently ON and make every cast gain the upgraded amount.
+    int  cast_lifegain_ferocious = 0;
+    int  ferocious_min_power     = 4;
     // Fortifying Draught: "+X/+X where X is the amount of life you gained this turn", computed AT
     // RESOLUTION per copy AFTER that copy's own cast_lifegain (gain first, THEN count -- oracle
     // order), off Player::life_gained_this_turn. So a magnet fan-out escalates: each copy gains its
@@ -2498,6 +2617,26 @@ struct CardParams
     // live subtype count (see IsScaledManaDork / ScaledDorkCount). This flag widens the count to
     // BOTH players' creatures (Priest); false = own side only (Elvish Archdruid).
     bool mana_per_creature_count_all = false;
+
+    // Accomplished Alchemist: "{T}: Add one mana of any color." AND "{T}: Add X mana of any one
+    // color, where X is the amount of life you gained this turn." The SAME scaled-dork shape as
+    // Priest of Titania, with Player::life_gained_this_turn in place of a subtype count -- so it is
+    // the engine's first scaled yield that is NOT a board count.
+    //
+    // The two abilities collapse EXACTLY to one whose per-tap yield is max(1, life_gained_this_turn),
+    // and that is a DOMINANCE argument, not a simplification: both cost only {T}, so exactly one is
+    // usable per untap; at X >= 1 the second's option set {X of one chosen colour} contains the
+    // first's {1 of that colour} and surplus mana is free (mana burn was removed in 2010); at X == 0
+    // the first is strictly better. So there is never a reason to prefer the other mode, and nothing
+    // to ask a human either.
+    //
+    // Unlike a Karoo's produces_amount bundle, the X mana are all ONE colour the controller picks,
+    // so both payers must suppress the amt>1-across-multi-colour one-of-each rule for this source
+    // (IsSingleColorBurstSource) -- the Three Tree City precedent. The yield RISES mid-turn as life
+    // is gained, which is why the sim key folds life_gained_this_turn for a deck holding one and why
+    // the mana ceiling declines to prune while a tappable copy is out. It is also never a dead
+    // source, unlike a Priest at zero Elves: the floor is 1.
+    bool mana_per_life_gained = false;
 
     // Arbor Elf: "{T}: Untap target Forest." Modelled as a G dork that is LIVE only while the
     // controller controls a land with this subtype -- equivalent in a single-main goldfish
@@ -3076,6 +3215,38 @@ struct CardParams
     // has no tap symbol, so a Clue made this turn can be cracked this turn. nullopt = no such
     // ability.
     std::optional<ManaCost> sac_draw_cost;
+
+    // ---- SelesnyaLifegain (2026-09-30): two more PermAbilityMode activations --------------------
+    // Blighted Steppe: "{3}{W}, {T}, Sacrifice this land: You gain 2 life for each creature you
+    // control." -> PermAbilityMode::SacLifePerCreature. The cost is the ARMING term (nullopt on
+    // every other card, so every other deck is byte-identical); the rate is the printed 2.
+    //
+    // "EACH CREATURE YOU CONTROL" IS OUR SIDE ONLY (CountOwnCreatures, which also counts an
+    // animated permanent -- CR 205.3b), deliberately NOT the both-sides count Priest of Titania
+    // uses (mana_per_creature_count_all, whose oracle says "each Elf on the battlefield"). The
+    // goldfish opponent can hold scheduled spawns, so the distinction is live.
+    std::optional<ManaCost> sac_lifegain_per_creature_cost;
+    int  sac_lifegain_per_creature = 0;
+
+    // Wellwisher: "{T}: You gain 1 life for each Elf on the battlefield." ->
+    // PermAbilityMode::TapLifegain. The SUBTYPE string is what arms the mode; the loader then
+    // derives tap_lifegain_cost from the (normally absent) "tap_lifegain_cost" key, so a missing key
+    // becomes an ALL-ZERO ManaCost -- "{T}" with no mana half -- rather than nullopt. That is
+    // deliberate: the three ModeSpec tables are keyed on an optional<ManaCost>, so a {T}-only
+    // ability has to present a cost object to be enumerated at all, and PaymentManaCovers already
+    // returns true at need <= 0 (the FadeSaproling / Kaldring {0} precedent).
+    //
+    // DO NOT express this as mana_per_creature_subtype to reuse ScaledDorkCount: IsScaledManaDork
+    // needs only `IsCreature() && !subtype.empty() && feeder == 0`, so that would register a card
+    // producing NO MANA as a live mana SOURCE in PermanentManaYield, AvailableManaPool, the
+    // backtracker, the greedy tap and the untap-burst net. Hence CountCreaturesWithSubtype and
+    // `template: custom` (never mana_dork).
+    //
+    // count_all = "on the battlefield" (BOTH players, Priest of Titania's reading); false would be
+    // own-side only (Elvish Archdruid's "Elves you control").
+    std::optional<ManaCost> tap_lifegain_cost;
+    std::string tap_lifegain_per_subtype;
+    bool tap_lifegain_count_all = false;
 };
 
 // A MANA CONVERSION source: one whose `produces` colours are NOT unconditionally available,

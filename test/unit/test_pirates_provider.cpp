@@ -124,6 +124,19 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Manabarbs / Vito / Dina) -- it would otherwise ride AntiLifegain via Living Wish's
         // tutor_to_hand. See the PreventDamageProvider note in DecisionProviders.h.
         {"Prevent Damage", "PreventDamage"},
+        // SelesnyaLifegain (onboarded 2026-09-30): its OWN provider, routed at the top of the chain.
+        // This pin previously read "Stompy", recording a MEASURED capture: Craterhoef's
+        // etb_team_pump_per_creature and Priest of Titania / Elvish Archdruid's creature-side
+        // mana_per_creature_subtype EACH set `stompy` alone, so the deck inherited StompyProvider's
+        // cast order and cleanup-discard buckets from the moment its first card was implemented.
+        // It also had to clear `critter` (returned above `stompy`), which a naive Ageless Entity /
+        // Nykthos Paragon modelling would have set. Both are now cleared two ways: the deck has its
+        // own nine-param signature routed above both, AND neither payoff card uses the legacy ints
+        // (`*_that_many` bools instead), so the critter signature is never set in the first place.
+        // SelesnyaLifegainProvider is an EMPTY DeckProvider derivation -- play-neutral by
+        // construction -- so this change of routing is a change of NAME and of future extension
+        // point, not of play. See its declaration in DecisionProviders.h.
+        {"SelesnyaLifegain", "SelesnyaLifegain"},
     };
 
     namespace fs = std::filesystem;

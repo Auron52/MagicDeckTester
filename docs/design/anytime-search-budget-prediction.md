@@ -421,3 +421,75 @@ to upstream's accepted GT, so no rebaseline was required.
   configs change at a 5x tighter floor), 6.3x the next-worst deck's mean cost.
 - Judge quality on a HELD-OUT sample. The 300-game train set showed a 1-game regression that did not
   reproduce on 1,200 held-out games, and a "p99 −28%" that shrank to −8.6%.
+
+---
+
+## 2026-09-30: MEASURED for the first time, on three decks
+
+This item was captured from a 2026-07-05 user report — *"the search commits to going deeper, then
+the budget expires partway through, and the partial deep work is discarded"* — and was never
+quantified. The per-decision work census (`docs/design/per-decision-work-census.md`,
+`MTG_TURN_CENSUS`) measures it directly, because `g_idwaste_units` is exactly "units spent in a
+pass the overrun guard aborted and rolled back" and the census carries it per decision.
+
+Held-out seeds (910000+), depth 3, budget 10 virtual-ms, single-threaded:
+
+| deck | decisions | with a discarded pass | discarded share OF THAT DECISION | units discarded (share of deck total) |
+|---|---|---|---|---|
+| Snow | 17,961 | 14 (0.08%) | **100.0%** (all 14) | 3,159,790 (**2.58%**) |
+| EldraziDisplacerFlicker | 8,886 | 1 (0.01%) | **99.5%** | 225,038 (0.49%) |
+| Melira Pod | 1,292 | 1 (0.08%) | **99.4%** | 225,065 (**2.17%**) |
+
+### The shape is identical on all three decks, and it is worse than "some partial work is wasted"
+
+Every occurrence is **near-total**. A decision that blows the proportional overrun ceiling
+(`kOverrunBudgetMult = 25`, so 225,000 units against a 9,000-unit budget) ends up keeping either
+
+* **nothing at all** — snow's 14 cases all show `lad_commit_units = 0`, i.e. no pass ever
+  completed; or
+* a **trivial shallow answer** — EDF kept a 1,027-unit pass after spending 226,065 units; Melira
+  kept a 1,320-unit pass after 226,409.
+
+So the failure is not "we lose the deep half of a good pass". It is: **the decision spends 25x its
+budget and returns the answer a 1,000-unit pass would have given, or no answer at all.** Worked
+examples, each reproducible with `--games 1 --seed <seed> --depth 3 --threads 1`:
+
+```
+  Snow   seed 910312 t5   227,446 units, kept a     0-unit pass  (100.0% discarded)  7,425 ms
+  EDF    seed 910214 t3   226,065 units, kept a 1,027-unit pass  ( 99.5% discarded)  9,898 ms
+  Melira seed 910161 t2   226,409 units, kept a 1,320-unit pass  ( 99.4% discarded)  2,750 ms
+```
+
+### Why this is a makespan item specifically
+
+The frequency (~1 decision in 1,000) makes it invisible in any mean, which is why it survived from
+July unquantified. But each occurrence is **2.7–9.9 seconds of wall clock** at a 10 ms nominal
+budget, and on snow and Melira the class accounts for **2.2–2.6% of the deck's entire search
+budget**. For generation makespan — where the tail is the deliverable — that is the relevant number,
+and it is the same argument `MTG_OVERRUN_FLOOR`'s comment makes about being "a TAIL/p99 lever, not a
+mean one".
+
+### It is NOT an argument for lowering the ceiling
+
+Two standing constraints say so, and both still hold:
+
+* USER 2026-09-09: *"we absolutely need to ensure that truncation is done only for budget reasons"*
+  — the ceiling is already a pure multiple of the budget with no absolute term, which is what makes
+  that structural.
+* The code's own note at the multiplier: the ceiling *"may only ever RISE"*, because lowering it
+  truncates more.
+
+And the anytime commit is already doing real work here: of snow's 14 aborted passes, **10 had
+PROVEN a better win turn than the committed pass**, and `MTG_ID_ANYTIME` (default ON) rescued them.
+Without it those ten would have been play regressions, not just wasted time. So the waste that
+remains is the *residual* after the cheap mitigation already shipped.
+
+### Which makes this doc's own proposal the right one
+
+The remaining gap needs **resumable passes** — a pass that can stop and be continued rather than
+rolled back — exactly as this document argues and as the `kOverrunBudgetMult` comment says
+(*"closing the remaining gap needs resumable passes rather than a smarter rollback"*). The census
+now gives that work a price to be measured against: **recover up to 2.6% of total units, all of it
+inside ~0.1% of decisions, each currently costing seconds and returning ~nothing.**
+
+Still deferred. Nothing here changes any default.

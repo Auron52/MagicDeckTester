@@ -147,6 +147,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             back.card.RehashName();
             back.params.produces = def.params.mdfc_back_produces;
             back.params.mdfc_back_name.clear();             // the back face has no further face
+            back.params.mdfc_front_name = def.card.m_name.str();   // ...but it remembers its front
             back.params.mdfc_back_produces.clear();
             // Spell//land MDFC (Turntimber Symbiosis // Turntimber, Serpentine Wood): the front is
             // a NONLAND card, so the back cannot inherit its types/cost/params -- synthesize a clean
@@ -705,6 +706,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.multicolor_cast_damage_per_color = params.value("multicolor_cast_damage_per_color", false);
     p.colored_cast_lifegain = params.value("colored_cast_lifegain", false);
     p.attack_draw_cards = params.value("attack_draw_cards", 0);
+    p.attack_trigger_lifegain = params.value("attack_trigger_lifegain", 0);
+    p.attack_team_pump_per_life_gained =
+        params.value("attack_team_pump_per_life_gained", false);
     p.attack_trigger_damage_any = params.value("attack_trigger_damage_any", 0);
     p.attack_trigger_modal = params.value("attack_trigger_modal", false);
     p.attack_trigger_damage_each_opponent =
@@ -1087,9 +1091,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.opp_creature_enters_life_loss = params.value("opp_creature_enters_life_loss", 0);
     // "Whenever you gain life" watchers (CritterLifegain)
     p.lifegain_self_counters              = params.value("lifegain_self_counters", 0);
+    p.lifegain_self_counters_that_many    = params.value("lifegain_self_counters_that_many", false);
     p.counter_threshold_flying_vigilance  = params.value("counter_threshold_flying_vigilance", 0);
     p.counter_threshold_indestructible    = params.value("counter_threshold_indestructible", 0);
     p.lifegain_each_own_creature_counters = params.value("lifegain_each_own_creature_counters", 0);
+    p.lifegain_each_own_creature_counters_that_many =
+        params.value("lifegain_each_own_creature_counters_that_many", false);
+    p.lifegain_counters_once_each_turn     = params.value("lifegain_counters_once_each_turn", false);
     for (const std::string& s : params.value("lifegain_counters_subtypes", json::array()))
         p.lifegain_counters_subtypes.push_back(s);
     p.lifegain_target_own_counter         = params.value("lifegain_target_own_counter", false);
@@ -1216,6 +1224,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.etb_reveal_put_subtypes.push_back(s);
     p.etb_reveal_put_creatures_only = params.value("etb_reveal_put_creatures_only", false);
     p.etb_reveal_put_max_mv     = params.value("etb_reveal_put_max_mv", 0);
+    p.reveal_x_put_permanents   = params.value("reveal_x_put_permanents", false);
     p.attack_pump_power_per_other_matching = params.value("attack_pump_power_per_other_matching", 0);
     p.attack_pump_tough_per_other_matching = params.value("attack_pump_tough_per_other_matching", 0);
     p.attack_self_pump_per_other_subtype   = params.value("attack_self_pump_per_other_subtype", std::string());
@@ -1293,6 +1302,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_temp_haste           = params.value("grants_temp_haste", false);
     p.counters_on_target          = params.value("counters_on_target", 0);
     p.cast_lifegain               = params.value("cast_lifegain", 0);
+    p.cast_lifegain_ferocious     = params.value("cast_lifegain_ferocious", 0);
+    p.ferocious_min_power         = params.value("ferocious_min_power", 4);   // see CardParams: 4, not 0
     p.pump_per_life_gained_power  = params.value("pump_per_life_gained_power", 0);
     p.pump_per_life_gained_tough  = params.value("pump_per_life_gained_tough", 0);
     p.pump_per_x_power            = params.value("pump_per_x_power", 0);
@@ -1312,6 +1323,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // --- StompySurprise (mono-green elf ramp) ---
     p.etb_life_floor               = params.value("etb_life_floor", 0);
     p.mana_per_creature_count_all  = params.value("mana_per_creature_count_all", false);
+    p.mana_per_life_gained         = params.value("mana_per_life_gained", false);
     p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
     p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
@@ -1436,6 +1448,26 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tap_investigate_cost = ManaCostFromString(params["tap_investigate_cost"].get<std::string>());
     if (params.contains("sac_draw_cost"))
         p.sac_draw_cost = ManaCostFromString(params["sac_draw_cost"].get<std::string>());
+
+    // Blighted Steppe: "{3}{W}, {T}, Sacrifice this land: You gain 2 life for each creature you
+    // control." The cost's presence arms PermAbilityMode::SacLifePerCreature.
+    if (params.contains("sac_lifegain_per_creature_cost"))
+        p.sac_lifegain_per_creature_cost =
+            ManaCostFromString(params["sac_lifegain_per_creature_cost"].get<std::string>());
+    p.sac_lifegain_per_creature = params.value("sac_lifegain_per_creature", 0);
+
+    // Wellwisher: "{T}: You gain 1 life for each Elf on the battlefield." The SUBTYPE arms the mode
+    // and the cost is DERIVED, because the enumeration tables are keyed on an optional<ManaCost>:
+    // an absent "tap_lifegain_cost" key means "{T} and nothing else", which is an all-zero ManaCost,
+    // NOT nullopt. Leaving it nullopt would arm the params and enumerate nothing -- a card that
+    // compiles, loads and silently has no ability. Every other card keeps nullopt (byte-identical).
+    p.tap_lifegain_per_subtype = params.value("tap_lifegain_per_subtype", std::string{});
+    p.tap_lifegain_count_all   = params.value("tap_lifegain_count_all", false);
+    if (!p.tap_lifegain_per_subtype.empty())
+    {
+        p.tap_lifegain_cost =
+            ManaCostFromString(params.value("tap_lifegain_cost", std::string{}));
+    }
 
     return p;
 }

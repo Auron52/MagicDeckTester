@@ -124,6 +124,13 @@ struct Arm
     // alternative (a scratch deck dir per arm) copies multi-hundred-MB sidecar trees per value.
     double      esc_deck_r        = -1.0;   // <=0 unset                   (MTG_ESC_DECK_R)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
+    // GREEDY-WALK CHARGE WEIGHT (MTG_SOLVE_CHARGE_W): visits per charged unit, >=1. NOT a value-leaf
+    // setting -- it lives here because this struct is the per-job NUMERIC arm (heurarm::Arm is
+    // boolean-only), and the question it answers is a SWEEP: W is the exchange rate between the
+    // walk's work and the node work the budget was calibrated on, so finding it means running
+    // W in {1,4,16,...} x the fleet in ONE pooled batch. An env static pins one W per process.
+    // 1 (and unset) = today's asserted 1:1 rate, byte-identical. See GreedyChargeGuard.
+    int         solve_charge_w    = -1;     // <=0 unset => env => 1
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
     // heuristic leaf on a deck that ships a model. Note this must be explicit: sidecar PRESENCE is
