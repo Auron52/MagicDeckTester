@@ -273,6 +273,114 @@ to stay measurable. **Measured price: ~10–15% wall on the slow games** (250.5 
 worst), with the slow-game COUNT unchanged at 17/60 — i.e. it does not create the tractability
 problem above, it is a modest surcharge on top of it.
 
+## Stage 5d — the claude-play sweep (8 games, Opus, 2026-10-01)
+
+**Zero engine bugs and zero data divergences across 8 games.** Every agent read `cards.json` first
+(Rule 0) and several then checked all 19 cards against Scryfall independently — two reported
+"cards.json is exact for all 19 cards", including Dwalin's Scryfall reminder text confirming the
+counter-intrinsic +1/+0 modelling. Win turns: Claude 4,3,none,5,4,none,7,4 vs engine 4,5,none,7,5,
+none,8,6.
+
+**What the sweep CONFIRMED working** (each independently arithmetic-checked, which is why it is
+worth as much as the flag list):
+* **Sram draws on CAST, exactly** — 7 separate batches of 3,1,4,4,2,2,1 draws for the same counts of
+  Equipment casts, and correctly silent for creatures and for Sigarda's Aid (an Enchantment with no
+  Aura subtype).
+* **Sram ⊕ Puresteel stack to W+1** — one cast Equipment with 1 Paladin + 1 Sram drew exactly 2,
+  confirmed in three separate games; 2 Paladins + 3 Equipment drew 6.
+* **Puresteel metalcraft equip {0}** — one plan attached 7 Equipment whose printed equip costs total
+  **20 mana** while leaving 2 lands untapped; another resolved 13 equips with zero mana available,
+  Colossus Hammer's printed equip {8} included. Recognised at ENUMERATION inside the same plan that
+  casts the Paladin, so the documented conservative bound did not bite.
+* **Golem-Skin Gauntlets' dynamic scaler, at five different counts** — 1 → +1, 3 attached → +3,
+  8 → +8, 9 → +9, 13 → +13, always counting itself, and the toughness-only shields correctly added
+  **0 power while still counting +1 each toward the Gauntlets**. One agent put it best: a flat-bonus
+  bug "would have read 16" instead of 29.
+* **Dwalin's hone counters, both halves** — the enter half, and the attack half applying to THAT
+  combat; one counter on **all 18** Equipment, attached and unattached. Exact combat arithmetic:
+  33 = 2 base + 15 flat + 8 Gauntlets + 8 hone.
+* **Sigarda's Aid** — fired for all 4 Equipment entering after it, each as an `attach_host`
+  decision, and **fully bypassed Colossus Hammer's equip {8}**; this was one game's winning play.
+* **Cid** — the reduction is GENERIC-ONLY and floored at 0: `{1}` Equipment really became free while
+  the `{W}` Deconstruction Hammer was correctly NOT reduced. Cid was never sacrificed.
+* **Dragonfire Blade's per-colour discount at BOTH sites** — a plan that is illegal at the
+  undiscounted {4} was enumerated and then paid, on a mono-white host.
+* **Skateboard** — the mandatory ETB surfaced as a both-sides `target` with the opponent's permanent
+  as `heuristic_default` and the Skateboard itself among the options (resolving as a clean no-op);
+  its haste grant let a just-cast creature attack.
+* **Vigilance grant** — a shielded attacker was still `tapped: false` after combat. (Worth noting
+  because this is the clause the research wanted to defer.)
+* **Metalcraft correctly INACTIVE as a negative control** — with 11–13 artifacts but no Puresteel, a
+  Colossus Hammer equip was never offered at 3, 4 or 5 mana.
+* Ancient Den counts as an artifact; Remote Farm's depletion + self-sacrifice; Shadowspear lifelink
+  per-creature; the duplicate-legend cast prune on Sram; mana legality exact in both directions.
+
+**Not exercised**, so claimed neither way: the `+0/+N` toughness grants (nothing in a goldfish
+damages our creatures) and Cid's `{2},{T}` rebuy in live play (the graveyard fills only by overdraw
+discard, and games end turns 3–7) — the latter is now covered by three constructed scenarios instead.
+
+### The one real defect the sweep found — and it is a VIEWER defect, not a rules one
+
+**The human-play plan-space valve deletes every "attach an unattached Equipment" action.** Censused
+over the FULL enumeration (not the display slice): across five consecutive frames the only equips
+offered were **moves of already-attached Equipment off the live attacker onto a summoning-sick
+body**, while an unattached Colossus Hammer and two Golem-Skin Gauntlets got zero actions. The
+valve's own stated guarantee — *"every action is still reachable one click at a time"* — did **not**
+hold; `dropped_groups` stayed 13–18 throughout. Measured cost in that game: a turn-3 kill (26 power
+available vs 20 needed) became a turn-4 one. Same class as the Prevent-Damage Genesis-Wave valve
+drop that was confirmed and fixed previously.
+
+**Why: the bound is an odometer PRODUCT and it is wildly wrong on this deck shape.** Measured at one
+frame: `positions_full = 4.2e13` against ~10^5 plans that actually materialise — a 7-order-of-
+magnitude over-estimate, because ~20 interchangeable {0} Equipment multiply the odometer without
+multiplying real outcomes. So the valve fires on frames it did not need to, and the groups it drops
+(lowest `SituationalCardRank`) are the equips, i.e. the deck's entire point.
+
+**I tried the obvious fix and it is REFUTED — do not retry it.** I added a deck-scoped override for
+the valve's positions bound, measured it, and reverted it:
+
+| bound | dropped_groups | wall for ONE frame |
+|---|---|---|
+| 65536 (default) | 11–18 | fast |
+| 2e7 (the override) | **still 11** | fast |
+| 1e10 | — | **>7 min, killed** |
+| valve off | — | **>7 min, killed** |
+
+So raising the bound either changes nothing or reinstates exactly the frozen-viewer hang the valve
+was built to prevent. **The fix must be RANKING, not budget**: the valve should not be able to drop
+the equip groups on a deck whose plan IS equipping. The natural lever is
+`EquipmentProvider::SituationalCardRank`, but that hook **also feeds the autonomous
+`MTG_PLAN_SPACE_CAP`**, so changing it can move ground truth and needs its own measured A/B — which
+is why I did not ship it blind at 3am. **This is the top open engineering item.**
+
+Practical note for playing references in the morning: this bites only once the board is
+artifact-heavy (~20 artifacts, i.e. mid-go-off). Before that the menu is complete. There is no
+usable env-var workaround — `MTG_VIEWER_PLAN_CAP=0` is correct in principle but takes minutes per
+click on this deck.
+
+### Fixed during the sweep: the protocol printed every creature's P/T with no Equipment
+
+Found by the same sweep and **fixed + verified**: all four P/T label sites in the decision protocol
+summed only the state-free reads, so a Sram wearing eight Equipment printed as **"(2/2)"** while
+attacking for 19 — and this is the only P/T the protocol prints anywhere, so a player had no way to
+read their own clock. Dwalin's hone counters were invisible by the same omission. The four sites now
+share one `ProtocolLivePT`/`ProtocolPTLabel` helper (three of them were also missing the older
+characteristic-defining-base and lord-bonus fixes, so the drift WAS the bug). Verified on the exact
+reported frame: that label now reads **"Sram, Senior Edificer (16/15)"**. Chooser-guarded, so
+ground-truth inert — smoke re-run after the fix: 104 passed, `play-changed=0`.
+
+### A convergent heuristic finding (NOT a bug) — three agents found it independently
+
+At `--depth 0` the cast-order heuristic **dumps free Equipment before deploying the draw engine**,
+forfeiting the Sram/Puresteel draws that are the deck's whole plan; one game left Puresteel uncast
+for two turns with spare white mana and 10+ artifacts out. One agent verified the enumerator's plan
+**index 0** on the engine's own turn-7 board equips all 9 and wins that turn, so this is a *ranking
+preference, not an enumeration gap*; another reported it disappears at depth >= 1. Two concrete
+rules were proposed: *hold {0} Equipment while an uncast draw payoff is in hand*, and *play the
+land that enters tapped on a turn whose mana you will not spend*. This belongs to
+`heuristic-optimization` (measure, then adopt), not to rules correctness — and note the no-search
+ranker also serves as rollout/leaf policy, so it is not purely cosmetic.
+
 ## Open questions for the user (surfaced, NOT blocking — work continues)
 
 1. **Variant name.** I chose `v2-puresteel-hammer`. Fungus used a `candidate-<x>-<date>` slug for an

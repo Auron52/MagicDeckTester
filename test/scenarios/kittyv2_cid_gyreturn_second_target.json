@@ -1,0 +1,39 @@
+{
+ "_comment": "The SECOND legal graveyard Equipment for Cid's rebuy. Paired with kittyv2_cid_gyreturn_equipment: asserting only one target would still pass if the enumeration collapsed to a first-match, which the core invariant forbids (one Action per distinct legal graveyard NAME, carried on tutor_target and folded into the plan signature).",
+ "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {
+   "name": "Cid, Freeflier Pilot",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [],
+ "graveyard": [
+  "Colossus Hammer",
+  "Bone Saw",
+  "Plains"
+ ],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 1,
+ "budget_ms": 200,
+ "validate_line": "gyreturn=Bone Saw",
+ "expect_verdict": "accept"
+}

@@ -1,0 +1,39 @@
+{
+ "_comment": "NEGATIVE control for Cid's rebuy target filter: Plains is in the graveyard but is not an Equipment, so gy_return_requires_subtype must reject it. Without this, a filter that returned everything would still pass the two positive fixtures.",
+ "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {
+   "name": "Cid, Freeflier Pilot",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [],
+ "graveyard": [
+  "Colossus Hammer",
+  "Bone Saw",
+  "Plains"
+ ],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 1,
+ "budget_ms": 200,
+ "validate_line": "gyreturn=Plains",
+ "expect_verdict": "illegal"
+}

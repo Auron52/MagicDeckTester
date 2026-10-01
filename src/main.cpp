@@ -2432,6 +2432,48 @@ static void CollectOwnCreatureTargets(const GameState& s, int controller,
     }
 }
 
+// The LIVE power/toughness to show a human, as one helper shared by every label the decision
+// protocol prints -- because this is the ONLY place the protocol prints a P/T at all (the board
+// serialisation carries none), so a number missing here is a number the player cannot get.
+//
+// It has now been wrong twice for the same reason: a label that sums only the state-free reads.
+// The first miss showed Daxos as a dying "2/0" (characteristic-defining base), and was fixed at
+// ONE of the four label sites. The second was found by the KittyEquipment v2 5d sweep: the sites
+// ignored ATTACHED AURAS AND EQUIPMENT, so on an Equipment deck a player read their lethal 19/17
+// Sram -- eight Equipment and a Colossus Hammer deep -- as a "2/2". Dwalin's hone counters were
+// invisible by the same omission, since that bonus rides EquipBonusFor rather than a +1/+1 counter.
+// Hence ONE helper, used by all four sites: the drift is the bug.
+//
+// Chooser-guarded and therefore GROUND-TRUTH INERT -- these labels are built only when a human
+// chooser is live; the search never reads them. Tokens are handled: they have no CardDatabase
+// entry, so the definition-dependent terms are skipped rather than dropping the creature.
+static std::pair<int,int> ProtocolLivePT(const Permanent& p, const GameState& s)
+{
+    int pw = p.EffectivePower(), tf = p.EffectiveToughness();
+    if (const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card))
+    {
+        pw += DynamicBasePower(*pd, s, p.controller_index);
+        tf += DynamicBaseToughness(*pd, s, p.controller_index);
+    }
+    const auto lb = ComputeLordBonus(p.card, s, p.controller_index, p.AnimatedAllTypes(), &p);
+    pw += lb.first;  tf += lb.second;
+    const auto ab = AuraBonusFor(p, s);     // attached Auras (+ the Kor self-buff)
+    pw += ab.first;  tf += ab.second;
+    const auto eb = EquipBonusFor(p, s);    // attached Equipment, incl. hone counters and the
+    pw += eb.first;  tf += eb.second;       // per-equipment scalers (Golem-Skin Gauntlets)
+    return { pw, tf };
+}
+
+// Render "<name> (P/T)" for a creature, or just the name for anything else -- a land or a Food
+// token has no P/T and "Island (0/0)" reads as a bug.
+static std::string ProtocolPTLabel(const Permanent& p, const GameState& s)
+{
+    if (!p.card.IsCreature()) { return p.card.m_name.str(); }
+    const auto pt = ProtocolLivePT(p, s);
+    return p.card.m_name.str() + " (" + std::to_string(pt.first) + "/"
+           + std::to_string(pt.second) + ")";
+}
+
 // The OPPONENT's creatures, in board order -- the legal targets for a creature-removal spell (Swords
 // to Plowshares exiles a creature and its controller gains life = its power; a Tainted Remedy / Plague
 // Drone flips that gain to a loss). kind==1 (permanent), index == battlefield index. No faces / own
@@ -2449,8 +2491,7 @@ static void CollectOpponentCreatureTargets(const GameState& s, int controller,
         // Permanent, so no definition is needed for the label either.
         if (!p.card.IsCreature()) { continue; }
         out.push_back({ 1, i });
-        labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) +
-                         "/" + std::to_string(p.EffectiveToughness()) + ")");
+        labels.push_back(ProtocolPTLabel(p, s));
     }
 }
 
@@ -2471,8 +2512,7 @@ static void CollectCreatureTargets(const GameState& s, int controller,
         const bool mine = (p.controller_index == controller);
         if (mine && !legacy_shroud && CreatureHasShroud(p, s)) { continue; }
         out.push_back({ 1, i });
-        labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) + "/"
-                         + std::to_string(p.EffectiveToughness()) + (mine ? ", yours)" : ")"));
+        labels.push_back(ProtocolPTLabel(p, s) + (mine ? " (yours)" : ""));
     }
 }
 
@@ -5670,23 +5710,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
                 // Power/toughness only for creatures -- a land or a Food token has none, and
                 // "Island (0/0)" reads as a bug. "(yours)"/"(opponent)" is the same marker the
                 // damage-target collector uses, so the viewer's label normaliser already knows it.
-                std::string lbl = p.card.m_name.str();
-                if (p.card.IsCreature())
-                {
-                    // Live P/T: base + counters + temp (EffectivePower) PLUS the characteristic-
-                    // defining base (Daxos: toughness = devotion; Adeline) and the static buffs the
-                    // combat/SBA paths apply (ComputeLordBonus: lords, Serra Ascendant's 30-life
-                    // +5/+5). The state-free reads alone showed Daxos as a dying "2/0" (5d sweep).
-                    int pw = p.EffectivePower(), tf = p.EffectiveToughness();
-                    if (const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card))
-                    {
-                        pw += DynamicBasePower(*pd, s, p.controller_index);
-                        tf += DynamicBaseToughness(*pd, s, p.controller_index);
-                    }
-                    const auto lb = ComputeLordBonus(p.card, s, p.controller_index, p.AnimatedAllTypes(), &p);
-                    pw += lb.first; tf += lb.second;
-                    lbl += " (" + std::to_string(pw) + "/" + std::to_string(tf) + ")";
-                }
+                std::string lbl = ProtocolPTLabel(p, s);
                 lbl += (p.controller_index == controller ? " (yours)" : " (opponent)");
                 legal_labels.push_back(lbl);
             }
@@ -5885,8 +5909,7 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
                 {
                     const Permanent& p = s.battlefield[t];
                     const bool mine = (p.controller_index == controller);
-                    legal_labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) + "/"
-                                           + std::to_string(p.EffectiveToughness()) + (mine ? ", yours)" : ")"));
+                    legal_labels.push_back(ProtocolPTLabel(p, s) + (mine ? " (yours)" : ""));
                 }
                 else { legal_labels.push_back("?"); }
             }
