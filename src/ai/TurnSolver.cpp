@@ -5397,8 +5397,39 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     // SimulateToEndImpl UNCHANGED -- rescuing there recurses without a decrementing bound.
     // OPTIMISTIC where you BRANCH, HONEST where you SCORE.
     const DecisionProvider& prov = ResolveProvider(state);
-    const bool searched = !in_rollout
-                       || (prov.SearchesRolloutSecondMain() && depth > 0);
+    // *** USER DOCTRINE, re-asserted 2026-10-01 -- READ THIS BEFORE WEAKENING THE GATE BELOW. ***
+    //   "There should be no greedy in the search window! Full stop!"
+    //   "We either do not consider the main at all, or we search it."
+    // This is the SECOND time the ruling has been given: it is already recorded verbatim at
+    // AntiLifegainProvider::SearchesRolloutSecondMain as USER 2026-08-23 ("We shouldn't have any
+    // greedy within the searched window"), where it was then parked behind a default-OFF lever
+    // (MTG_AL_SSM_ROLLOUT) because searching measured WORSE on that deck (+12 turns / 3000 train
+    // games at d3, non-monotone). The user has now ruled that the measurement does not overrule the
+    // doctrine. So the rollout site is SEARCHED for EVERY deck whenever depth > 0, and the old
+    // greedy-unless-the-provider-opted-in default is gone.
+    //
+    // WHAT THE depth > 0 SCOPE IS, because it is NOT an exception to the ruling. depth <= 0 at this
+    // site IS the horizon playout -- the same leaf whose first main is site 90's greedy Solve -- and
+    // greedy BEYOND the horizon is permitted by USER 2026-09-05 ("greedy is allowed only beyond the
+    // search horizon"). Searching it is also structurally impossible as written: the rescued call
+    // re-enters SolveWithLookahead(depth=1), whose own rollout returns here at depth 0 with
+    // in_rollout=true, and `depth` passes through SimulateToEndImpl UNCHANGED -- so it recurses
+    // without a decrementing bound. Closing that needs a decrementing rescue bound, not a flag.
+    //
+    // THE OTHER SANCTIONED ROUTE IS NOT MINE TO TAKE. "Do not consider the main at all" is
+    // explicitly allowed by the ruling and measured CHEAPER than searching on AL (removing the
+    // rollout m2 entirely cost +7 where searching cost +12) -- but the USER added: *"not considering
+    // the main is something that you should get user approval for at some point if that is the right
+    // call"*. So it is a PROPOSAL to bring back with measurement, never a default an agent picks.
+    //
+    // If searching shows budget dilution, the first remedy is MTG_M2_CAP1 (one-ply interior solve --
+    // still searched, no greedy pick), which is what the AL note names as the strict-win route.
+    // MTG_SSM_ROLLOUT=0 restores the old per-deck behaviour EXACTLY (the `||` keeps the three
+    // opted-in providers true) and exists to measure the doctrine-VIOLATING arm, not to ship it.
+    static const bool s_ssm_rollout_env = EnvOn("MTG_SSM_ROLLOUT", true);
+    const bool ssm_rollout = heurarm::Flag(heurarm::SSM_ROLLOUT,
+                                           s_ssm_rollout_env || prov.SearchesRolloutSecondMain());
+    const bool searched = !in_rollout || (ssm_rollout && depth > 0);
     // MTG_M2_SEARCH_DEPTH=<n>: cap the interior m2 solve's depth (value-carrying; unset/<=0 = no
     // cap = full sub_depth, the 5C-adopted behaviour). n=1 is the "lean form" second-main-greedy.md
     // item 2 recorded: enumerate the m2 candidate set and score each with ONE playout, instead of

@@ -587,10 +587,17 @@ def cmd_heavy(args):
               f"{fmt_pct(ratio(eh,eh+em))} hit rate"
               + (f"   (nested {r['enum_nested_hits']:,}/{r['enum_nested_misses']:,})"
                  if r.get("enum_nested_misses", 0) or r.get("enum_nested_hits", 0) else ""))
-        if r.get("space_dedup", 0):
-            print(f"            walk dedup removed {r['space_dedup']:,} of "
-                  f"{r.get('space_plans',0)+r['space_dedup']:,} emitted plans "
-                  f"({ratio(r['space_dedup'], r.get('space_plans',0)+r['space_dedup'])*100:.1f}%)")
+        # space_plans is Slot::raw = plans.size() BEFORE the signature dedup; space_dedup is
+        # Slot::dedup = deduped.size() = the SURVIVORS (see RecordShape's call site in
+        # TurnSolver.cpp -- it passes plans.size() then deduped.size()). So the removals are the
+        # DIFFERENCE, not space_dedup itself. An earlier version printed space_dedup as "removed"
+        # over a (plans + dedup) denominator, which reads ~50% precisely when NOTHING was removed
+        # (dedup == plans) -- it reported the duplicate rate of this archetype as 47% when it is
+        # ~12%, i.e. the metric got MORE alarming the fewer duplicates there were.
+        if r.get("space_plans", 0):
+            raw, kept = r.get("space_plans", 0), r.get("space_dedup", 0)
+            print(f"            walk dedup removed {raw - kept:,} of {raw:,} emitted plans "
+                  f"({ratio(raw - kept, raw)*100:.1f}%)")
         if r.get("dedup_seen", 0):
             print(f"            candidate dedup {r['dedup_dup']:,} dups of {r['dedup_seen']:,} "
                   f"consultations ({ratio(r['dedup_dup'],r['dedup_seen'])*100:.1f}%)")

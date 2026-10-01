@@ -743,8 +743,20 @@ public:
 
     // SearchesRolloutSecondMain -- the ROLLOUT site of the interior second main:
     // SimulateToEndImpl's per-turn second main, i.e. the playout policy of the LEAF ESTIMATOR.
-    // Not a decision: a scoring device. Greedy here is by DESIGN ("HONEST where you SCORE"), and
-    // it is the ONE place in this area a provider may still choose:
+    // *** SUPERSEDED 2026-10-01 -- THIS HOOK NO LONGER DECIDES WHETHER GREEDY IS ALLOWED. ***
+    // USER: "There should be no greedy in the search window! Full stop!" and "We either do not
+    // consider the main at all, or we search it." MTG_SSM_ROLLOUT (heurarm::SSM_ROLLOUT, default ON)
+    // now searches this site for EVERY deck whenever depth > 0; see the gate in TurnSolver.cpp for
+    // the full ruling and the depth<=0 scope. An override to `true` here is therefore redundant but
+    // harmless (it is OR'd in, so it keeps that deck searched when MTG_SSM_ROLLOUT=0 is used to
+    // measure the doctrine-violating arm). An override to `false` NO LONGER HAS ANY EFFECT, and
+    // adding one to make a deck cheaper is the thing the ruling forbids.
+    //
+    // THE MEASUREMENT BELOW STILL STANDS AS A MEASUREMENT -- it is retained because it says what
+    // this costs, not because it licenses an opt-out. The user has ruled that it does not.
+    //
+    // Not a decision: a scoring device. Greedy here WAS by DESIGN ("HONEST where you SCORE"), and
+    // this was the ONE place in this area a provider could still choose:
     //
     // Anti-Lifegain measured the split and it is large and one-directional. Searching the rollout
     // site costs +12 turns / 3000 train games at d3, reproduced in all five shuffle realisations
