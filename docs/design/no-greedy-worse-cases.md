@@ -172,3 +172,34 @@ Scenarios 118/118; reference replay gate PASS (0 play-drift, 0 enum-gap; 35 ok v
 | hinata d3 s2002 gi69 | 6 -> 7 | 6 | 6 |
 
 All recover at d8 b0 (gi428 beats GT there). Budget churn.
+
+## Checkpoint 4 (steps 20-29), all three tiers vs the previous GT -- 2026-10-01, ACCEPTED
+
+Searched depths 722 faster / 269 slower, net -435 (smoke -42, regression -49, overnight -344); d0 +135,
+all slivers d0 (greedy runner, deferred -- see the d0 section above). Every searched slower game was
+re-run at `--depth 8 --budget-ms 0`: the non-hinata ones on the final binary (they are byte-identical
+with or without step 30), the hinata ones on the purge-only binary. All recover except these nine,
+each checked on the committed-tree binary and on the step-27 snapshot at the same settings:
+
+| game | GT | d8 b0 now | committed tree | step 27 | verdict |
+|---|---|---|---|---|---|
+| dragonstorm ov d5 s4004 gi107 | 5 | 6 | 6 | 6 | pre-existing |
+| hinata smoke d3 s1001 gi110 | 6 | 7 | 7 | 7 | pre-existing |
+| hinata ov d3 s5005 gi308 | 4 | 5 | 5 | 5 | pre-existing |
+| hinata ov d3 s4004 gi355 | 5 | 6 | 6 | 6 | pre-existing |
+| hinata ov d5 s7007 gi75 | 5 | 6 | 6 | 6 | pre-existing |
+| hinata ov d5 s7007 gi161 | 5 | 6 | 6 | 6 | pre-existing |
+| hinata2hg ov d5 s7007 gi75 | 5 | 6 | 6 | 6 | pre-existing |
+| hinata2hg ov d5 s6006 gi61 | 5 | 6 | 5 | 6 | lost at a step <= 27; OPEN |
+| hinata ov d5 s5005 gi13 | 6 | 7 | 6 | 7 | Gamble lockstep: the executor's index pick discards a Reality Spasm the verified T5 line casts; step 30 (canonical pick) -> T5 |
+| hinata reg d5 s2002 gi25 | 5 | 6 | 5 | 5 | **OPEN -- a verified line the executor does not realise.** The T1 search (searched depth 5, verified) commits a T5 win; at T5 the executor casts Soulfire Eruption, takes the line's EMPTY continuation at its look, then pops a SECOND main-2 phase (Island + Reality Spasm x6 + Gamble, without the Expressive Iteration the line holds) and the kill does not happen -> T6. Not the Gamble discard: search and executor both shed Ornithopter on the same hand. Exposed, not caused, by step 29a (the full Ponder order changes the T1 line: Preordain where the committed tree casts Ponder). Under step 30's canonical pick the game realises T5 |
+
+Per-deck searched cells still above GT -- all churn (their slower games recover at d8 b0): th reg +5,
+antilife ov +4, antilife2hg ov +3 / reg +2, slivers reg +2, mirrorwing ov +1, stompy ov +1,
+dragonstorm2hg smoke +1, slivers2hg smoke +1. Tracked for the mitigation phase.
+
+**Step 30 split out (Gamble's canonical discard).** It re-deals which card a random discard takes, so a
+Gamble game becomes a DIFFERENT game -- the d8-b0 recovery test does not apply to it. The 33 hinata games
+that failed to recover on the first candidate (which carried step 30) all recovered on that binary with
+only the pick reverted (32/33; the 33rd is gi61 above), and hinata_d0 matched GT exactly. So it is its own
+commit with its own GT.

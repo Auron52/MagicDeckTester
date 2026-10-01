@@ -21,7 +21,7 @@ real strategy from clairvoyance on that class.
 | `MTG_BP_SEARCH` | 2 | Measured bp-waves adoption; width is the searched breakpoint-continuation fan. Review = confirm the measurement stands under Rule 0c, not re-measure by default. |
 | `MTG_SCRY_WIDTH` | 2 | Land-ETB scry/surveil disposition fan. Library-order-adjacent → decouple ensemble applies. |
 | `MTG_ETBDIG_WIDTH` | 3 | ETB-dig pick fan (Acclaimed Contender class). Library-order-adjacent. |
-| `MTG_PONDER_ORDER_WIDTH` | 4 | Ponder reorder fan. Library-order class. |
+| ~~`MTG_PONDER_ORDER_WIDTH`~~ | DELETED 2026-10-01 | Replaced by the COMPLETE disposition set (every order of the looked-at cards + the shuffle, m!+1 = 7 at m = 3) under the no-greedy purge (`no-greedy-in-search-window.md` step 29): the top-card-only narrowing lost hinata gi230 a turn at d8 unbounded. The three cards are SEEN, so ordering them is real information, not draw-order clairvoyance; only the SHUFFLE arm's valuation stays in the clairvoyant class, unchanged by this. USER review still welcome on the cost side (Hinata). |
 | `MTG_LACKEY_WIDTH` | 2 | Lackey combat-cheat put fan (plus MTG_LACKEY_RANK orderings). Board-facing, not library-facing — plain measurement suffices. |
 
 Perf context (why this is not urgent as a *cost* item): Hinata's w2-vs-w6 tutor probe was

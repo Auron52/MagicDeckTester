@@ -942,10 +942,10 @@ public:
         // Mountain was strictly better and would have been the search's fourth land.
         int tectonic_keep_choice = -1;
 
-        // Ponder-style REORDER disposition: which candidate of ReorderCandidatesNarrow the reorder
-        // takes. -1 == the provider heuristic, byte-identical to no branch. Narrow by construction
-        // (shuffle + one variant per distinct TOP card) because Ponder draws immediately, so only
-        // the top card is received now; the full m! permutation set is mostly waste. Pinned for the
+        // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
+        // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set
+        // (every order + the shuffle): the rest of the order is the next turns' draws, which the
+        // line search sees (a top-card-only narrowing lost hinata gi230/gi13 a turn). Pinned for the
         // apply via ScriptedReorder -- a SEPARATE pin from scry_choice, which the first look of any
         // kind consumes.
         int ponder_choice = -1;

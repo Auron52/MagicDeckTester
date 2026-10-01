@@ -812,3 +812,44 @@ the creature. The one searched loss that was not that (th gi80) was the section-
 window failing to reset at inline breakpoints, which double-armed site 10 and made the EMPTY overrun
 rank unreachable -- `breakpoints-should-key-on-hand-entry.md`, 2026-09-27. After both: no searched
 smoke loss under `MTG_BP_HAND_ENTRY=1` survives b0; shipped defaults 97/0/0 byte-identical.
+
+
+## 2026-10-01 — the stillborn test is ADOPTED (unconditional), and it was not sound until three holes closed
+
+`MTG_BP_ARM_NEW` is deleted; the test runs in both mains (`ArmNewDupAll`, purge step 28 in
+`no-greedy-in-search-window.md`). The adoption argument changed from wall clock to UNITS: the budget
+is deterministic units, so every declined apply is a unit handed back to real search, which is what
+the purge's residual budget churn needs. The emission side now covers EVERY wave-0 variant kind
+(rank, EMPTY arm, uniform, chain), not just ranks.
+
+The 2026-09-27 soundness argument above had three holes, and all three were found by the same instrument --
+`MTG_ARMNEW_VERIFY=1`, which applies every would-be-declined variant anyway and compares its
+post-apply dedup key with its base plan's. The first cut compared **79,642 of 1.38M unequal**.
+
+1. **"bp_choice cannot create a breakpoint" is false at site 9** (post-entry activation). Its gate
+   requires a bp_choice, so a base plan passes it counting nothing while every variant applies a
+   continuation there (CritterLifegain: Heliod, then the variant casts Ocelot Pride). New monotonic
+   counter `g_bp_latent9_last`: a base plan records where a variant's site 9 would fire, and the
+   decline requires it unmoved. The decline also reads the ANY-class count now, not just class-on.
+   The same false identity sat under `SolveWithLookahead`'s two default-on NOBP gates
+   (`MTG_BP_W0_NOBP`, `MTG_BP_WAVE_NOBP`), where it did real damage: `PlanOpensBreakpoint` selects
+   site-9 plans, and the gates then skipped every variant of a plan whose base reached no other
+   breakpoint -- the post-entry activation line was unreachable at d3/d5.
+2. **"one class-on breakpoint with an EMPTY list" did not mean "the base resolved EMPTY" at site 8**
+   (Snow's look). An unresolved look continuation played a found LAND directly (the narrow
+   replacement for the deleted greedy Solve). The list is empty there exactly when the new-only filter
+   ruled the land a sibling's line (same name as a land the plan held and chose not to play), so the
+   play overrode the plan's own deliberate defer -- unrecorded, so the executor could not replay it --
+   while the EMPTY arm, the same line, played nothing. Gated out of the search window (list
+   authoritative: top level, outside rollouts, canon on, site 8 class-on); rollouts keep it.
+
+3. **"one class-on breakpoint with an EMPTY list" was measured at the WRONG POINT for an unhosted base.**
+   At a deferred draw (sites 3 / 5 / 6) every variant truncates its tail at the draw (`node_owns_site`
+   holds for any plan carrying a bp_choice), but a base plan truncates only when its caller hosts the
+   node -- which main 2 often does not. The base then cast its whole tail and measured the list after
+   it (empty), while every variant picked from the real list before it: 288 residual unequal declines,
+   all Hinata main-2 cantrip + Magma Opus. New monotonic counter `g_bp_truncasym_last`; the decline
+   requires it unmoved.
+
+After all three: the 26-deck d3 b0 gate compares **0 of 1.22M** declined variants unequal, and the
+decline arm is byte-identical to the verify arm on every deck (units -0.43%).

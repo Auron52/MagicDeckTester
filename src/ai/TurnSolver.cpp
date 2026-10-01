@@ -915,13 +915,17 @@ static std::atomic<long long> g_bp_newonly_kept_new{0};
 static std::atomic<long long> g_bp_newonly_kept_plan{0};
 static std::atomic<long long> g_bp_newonly_kept_act{0};      // kept by a newly AVAILABLE activation
 static std::atomic<long long> g_bp_newonly_kept_unknown{0};  // kept because the kind is not keyed
-// MTG_BP_ARM_NEW firing counters (see BpArmNewOn, far below). `measured` = base-plan applies that
-// asked the enumerator for a breakpoint's continuation length, `empty` = those that found no new
-// line, `declined` = wave-0 rank variants skipped as a result. At file scope only because the
-// rollout-stats reporter above reads them.
+// WAVE 0's STILLBORN TEST firing counters (see ArmNewDupAll, far below). `measured` = base-plan
+// applies that asked the enumerator for a breakpoint's continuation length, `empty` = those that
+// found no new line, `declined` = wave-0 variants skipped as a result (m1 / m2). The verify pair is
+// MTG_ARMNEW_VERIFY's: a would-be-declined variant applied anyway and its state compared with its
+// base plan's -- `mismatch` must read 0. At file scope only because the reporter above reads them.
 static std::atomic<long long> g_bp_armnew_measured{0};
 static std::atomic<long long> g_bp_armnew_empty{0};
 static std::atomic<long long> g_bp_armnew_declined{0};
+static std::atomic<long long> g_bp_armnew_declined_m2{0};
+static std::atomic<long long> g_bp_armnew_verify_match{0};
+static std::atomic<long long> g_bp_armnew_verify_mismatch{0};
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
 static std::atomic<long long> g_bp_cond_mark_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
@@ -1521,6 +1525,10 @@ namespace
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
                       << " m2_variant_dup_skips=" << g_m2_variant_dup_skips.load()
                       << " m2_stillborn_skips=" << g_m2_stillborn_skips.load()
+                      << " armnew_declined_m1=" << g_bp_armnew_declined.load()
+                      << " armnew_declined_m2=" << g_bp_armnew_declined_m2.load()
+                      << " armnew_verify_match=" << g_bp_armnew_verify_match.load()
+                      << " armnew_verify_mismatch=" << g_bp_armnew_verify_mismatch.load()
                       << " le_variants=" << g_axis_le_vars.load() << "\n";
             std::cerr << "[rollout-stats] nodrop_axes m1: enums=" << g_nodrop_enum[1].load()
                       << " axis_variants=" << g_nodrop_axis_vars[1].load()
@@ -1734,7 +1742,7 @@ namespace
                           << " kept_unknown=" << g_bp_newonly_kept_unknown.load()
                           << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
             }
-            // MTG_BP_ARM_NEW firing counters (see BpArmNewOn). `declined` == 0 with measured > 0 is
+            // Stillborn-test firing counters (see ArmNewDupAll). `declined` == 0 with measured > 0 is
             // the inert-arm signature: the rule looked at breakpoints and never skipped anything.
             if (g_bp_armnew_measured.load() > 0)
             {
@@ -4269,18 +4277,28 @@ bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
     return BpNewOnlyActive(state);
 }
 
-// MTG_BP_ARM_NEW -- WAVE 0's stillborn test: a breakpoint that offers NO new line gets no variants,
+// WAVE 0's STILLBORN TEST (was MTG_BP_ARM_NEW; unconditional since 2026-10-01, step 28 of
+// docs/design/no-greedy-in-search-window.md): a breakpoint that offers NO new line gets no variants,
 // because "do nothing" is the base plan's own line and the base plan is already being played out.
-// Full argument and the measurement at g_bp_base_lens. DEFAULT OFF (measuring).
+// Full argument and the measurement at g_bp_base_lens; the decision is ArmNewDupAll.
 //
 // PLAY-NEUTRAL BY CONSTRUCTION, and that is the gate to check it on: a declined variant would have
-// overrun its empty list, resolved to the unconditional EMPTY continuation, and landed on the state
-// the base plan's own apply produces -- which bp_seen_states already recognises and skips. So the
-// prediction is IDENTICAL digests with strictly fewer units, and both halves must be verified: a
-// digest match alone is also what a silently inert arm looks like (see the firing counters below).
-static bool BpArmNewOn()
+// landed on the state the base plan's own apply produces, which the post-apply dedup already
+// recognises and skips -- AFTER charging it a unit. So the prediction is IDENTICAL digests at
+// --budget-ms 0 with strictly fewer units, and both halves must be verified: a digest match alone is
+// also what a silently inert arm looks like (see the firing counters).
+//
+// ADOPTED ON UNITS, NOT WALL. The 2026-09-27 measurement left it off because wall clock did not move
+// (the declined applies are cheap). The budget is deterministic UNITS, and every declined apply is a
+// unit returned to real search -- which is exactly what the no-greedy purge's residual budget churn
+// needs.
+//
+// MTG_ARMNEW_VERIFY=1 (diagnosis only): apply every would-be-declined variant anyway and compare its
+// post-apply state with its base plan's. Play is then byte-identical to a build without the skip, and
+// armnew_verify_mismatch (rollout-stats) must read 0.
+static bool ArmNewVerifyOn()
 {
-    static const bool on = EnvOn("MTG_BP_ARM_NEW");
+    static const bool on = EnvOn("MTG_ARMNEW_VERIFY");
     return on;
 }
 // Firing counters are declared with the other bp_newonly ones (the rollout-stats reporter above
@@ -13678,23 +13696,17 @@ static bool PonderAxisPartial()
     static const bool on = EnvOn("MTG_PONDER_PARTIAL");
     return on;
 }
-// ORDER axis: branch on the disposition (which card ends up on TOP, plus shuffle) rather than only
-// keep-vs-shuffle. Ponder draws immediately, so the top card is the one received now.
+// ORDER axis: branch on the FULL disposition -- every order of the looked-at cards, plus the
+// shuffle -- rather than only keep-vs-shuffle. Ponder draws the top card now, and the line search
+// knows the library, so the order of the REST is the next turns' draws: it is a decision too.
+// (2026-10-01: a top-card-only narrowing, MTG_PONDER_ORDER_WIDTH, dropped every order but the
+// heuristic's tail, and when the heuristic SHUFFLED the tail fell back to library order. hinata
+// s4004 gi230 and s5005 gi13 lost a turn at d8 unbounded: "Mountain now, Expressive Iteration
+// next" was no longer a candidate. Full set = m! + 1 options, 7 at Ponder's m = 3.)
 // UNCONDITIONAL since 2026-09-30 (MTG_PONDER_ORDER deleted; USER HARD RULE,
 // docs/design/no-greedy-in-search-window.md): with keep-vs-shuffle alone, WHICH looked-at card is
 // drawn right now was the resolution heuristic's pick, unbranched, inside the search window.
 static bool PonderOrderAxis() { return true; }
-static std::size_t PonderOrderWidth()
-{
-    static const std::size_t w = []() -> std::size_t
-    {
-        const char* v = std::getenv("MTG_PONDER_ORDER_WIDTH");
-        if (v == nullptr || *v == '\0') { return 4; }   // heuristic + shuffle + 2 top-card variants
-        const int n = std::atoi(v);
-        return n < 1 ? 1 : static_cast<std::size_t>(n);
-    }();
-    return w;
-}
 
 // Is the top `n` of the library a MIXED set (some wanted, some not)? Used only to decide whether the
 // partial axis bothers emitting a variant; read off the library as it stands at enumeration time,
@@ -15534,7 +15546,7 @@ static thread_local int g_bp_cands_last = 0;
 static thread_local std::vector<int> g_bp_base_lens;
 
 // ...AND HOW MANY CLASS-ON BREAKPOINTS THE APPLY REACHED IN TOTAL. Required for soundness, and the
-// first cut was wrong without it: smoke at shipped defaults read 95 passed / 2 failed (burn d3 gi16,
+// first cut (2026-09-27) was wrong without it: smoke at shipped defaults read 95 passed / 2 failed (burn d3 gi16,
 // hinata d5 gi9), both "score unchanged, play differs".
 //
 // WHY A DECLINED VARIANT IS NOT ALWAYS ITS BASE PLAN'S LINE. The identity argument is that a variant
@@ -15549,7 +15561,8 @@ static thread_local std::vector<int> g_bp_base_lens;
 // nothing else covers it.
 //
 // So the decline requires an EXACT identity: one class-on breakpoint, and its list empty.
-static thread_local int g_bp_base_bps = 0;
+// The total is no longer a reset counter of its own: ArmNewDupAll reads it as a DELTA on the
+// monotonic g_bp_classon_last, which a nested apply can only inflate (the safe direction).
 
 // The same trick for the OTHER axis: how many breakpoints of a searchable class did this apply
 // actually reach? `bp_at` indexes them, and wave 0 only ever emits bp_at < BpSearchDepth(), so a
@@ -15589,6 +15602,60 @@ static thread_local std::uint64_t g_bp_any_last = 0;
 // delta of <= 1 here is exactly the condition under which the two arms are the same candidate,
 // whereas a delta of <= 1 on g_bp_any_last would be neither necessary nor sufficient.
 static thread_local std::uint64_t g_bp_classon_last = 0;
+// ...and the one breakpoint a BASE plan cannot see itself reach: site 9 (post-entry activation)
+// opens ONLY for a plan carrying a bp_choice (see its gate in ApplyPlanDirect), so a base plan's
+// apply counts nothing there while every one of its variants applies a continuation. Bumped by a
+// measuring base apply (the same scope as g_bp_base_lens) where a variant's site 9 WOULD fire;
+// monotonic, delta-read by ArmNewDupAll like the two counters above.
+static thread_local std::uint64_t g_bp_latent9_last = 0;
+// ...and the partition a BASE plan does not take: a deferred-draw site (3 / 5 / 6) truncates the
+// plan's tail through node_owns_site, which holds for every variant (it carries a bp_choice) but
+// for a base plan only when its caller hosts the node. An unhosted base therefore casts its whole
+// tail and resolves the breakpoint AFTERWARDS -- typically against an empty list -- while each of
+// its variants stops at the draw and picks from the real one. MEASURED (MTG_ARMNEW_VERIFY, 26-cell
+// b0 gate): all 288 residual unequal declines were this, every one a Hinata main-2 cantrip +
+// Magma Opus base whose measured n = 0 was taken post-Opus (unt=3/8) while its variants saw 3-5
+// continuations pre-Opus (unt=7/8). Bumped where a measuring base apply skips a truncation its
+// variants would take; monotonic, delta-read by ArmNewDupAll like the counters above.
+static thread_local std::uint64_t g_bp_truncasym_last = 0;
+// THE STILLBORN DECISION (wave 0; see ArmNewVerifyOn): after a BASE plan's apply, is every wave-0
+// variant of it a guaranteed duplicate of that apply? The deltas are the three monotonic counters
+// after minus before the apply (g_bp_classon_last, g_bp_any_last, g_bp_latent9_last,
+// g_bp_truncasym_last), and the caller cleared g_bp_base_lens just before it. True exactly when
+//   * the apply reached NO breakpoint of ANY class, and no variant-only one either. bp_choice decides
+//     what to do AT a breakpoint, so every variant -- any rank, any bp_at, the EMPTY arm, the
+//     uniform and chain arms -- resolves nothing and replays the base plan's actions onto the same
+//     state. The two qualifiers are both MEASURED, not assumed (MTG_ARMNEW_VERIFY on the 26-cell
+//     b0 gate, 2026-10-01): a first cut that read only the class-on count compared 79,642 of 1.38M
+//     declined variants UNEQUAL to their base, every one in the rank/uniform kinds. The cause was
+//     site 9 (post-entry activation), the one breakpoint whose gate requires a bp_choice: a base
+//     plan passes it counting nothing while each variant applies a continuation there
+//     (CritterLifegain: Heliod, then the variant casts Ocelot Pride). g_bp_latent9_last records it;
+//     the any-class count closes the same hole for any other class the mask leaves off; or
+//   * it reached EXACTLY ONE, the base measured it at the SAME point its variants resolve it (no
+//     truncation asymmetry -- see g_bp_truncasym_last), and its list was EMPTY. Every variant resolves
+//     EMPTY there (an overrun, the EMPTY arm, a chain scan that finds nothing, or -- at a bp_at it
+//     never reaches -- NESTED_CANON's front() of the same empty list), which is what the base took,
+//     and with no second breakpoint nothing after it can differ (see g_bp_base_lens for the
+//     two-breakpoint case that is NOT an identity).
+// WHY THE DELTA IS SAFE UNDER RE-ENTRY: the counter is monotonic, so a nested apply (an enumeration
+// ranking its candidates) can only ADD to it; and g_bp_base_lens is pushed only by a base plan at
+// enumeration depth 0 outside rollouts, so one entry under a delta of one is the base's own.
+static bool ArmNewDupAll(const TurnSolver::Plan& base, std::uint64_t classon_delta,
+                         std::uint64_t any_delta, std::uint64_t latent9_delta,
+                         std::uint64_t truncasym_delta)
+{
+    if (base.bp_choice >= 0 || base.bp_all || !base.bp_wave0) { return false; }
+    // A variant-only breakpoint (site 9) the base passed: its variants are the ONLY carriers of
+    // that continuation (measured: CritterLifegain Heliod -> Ocelot Pride, 21% of the first cut's
+    // declines in the rank/uniform kinds were exactly this).
+    if (latent9_delta != 0) { return false; }
+    // The base resolved its one breakpoint at a different point from its variants (see
+    // g_bp_truncasym_last), so its measured list says nothing about theirs.
+    if (truncasym_delta != 0) { return false; }
+    if (any_delta == 0) { return true; }
+    return any_delta == 1 && classon_delta == 1 && g_bp_base_lens.size() == 1 && g_bp_base_lens[0] == 0;
+}
 // Where the CHAIN SCAN landed on this apply (MTG_DEDUP_CENSUS only): -2 = no chain slot resolved
 // here, -1 = the scan found no chainable continuation (so the slot fell through to EMPTY), >= 0 =
 // the index it took. Reset by the candidate loop before each apply, like g_bp_cands_last.
@@ -33286,11 +33353,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
     // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
     dmgev::BackstopFlush(state, "ApplyPlanDirect");
-    // MTG_BP_ARM_NEW: this apply's measured continuation lengths describe THIS apply only -- the
-    // same convention g_bp_cands_last is reset under, and for the same reason: a stale length from
-    // an earlier plan must never be attributed to this breakpoint. The candidate loop reads it
-    // immediately after the call returns, before anything nested can clear it again.
-    if (BpArmNewOn()) { g_bp_base_lens.clear(); g_bp_base_bps = 0; }
+    // g_bp_base_lens is NOT reset here: the candidate loops clear it immediately before a base plan's
+    // apply (see ArmNewDupAll). A reset at every apply's entry let a nested apply wipe the outer
+    // base plan's measurement mid-flight.
     PROF_INC(applyplan_calls);
     {
         static const bool s_lp = EnvOn("MTG_WINLESS_STATS");
@@ -33591,6 +33656,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         return BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0
             && (bp_capture != nullptr || plan.bp_choice >= 0);
+    };
+    // A measuring base apply (the g_bp_base_lens scope) that did NOT truncate at a deferred site
+    // where every variant of it would: record the asymmetry for ArmNewDupAll (g_bp_truncasym_last).
+    auto note_trunc_asym = [&](int site, bool truncated)
+    {
+        if (!truncated && !HumanPlayActive() && plan.bp_choice < 0 && !plan.bp_all
+            && g_bp_enum_depth == 0 && g_rollout_nest == 0
+            && BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0)
+        { ++g_bp_truncasym_last; }
     };
 
     // PARTITION TRUNCATION (MTG_EQUIP_DRAW_BP_INLINE). USER 2026-08-20/21: "we should only be
@@ -33943,7 +34017,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // phase opens it); the counter measures how much of the nesting lands there.
         const bool nested_blocked = plan.bp_choice >= 0 && class_on
                                  && seen_before >= BpSearchDepth();
-        // MTG_BP_ARM_NEW (see g_bp_base_lens): a BASE plan measures this breakpoint's continuation
+        // WAVE 0's STILLBORN TEST (see g_bp_base_lens, ArmNewDupAll): a BASE plan measures this breakpoint's continuation
         // list so the candidate loop can decline variants that could only replay the base's own
         // line. Base plans carry no bp_choice, so `eligible` is false for them and nothing below
         // enumerates -- this is the one place that can ask.
@@ -33964,12 +34038,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // a class-on breakpoint at apply time without having been marked before it. MEASURED: without
         // this gate the node saving was real (mirrorwing -5.35%) but wall clock went the WRONG WAY
         // (+3.44%), because the per-node cost rose by more than the nodes fell.
-        if (BpArmNewOn() && class_on && plan.bp_choice < 0 && !plan.bp_all && plan.bp_wave0
+        // (The TOTAL number of class-on breakpoints is read by the caller as a g_bp_classon_last
+        // delta, bumped above for every apply kind.)
+        if (class_on && plan.bp_choice < 0 && !plan.bp_all && plan.bp_wave0
             && g_bp_enum_depth == 0 && g_rollout_nest == 0 && !HumanPlayActive())
         {
-            // EVERY class-on breakpoint counts toward the total, whether or not wave 0 targets it --
-            // that is the whole point of the total (see g_bp_base_bps).
-            ++g_bp_base_bps;
             if (static_cast<int>(g_bp_base_lens.size()) < BpSearchDepth())
             {
                 const std::size_t n =
@@ -35640,6 +35713,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // thing the USER objected to: a tail derived against a hand that has not seen the
                 // draw. Everything after this cast is the continuation's to decide.
                 if (partition_here) { bp_truncate = true; }
+                note_trunc_asym(3, partition_here);
             }
             else
             {
@@ -36101,6 +36175,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // plain-cantrip branch does. Everything still unapplied belongs to the
                     // continuation's section -- and the continuation is what the node enumerates.
                     if (node_owns_site(5)) { bp_truncate = true; }
+                    note_trunc_asym(5, node_owns_site(5));
                 }
                 else if (def.params.cast_draw > 0)
                 {
@@ -36325,6 +36400,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // already truncates -- after its continuation's own apply -- so this is the
                     // deferred twin of a shape site 6 has always had, not a new one.
                     if (node_owns_site(6)) { bp_truncate = true; }
+                    note_trunc_asym(6, node_owns_site(6));
                 }
             }
             // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
@@ -37399,10 +37475,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             // are still fully expressible where they matter: the searched
                             // variants above and the executor's committed re-solve (which is
                             // NOT narrowed) both run the real continuation.
+                            //
+                            // NOT IN THE SEARCH WINDOW. Where the list is authoritative (top
+                            // level, outside rollouts, site 8 class-on, canon on), `searched` false
+                            // means it was EMPTY -- for a base plan (no front() to take) and for a
+                            // rank variant alike (a past-the-end rank) -- and a found land is
+                            // only missing from it when the new-only filter ruled it a sibling's
+                            // line (same name as a land the plan already held and chose not to
+                            // play). Playing it here overrode the plan's own deliberate defer, was
+                            // a one-option pick the list did not offer, and went UNRECORDED (no
+                            // sink), so the executor could not replay it. Found 2026-10-01 by
+                            // MTG_ARMNEW_VERIFY: Snow's base plan and its overrun rank variants
+                            // played the found Island while the EMPTY arm, the same line, did not.
+                            const bool window_base = g_rollout_nest == 0 && g_bp_enum_depth == 0
+                                                  && BpBaseCanon() > 0
+                                                  && ((BpSiteMask() >> 8) & 1) != 0;
                             const Player& lap2 = state.players[state.active_player_index];
                             const CardDefinition* fd2 =
                                 CardDatabase::Instance().LookupCached(lap2.hand.back());
-                            if (fd2 && fd2->card.IsLand())
+                            if (fd2 && fd2->card.IsLand() && !window_base)
                             {
                                 TurnSolver::Plan mini;
                                 mini.land_decided = true;
@@ -37802,6 +37893,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         g_bp_searchonly_suppressed = true;
     }
+    // The base plan's half of every "a base that reached no breakpoint has nothing to vary" test
+    // (ArmNewDupAll, and the wave-0 / wave-walker NOBP gates): this site opens for its variants
+    // only, so the base records that it WOULD have (see g_bp_latent9_last). Any top-level base plan
+    // -- the walker gate covers plans wave 0 never marked. Play-neutral (a counter).
+    if (!s_human_play && plan.bp_choice < 0 && !plan.bp_all
+        && g_bp_enum_depth == 0 && g_rollout_nest == 0
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
+    { ++g_bp_latent9_last; }
     if (!s_human_play && plan.bp_choice >= 0 && bp_seen == 0
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
@@ -44618,9 +44717,11 @@ namespace
     // THE IDENTITY IS THE STRONGEST ONE IN THIS FILE, and unlike the rank-0 identity (§9.6 of
     // docs/design/snow-branching-residual.md, refuted at 0.587) it does not depend on a canon flag,
     // a rollout depth, or which entry a list ranks first. A variant differs from its base plan ONLY
-    // at a breakpoint: bp_choice, bp_at and bp_all are read nowhere else in an apply. No breakpoint
-    // occurrence therefore means no read, which means the identical action list applied to the
-    // identical state -- the identical result. There is nothing for a missing condition to hide in.
+    // at a breakpoint: bp_choice, bp_at and bp_all are read nowhere else in an apply -- EXCEPT the
+    // gate of site 9 (post-entry activation), which opens only for a plan carrying a bp_choice, so a
+    // base plan passes it counting nothing. g_bp_latent9_last closes that: the base records where a
+    // variant's site 9 would fire, and the memo requires it unmoved (found 2026-10-01 by
+    // MTG_ARMNEW_VERIFY on the same identity in FSLineWin -- CritterLifegain Heliod -> Ocelot Pride).
     //
     // WHY WAVE 0 CAN KNOW IT. `candidates` holds every base plan before any variant
     // (AppendBreakpointVariants appends), so by the time the loop reaches a variant its base plan has
@@ -45757,18 +45858,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
                 if (PonderOrderAxis())
                 {
-                    // ORDER axis: branch on the DISPOSITION (which card ends up on top, plus the
-                    // shuffle), not just keep-vs-shuffle. Ponder draws immediately, so the top card
-                    // is what you actually receive; ReorderCandidatesNarrow keeps exactly the
-                    // options that differ in that card (m + 1) instead of every permutation (m! + 1).
-                    // Sized off the library as it stands now -- an earlier cantrip in the same plan
-                    // can shift it, and the pin clamps, so a stale size costs a wasted or missed
-                    // variant, never correctness.
+                    // ORDER axis: branch on the full DISPOSITION (every order of the looked-at
+                    // cards, plus the shuffle; see PonderOrderAxis). TopDispositionCandidates puts
+                    // the heuristic at index 0 (= this base plan) and drops its duplicate, so the
+                    // variants are indices 1..m!. Sized off the library as it stands now -- an
+                    // earlier cantrip in the same plan can shift it, and the pin clamps, so a stale
+                    // size costs a duplicate variant (skipped post-apply), never a missing order of
+                    // the cards actually looked at.
                     const int look = std::min(d->params.cast_reorder,
                                               static_cast<int>(ap.library.size()));
-                    const std::size_t k_max =
-                        std::min<std::size_t>(static_cast<std::size_t>(look) + 1, PonderOrderWidth());
-                    for (std::size_t k = 1; k < k_max; ++k)
+                    std::size_t k_max = 1;
+                    for (int f = 2; f <= look; ++f) { k_max *= static_cast<std::size_t>(f); }
+                    if (look <= 0) { k_max = 0; }
+                    for (std::size_t k = 1; k <= k_max; ++k)
                     {
                         TurnSolver::Plan v = p;
                         v.ponder_choice = static_cast<int>(k);
@@ -45900,11 +46002,27 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             { le_live = true; le_rate = std::max(le_rate, d->params.discard_land_damage); }
         }
         int lands_now = 0;
+        // Can a breakpoint CONTINUATION cast a Land's Edge this turn? One in hand, or one in the
+        // library a draw can reach. The fire point is at the end of main, AFTER the continuation,
+        // so a plan whose own actions cast nothing of the kind still fires an Edge its continuation
+        // cast. Gating the fan on the plan's own actions made that line inexpressible: th s6006 gi11
+        // (Treasure Hunt -> Fiery Islet + Land's Edge, then fire every land) lost a turn at d8
+        // unbounded once the executor-only fire-all trial was deleted (step 11).
+        bool le_reachable = false;
         for (const Card& c : state.players[ctrl].hand)
         {
             if (c.m_is_staged) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d ? d->card.IsLand() : c.IsLand()) { ++lands_now; }
+            if (d && d->params.discard_land_damage > 0) { le_reachable = true; }
+        }
+        if (!le_reachable)
+        {
+            for (const Card& c : state.players[ctrl].library)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.discard_land_damage > 0) { le_reachable = true; break; }
+            }
         }
         std::vector<TurnSolver::Plan> extra;
         for (const TurnSolver::Plan& p : all)
@@ -45920,8 +46038,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (d && d->params.discard_land_damage > 0) { casts_le = true; break; }
                 }
             }
-            if (!le_live && !casts_le) { continue; }
             const bool draws = PlanOpensBreakpoint(state, p) != 0;
+            if (!le_live && !casts_le && !(draws && le_reachable)) { continue; }
             const int  L = std::max(0, lands_now - (p.land_to_play.empty() ? 0 : 1));
             if (L == 0 && !draws) { continue; }
             // The provider prunes the fan (LandsEdgeFireCandidates; default hold / fire-all).
@@ -51617,7 +51735,21 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (g_m2fix_nest > 0)
             { m2stats::g_fix_decisions.fetch_add(1, std::memory_order_relaxed); }
         }
-        MoveOrderPlans(post);   // lethal-looking / higher-value second mains first -> earlier cutoff
+        // WAVE 0's STILLBORN TEST needs each BASE plan's PRE-sort index, because that is what its
+        // variants' bp_base holds (main 2 does not remap it). Witness the permutation through
+        // bp_self and put the field back afterwards, so the plans themselves are untouched.
+        std::vector<int> m2_presort(post.size(), -1);
+        {
+            std::vector<int> saved_self(post.size());
+            for (std::size_t i = 0; i < post.size(); ++i)
+            { saved_self[i] = post[i].bp_self; post[i].bp_self = static_cast<int>(i); }
+            MoveOrderPlans(post);   // lethal-looking / higher-value second mains first -> earlier cutoff
+            for (std::size_t i = 0; i < post.size(); ++i)
+            {
+                m2_presort[i]    = post[i].bp_self;
+                post[i].bp_self = saved_self[static_cast<std::size_t>(m2_presort[i])];
+            }
+        }
         // NOTE: we do NOT shortcut on the projected `wins_this_turn` flag here. That
         // projection (pending_atk + direct_dmg >= opp life) can over-count what the
         // actual ApplyPlanDirect + SimulateCombat deals, and trusting it would commit
@@ -51714,6 +51846,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // billed. Keyed (bp_base << 8 | bp_at); bp_base is the variant's pre-sort base index, shared
         // by all of one base's variants (main 2 does not remap it, and needs only equality).
         std::unordered_map<std::uint64_t, int> m2_known_n;
+        // WAVE 0's STILLBORN TEST (see ArmNewDupAll and FSLineWin's armnew_dup_all): base plans, by
+        // PRE-sort index, whose own apply proved every wave-0 variant of them a duplicate.
+        std::unordered_map<int, TranspositionTable::Key> m2_armnew_dup_all;
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -51723,6 +51858,24 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t m2_nkey = m2_plain_rank
                 ? ((static_cast<std::uint64_t>(q.bp_base) << 8) | static_cast<std::uint64_t>(q.bp_at & 0xFF))
                 : 0;
+            // The stillborn skip (see FSLineWin's). Leaves behind exactly what the skipped duplicate
+            // would have: its m2_known_n length (n = 0) and the beam refund.
+            const TranspositionTable::Key* armnew_expect = nullptr;
+            if (q.bp_choice >= 0 && q.bp_base >= 0)
+            {
+                const auto it = m2_armnew_dup_all.find(q.bp_base);
+                if (it != m2_armnew_dup_all.end())
+                {
+                    if (ArmNewVerifyOn()) { armnew_expect = &it->second; }
+                    else
+                    {
+                        g_bp_armnew_declined_m2.fetch_add(1, std::memory_order_relaxed);
+                        if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, 0); }
+                        if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
+                        continue;
+                    }
+                }
+            }
             if (m2_plain_rank)
             {
                 const auto kn = m2_known_n.find(m2_nkey);
@@ -51755,8 +51908,30 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // THIS plan's breakpoint count, not a stale one. Write-only unless the lever is on.
             if (m2fmode != 0) { g_bp_fired_last = 0; }
             if (m2_plain_rank) { g_bp_cands_last = 0; }   // one apply measures the list (see its decl)
+            g_bp_base_lens.clear();   // this apply's own measurement only (see ArmNewDupAll)
+            const std::uint64_t classon_before = g_bp_classon_last;
+            const std::uint64_t any_before     = g_bp_any_last;
+            const std::uint64_t latent9_before = g_bp_latent9_last;
+            const std::uint64_t truncasym_before = g_bp_truncasym_last;
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, g_bp_cands_last); }
+            {
+                const std::size_t pos = static_cast<std::size_t>(&q - post.data());
+                if (!node_snap.pending
+                    && ArmNewDupAll(q, g_bp_classon_last - classon_before, g_bp_any_last - any_before,
+                                    g_bp_latent9_last - latent9_before,
+                                    g_bp_truncasym_last - truncasym_before))
+                {
+                    m2_armnew_dup_all.emplace(m2_presort[pos], ArmNewVerifyOn() ? BuildDedupKey(s2)
+                                                                                : TranspositionTable::Key{});
+                }
+            }
+            if (armnew_expect != nullptr)
+            {
+                (BuildDedupKey(s2) == *armnew_expect ? g_bp_armnew_verify_match
+                                                     : g_bp_armnew_verify_mismatch)
+                    .fetch_add(1, std::memory_order_relaxed);
+            }
             if (node_snap.pending)
             {
                 // ---- THE BREAKPOINT NODE (MTG_BP_NODE) -------------------------------------
@@ -53074,14 +53249,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // MTG_BP_WAVE_NSKIP only: continuation-list lengths this node's wave-0 variants measured, keyed
     // (base plan index << 8 | bp_at). Left empty when the flag is off, so the walker sees nullptr.
     BpWaveWalker::KnownLens bp_known_n;
-    // MTG_BP_ARM_NEW (see g_bp_base_lens): what each BASE plan's apply measured, keyed
-    // (plan index in `pre` << 8) | bp_at -- the same key shape bp_known_n uses. Deliberately a
-    // SEPARATE map: bp_known_n carries the wave phase's own (n, max_k) semantics, and seeding it
-    // from a base plan (which applies no rank, so has no max_k) would change what the stillborn
-    // skip means. A variant is declined only on an entry recorded by its OWN base plan, in this
-    // same frontier, from that plan's own apply -- never inferred across nodes.
-    const bool                             armnew_here = BpArmNewOn();
-    std::unordered_map<std::uint64_t, int> bp_base_n;
+    // WAVE 0's STILLBORN TEST (see ArmNewDupAll): the BASE plans (by index in `pre`) whose own apply
+    // proved every wave-0 variant of them a duplicate, mapped to that apply's dedup key (filled only
+    // under MTG_ARMNEW_VERIFY, which compares against it). Deliberately NOT bp_known_n: that map
+    // carries the wave phase's own (n, max_k) semantics, and a base plan applies no rank. A variant
+    // is declined only on an entry recorded by its OWN base plan, in this same frontier, from that
+    // plan's own apply -- never inferred across nodes.
+    std::unordered_map<std::size_t, TranspositionTable::Key> armnew_dup_all;
     // ---- THE WAVE-0 COLLAPSES, IN THIS HOST FOR THE FIRST TIME (see the w0collapse namespace) ---
     // MTG_BP_W0_FSW carries the two ADOPTED skips (NOBP + uniform) into this loop, which never had
     // either; MTG_BP_W0_CHAIN_COLLAPSE adds the chain arm's, which exists in neither host. Both
@@ -53242,24 +53416,45 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             { winlesscert::g_max_pre.store(pre.size(), std::memory_order_relaxed); }
             winlesscert::MaybeProgress();
         }
-        // ---- WAVE 0's STILLBORN SKIP (MTG_BP_ARM_NEW) ------------------------------------------
-        // This plan is a plain rank variant whose OWN base plan already measured the breakpoint it
-        // targets and found no continuation. There is no rank 0 to take, so this apply can only
-        // overrun to the unconditional EMPTY continuation -- the base plan's own line, which this
-        // frontier is playing out anyway. Declining it BEFORE ConsumeAt is the whole point: the
-        // dedup below already skipped its rollout, but only after the units were spent.
+        // ---- WAVE 0's STILLBORN SKIP (see ArmNewDupAll) ----------------------------------------
+        // This plan is a wave-0 variant whose OWN base plan already applied and proved every variant
+        // of it a duplicate of its line. Declining it BEFORE ConsumeAt is the whole point: the
+        // post-apply dedup below would skip it too, but only after the unit was spent.
         // USER: *"do nothing is already covered by the original line ... Only genuinely new lines
         // (i.e. those that use our new options) need to be considered."*
-        if (armnew_here && p.bp_choice >= 0 && p.bp_choice < kBpEmptyChoice && !p.bp_all
-            && p.bp_at == 0 && p.bp_base >= 0 && p.bp_base < static_cast<int>(pre.size()))
+        //
+        // EXACTLY WHAT THE SKIPPED DUPLICATE WOULD HAVE LEFT BEHIND, so nothing downstream can tell:
+        // its NSKIP length record (the apply would have measured n = 0: an empty list at its one
+        // breakpoint, or no eligible breakpoint at all), the probe's no-win value for this position,
+        // and the beam refund. MTG_ARMNEW_VERIFY instead applies it and checks the state.
+        const TranspositionTable::Key* armnew_expect = nullptr;
+        if (p.bp_choice >= 0 && p.bp_base >= 0)
         {
-            const auto it = bp_base_n.find((static_cast<std::uint64_t>(p.bp_base) << 8) | 0u);
-            if (it != bp_base_n.end() && it->second == 0)
+            const auto it = armnew_dup_all.find(static_cast<std::size_t>(p.bp_base));
+            if (it != armnew_dup_all.end())
             {
-                if (s_rollout_stats)
-                { g_bp_armnew_declined.fetch_add(1, std::memory_order_relaxed); }
-                if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
-                continue;
+                if (ArmNewVerifyOn()) { armnew_expect = &it->second; }
+                else
+                {
+                    g_bp_armnew_declined.fetch_add(1, std::memory_order_relaxed);
+                    if (BpWaveNSkipOn() && p.bp_choice < kBpEmptyChoice && !p.bp_all)
+                    {
+                        BpWaveWalker::W0Len& e =
+                            bp_known_n[(static_cast<uint64_t>(p.bp_base) << 8)
+                                       | static_cast<uint64_t>(p.bp_at & 0xFF)];
+                        e.n     = 0;
+                        e.max_k = std::max(e.max_k, p.bp_choice);
+                        if (nskip_global_here && p.bp_choice == 0
+                            && p.bp_base < static_cast<int>(pre.size()))
+                        {
+                            BpLenRecord(BpLenKey{ node_dedup_key, BpCandFingerprint(pre[p.bp_base]),
+                                                  p.bp_at }, 0);
+                        }
+                    }
+                    if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                    if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                    continue;
+                }
             }
         }
         // ---- THE WAVE-0 COLLAPSES (MTG_BP_W0_FSW / MTG_BP_W0_CHAIN_COLLAPSE) -------------------
@@ -53318,6 +53513,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
         // Per-apply, like g_bp_cands_last: "did THIS apply suppress a searched-only site".
         if (fsw_nobp_here) { g_bp_searchonly_suppressed = false; }
+        g_bp_base_lens.clear();   // this apply's own measurement only (see ArmNewDupAll)
+        const std::uint64_t classon_before = g_bp_classon_last;
+        const std::uint64_t any_before     = g_bp_any_last;
+        const std::uint64_t latent9_before = g_bp_latent9_last;
+        const std::uint64_t truncasym_before = g_bp_truncasym_last;
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
         if (fsw_w0_here)
         {
@@ -53364,15 +53564,23 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
         }
-        // MTG_BP_ARM_NEW: harvest what THIS base plan's apply measured, keyed by its own index in
-        // `pre` so only its own variants can read it. Read here, immediately -- the tail recursion
-        // below applies further plans on this thread and clears the channel.
-        // EXACTLY ONE class-on breakpoint, or the variant is not this plan's line -- see
-        // g_bp_base_bps for the two smoke cases that proved it.
-        if (armnew_here && p.bp_choice < 0 && g_bp_base_bps == 1 && !g_bp_base_lens.empty())
+        // Harvest the stillborn test for THIS base plan, keyed by its own index in `pre` so only its
+        // own variants can read it. Read here, immediately -- the tail recursion below applies
+        // further plans on this thread. A PENDING apply stopped at a node's partition point and is
+        // not the base plan's line, so it proves nothing.
+        if (!node_snap.pending
+            && ArmNewDupAll(p, g_bp_classon_last - classon_before, g_bp_any_last - any_before,
+                            g_bp_latent9_last - latent9_before,
+                            g_bp_truncasym_last - truncasym_before))
         {
-            const std::uint64_t base = static_cast<std::uint64_t>(&p - pre.data());
-            bp_base_n[(base << 8) | 0u] = g_bp_base_lens[0];
+            armnew_dup_all.emplace(static_cast<std::size_t>(&p - pre.data()),
+                                   ArmNewVerifyOn() ? BuildDedupKey(s) : TranspositionTable::Key{});
+        }
+        if (armnew_expect != nullptr)
+        {
+            (BuildDedupKey(s) == *armnew_expect ? g_bp_armnew_verify_match
+                                                : g_bp_armnew_verify_mismatch)
+                .fetch_add(1, std::memory_order_relaxed);
         }
         // ZERO IS THE COMMON CASE AND MUST BE RECORDED. g_bp_cands_last == 0 means this apply
         // reached no eligible breakpoint of the searchable class (or found an empty list) at
@@ -58354,6 +58562,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         std::size_t cand_index = 0;
         std::uint64_t any_before = 0;
         std::uint64_t classon_before = 0;
+        std::uint64_t latent9_before = 0;
         auto w0len_record = [&](const Plan& pl)
         {
             if (w0chain_here)
@@ -58378,10 +58587,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // for the shipped arm despite its own comment saying it closed the hole here too. That
             // is the gap this term closes.
             //
-            // STILL DEFAULT OFF, and deliberately: this host's skip is default ON, so tightening it
-            // skips strictly LESS and moves the committed line on every budgeted cell of every deck.
-            // With the flag off the condition is unchanged and every deck stays byte-identical.
+            // SUPERSEDED BY THE UNCONDITIONAL TERM (no-greedy purge step 28, 2026-10-01): the base
+            // plan's apply now counts a site-9 occurrence it WOULD have opened for its variants
+            // (g_bp_latent9_last), and that delta is required to be zero below with no flag. It
+            // covers this flag's case (same gate, same short-circuit), so the flag is redundant here;
+            // it is left as the other host's slot owns it.
+            // ...and no VARIANT-ONLY breakpoint either (site 9; see g_bp_latent9_last): the
+            // base passing it counts nothing, while every variant applies a continuation there.
             if ((nobp_here || w0nobp_here) && pl.bp_choice < 0 && g_bp_any_last == any_before
+                && g_bp_latent9_last == latent9_before
                 && !(w0collapse::NobpSite9FixOn() && g_bp_searchonly_suppressed))
             { bp_nobp.insert(cand_index); }
             // Record what THIS apply saw, for the uniform sibling that has not run yet. Rank
@@ -58526,6 +58740,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // first suppressing apply would make every LATER base plan on this thread look
             // suppressed -- which would silently disarm the whole NOBP skip rather than tighten it.
             if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = false; }
+            latent9_before = g_bp_latent9_last;   // ...and the variant-only site (g_bp_latent9_last)
             // Chain-scan outcome is per-apply, so it RESETS (unlike the two monotonic counters
             // above): -2 means this apply never reached a chain slot at all.
             if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
