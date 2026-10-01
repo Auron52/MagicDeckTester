@@ -10182,6 +10182,277 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
     return false;
 }
 
+// ---- THE SAME ANSWER AS A SUM (FodderIndex) --------------------------------------------------
+//
+// WHY. The function above is the single most expensive subset filter in the engine: measured at
+// 6.6% of a whole Fungus keep-generation run (perf, 2026-10-01, inclusive over its three clones --
+// 1.4% self in the hot clone plus its callees), against 1.4% for SubsetHasDuplicateSacSource and
+// 0.9% for SubsetWastesCreatureSacMana. The reason is visible in its body: per ENUMERATED SUBSET
+// it heap-allocates a vector<pair<string,int>>, copies a std::string per outlet, string-compares
+// to group the demand, and then walks the whole battlefield once per filter inside board_supply
+// (twice more on the reject path, plus once for the union). On a turn-6 Fungus board that is
+// ~22 permanents x 3-4 scans x CardHasSubtype, tens of thousands of times per decision.
+//
+// All of that re-derives, per subset, facts that are FIXED for the enumeration.
+//
+// WHAT MAKES IT COLLAPSE. Read the predicate as arithmetic and every term is a SUM or an OR over
+// the selected actions, against board quantities that cannot change while the enumeration runs:
+//
+//     sac_actions / outlets / devour / want[f]   -- sums over sel
+//     pooled_multi / unbounded[f]                -- ORs over sel
+//     credit[f]                                  -- a sum over sel
+//     supply[f]                                  -- a BOARD count, identical for every subset
+//
+// So the whole predicate is a fixed-size aggregate of per-candidate terms. Precompute one term per
+// candidate and the per-subset cost becomes |sel| integer adds -- no allocation, no string, no
+// board walk, no CardDefinition deref.
+//
+// THIS IS NOT A BOUND AND NOT AN APPROXIMATION. It is the SAME TEST, re-associated. Every branch
+// of the original is reproduced below, in the same order, including the two early-outs, the
+// per-filter loop before the union loop, and the MTG_SAC_FODDER_RESERVE_DEVOUR sub-lever. That
+// matters because an earlier attempt at this shape -- a prefix bound inside the odometer -- would
+// NOT have been exact: the predicate is not monotone (a cast creature adds +1 body, a spore pop
+// adds k x spore_creates_tokens), so a violating prefix can be made legal by extension and the
+// sound prefix test is the strictly weaker `demand > supply + max-remaining-credit`. Re-associating
+// the LEAF test needs no such weakening, and the profile says the leaf test is where the time is.
+//
+// WHEN IT STANDS DOWN (active=false -> the original function runs, unchanged):
+//   * MTG_SAC_FODDER_RESERVE off -- the non-reserve path uses plan_can_add (EXISTENCE), a
+//     different predicate that is not a sum.
+//   * a persist permanent on the battlefield, or no sac_src_def table to read -- the bail-out
+//     above then depends on a board scan the summary does not model.
+//   * more than kFodSlots-1 distinct victim subtype filters (never seen; Fungus has exactly one,
+//     "Saproling", shared by all four of its outlets).
+//   * the SubsetFilterPre instruments are armed (same disarm rule, same reason).
+// Every one of those keeps today's behaviour exactly, so a future caller that does not build an
+// index is correct by default.
+static constexpr int kFodSlots = 4;   // slot 0 = the UNION filter (""); 1..n = distinct victim filters
+
+// Widths are deliberately `int`, matching the original's arithmetic exactly. A narrower field
+// would be big enough for every card in the repo and would wrap toward a FALSE REJECT on the first
+// one that is not -- the single direction that deletes a line the deck can really play. The terms
+// are per CANDIDATE (a handful per enumeration), never per odometer position, so this costs nothing.
+struct FodderTerm
+{
+    int sac_act = 0;   // -> sac_actions (kind is a sac AND sac_source_id != 0)
+    int outlet  = 0;   // -> outlets     (... AND the source really is a creature-sac outlet)
+    int devour  = 0;   // -> the union check's second consumer
+    unsigned pooled = 0;   // -> pooled_multi
+    unsigned unb    = 0;   // bit f: this action makes filter f's credit unbounded
+    int want[kFodSlots]   = {0, 0, 0, 0};
+    int credit[kFodSlots] = {0, 0, 0, 0};
+};
+
+struct FodderIndex
+{
+    bool active      = false;
+    int  nslots      = 1;      // slot 0 always exists (the union); outlet filters start at 1
+    bool union_check = true;   // MTG_SAC_FODDER_RESERVE_DEVOUR
+    int  supply[kFodSlots] = {0, 0, 0, 0};
+    std::vector<FodderTerm> term;   // indexed by candidate
+};
+
+// The aggregate, read back. Mirrors SubsetOversubscribesSacFodder branch for branch.
+static inline bool FodderAggRejects(const FodderIndex& fx, const FodderTerm& a)
+{
+    const bool multi_consumer = (a.pooled != 0) || (a.devour > 0 && a.sac_act >= 1);
+    if (a.sac_act < 2 && !multi_consumer) { return false; }   // outlets <= sac_actions
+    if (a.outlet  < 2 && !multi_consumer) { return false; }   // one UNPOOLED outlet cannot oversubscribe itself
+    // Per-filter: two outlets wanting different subtypes do not compete for the same bodies.
+    for (int f = 1; f < fx.nslots; ++f)
+    {
+        if ((a.unb & (1u << f)) != 0) { continue; }            // cannot judge -> allow
+        if (fx.supply[f] + a.credit[f] < a.want[f]) { return true; }
+    }
+    if (!fx.union_check) { return false; }
+    // ACROSS filters, and against devour as the other consumer of the same bodies.
+    int total_demand = a.devour;
+    for (int f = 1; f < fx.nslots; ++f) { total_demand += a.want[f]; }
+    if ((a.unb & 1u) == 0 && fx.supply[0] + a.credit[0] < total_demand) { return true; }
+    return false;
+}
+
+static bool FodderAggVerifyOn()
+{
+    // Default OFF. =1 runs BOTH forms on every subset and reports the first disagreement, which is
+    // how the equivalence claim above is checked against a real deck rather than asserted.
+    static const bool on = EnvOn("MTG_SAC_FODDER_AGG_VERIFY");
+    return on;
+}
+
+static bool FodderAggEnabled()
+{
+    // DEFAULT ON; =0 reverts to the original per-subset function (the A/B arm, and the hatch).
+    static const bool on = EnvOn("MTG_SAC_FODDER_AGG", true);
+    return on;
+}
+
+// Build the per-candidate terms. `sac_src_def` / `board_persist` are the SubsetFilterPre hoists --
+// the same ones the original reads -- so this sees exactly the sources that function would resolve.
+static void BuildFodderIndex(const GameState& state, const std::vector<Action>& cands,
+                             const std::vector<const CardDefinition*>& sac_src_def,
+                             bool board_persist, FodderIndex& fx)
+{
+    if (!FodderAggEnabled() || !SacFodderReserveEnabled()) { return; }
+    if (sac_src_def.empty() || board_persist) { return; }   // the original bails on persist anyway
+
+    // Slot 0 is the union (""); each distinct victim filter gets its own slot, INCLUDING an empty
+    // one -- an outlet with no subtype requirement is a per-filter entry in the original's `demand`
+    // as well as a term of the union, and collapsing the two would skip its per-filter check.
+    std::string filt[kFodSlots];
+    int nslots = 1;
+    auto slot_of = [&](const std::string& f) -> int
+    {
+        for (int i = 1; i < nslots; ++i) { if (filt[i] == f) { return i; } }
+        if (nslots >= kFodSlots) { return -1; }
+        filt[nslots] = f;
+        return nslots++;
+    };
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::SacForMana && a.kind != Action::Kind::SacCreatureOutlet) { continue; }
+        if (a.sac_source_id == 0) { continue; }
+        const CardDefinition* sd = sac_src_def[static_cast<std::size_t>(j)];
+        if (sd == nullptr || !sd->params.sac_creature_outlet) { continue; }
+        if (slot_of(sd->params.sac_creature_requires_subtype) < 0) { return; }   // too many filters -> stand down
+    }
+
+    const int me = state.active_player_index;
+    for (int f = 0; f < nslots; ++f)
+    {
+        int supply = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            if (!filt[f].empty() && !CardHasSubtype(p.card, filt[f])) { continue; }
+            ++supply;
+        }
+        fx.supply[f] = supply;
+    }
+
+    fx.term.assign(cands.size(), FodderTerm{});
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& a = cands[j];
+        FodderTerm& t   = fx.term[static_cast<std::size_t>(j)];
+        const bool is_sac = (a.kind == Action::Kind::SacForMana
+                          || a.kind == Action::Kind::SacCreatureOutlet);
+        // ---- demand side (the prepass + the `demand` map) ----
+        if (is_sac && a.sac_source_id != 0)
+        {
+            t.sac_act = 1;
+            if (a.pooled_sac && a.sac_count > 1) { t.pooled = 1; }
+            const CardDefinition* sd = sac_src_def[static_cast<std::size_t>(j)];
+            if (sd != nullptr && sd->params.sac_creature_outlet)
+            {
+                t.outlet = 1;
+                const int s = slot_of(sd->params.sac_creature_requires_subtype);
+                if (s < 0) { fx.term.clear(); return; }   // unreachable (the pass above counted them)
+                t.want[s]  = (a.sac_count > 1 ? a.sac_count : 1);
+            }
+        }
+        if (a.devour_count > 0) { t.devour = a.devour_count; }
+        // ---- supply side (plan_fodder_credit, clause for clause and in its order) ----
+        const CardDefinition* d = a.def;
+        if (d == nullptr && !static_cast<const std::string&>(a.card_name).empty())
+        { d = CardDatabase::Instance().Lookup(static_cast<const std::string&>(a.card_name)); }
+        if (d == nullptr)
+        {
+            // `unknown -> do not reject` fires BEFORE the sac-kind `continue`, so even a sac action
+            // with no resolvable definition makes every filter unbounded.
+            t.unb = (1u << nslots) - 1u;
+            continue;
+        }
+        if (is_sac) { continue; }   // the sac activation itself adds nothing
+        const bool spore_pop = (a.kind == Action::Kind::ActivatePermAbility
+                                && a.ability_mode == Action::AbilityMode::SporeSaproling);
+        for (int f = 0; f < nslots; ++f)
+        {
+            const std::string& F = filt[f];
+            auto matches = [&](const std::vector<std::string>& subs)
+            {
+                if (F.empty()) { return !subs.empty(); }
+                for (const std::string& s : subs) { if (s == F) { return true; } }
+                return false;
+            };
+            if (a.kind == Action::Kind::CastFromHand && d->card.IsCreature()
+                && (F.empty() || CardHasSubtype(d->card, F)))
+            { t.credit[f] += 1; }
+            if (spore_pop && matches(d->params.spore_token_subtypes))
+            {
+                t.credit[f] += std::max(1, a.chosen_x) * std::max(1, d->params.spore_creates_tokens);
+                continue;   // the pop carries its own yield; it never reaches the clause below
+            }
+            if (matches(d->params.dies_token_subtypes)
+                || matches(d->params.sac_outlet_token_subtypes)
+                || matches(d->params.etb_created_token_subtypes)
+                || matches(d->params.tap_token_subtypes)
+                || matches(d->params.cast_token_subtypes)
+                || matches(d->params.attack_token_subtypes))
+            { t.unb |= (1u << f); }
+        }
+    }
+
+    static const bool s_union = EnvOn("MTG_SAC_FODDER_RESERVE_DEVOUR", true);
+    fx.union_check = s_union;
+    fx.nslots      = nslots;
+    fx.active      = true;
+}
+
+// The call both subset walkers make. Falls through to the original whenever the index stood down.
+static inline bool SubsetOversubscribesSacFodderFast(const FodderIndex& fx,
+                                                     const GameState& state,
+                                                     const std::vector<Action>& cands,
+                                                     const std::vector<int>& sel,
+                                                     const std::vector<const CardDefinition*>* sac_src_def,
+                                                     int board_persist)
+{
+    if (!fx.active)
+    { return SubsetOversubscribesSacFodder(state, cands, sel, sac_src_def, board_persist); }
+    FodderTerm a;
+    for (int j : sel)
+    {
+        const FodderTerm& t = fx.term[static_cast<std::size_t>(j)];
+        a.sac_act += t.sac_act;
+        a.outlet  += t.outlet;
+        a.devour  += t.devour;
+        a.pooled  |= t.pooled;
+        a.unb     |= t.unb;
+        for (int f = 0; f < fx.nslots; ++f)
+        {
+            a.want[f]   += t.want[f];
+            a.credit[f] += t.credit[f];
+        }
+    }
+    const bool fast = FodderAggRejects(fx, a);
+    if (FodderAggVerifyOn())
+    {
+        // One line per process, so "0 mismatches" is never a vacuous pass: it says the fast path
+        // really ran on this deck, and with how many filter slots against what board supply.
+        static std::atomic<bool> announced{false};
+        if (!announced.exchange(true))
+        {
+            std::fprintf(stderr, "[fodder-agg] verify ARMED nslots=%d supply=%d/%d/%d/%d\n",
+                         fx.nslots, fx.supply[0], fx.supply[1], fx.supply[2], fx.supply[3]);
+        }
+        const bool slow = SubsetOversubscribesSacFodder(state, cands, sel, sac_src_def, board_persist);
+        if (fast != slow)
+        {
+            std::fprintf(stderr, "[fodder-agg] MISMATCH fast=%d slow=%d t%d nslots=%d sel=%zu |",
+                         fast ? 1 : 0, slow ? 1 : 0, state.turn_number, fx.nslots, sel.size());
+            for (int j : sel)
+            {
+                std::fprintf(stderr, " %s/k%d", static_cast<const std::string&>(cands[j].card_name).c_str(),
+                             static_cast<int>(cands[j].kind));
+            }
+            std::fprintf(stderr, "\n");
+            return slow;   // the original is authoritative while verifying
+        }
+    }
+    return fast;
+}
+
 static bool SubsetWastesCreatureSacMana(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel,
@@ -10513,6 +10784,10 @@ struct SubsetFilterPre
     // SubsetHasDuplicateSacSource (7.29%), SubsetWastesCreatureSacMana (4.87%) and
     // SubsetOversubscribesSacFodder (3.96%) -- precisely the three whose bits are true because
     // Utopia Mycon really is a creature-sac outlet.
+    // (2026-10-01: re-measured inclusive on a whole keep-generation run, the fodder filter was
+    // 6.61% and the biggest single item in the engine. It no longer is -- see FodderIndex, which
+    // replaces its per-subset body with a sum of precomputed per-candidate terms. The two others
+    // are now 1.43% / 0.89% and are the remaining members of this trio.)
     //
     // Two of those three still had a BATTLEFIELD WALK INSIDE THE SUBSET LOOP: each resolved a
     // selected action's `sac_source_id` to its controlled CardDefinition (a scan with a
@@ -25826,6 +26101,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     const std::vector<const CardDefinition*>* sac_tab =
         pre.sac_src_def.empty() ? nullptr : &pre.sac_src_def;
     const int persist_arg = pre.sac_src_def.empty() ? -1 : (pre.board_persist ? 1 : 0);
+    // The per-candidate aggregate form of the fodder filter (see FodderIndex). Inactive -> the
+    // original per-subset function runs. Lockstep twin in EnumeratePlans.
+    FodderIndex fodx;
+    if (pre.sac_fodder) { BuildFodderIndex(state, cands, pre.sac_src_def, pre.board_persist, fodx); }
     // "{cost}, {T}" ability SELF-FUNDING debit (see PermAbilityTapDebitOf). State-only, so it is
     // built ONCE here and the per-subset path is a bool test plus a walk of the selection. Lockstep
     // twin of the scan in EnumeratePlans.
@@ -26146,7 +26425,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
         if (pre.sac_fodder
-            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg))
+            && SubsetOversubscribesSacFodderFast(fodx, state, cands, sel, sac_tab, persist_arg))
         { if (shape != nullptr) { shapestats::Bump(shape->rej_fodder); ++callf.rej_fodder; } return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
@@ -35776,6 +36055,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const std::vector<const CardDefinition*>* sac_tab =
         pre.sac_src_def.empty() ? nullptr : &pre.sac_src_def;
     const int persist_arg = pre.sac_src_def.empty() ? -1 : (pre.board_persist ? 1 : 0);
+    // The per-candidate aggregate form of the fodder filter (see FodderIndex). Lockstep twin of
+    // the build in Solve; inactive -> the original per-subset function runs.
+    FodderIndex fodx;
+    if (pre.sac_fodder) { BuildFodderIndex(state, cands, pre.sac_src_def, pre.board_persist, fodx); }
     // "{cost}, {T}" ability SELF-FUNDING debit scan (see PermAbilityTapDebitOf). Lockstep twin of
     // the scan in Solve; inert on every board with no such ability -> byte-identical.
     std::vector<ManaPool> tap_debit;
@@ -36468,7 +36751,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
         if (pre.sac_fodder
-            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_fodder); ++ecallf.rej_fodder; } return; }
+            && SubsetOversubscribesSacFodderFast(fodx, state, cands, sel, sac_tab, persist_arg)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_fodder); ++ecallf.rej_fodder; } return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- lockstep twin of Solve::consider's call; see the helper).
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }

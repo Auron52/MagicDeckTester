@@ -160,6 +160,65 @@ Myconid). The enumerator builds those combinations and then throws three-quarter
 generating, rather than as a leaf test after, is now the one candidate with real mass behind it, and
 it is worth noting the bound only has to be good on turn-6-shaped boards to collect most of it.
 
+### 2e. The 73.5% COLLECTED — but not by the bound §2d proposed (2026-10-01)
+
+**Profile first, as the rule says — and it redirected the work.** §2d ended pointing at a *prefix
+bound* inside the odometer. Before building one, `perf record` on the same replay was asked how much
+time the predicate actually costs. Inclusive, over its three clones:
+
+| symbol | inclusive | self |
+|---|---|---|
+| `SubsetOversubscribesSacFodder` | **6.61%** | 2.66% |
+| `SubsetHasDuplicateSacSource` | 1.43% | 1.38% |
+| `SubsetWastesCreatureSacMana` | 0.89% | 0.85% |
+
+So the leaf test is ~3/4 of the whole sac-filter bill, and the two filters a prefix prune would
+*additionally* skip on rejected positions are together ~2.3% — of which only the fodder-rejected
+share is collectable. **The prefix bound was aimed at the smaller half.**
+
+**And the leaf test did not need a bound at all — it needed to be read as arithmetic.** Every term of
+the predicate is a sum or an OR over the selected actions, against board quantities that are fixed
+for the whole enumeration:
+
+```
+sac_actions / outlets / devour / want[f]   sums over sel
+pooled_multi / unbounded[f]                ORs  over sel
+credit[f]                                  a sum over sel
+supply[f]                                  a BOARD count -- identical for every subset
+```
+
+So one precomputed term per candidate turns the per-subset cost into `|sel|` integer adds. What it
+replaces, *per enumerated subset*, is: a heap-allocated `vector<pair<string,int>>`, a `std::string`
+copy per outlet, string compares to group the demand, and 3–4 full battlefield walks inside
+`board_supply` — on a turn-6 board that is ~22 permanents × `CardHasSubtype`, tens of thousands of
+times per decision. `FodderIndex` in `TurnSolver.cpp` is that re-association.
+
+**This is EXACT, which the prefix bound could not have been.** The predicate is not monotone — a cast
+creature adds +1 body, a spore pop adds `k × spore_creates_tokens` — so a violating prefix can be
+made legal by extension, and the sound prefix test is the strictly weaker
+`demand > supply + max-remaining-credit`. Re-associating the leaf needs no such weakening: it is the
+same test, same branches, same order.
+
+**Measured on the heaviest cell** (`MTG_SAC_FODDER_AGG=0` vs default, arms interleaved, 6 reps each):
+
+| arm | n | mean | min | max |
+|---|---|---|---|---|
+| `MTG_SAC_FODDER_AGG=0` (original leaf test) | 6 | 12,126 ms | 11,951 | 12,503 |
+| default (aggregate) | 6 | **10,722 ms** | 10,607 | 10,813 |
+
+**1.131x, with no overlap between the arms,** and the rollout-config play digest `4b55aac85d0e0b77`
+identical on every run. Wall is credible here despite the contention the user flagged: the replay is
+single-threaded, the arms were interleaved, and the ranges are disjoint by 1.1 s.
+
+**Equivalence is checked, not asserted.** `MTG_SAC_FODDER_AGG_VERIFY=1` runs both forms on every
+subset and prints the first disagreement. Zero mismatches on the Fungus replay and across the smoke
+suite.
+
+**The lesson, which is the same one as §2c one level down.** §2c found that the odometer bounds the
+prize but does not predict it. §2e finds that **visits do not predict it either**: 73.5% of visits
+was a real number and a real prize, but the way to collect it was to make each visit cheap, not to
+stop making visits. The profile is what distinguished the two, and it took ten minutes.
+
 ### The subset funnel — the real work unit (NOTE: see §2d, this section's cross-walk ratio is wrong)
 
 | turn | subsets entered | dupSacSrc | wasteSacMana | overFodder | other | PASSED |
@@ -341,11 +400,13 @@ naming: **on this deck, "the board is wide so copying is expensive" keeps being 
    odometer space, turn 8 holds 53.7% of the constructed plans, and the walk visits 43.7 M subsets —
    8.5x the plan count everything above is written around.
 
-5. **Does a sound prefix bound beat the leaf test?** Opened by §2b. The leaf-level shared-resource
-   reject rate is 25.03% of visits, which caps a leaf-level fix at ~1.33x. A prefix prune on
-   `demand > supply + max-remaining-credit` cuts subtrees instead, so it could save more visits than
-   it rejects leaves — but the constraint is not monotone, so the bound has to be the admissible one.
-   This is the highest-value next measurement.
+5. ~~**Does a sound prefix bound beat the leaf test?**~~ **ANSWERED in §2e, and the answer is that
+   the question was aimed at the wrong half.** The leaf test is 6.61% of the run and the two filters
+   a prefix prune would additionally skip are together 2.3%, so the bound was chasing the smaller
+   number — and it would have had to be the *weakened*, non-monotone-safe form. Re-associating the
+   leaf test as a per-candidate aggregate (`FodderIndex`) is exact and measured **1.131x** on the
+   heaviest cell. A prefix prune is still available on top, now worth at most ~1–2% and needing
+   odometer surgery in a path that has OOM'd before; it is not the next thing to do.
 
 6. **Why does turn 8 dedup only 0.4%?** Every other turn removes 4-23%. Turn 8 builds 2.76 M plans
    and discards almost nothing, on the horizon edge where `fungus-value-leaf-status.md` says 99.7% of
