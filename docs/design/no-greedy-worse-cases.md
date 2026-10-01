@@ -191,22 +191,31 @@ each checked on the committed-tree binary and on the step-27 snapshot at the sam
 | hinata ov d5 s7007 gi161 | 5 | 6 | 6 | 6 | pre-existing |
 | hinata2hg ov d5 s7007 gi75 | 5 | 6 | 6 | 6 | pre-existing |
 | hinata2hg ov d5 s6006 gi61 | 5 | 6 | 5 | 6 | lost at a step <= 27; OPEN |
-| hinata ov d5 s5005 gi13 | 6 | 7 | 6 | 7 | Gamble lockstep: the executor's index pick discards a Reality Spasm the verified T5 line casts; step 30 (canonical pick) -> T5 |
-| hinata reg d5 s2002 gi25 | 5 | 6 | 5 | 5 | **FIXED (step 31, `rollout-executor-lockstep.md` #10): an unpaid executor cast replayed the next breakpoint segment.** The T1 search (searched depth 5, verified) commits a T5 win; at T5 the executor casts Soulfire Eruption, takes the line's EMPTY continuation at its look, then pops a SECOND main-2 phase (Island + Reality Spasm x6 + Gamble, without the Expressive Iteration the line holds) and the kill does not happen -> T6. Not the Gamble discard: search and executor both shed Ornithopter on the same hand. Exposed, not caused, by step 29a (the full Ponder order changes the T1 line: Preordain where the committed tree casts Ponder). Under step 30's canonical pick the game realises T5 |
+| hinata ov d5 s5005 gi13 | 6 | 7 | 6 | 7 | **FIXED (step 32, `rollout-executor-lockstep.md` #5): Gamble lockstep.** The executor's index pick discarded a Reality Spasm the verified T5 line casts, because the rollout laid staged cards out differently from the executor. The rollout now reproduces the executor's layout -> T5 under the unchanged index pick |
+| hinata reg d5 s2002 gi25 | 5 | 6 | 5 | 5 | **FIXED (step 31, `rollout-executor-lockstep.md` #10): an unpaid executor cast replayed the next breakpoint segment.** The T1 search (searched depth 5, verified) commits a T5 win; at T5 the executor casts Soulfire Eruption, takes the line's EMPTY continuation at its look, then pops a SECOND main-2 phase (Island + Reality Spasm x6 + Gamble, without the Expressive Iteration the line holds) and the kill does not happen -> T6. Not the Gamble discard: search and executor both shed Ornithopter on the same hand. Exposed, not caused, by step 29a (the full Ponder order changes the T1 line: Preordain where the committed tree casts Ponder) |
 
 Per-deck searched cells still above GT -- all churn (their slower games recover at d8 b0): th reg +5,
 antilife ov +4, antilife2hg ov +3 / reg +2, slivers reg +2, mirrorwing ov +1, stompy ov +1,
-dragonstorm2hg smoke +1, slivers2hg smoke +1. Tracked for the mitigation phase.
+dragonstorm2hg smoke +1, slivers2hg smoke +1; and after step 32, hinata2hg +2 (reg +1, ov +1). Tracked for the mitigation phase.
 
-**Step 30 split out (Gamble's canonical discard).** It re-deals which card a random discard takes, so a
-Gamble game becomes a DIFFERENT game -- the d8-b0 recovery test does not apply to it. The 33 hinata games
-that failed to recover on the first candidate (which carried step 30) all recovered on that binary with
-only the pick reverted (32/33; the 33rd is gi61 above), and hinata_d0 matched GT exactly. So it is its own
-commit with its own GT.
+**Step 30 (Gamble's canonical discard) -- DROPPED, replaced by step 32.** Drawing the random discard over
+ascending m_number put the two worlds in agreement by ignoring the hand's layout, and it re-dealt which card
+every Gamble takes, so every Gamble game became a different game and the d8-b0 recovery test could not be
+applied (hinata2hg +8 on a re-deal). USER: make the search match the executor instead. Step 32 does: the
+rollout lays staged cards out the way the executor does (`rollout-executor-lockstep.md` #5), the index
+pick is unchanged, and gi13 recovers.
 
 **Step 31 (2026-10-01): gi25 ROOT-CAUSED and FIXED.** The executor armed a committed-line breakpoint
 replay after a cast it could not pay, which the rollout never does (`apply_one` returns first), so the
 continuation recorded for the Gamble cast replayed at a failed Expressive Iteration. Now gated on a paid
 cast, committed-line replay only (`rollout-executor-lockstep.md` #10). gi25 -> T5 under the index pick it
-was found on. All three tiers turn-neutral (one regression cell's play digest moved at the same score).
+was found on. All three tiers turn-neutral (measured on top of the since-dropped step 30).
 The other eight open games are unchanged by it.
+
+**Step 32 (2026-10-01): gi13 FIXED; GT re-accepted for steps 31+32.** The rollout lays staged cards out the
+way the executor does, so Gamble's index pick sheds the same card in both worlds (`rollout-executor-lockstep.md`
+#5). gi13 -> T5 at d8 b0. Tiers vs the purge-commit GT: smoke 2 faster / 0 slower, regression 3 / 2,
+overnight 8 / 3, d0 byte-identical. The five slower games all recover at d8 b0 (T5 each): hinata2hg reg d3
+s2002 gi25 / gi73, hinata2hg ov d5 s6006 gi10, hinata ov d5 s4004 gi154 / gi199. Per deck: hinata -7,
+hinata2hg **+2** -- a churn cell, added to the mitigation list above. Open from the checkpoint-4 table: the
+7 pre-existing games and gi61.

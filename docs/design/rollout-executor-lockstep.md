@@ -87,7 +87,40 @@ the numbered one (Hinata seed 4153 T3). The Vial-deploy path had the same gap on
 Every real-board permanent-creation site now stamps the number; the only unstamped ones left are
 opponent tokens (no card) and the speculative mana-rock copies inside the scratch feasibility state.
 
-## #5 — Gamble's random discard: built, opt-in, deliberately NOT the default
+## #5 — Gamble's random discard: FIXED AT THE SOURCE (2026-10-01; history below)
+
+**Resolution.** The two hands were laid out differently for exactly one reason, and the rollout now
+reproduces the executor's layout instead of the pick hiding it. The executor holds an unplayed staged
+card OUT of hand between `TakeTurn` passes (the pass's tail moves it to `Player::staged_cards`; the next
+pass's head re-appends it with `EnterHand(StagedMerge)`), so anything that reaches the hand in between
+-- the draw step, a combat draw, a draw that ended the previous m2 pass -- sits BEFORE the staged cards.
+The rollout kept them in place, so the same card sat AFTER them. `MergeStagedToHandEnd` (TurnSolver.cpp)
+stable-partitions staged cards to the end at every point the executor starts a pass: after the draw
+step (`SimulateEndAndStartNextTurn`), before main 2 (`SimulateCombat`), and at the m2 fixpoint's
+follow-on plan (FSLineTail's kill-scan / re-solve, `ApplySecondMainInSearch`) -- the executor replays a
+second m2 `PhasePlan` as its own `TakeTurn` pass.
+
+Measured with `MTG_DISCARD_TRACE` (`real=1` marks the executor's discards; diagnostic only), hinata
+smoke + regression searched cells, every executor Gamble discard against the search's discards at the
+same seed / turn / `search_count` / hand set:
+
+| binary | executor discards | search twin in the SAME order | same victim |
+|---|---|---|---|
+| before | 321 | 309 | 313 |
+| main-head partition only | 322 | 320 | 320 |
+| + m2 follow-on pass | 322 | **322** | **322** |
+
+The two left after the first cut were one game (hinata regression s3003 gi24, in both its d3 and d5
+cells): Ponder drew Preordain at the end of the first m2 pass, and the second pass's Gamble saw it
+before the staged cards. hinata overnight d5 s5005 gi13 -- the executor's index pick discarded a Reality
+Spasm the verified T5 line cast, realised T7 -- is T5 at d8 unbounded.
+
+The canonical pick below (`MTG_CANON_TUTOR_DISCARD`) is DELETED. It was briefly made the default
+(2026-10-01, never pushed) and then dropped: it made the two worlds agree by ignoring the layout, not by
+fixing it, and it re-dealt which card every Gamble takes -- every Gamble game became a different game,
+so the d8-unbounded recovery test could not be applied to it (hinata2hg moved +8 on a re-deal alone).
+
+### History (2026-07): built, opt-in, deliberately NOT the default
 
 `PerformTutor` picks `mix % hand.size()` as an index into the hand **as stored**, and storage order
 is not part of the lockstep contract (the rollout pushes staged cards straight into hand; the
@@ -499,3 +532,16 @@ reads a per-cast snapshot of it taken before any nested cast -- but ONLY for the
 (`fd_plan_committed`), where the lockstep contract lives. The re-solving fallback (no committed line, and
 the d0 runner) has no rollout twin and leans on re-solving after a no-op cast to find another play:
 gating it as well cost dragonstorm d0 +1351 turns over the overnight tier. gi25: T5.
+
+## #11 — OPEN, unmeasured: the executor's m2 stranded-kill scan cannot see staged cards (found 2026-10-01)
+
+Found while fixing #5, not yet measured. `GameEngine::MainPhase`'s non-committed m2 re-entry calls
+`AIEngine::TrySecondMainStrandedKill` AFTER `TakeTurn` has returned -- i.e. after its tail moved every
+unplayed staged card out to `Player::staged_cards` -- and the scan enumerates `EnumerateMainPlans(state)`
+on that hand. Its rollout twins (`ApplySecondMainInSearch`'s kill-scan, FSLineTail's fixpoint kill-scan)
+run with the staged cards still in hand. So a stranded kill that needs a staged card (a Soulfire- or
+Expressive-Iteration-exiled burn spell) is found by the search and not by the executor. It is CONTENT,
+not order, so #5's partition cannot touch it; and it only reaches the non-committed path (a committed
+line's second m2 plan goes through `TakeTurn`, which merges first). Next step: count executor stranded-
+kill scans with a non-empty `staged_cards` on the hinata cells; if any, merge (and restore) around the
+scan the way `TakeTurn` does.

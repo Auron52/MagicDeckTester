@@ -38376,6 +38376,36 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     SacrificeDepletedLands(state);
 }
 
+// STAGED-MERGE ORDER -- the rollout twin of AIEngine::TakeTurn's staged merge (lockstep). The
+// executor keeps an unplayed staged card (Light Up the Stage, Soulfire, Expressive Iteration, an
+// adventure parent ...) OUT of hand between mains -- TakeTurn's tail moves it to Player::staged_cards
+// and the next main's head re-appends it via EnterHand(StagedMerge) -- so every card that reaches the
+// hand in between (the draw step, a combat-damage draw) lands BEFORE the staged ones. The rollout
+// keeps staged cards in hand throughout, so the same draw landed AFTER them: same cards, different
+// storage order. Storage order is read by exactly one rule, the index-drawn random discard
+// (PerformTutor's Gamble pick), and there it shed a different card in the two worlds -- hinata
+// overnight d5 s5005 gi13 verified a T5 line casting both Reality Spasms in main 2, the executor's
+// Gamble discarded one, and the game played out as T7. Moving the staged cards to the END, order
+// kept, at each executor TakeTurn pass's head reproduces the executor's layout exactly. Called from
+// the points every rollout/search path crosses on its way into such a pass: SimulateEndAndStartNextTurn
+// (after the draw step), SimulateCombat (before main 2), and the m2 fixpoint's follow-on plan
+// (FSLineTail's kill-scan / re-solve and ApplySecondMainInSearch -- the executor replays a second m2
+// PhasePlan as its own TakeTurn pass; hinata regression d3 s3003 gi24: Ponder drew Preordain in the
+// first m2 pass, the second pass's Gamble saw it BEFORE the staged cards). No-op unless a staged
+// card precedes an unstaged one, i.e. byte-identical for every deck that never stages.
+static void MergeStagedToHandEnd(GameState& state)
+{
+    std::vector<Card>& hand = state.ActivePlayer().hand;
+    bool seen_staged = false, out_of_order = false;
+    for (const Card& c : hand)
+    {
+        if (c.m_is_staged) { seen_staged = true; }
+        else if (seen_staged) { out_of_order = true; break; }
+    }
+    if (!out_of_order) { return; }
+    std::stable_partition(hand.begin(), hand.end(), [](const Card& c) { return !c.m_is_staged; });
+}
+
 // Deal combat damage: all eligible attackers hit the opponent.
 static void SimulateCombat(GameState& state)
 {
@@ -38504,6 +38534,7 @@ static void SimulateCombat(GameState& state)
     // combat.
     static const bool s_fb_sba = EnvOn("MTG_FB_SBA", true);
     if (s_fb_sba) { SacrificeDepletedLands(state); }
+    MergeStagedToHandEnd(state);   // main 2's head: the executor's staged merge (see the helper)
 }
 
 // Provider-visible combat simulation (MirrorwingProvider::LegendKeepIndex): decide a legend-rule
@@ -38971,6 +39002,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // side of the draw would mill a different set of cards in the rollout than in the real game.
     // No-op at 0 rad counters, i.e. everywhere but a deck holding Mariposa Military Base.
     ApplyRadMill(state, state.active_player_index);
+    MergeStagedToHandEnd(state);   // main 1's head: the executor's staged merge (see the helper)
     state.StampMain1Hand();   // main-2 land drop: newly arrived lands only (lockstep w/ GameEngine::MainPhase)
     return true;
 }
@@ -49015,6 +49047,8 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
     ApplyPlanDirect(copy, post, false);
     if (OpponentHasLost(copy)) { return true; }
     if (!fix || g_bp_fired_last <= 0) { return false; }
+    // A follow-on m2 plan is a fresh executor TakeTurn pass, which re-merges staged cards at the end.
+    MergeStagedToHandEnd(copy);
     // LETHAL-ONLY KILL-SCAN, probed on COPIES and committed only on a kill. Two rejected forms
     // preceded this one, both by measurement: an unconditional re-solve-and-play was net-red on
     // the hinata battery (extra non-lethal casts deviate the future from everything the outer
@@ -52174,6 +52208,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // everything the outer line priced.
             if (m2fmode != 0 && g_bp_fired_last > 0 && g_m2fix_nest < 1)
             {
+                // The second m2 PhasePlan is replayed as a fresh executor TakeTurn pass
+                // (GameEngine::MainPhase's committed re-entry), whose head re-merges the staged
+                // cards AFTER everything this plan drew -- see MergeStagedToHandEnd.
+                MergeStagedToHandEnd(s2);
                 ++g_m2fix_nest;   // the scan's applies must not re-enter the scan
                 std::vector<TurnSolver::Plan> fx = M2DropLive(s2)
                     ? EnumeratePlansWithLand(s2, false) : EnumeratePlansM2Memoized(s2);

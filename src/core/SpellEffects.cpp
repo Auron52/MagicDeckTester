@@ -343,33 +343,24 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // known-library simplification), but it can still hit the just-tutored card (the real Gamble
     // risk on a small hand). Only fires for to-hand tutors that set the flag; off everywhere else.
     //
-    // KNOWN ORDER-SENSITIVITY, opt-in fix behind MTG_CANON_TUTOR_DISCARD (default OFF -- read this
-    // before flipping it). The victim is an index into the hand AS STORED, and storage order is NOT
-    // part of the rollout/executor lockstep contract: the rollout pushes staged (Soulfire / Expressive
-    // Iteration / impulse) cards straight into hand while the executor merges Player::staged_cards at
-    // its own breakpoints, so the two legitimately hold the SAME cards in a different order and then
-    // shed DIFFERENT cards (Hinata seed 4010 post-fix: rollout Mountain, executor Island, same index).
-    // MTG_CANON_TUTOR_DISCARD draws over ascending per-copy m_number instead -- still a uniform draw
-    // over the same set, so the modelled randomness is unchanged; it just stops depending on a vector's
-    // layout, and it does put the two sides in lockstep on the traced game.
+    // The victim is an index into the hand AS STORED, so storage order IS part of the rollout/executor
+    // lockstep contract. The one place the two worlds laid the hand out differently was staged cards:
+    // the executor holds them out of hand between TakeTurn passes and re-appends them at each pass's
+    // head, while the rollout kept them in place, so a card drawn in between sat on opposite sides of
+    // them and the same index shed a different card (hinata overnight d5 s5005 gi13: the executor's
+    // Gamble discarded a Reality Spasm the verified T5 line cast; realised T7). The rollout now
+    // reproduces the executor's layout at every pass head (TurnSolver.cpp MergeStagedToHandEnd), and
+    // over the hinata smoke + regression searched cells every executor Gamble discard (322) has a search
+    // discard at the same hand, in the same order, shedding the same card. An earlier opt-in fix drew
+    // over ascending m_number instead (MTG_CANON_TUTOR_DISCARD, deleted 2026-10-01): it hid the layout
+    // difference rather than removing it, and it re-dealt every Gamble game. See
+    // docs/design/rollout-executor-lockstep.md #5.
     //
-    // Why it is NOT the default (measured 2026-07-29). Suite A/B, all three modes: searched-depth net
-    // -0.105, which splits into train (smoke+regression) -0.113 and HELD-OUT (overnight) +0.008 --
-    // train-positive, held-out NEUTRAL. The d0 cases move +0.044, which is noise (no lookahead, so
-    // changing which card a random discard takes just reshuffles). So this buys no measurable quality;
-    // it is correctness only, against a 12+ case Hinata GT rebaseline.
-    //
-    // Its one fd-diverge (0 -> 1, Hinata seed 4259) was ROOT-CAUSED and is NOT a defect here: with the
-    // default discard that game has no T5 win at all, even at width 4; this change CREATES one, and
-    // only the default breakpoint continuation width (W=2) fails to cash it (MTG_BP_SEARCH=4 realises
-    // T5). Realised turns are T6 either way. See docs/design/rollout-executor-lockstep.md.
-    //
-    // ORDER OF FIXES MATTERS. Enabling this while the two hands still differed in CONTENT took Hinata
-    // 2 -> 4 per 500: any index-based pick lands on a different card when the sets differ, however it
-    // is canonicalised. Two upstream fixes had to land first -- the rollout counting staged cards
-    // toward the 7-card cleanup limit (SimulateEndAndStartNextTurn) and the rollout not stamping a
-    // played land's per-copy m_number (PlayLandByName), which made a Karoo bounce hand the rollout an
-    // unnumbered Island. Those took it 3 -> 1. See docs/design/rollout-executor-lockstep.md.
+    // ORDER OF FIXES MATTERS. Any index-based pick lands on a different card when the two hands differ
+    // in CONTENT, however it is laid out. Two upstream fixes had to land first -- the rollout counting
+    // staged cards toward the 7-card cleanup limit (SimulateEndAndStartNextTurn) and the rollout not
+    // stamping a played land's per-copy m_number (PlayLandByName), which made a Karoo bounce hand the
+    // rollout an unnumbered Island. See docs/design/rollout-executor-lockstep.md.
     if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
     {
         uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
@@ -380,18 +371,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
         mix ^= mix >> 31;
         mix = SaltSeed(mix, g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt);   // shuffle-variance: a mid-game random event
-        // Canonical draw order: hand indices sorted by m_number (stable on ties, so two copies that
-        // somehow share a number still resolve deterministically). Opt-in only.
-        static const bool s_canon_discard = EnvOn("MTG_CANON_TUTOR_DISCARD");
-        int victim = static_cast<int>(mix % ap.hand.size());
-        if (s_canon_discard)
-        {
-            std::vector<int> order(ap.hand.size());
-            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { order[i] = i; }
-            std::stable_sort(order.begin(), order.end(),
-                             [&](int a, int b) { return ap.hand[a].m_number < ap.hand[b].m_number; });
-            victim = order[victim];
-        }
+        const int victim = static_cast<int>(mix % ap.hand.size());
         const int         victim_num  = ap.hand[victim].m_number;
         const std::string victim_name = ap.hand[victim].m_name;
         // Discard goes to the graveyard (CR 701.8 / a discarded card is put into its owner's
@@ -406,8 +386,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
             for (const Card& hc : ap.hand)
             { hs += hc.m_name.str(); hs += "#"; hs += std::to_string(hc.m_number); hs += ","; }
             std::fprintf(stderr,
-                         "[discard] T%d seed=%llu search_count=%llu handsize=%zu victim=%d(%s) hand=[%s]\n",
-                         state.turn_number, static_cast<unsigned long long>(state.game_seed),
+                         "[discard] real=%d T%d seed=%llu search_count=%llu handsize=%zu victim=%d(%s) hand=[%s]\n",
+                         g_real_resolution ? 1 : 0, state.turn_number, static_cast<unsigned long long>(state.game_seed),
                          static_cast<unsigned long long>(state.search_count), ap.hand.size(),
                          victim, victim_name.c_str(), hs.c_str());
         }
