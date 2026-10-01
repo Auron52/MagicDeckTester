@@ -175,6 +175,45 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   without going through `--batch` therefore has NO utilisation reporting — which is one
   more reason the pooled queue is the only route.
 
+- **COLLAPSE WASTED SEARCH UNCONDITIONALLY — a collapse does NOT have to buy wall to be worth
+  keeping (user directive, 2026-10-01).** The user's words: *"I do indeed want to collapse
+  unnecessary search as much as possible even if it causes us to search further. Wasted work is
+  wasted work regardless of the situation."*
+  * **Freed budget being spent on more depth is not a reason to withhold the collapse.** Narrowing
+    a menu, folding a symmetry, or deleting a dominated branch very often shows up as ~0% wall,
+    because the search simply goes deeper inside the same budget. That is the budget being spent
+    *better*, not the collapse failing. Judge a collapse on **work removed and soundness** — never
+    on whether wall fell. Do not report a sound collapse as though a small wall number were a
+    verdict against it.
+  * **The SECOND reason is diagnostic, and it is the sharper one:** *"Another important reason to do
+    this collapse is to allow us to more accurately locate remaining issues in our branching."*
+    Every unnecessary branch is noise in the enumeration/odometer census, so each collapse sharpens
+    the signal that finds the *next* defect. A collapse worth 0.2% of wall that makes the census
+    legible has already paid for itself. This repo has demonstrated it: pooling the interchangeable
+    sac outlets took the worst odometer shape **4.61e+03 -> 2.02e+03 and `ind` -> 0**, and that is
+    what made the remaining shape readable at all.
+  * **The method is iterative and it TERMINATES IN A DIAGNOSIS:** *"We should just keep pruning
+    anything that seems unreasonable and then the any remaining unreasonable items should be more
+    obvious. Once all of those are gone the expectation would be that whatever remains is not
+    branching related."* So keep pruning the unreasonable, and do **not** stop because one prune
+    measured small. When nothing unreasonable is left, the residual cost is **per-node** rather than
+    branching — that is the point at which allocation/evaluation profiling (`operator new`,
+    `~vector<Action>`) is the right next move, and not before.
+  * **Do NOT add complexity whose purpose is to dodge a depth increase:** *"I don't want to
+    duplicate work or overcomplicate search just to prevent us from going to the next depth. If we
+    find that going to the next depth is not worth it, (the quality gain is not worth the
+    performance) then we should change our settings so that we don't go there."* Depth economics are
+    a **settings** question — the depth matrix and escalation config — not a search-hack question.
+    Recomputing something redundantly, or bolting on a second estimator, so the search can decide a
+    ply earlier is the forbidden shape.
+  * **What this does NOT license.** A *lossy* narrowing is still a quality question and still needs
+    its A/B: "it removes work" never excuses dropping a line that might be best. The distinction
+    that matters is **sound dominance / identity fold** (collapse freely, default ON) vs
+    **projection / heuristic narrowing** (earn it, default OFF until measured).
+    `MTG_FUNGUS_DEVOUR_LETHAL` is the first kind — a proven kill makes `k = own` dominant — and is
+    ON despite measuring 0.2%. `MTG_FUNGUS_DEVOUR_LANDMARKS` is the second — eating 3 of eight
+    identical N/N tokens really does differ from eating 5 — and stays OFF until a quality A/B.
+
 - **A DECK MUST BE IN THE REGRESSION SUITE BEFORE THE VALUE LEAF OR MULLIGAN PROFILE (user
   directive, 2026-09-26).** Adding the deck to `test/regression_cases.sh` is a **required step of
   the analysis**, and both generators now **refuse to start** (exit 3) without it:
