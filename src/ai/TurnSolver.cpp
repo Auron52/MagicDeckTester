@@ -1284,6 +1284,21 @@ static void DedupFamRecord(bool is_dup, const DedupFirstSeen& first, std::uint64
 // the frequency of the line a rank RANGE on Irencrag would make expressible -- measure it before
 // building the range. USER 2026-09-01: "It might be irrelevant enough to skip."
 static std::atomic<long long> g_iw_drops{0}, g_iw_drops_with_payoff{0};
+// MTG_FREE_EQUIP_DIAG=1: why the collapse did or did not arm, per enumeration. Exists because
+// "identical digests" on a collapse is ambiguous between INERT and NEVER FIRED, and this repo has
+// already shipped a widening whose digests matched because it emitted zero variants (memory
+// digest-equality-can-mean-broken). Counters only; no behaviour.
+static std::atomic<long long> g_feq_calls{0};      // enumerations that ran the builder
+static std::atomic<long long> g_feq_armed{0};      // ...that found >= 1 mandatory group
+static std::atomic<long long> g_feq_groups{0};     // mandatory groups found, summed
+static std::atomic<long long> g_feq_equip_groups{0};  // all-Equip groups seen (the denominator)
+static std::atomic<long long> g_feq_rej_cost{0};   // ...rejected: equip cost is not 0 right now
+static std::atomic<long long> g_feq_rej_attached{0};  // ...rejected: Equipment already attached
+static std::atomic<long long> g_feq_rej_host{0};   // ...rejected: host not already on battlefield
+static std::atomic<long long> g_feq_rej_params{0}; // ...rejected: not pure upside
+static std::atomic<long long> g_feq_disarm_shroud{0}; // frames disarmed by (b)
+inline bool FreeEquipDiagOn() { static const bool v = EnvOn("MTG_FREE_EQUIP_DIAG"); return v; }
+
 static std::atomic<long long> g_iw_subsets{0}, g_iw_subsets_with_payoff{0};
 static std::mutex g_iw_mu;
 static std::map<std::string,long long> g_iw_followers;
@@ -2078,6 +2093,18 @@ namespace
             long long site_tot = 0;
             for (int i = 0; i < unitsite::kSiteCount; ++i) { site_tot += unitsite::g_units[i].load(); }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
+            if (g_feq_calls.load() > 0)
+            {
+                std::cerr << "FREE_EQUIP_MANDATORY calls=" << g_feq_calls.load()
+                          << " armed=" << g_feq_armed.load()
+                          << " mandatory_groups=" << g_feq_groups.load()
+                          << " | equip_groups_seen=" << g_feq_equip_groups.load()
+                          << " rej: cost=" << g_feq_rej_cost.load()
+                          << " attached=" << g_feq_rej_attached.load()
+                          << " host=" << g_feq_rej_host.load()
+                          << " params=" << g_feq_rej_params.load()
+                          << " | disarm_shroud=" << g_feq_disarm_shroud.load() << "\n";
+            }
             if (g_iw_drops.load() > 0)
             {
                 std::cerr << "[rollout-stats] iren_waste drops=" << g_iw_drops.load()
@@ -12322,6 +12349,166 @@ static inline bool FungibleEquipCopyViolated(const std::vector<int>& class_of,
         if (c < 0) { continue; }
         if (choice[g] > last[c]) { return true; }
         last[c] = choice[g];
+    }
+    return false;
+}
+
+// ---- MANDATORY FREE EQUIP (MTG_FREE_EQUIP_MANDATORY) ------------------------------------------
+// A FREE, pure-upside equip onto a host ALREADY on the battlefield is not a decision: its group may
+// not take the 0 ("skip") position, so the 2^k subset over k such digits collapses to the one
+// all-taken position. The argument is the USER's, 2026-10-01, on KittyEquipment v2: *"I think we
+// need to make a dominance argument."*
+//
+// WHY IT IS A DOMINANCE AND NOT A PREFERENCE. Attaching an Equipment whose equip cost is {0} right
+// now and whose attach carries no downside can never be worse than declining it:
+//   * Equipment do not COMPETE for a host -- a creature holds unlimited Equipment, so taking one
+//     attach never forecloses another (unlike a sac outlet's fodder or a mana source's {T});
+//   * nothing in the engine prices an attached Equipment as a cost. It still counts for metalcraft
+//     and for the artifact count, and Golem-Skin Gauntlets reads "each Equipment attached to IT",
+//     so piling more onto the same host strictly RAISES the Gauntlets' own bonus;
+//   * the attach is not spent: re-equipping later is legal, and if metalcraft switches OFF in the
+//     meantime the attachment is already paid for while an unattached copy becomes dear again. So
+//     attaching now weakly dominates attaching later, and strictly dominates never.
+// Same shape and same reasoning as MTG_SPORE_POP_ALL ("there is no benefit to waiting"), and like
+// it this is an EXACT collapse, not a heuristic narrowing.
+//
+// MEASURED (kitty v2, seed 2002, d3/b250, MTG_BRANCH_HEAVY): the heaviest decisions are 10 option
+// groups of which SEVEN are single-variant same-host free equips -- odo 2048, of which 2^7 is pure
+// subset waste -- and the shared-resource funnel rejects 0.00% of 36,672,476 subset visits, so
+// nothing downstream was removing them either. The group-size histogram is almost entirely size-1
+// (turn 6: 457,279 size-1 groups against 28,905 size-2), i.e. the odometer on this deck is a
+// product of binary take/skip digits, which is exactly the shape this collapses.
+//
+// THE THREE CARVE-OUTS ARE ENFORCED, NOT ARGUED -- an incomplete list is the documented failure
+// mode here (see BuildFungibleEquipClasses' "keep it exhaustive rather than argue reachability"):
+//   (a) THE HOST MUST ALREADY BE ON THE BATTLEFIELD. A host that only a CAST digit brings in makes
+//       the forced position illegal, which would delete real plans rather than fold them -- that is
+//       precisely the dependency MTG_EQUIP_PIECE_DEPS exists to model, and forcing a digit on top of
+//       it would fight that guard instead of composing with it.
+//   (b) equip_grants_shroud ANYWHERE IN THE FRAME DISARMS IT ENTIRELY. Equip targets ("attach to
+//       target creature you control"), so a Lightning Greaves that grants shroud to its own host
+//       makes every LATER equip onto that host an illegal target. Forcing digits could then
+//       manufacture a sequence with no legal order at all. Frame-wide rather than per-group because
+//       the illegality is created by one digit and suffered by the others.
+//   (c) equip_sacrifices_prior_host, and any negative bonus, are excluded outright.
+// Note what is NOT a carve-out: Colossus Hammer's "loses flying" is modelled by no param and is
+// inert regardless -- nothing blocks anywhere in this engine, so flying buys no evasion to lose.
+static bool FreeEquipMandatoryEnabled()
+{
+    static const bool env_on = EnvOn("MTG_FREE_EQUIP_MANDATORY");      // DEFAULT OFF
+    return heurarm::Flag(heurarm::FREE_EQUIP_MANDATORY, env_on);
+}
+
+// Totally free RIGHT NOW. The flat ints are the whole test: hybrid and phyrexian pips bake their
+// colour into them (see ManaCost's representation note), so an all-zero flat cost with no {X} is
+// free under every payment assignment there is.
+static inline bool EquipCostIsZeroNow(const ManaCost& c)
+{
+    return !c.has_x && c.x_pips == 0
+        && c.generic == 0 && c.white == 0 && c.blue == 0 && c.black == 0
+        && c.red == 0 && c.green == 0 && c.colorless == 0;
+}
+
+// Can ATTACHING this Equipment ever be worse than declining to? Exhaustive over CardParams' whole
+// equip_* surface as of 2026-10-01 -- a param added later that can hurt the host must be added here.
+static inline bool EquipAttachPureUpside(const CardDefinition* d)
+{
+    if (d == nullptr)                                   { return false; }
+    const CardParams& p = d->params;
+    if (!p.is_equipment)                                { return false; }
+    if (p.equip_sacrifices_prior_host)                  { return false; }   // (c)
+    if (p.equip_grants_shroud)                          { return false; }   // (b), also per-group
+    if (p.equip_power_bonus < 0)                        { return false; }
+    if (p.equip_tough_bonus < 0)                        { return false; }
+    if (p.equip_scale_power_per_equipment < 0)          { return false; }
+    if (p.equip_scale_tough_per_equipment < 0)           { return false; }
+    return true;                                                            // haste/lifelink/
+}                                                                           // vigilance/charges: up
+
+// Groups whose 0 position is dominated, ascending. Choice-INDEPENDENT precompute, once per
+// enumeration (like BuildFungibleEquipClasses).
+static int BuildMandatoryFreeEquip(const GameState& state, const std::vector<Action>& cands,
+                                   const std::vector<std::vector<int>>& groups,
+                                   std::vector<int>& mand)
+{
+    mand.clear();
+    const bool diag = FreeEquipDiagOn();
+    if (diag) { g_feq_calls.fetch_add(1, std::memory_order_relaxed); }
+    // (b) frame-wide disarm: one shroud-granter poisons every other digit's legality.
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::Equip) { continue; }
+        const CardDefinition* d = a.def;
+        if (d != nullptr && d->params.equip_grants_shroud)
+        {
+            if (diag) { g_feq_disarm_shroud.fetch_add(1, std::memory_order_relaxed); }
+            return 0;
+        }
+    }
+    auto on_bf_mine = [&](int num, bool want_creature) -> bool
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (p.card.m_number != num)                         { continue; }
+            return !want_creature || p.card.IsCreature();
+        }
+        return false;
+    };
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        const std::vector<int>& mem = groups[g];
+        if (mem.empty()) { continue; }
+        bool ok = true;
+        bool any_equip = false;
+        for (int j : mem)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::Equip)        { ok = false; break; }
+            any_equip = true;
+            if (!EquipCostIsZeroNow(a.cost))
+            { if (diag) { g_feq_rej_cost.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
+            if (a.sac_source_id <= 0 || a.sac_victim_id <= 0) { ok = false; break; }
+            // The Equipment itself must be ours, on the battlefield, and UNATTACHED: moving an
+            // already-attached copy off a host it is helping is a real decision, not a free gain.
+            const Permanent* src = nullptr;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                if (p.card.m_number != a.sac_source_id)             { continue; }
+                src = &p;
+                break;
+            }
+            if (src == nullptr || src->equipped_to != 0)
+            { if (diag) { g_feq_rej_attached.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
+            if (!on_bf_mine(a.sac_victim_id, true))                                   // (a)
+            { if (diag) { g_feq_rej_host.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
+            const CardDefinition* d = a.def ? a.def
+                                            : CardDatabase::Instance().LookupCached(src->card);
+            if (!EquipAttachPureUpside(d))
+            { if (diag) { g_feq_rej_params.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
+        }
+        if (diag && any_equip) { g_feq_equip_groups.fetch_add(1, std::memory_order_relaxed); }
+        if (ok) { mand.push_back(static_cast<int>(g)); }
+    }
+    if (diag && !mand.empty())
+    {
+        g_feq_armed.fetch_add(1, std::memory_order_relaxed);
+        g_feq_groups.fetch_add(static_cast<long long>(mand.size()), std::memory_order_relaxed);
+    }
+    return static_cast<int>(mand.size());
+}
+
+// Per-CHOICE check. Each mandatory digit is an INDEPENDENT unconditional requirement, so this is
+// valid on any subset of the digits it can see -- which is what lets the split walk run it per side
+// with no straddle guard (unlike FungibleEquipCopyViolated, which compares digits ACROSS groups).
+static inline bool MandatoryFreeEquipViolated(const std::vector<int>& mand,
+                                              const std::vector<int>& choice)
+{
+    for (int g : mand)
+    {
+        if (static_cast<std::size_t>(g) < choice.size() && choice[static_cast<std::size_t>(g)] <= 0)
+        { return true; }
     }
     return false;
 }
@@ -27238,6 +27425,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    // equip digit -> the cast groups its pieces need; see
                                    // BuildEquipPieceDeps.
                                    const EquipPieceDeps& equip_deps,
+                                   // groups whose "skip" position is dominated (empty when the
+                                   // collapse is off or found nothing); see BuildMandatoryFreeEquip.
+                                   const std::vector<int>& mand_equip,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
@@ -27288,6 +27478,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     // wrong prune. One pass over the groups, once per call.
     bool copy_pred_on = !copy_class.empty();
     bool dep_pred_on  = !equip_deps.Empty();
+    // No straddle guard: every mandatory digit is its own unconditional requirement, so the test is
+    // valid on whatever digits the caller's vector holds (see MandatoryFreeEquipViolated).
+    const bool mand_pred_on = !mand_equip.empty();
     if (copy_pred_on || dep_pred_on)
     {
         std::vector<char> side(num_groups, 0);
@@ -27391,6 +27584,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                        (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
                     || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice))
                     || (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+                    || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, choice))
                     || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
                 if (!rejected)
                 {
@@ -27447,6 +27641,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                    (any_splice && SpliceGroupChoiceRejected(sidx, groups, full, splice_collapse_on))
                 || (accel_pred_on && NonPrefixAccelViolated(accel_order, full))
                 || (copy_pred_on && FungibleEquipCopyViolated(copy_class, full))
+                || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, full))
                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, full));
             if (!rejected)
             {
@@ -29870,6 +30065,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Byte-identical (SubsetHasStrandedEquip rejects the same positions); see BuildEquipPieceDeps.
     EquipPieceDeps equip_deps;
     if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, equip_deps); }
+    // Free pure-upside equips onto an on-board host -> the "skip" position is dominated, so the
+    // group must take a member. Empty (and inert) unless the collapse is on. See
+    // BuildMandatoryFreeEquip for the dominance argument and its three carve-outs.
+    std::vector<int> mand_equip;
+    if (FreeEquipMandatoryEnabled()) { BuildMandatoryFreeEquip(state, cands, groups, mand_equip); }
     // Choice-independent inputs to the two splice predicates (name ids, copy positions, hand counts),
     // plus the lowest odometer digit that can change any predicate. See BuildSpliceOdometerIndex.
     std::unique_ptr<SpliceOdometerIndex> sidx_owned;
@@ -29940,6 +30140,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
+        const bool mand_pred_on = !mand_equip.empty();   // see MandatoryFreeEquipViolated
         // Canonical-prefix fold, hoisted to the digit (see BuildFoldPrefixMap): 65% of this walk's
         // subset visits on Snow are non-canonical positions whose whole inner loop is dead work.
         // Gated on pre.dup_source as well, so the skip can never outlive the leaf clause it mirrors.
@@ -29960,6 +30161,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // two-stage split it needs no straddle guard.
             const bool fold_viol = fold_pred_on && FoldPrefixViolated(fold_map, choice);
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+                                || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, choice))
                                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
                                 || (fold_viol && !s_fold_odo_verify);
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
@@ -30063,7 +30265,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, copy_class, equip_deps, vial_ok, consider);
+                               has_ind_accel, copy_class, equip_deps, mand_equip, vial_ok, consider);
     }
 
     return materialize_best();
@@ -40410,6 +40612,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Equip piece dependencies (mirrors Solve). See BuildEquipPieceDeps.
     EquipPieceDeps equip_deps;
     if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, equip_deps); }
+    // Free pure-upside equips onto an on-board host -> the "skip" position is dominated, so the
+    // group must take a member. Empty (and inert) unless the collapse is on. See
+    // BuildMandatoryFreeEquip for the dominance argument and its three carve-outs.
+    std::vector<int> mand_equip;
+    if (FreeEquipMandatoryEnabled()) { BuildMandatoryFreeEquip(state, cands, groups, mand_equip); }
     // Choice-independent inputs to the two splice predicates + the lowest predicate-relevant odometer
     // digit (mirrors Solve). See BuildSpliceOdometerIndex / MinPredicateDigit.
     std::unique_ptr<SpliceOdometerIndex> sidx_owned;
@@ -40502,6 +40709,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
+        const bool mand_pred_on = !mand_equip.empty();   // see MandatoryFreeEquipViolated
         // Canonical-prefix fold at the digit -- the twin of Solve's (see BuildFoldPrefixMap), with
         // ONE extra gate that is the whole reason this twin is not just a copy.
         //
@@ -40523,6 +40731,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+                                || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, choice))
                                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
                                 || (fold_pred_on && FoldPrefixViolated(fold_map, choice));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
@@ -40626,7 +40835,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, copy_class, equip_deps,
+                               has_ind_accel, copy_class, equip_deps, mand_equip,
                                [](const std::vector<int>&) { return true; },
                                eval_and_push);
     }
