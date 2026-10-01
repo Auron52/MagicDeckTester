@@ -1,7 +1,43 @@
 # Sac-for-mana outlets: model them as a LAST-RANKED MANA SOURCE, not a searched action
 
-**Status (2026-09-18): BUILT, behind `MTG_SAC_OUTLET_PAY` / `heurarm::SAC_OUTLET_PAY`, DEFAULT
-OFF.** A `heurarm` slot rather than a bare env flag so both arms ride ONE pooled batch (an
+**Status (2026-10-01): BUILT 2026-09-18, DEFAULT OFF, and its A/B IS RUNNING FOR THE FIRST TIME.**
+See §"WHY THIS WENT 13 DAYS UNMEASURED" at the bottom — the short version is that the A/B manifests
+were written and never executed, and the lever was then carried as *"believed measured"*.
+
+USER, 2026-10-01, restating the original request and in effect re-asking for this:
+
+> *"To be clear, Utopia Mycon mana should be able to produce black if needed."*
+> *"But I'm not worried about presumptively holding black. We should be able to just do it on
+> demand. (i.e. sacrifice a saproling or tap a land)"*
+
+That is precisely what this lever does, and it is the reason it SUPERSEDES the colour-fan narrowing
+in `sac-pool-colour-gate.md`: with `MTG_SAC_OUTLET_PAY` on there is no float colour to commit, hence
+no colour fan, no singleton gate, and no speculative-black question at all — the payer makes black
+when a cost needs black.
+
+**The in-flight run (2026-10-01):** `logs/victim_ab/pay_ab.json` → `logs/victim_ab/pay_ab.out`,
+72 jobs / 15,600 games, ONE pooled batch, three arms pinned PER JOB so the process default is
+irrelevant:
+
+| arm | flags |
+|---|---|
+| `base` | `MTG_SAC_POOL_TURN_COLOR=false` — the pre-2026-10-01 baseline |
+| `tc` | `MTG_SAC_POOL_TURN_COLOR=true` — the colour narrowing alone |
+| `pay` | `MTG_SAC_OUTLET_PAY=true` + the above — this lever |
+
+Decks: Fungus `candidate-b-2026-09` **and Goblins** (Skirk Prospector is the same card shape, and
+Goblins is the one of the two in the regression suite, so it is the real gate). Cells d0 / d3 b10 /
+d5 b20, 4 paired seed blocks each, seeds spaced by `games`.
+
+**Read it against the bar below: avg win turn must not regress (any regression is disqualifying),
+and `units` is the cost metric** because units are deterministic and so immune to the shared box.
+**Built-in control:** Skirk pins `{R}`, so its fan is already a singleton — Goblins `base` and `tc`
+must come out IDENTICAL. If they differ, the colour narrowing is mis-scoped, not the pay lever.
+
+**If Fungus comes back quality-negative, suspect §"STILL MISSING: the plan-added fodder credit"
+FIRST, not the ranking.**
+
+A `heurarm` slot rather than a bare env flag so both arms ride ONE pooled batch (an
 `EnvOn` static can only ever BE one arm, which forces the per-arm wave CLAUDE.md forbids). The OFF
 arm is byte-identical: smoke `configs changed: 0`, `play-changed=0`, scenarios 100/100.
 
@@ -263,3 +299,52 @@ deck merely looks a little slower. If the A/B comes back quality-negative on Fun
 first thing to suspect**, not the ranking. `SubsetOversubscribesSacFodder` already bails out
 entirely when a co-selected action can add a matching creature, and Melira Pod (where persist
 *returns* a sacrificed body) is the regression case that catches a naive static count.
+
+---
+
+# WHY THIS WENT 13 DAYS UNMEASURED (recorded 2026-10-01, at the user's question)
+
+Worth writing down because the failure is procedural, not technical, and it is repeatable.
+
+**There was never a technical blocker.** The lever has a `heurarm` slot, so it pools cleanly — which
+is why its first real A/B could be launched as 72 jobs in a single batch. (Contrast
+`MTG_FORCE_USES_M2`, which genuinely *could not* be measured in a pooled batch because
+`GoldFishRunner.cpp` read it as a process-wide `static const bool`. That one had an excuse.)
+
+**The A/B was planned and then skipped, inside three minutes.** Timestamps:
+
+| when | what |
+|---|---|
+| 09-18 00:30 | `logs/sacpay_ab/manifest.json` written |
+| 09-18 01:48 | the lever commits (`d81195f7`) — scenarios 100/100, smoke byte-identical OFF, ASan clean ON over 250 Goblins + 100 Fungus games |
+| 09-18 01:51 | `logs/sacpay_ab/holdout.json` written |
+| 09-18 02:05 | next commit is condemnation perf — the session had moved on |
+
+Both of those files are **manifests only**: a `jobs` array of 16, and no `avg`, no `digest`, no
+`played=` anywhere in them. Verified again 2026-10-01, they are still results-free. So the careful
+work went into *correctness* (and found three real zone-mutation bugs, two of them live under §2a)
+while the cost/quality question the lever exists to answer was never asked.
+
+**Then it was carried as "believed measured."** The existence of `holdout.json` was mistaken for its
+results. Caught 2026-09-18 11:08 while sequencing the Fungus value-leaf freeze, and recorded as the
+memory *"open the artifact before believing a measurement exists."*
+
+**And then the parking was legitimate, which is why nobody came back.** The freeze rule is that every
+open play lever must be *settled* first, and *"this ships OFF for now"* is a complete way to settle
+one. So it was settled OFF, the freeze proceeded correctly, and the measurement simply stayed
+undone. It surfaced once more on 2026-09-24 — but only to verify it does **not** fix the same-line
+fodder hole (`sac-fodder-created-in-the-same-line.md` §"root cause"), a narrow correctness check
+rather than the A/B.
+
+## The gap this exposes, which is the transferable part
+
+**A lever parked as "ships OFF pending measurement" is indistinguishable in the tree from one that
+was measured and REJECTED.** Both read as a default-OFF flag with a long justifying comment at the
+read site. Nothing in the comment, the flag registry or the doc header separated the two, so every
+later reader — including three of my own sessions — saw a settled decision where there was an unpaid
+debt.
+
+**So: a read-site comment for a default-OFF lever must say WHICH of the two it is.** "Default OFF,
+UNMEASURED — A/B pending" and "default OFF, measured and rejected (evidence: ...)" are different
+facts and must not share a phrasing. `MTG_FUNGUS_SAC_DRAW_CLOCK` was on the same 2026-09-18 list
+("built and measured, adoption not yet decided") and is worth auditing for the same ambiguity.

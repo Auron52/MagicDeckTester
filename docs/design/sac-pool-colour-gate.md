@@ -1,5 +1,18 @@
 # The sac-outlet pool's colour gate: 3 cards in 60 disabled a collapse on 100% of boards
 
+> **SUPERSESSION WARNING (2026-10-01), read before adopting anything here.** The USER has redirected
+> this at the better fix: *"I'm not worried about presumptively holding black. We should be able to
+> just do it on demand. (i.e. sacrifice a saproling or tap a land)"* — which is
+> `MTG_SAC_OUTLET_PAY` / `docs/design/sac-mana-outlet-as-deferred-source.md`. With that lever on,
+> the mana outlet's searched actions are SUPPRESSED, so there is no float colour, no colour fan, no
+> singleton gate and no speculative-black question — this whole document's narrowing becomes inert
+> for Utopia Mycon. Its A/B is running now (`logs/victim_ab/pay_ab.json`).
+>
+> **UNCOMMITTED WORKING-TREE STATE:** `src/ai/TurnSolver.cpp` has `SacPoolTurnColorEnabled()` flipped
+> to **default ON** (committed state is OFF). Deliberately left uncommitted pending that A/B: if the
+> payment-source model adopts, REVERT the flip rather than ship two mechanisms for one problem. The
+> flip is measurement-neutral for the running A/B because all three arms pin the flag per job.
+
 **Status 2026-10-01: diagnosed, sized, and a first fix BUILT behind `MTG_SAC_POOL_TURN_COLOR`
 (default OFF). It recovers ~56% of the lost opportunity. The remaining ~44% needs a different
 change (§5).**
