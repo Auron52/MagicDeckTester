@@ -12354,9 +12354,24 @@ static bool EquipPieceDepsEnabled()
     return heurarm::Flag(heurarm::EQUIP_PIECE_DEPS, env);
 }
 
+// ADOPTED DEFAULT-ON 2026-10-01 (=0 is the hatch). It had been default OFF since it was built, on a
+// measurement that read 0.990x units with digests identical 20/20 -- and that reading was an
+// ARTEFACT of the hone-counter refusal below: on KittyEquipment v2 the class builder was returning
+// ZERO classes from the turn Dwalin, Weaponmaster lands, so the arm measured the cost of a collapse
+// that never armed. With the count carried in the key instead (see BuildFungibleEquipClasses), the
+// same arm is:
+//     v2, held-out 40 seeds   units 0.9670   ms 0.9384   digests identical 40/40   0 worse / 0 better
+//     v1 (THE SUITE DECK), 20 units 0.9942               digests identical 20/20   0 worse / 0 better
+//     smoke suite             104/104 PASS, configs changed 0, play-changed 0
+// and per-game on the tail it reaches 0.772 / 0.830. Play-identical on every deck measured and
+// cheaper on both equipment decks, so it is a clean win under the adopt-clean-wins rule rather than
+// a trade. The general digest caveat above still stands (the surviving representative can be a
+// different PHYSICAL copy, which moves card numbers on an isomorphic board) -- it simply does not
+// fire on any deck in the suite, and that class of movement is already accepted for the default-ON
+// MTG_FOLD_HAND_CASTS.
 static bool EquipCopyCollapseEnabled()
 {
-    static const bool env = EnvOn("MTG_EQUIP_COPY_COLLAPSE");
+    static const bool env = EnvOn("MTG_EQUIP_COPY_COLLAPSE", true);
     return heurarm::Flag(heurarm::EQUIP_COPY_COLLAPSE, env);   // per-JOB so one pooled batch runs both arms
 }
 
@@ -12397,14 +12412,37 @@ static int BuildFungibleEquipClasses(const GameState& state,
             // Unreachable today (the is_equipment gate below excludes every Fungus card), but this
             // list is "every field that can differentiate two copies" and an incomplete one is the
             // documented failure mode -- keep it exhaustive rather than argue reachability.
-            || src->spore_counters != 0 || src->quest_counters != 0 || src->hone_counters != 0
+            || src->spore_counters != 0 || src->quest_counters != 0
             || src->fade_counters != 0)
         { continue; }
+        // HONE COUNTERS ARE CARRIED IN THE KEY, NOT REFUSED -- and that is the difference between
+        // this collapse working on KittyEquipment v2 and finding nothing at all.
+        //
+        // MEASURED: Dwalin, Weaponmaster puts a hone counter on EVERY Equipment it sees
+        // (hone_counters_on_enter_or_attack), so from the turn Dwalin lands, every equipment
+        // permanent on the board carries a nonzero count -- and a `hone_counters != 0` membership
+        // refusal therefore disarmed the collapse for the whole rest of the game. That is why the
+        // MTG_EQUIP_COPY_COLLAPSE arm measured 0.990x units on 20 v2 seeds with digests identical
+        // 20/20: not "the symmetry is absent" but "the class builder returned 0 classes", while the
+        // heaviest frames of those same games show `Bone Saw [equip:victim=58]` three times over.
+        //
+        // The refusal proved a narrower thing than it implemented, exactly as the sibling
+        // ACT-SOURCE fold's spore/quest clause did: "a Bone Saw with 2 hone counters and one with 3
+        // are not interchangeable" is an argument about UNEQUAL counts. Equal counts ARE
+        // interchangeable -- the counter's only semantic reader is EquipBonusFor's
+        // `pw += e.hone_counters` (SpellEffects.h), identical for equal counts -- so the count goes
+        // into the signature, where unequal counts still land in different classes. The same
+        // treatment `tapped` and `entered_this_turn` already get: a differentiating FIELD belongs in
+        // the key, and refusing membership outright is only right for a field the key cannot
+        // express. MTG_FOLD_COUNTER_SOURCES makes this identical argument at the act-source site
+        // (see FoldCounterSourcesOn); this needs no flag of its own because the whole collapse is
+        // already behind MTG_EQUIP_COPY_COLLAPSE and already documented as digest-moving.
         const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().LookupCached(src->card);
         if (!d || !d->params.is_equipment || d->params.equip_sacrifices_prior_host) { continue; }
         std::string s = "E|";
         s += a0.card_name.c_str();
-        std::snprintf(buf, sizeof buf, "|%d%d", src->tapped ? 1 : 0, src->entered_this_turn ? 1 : 0);
+        std::snprintf(buf, sizeof buf, "|%d%d|h%d", src->tapped ? 1 : 0,
+                      src->entered_this_turn ? 1 : 0, src->hone_counters);
         s += buf;
         bool ok = true;
         for (int j : mem)
@@ -12460,6 +12498,94 @@ static bool FreeCastHoistEnabled()
 {
     static const bool env_on = EnvOn("MTG_FREE_CAST_HOIST");           // DEFAULT OFF
     return heurarm::Flag(heurarm::FREE_CAST_HOIST, env_on);
+}
+
+static bool ZeroPowerEquipFreeOnlyEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ZERO_POWER_EQUIP_FREE_ONLY");   // DEFAULT OFF
+    return heurarm::Flag(heurarm::ZERO_POWER_EQUIP_FREE_ONLY, env_on);
+}
+
+// Should this (equipment, host) pair be WITHHELD because it costs mana and the equipment adds no
+// power of its own? MTG_ZERO_POWER_EQUIP_FREE_ONLY.
+//
+// USER ruling, 2026-10-01 (KittyEquipment v2): *"we want to equip those 0 power equipment only when
+// they are free or I suppose if we have Golem-Skin Gauntlets and nothing else to do with the mana.
+// Overall they are pretty poor to use for anything but draws and free equips in goldfishing."*
+//
+// v2 plays SIXTEEN such cards -- Cathar's Shield x4, Accorder's Shield x4, Kite Shield x4,
+// Spidersilk Net x4 -- every one {0} to cast with an equip of {2}/{3}, and their whole role on the
+// list is the CAST: an artifact toward metalcraft plus a Sram/Puresteel draw.
+//
+// WHAT THIS DOES AND DOES NOT NARROW. On an ordinary host the engine already refuses the pair:
+// rider_delta reads the attach as 0 and the `rd > 0` ranking never offers it, so nothing here is
+// new for the common case. The ONE case this narrows is a host carrying a Golem-Skin Gauntlets,
+// where EquipAttachDeltaFor correctly prices the attach at +1 power because the Gauntlets counts one
+// more Equipment. That is the case the user prices as POOR rather than wrong -- {3} for +1 damage,
+// against {1} for a Colossus Hammer whose equip is free under metalcraft -- so this is a PROJECTION,
+// not a dominance fold, and it is default OFF until measured per the collapse doctrine.
+//
+// MEASURED SHAPE (seed 13019, the worst game of a 20-seed probe: 7.56M units, 313M odometer
+// positions): the two heaviest decisions are 12-group frames at odo=4096 whose digits include
+// `Accorder's Shield [equip:victim=58]` and `Kite Shield [equip:victim=58]` -- 4x of that frame's
+// walk is those two shields alone.
+//
+// Every carve-out below is a named reason a POWERLESS attach still earns its mana. The free-at-the-
+// stamp and metalcraft cases are the caller's (see the emission site): a cost of {0} is always
+// offered, and an equip the frame's own casts will free must not be judged on the stale enumeration
+// stamp -- that is the lesson SameTurnMetalcraftEquipCredit and MetalcraftWillFreeEquips exist for.
+static bool PaidPowerlessEquipWithheld(const GameState& state, const CardDefinition& ed,
+                                       int equip_source_num, int host_num, int cost_generic)
+{
+    if (cost_generic <= 0) { return false; }               // free: the user's own exception
+    const CardParams& p = ed.params;
+    if (p.equip_power_bonus > 0)                { return false; }   // adds power on its own
+    if (p.equip_scale_power_per_equipment > 0)  { return false; }   // Gauntlets itself always does
+    if (p.equip_grants_haste)                   { return false; }   // the benefit is the ATTACK
+    if (p.equip_grants_lifelink)                { return false; }
+    if (p.equip_combat_damage_charges > 0)      { return false; }   // Jitte's charge engine
+    if (p.equip_sacrifices_prior_host)          { return false; }   // Wargear: the search weighs it
+    const int controller = state.active_player_index;
+    // Dwalin's hone counters ride the EQUIPMENT permanent and ARE power on attach (SpellEffects.h:
+    // "pw += e.hone_counters"). EquipAttachDeltaFor structurally cannot see them -- it takes
+    // CardParams, not the Permanent -- which is a pre-existing emission gap (a honed shield reads
+    // rd == 0 and is already never offered). This slot must not deepen it, so the counter is read
+    // off the permanent here.
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.card.m_number != equip_source_num) { continue; }
+        if (q.hone_counters > 0) { return false; }
+        break;
+    }
+    // Host-side reasons: Kemba's upkeep Cat is per Equipment attached, so a powerless one still
+    // pays; and an attach that FLIPS double strike doubles the host's WHOLE power, which is the
+    // opposite of poor. Checked on the battlefield and then in hand (a host still in hand is a
+    // legal pair here -- see the `hosts` list -- and a Kor Duelist cast this turn is exactly the
+    // case the equip-host width policy already widens for).
+    auto host_earns_it = [&](const CardDefinition* hd, int n_att, bool ds_now) -> bool
+    {
+        if (hd == nullptr)                           { return true; }   // unknown: keep the pair
+        if (hd->params.upkeep_tokens_per_equipment)  { return true; }
+        if (ds_now)                                  { return false; }  // already doubled: no flip
+        if (hd->params.double_strike_while_equipped) { return true; }
+        return hd->params.double_strike_min_equipment > 0
+            && n_att + 1 >= hd->params.double_strike_min_equipment;
+    };
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.card.m_number != host_num) { continue; }
+        const bool ds_now = q.card.HasKeyword(Keyword::DoubleStrike)
+                         || HasDoubleStrikeFromEquipment(q, state);
+        return !host_earns_it(CardDatabase::Instance().LookupCached(q.card),
+                              CountEquipmentAttachedTo(state, controller, host_num), ds_now);
+    }
+    for (const Card& c : state.players[controller].hand)
+    {
+        if (c.m_number != host_num) { continue; }
+        return !host_earns_it(CardDatabase::Instance().LookupCached(c), 0,
+                              c.HasKeyword(Keyword::DoubleStrike));
+    }
+    return true;
 }
 
 // Is CASTING this {0}-mana Equipment dominant -- i.e. is "don't cast it" never better? The
@@ -21517,6 +21643,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (stoneforge_id != 0) { break; }
                 }
             }
+            // MTG_ZERO_POWER_EQUIP_FREE_ONLY (USER ruling, 2026-10-01 -- see
+            // PaidPowerlessEquipWithheld). The frame-level metalcraft precondition is computed ONCE
+            // here, not per pair: an equip whose cost the frame's OWN casts will zero must never be
+            // judged on the stale enumeration stamp, which is the same correction
+            // SameTurnMetalcraftEquipCredit makes at the affordability gate. Both scans are skipped
+            // outright when the flag is off, so every other deck stays byte-identical.
+            const bool s_zp_free_only = ZeroPowerEquipFreeOnlyEnabled();
+            const bool s_zp_mc_free   = s_zp_free_only && MetalcraftWillFreeEquips(state, actions);
             for (std::size_t e = 0; e < equips.size(); ++e)
             {
                 const CardDefinition* ed = equips[e].first;
@@ -21685,6 +21819,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             if (!other) { continue; }
                         }
                     }
+                    // The USER's 0-power rule, applied to THIS pair. Never in an open set: the
+                    // viewer and the standing all-hosts A/B must not narrow (same rule as the width
+                    // policy below). Dropped BEFORE the Action is built, so the digit never exists.
+                    if (s_zp_free_only && !s_zp_mc_free && !open_all
+                        && PaidPowerlessEquipWithheld(state, *ed, equips[e].second->m_number, h.id,
+                               EquipCostGenericNow(state, state.active_player_index, *ed, h.id)))
+                    { continue; }
                     const bool haste_benefit = ed->params.equip_grants_haste && h.fresh && !h.haste;
                     if (!open_all)
                     {

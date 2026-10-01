@@ -426,3 +426,130 @@ Worth recording, because the right answer was to *check* rather than build:
 Unit tests **2,641,296 / 2,641,296**. Scenarios **125/125** at the default *and* **125/125** with
 both flags forced on. Default-OFF builds byte-identical to the pre-change binary on 5/5 v2 digests,
 before and after the `FREE_EQUIP_MANDATORY` deletion.
+
+## 7. The 0-power ruling, and the disarm the census found instead (2026-10-01, later still)
+
+**USER:** *"we want to equip those 0 power equipment only when they are free or I suppose if we have
+Golem-Skin Gauntlets and nothing else to do with the mana. Overall they are pretty poor to use for
+anything but draws and free equips in goldfishing."*
+
+v2 plays **sixteen** such cards — Cathar's Shield x4, Accorder's Shield x4, Kite Shield x4,
+Spidersilk Net x4 — all `{0}` to cast with equip `{2}`/`{3}`.
+
+### 7a. The ruling was already in force, and here is the frame evidence
+
+§6c argued this from the code; this is the measurement. Across the **10 heaviest decisions** of a v2
+game (`MTG_BRANCH_SHAPE` + `MTG_BRANCH_HEAVY=10`, seed 13001), the option groups are:
+
+```
+30 Colossus Hammer      [cast]      30 Colossus Hammer      [equip]
+ 9 Golem-Skin Gauntlets  [cast]     10 Golem-Skin Gauntlets  [equip]
+ 9 Dwalin, Weaponmaster  [cast]
+```
+
+**Zero shield casts and zero shield equips.** The casts are gone because `MTG_FREE_CAST_HOIST`
+force-takes them (they are free, and they are the "draws" half of the user's sentence: an artifact
+toward metalcraft plus a Sram/Puresteel trigger). The equips are gone because `rd == 0`.
+
+### 7b. `MTG_ZERO_POWER_EQUIP_FREE_ONLY` — built, measured, REFUTED
+
+The one case the engine *does* offer is a **Golem-Skin Gauntlets host**, where `EquipAttachDeltaFor`
+correctly prices the attach at +1 power per Gauntlets. The lever withholds exactly that pair when it
+costs mana (carve-outs: free at the stamp, freeable by the frame's own casts via
+`MetalcraftWillFreeEquips`, own power bonus or scaler, haste, lifelink, Jitte charges, re-host
+sacrifice, hone counters on the equipment, a Kemba host, or an attach that flips double strike).
+
+| | units | ms | avg | digests | worse / better |
+|---|---|---|---|---|---|
+| v2, held-out 40 seeds (24001-24040) | **0.9957** | 0.9679 | 4.8250 → 4.8500 | 38/40 identical | **1 / 0** |
+| v1 — THE SUITE DECK, 20 seeds | 1.0000 | 1.0075 | unchanged | **20/20 identical** | 0 / 0 |
+
+**That near-null is noise, not a small win.** The lever touched **2 of 40 games** (7.3% of units) and
+on *those two* it was worse on both axes: units x1.0504, and seed 24010 finished a turn **later**
+(5 → 6). The **churn control** settles which kind of loss that is — re-run at **16x budget the zp arm
+still finishes on turn 6**, so the line it removed was real, not freed budget re-spent.
+
+**The finding is that the user's own exception is load-bearing.** v2 plays **three** Gauntlets, so on
+a loaded host every further Equipment is **+3** power and "poor" stops being true. The `rd > 0` rule
+already implements the rest of the ruling, so there was nothing left to collapse here. Default OFF;
+the slot is kept as the record of the measurement so it is not rebuilt.
+
+**And the sharper diagnostic point:** the 7.9M-unit tail game carrying **38%** of the sample's units
+was never touched. A frame census says which decision is *heaviest*, not where the volume *is*.
+
+### 7c. Where the volume actually is (`MTG_TURN_CENSUS`, seed 13019 — the worst game)
+
+| | |
+|---|---|
+| census rows (real-play decision roots) | **27**, `contended=0` |
+| their units | **7,561,008 — all of them** |
+| odometer positions | **313,288,102** |
+| subsets reaching `consider()` | **30,332,517** |
+| plans emitted | 3,517,009 (distinct 3,258,848) |
+| rollout calls | 1,667,488 |
+
+Two things this settles. First, **the missing apparatus is not the explanation**: every unit is
+attributed to a real-play root, so v2's absent keep table and value leaf are not hiding mulligan
+trial games (the Snow failure mode). Second, the cost is a **tail** — in a 20-seed sample, **5 games
+carry 88.8% of all units and two carry 76%**, so any lever must be priced on those games.
+
+### 7d. A hypothesis of mine, refuted before it was built
+
+`metalcraft_bound` adds *the summed generic of every Equip candidate* to the scalar prune bound (an
+upper bound on what `SameTurnMetalcraftEquipCredit` can forgive), which on a go-off frame is +24 or
+more and looked like it must be nullifying mana pruning frame-wide. **Measured:** turning the whole
+credit family off (`MTG_METALCRAFT_CREDIT=0`) is **0.9440** units over 20 seeds — so the tightening
+it suggested (credit only the *selected* equips, per position) could not be worth more than ~5%, and
+8 of 20 games were byte-identical with it off at all. Not built.
+
+### 7e. THE DISARM: Dwalin's hone counters silently disabled `MTG_EQUIP_COPY_COLLAPSE`
+
+The heaviest frames of the heavy games are made of **interchangeable copies**:
+
+```
+HEAVY rank=1 odo=4096 turn=4 groups=12   (board: Sram, Bone Saw x3, Accorder's Shield, Gauntlets)
+  [cast]  Dwalin | Shadowspear | Colossus Hammer | Shadowspear
+  [equip:victim=58]  Bone Saw x3 | Accorder's Shield | Kite Shield | Shadowspear x2 | Colossus Hammer
+```
+
+`BuildFungibleEquipClasses` exists to fold exactly this, and the branch-shape instrument prices the
+full interchangeable-copy fold at **2.349x of the whole search's odometer**. Yet the
+`MTG_EQUIP_COPY_COLLAPSE` arm had measured **0.990x units with digests identical 20/20** — which I
+had read as "the symmetry is absent".
+
+It was not absent. The class builder's eligibility list refused any source carrying a counter, and
+**Dwalin, Weaponmaster puts a hone counter on every Equipment**
+(`hone_counters_on_enter_or_attack`). From the turn Dwalin lands, every equipment permanent on the
+board carries a nonzero count and the builder returned **0 classes for the rest of the game**.
+
+The refusal proved a narrower thing than it implemented — the same defect, and the same fix, as the
+sibling act-source fold's spore/quest clause (`MTG_FOLD_COUNTER_SOURCES`, written for Fungus): *"a
+Bone Saw with 2 hone counters and one with 3 are not interchangeable"* is an argument about
+**unequal** counts. Equal counts are interchangeable (the counter's only semantic reader is
+`EquipBonusFor`'s `pw += e.hone_counters`), so the count belongs **in the signature**, exactly as
+`tapped` and `entered_this_turn` already are. One `snprintf` field.
+
+| after the fix | units | ms | avg | digests | worse / better |
+|---|---|---|---|---|---|
+| v2, held-out 40 seeds | **0.9670** | **0.9384** | unchanged | **40/40 identical** | 0 / 0 |
+| v1 — THE SUITE DECK, 20 seeds | 0.9942 | 1.0567 | unchanged | **20/20 identical** | 0 / 0 |
+
+Per-game on the tail: s24004 **0.772**, s24006 **0.830**, s24005 (the 7.9M-unit game) 0.962.
+
+No flag of its own: the whole collapse is already behind `MTG_EQUIP_COPY_COLLAPSE` (default OFF) and
+already documented as digest-moving in general, so widening what it catches cannot touch a default
+run. **It is now worth adopting on its own merits** — play-identical on both decks, cheaper on both.
+
+### 7f. The lesson worth carrying
+
+A default-OFF collapse that measures ~0 has **two** possible causes, and they are not distinguishable
+from the ratio: the symmetry is absent, or **the mechanism never armed**. §3c got this wrong once
+already (a reject predicate that walked what it rejected); this is the same mistake wearing a
+different hat — an eligibility guard that refused the very boards the symmetry lives on. Before
+concluding "absent", **count the classes the builder actually found**.
+
+### Verification (§7)
+
+Unit tests **2,641,296 / 2,641,296** (359/359 cases). Scenarios **125/125**. Default-OFF builds
+byte-identical to the pre-change binary on **5/5** v2 digests *and* units, re-checked after each of
+the two changes.
