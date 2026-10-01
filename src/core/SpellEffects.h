@@ -9161,8 +9161,20 @@ inline bool ApplyGraveyardPlayAbility(GameState& state, int controller, int sour
 // MTG_SAC_VICTIM_ENGINE -- defer a combat-damage TOKEN ENGINE as fodder. DEFAULT OFF; =1 enables.
 // Both are USER-specified play heuristics (2026-10-01) and both MOVE PLAY, so they are measured
 // before adoption rather than defaulted on.
-inline bool SacVictimDoomedOn() { static const bool v = EnvOn("MTG_SAC_VICTIM_DOOMED"); return v; }
-inline bool SacVictimEngineOn() { static const bool v = EnvOn("MTG_SAC_VICTIM_ENGINE"); return v; }
+// Both go through heurarm so ONE pooled batch runs every arm: the rank is read inside a sort
+// comparator, so a process can only ever BE one arm, and pricing them one process per arm is the
+// per-arm WAVE pattern CLAUDE.md forbids. It is also how the first measurement failed -- sequential
+// arms gave opposite signs because the baseline itself moved 45% under the neighbour's load.
+inline bool SacVictimDoomedOn()
+{
+    static const bool v = EnvOn("MTG_SAC_VICTIM_DOOMED");
+    return heurarm::Flag(heurarm::SAC_VICTIM_DOOMED, v);
+}
+inline bool SacVictimEngineOn()
+{
+    static const bool v = EnvOn("MTG_SAC_VICTIM_ENGINE");
+    return heurarm::Flag(heurarm::SAC_VICTIM_ENGINE, v);
+}
 
 // The m_numbers of permanents that DESTROY THEIR OWN TOKENS when they leave the battlefield
 // (Saproling Burst: `fade_ltb_destroys_created_tokens`). Computed ONCE per ranking pass and passed
@@ -9244,6 +9256,45 @@ inline int SacExpendabilityRank(const Permanent& v, int source_id,
 // ("{2}, Sacrifice another creature OR AN ENCHANTMENT"): an enchantment permanent becomes legal
 // fodder, and "another" makes the source itself ILLEGAL rather than merely last-ranked. Both
 // default false -> every pre-existing outlet (Skirk / Siege-Gang / Pashalik) is byte-identical.
+// REACH census for the two USER victim levers (MTG_SAC_VICTIM_PROBE, default OFF -> one branch on a
+// static bool and otherwise byte-identical). A flat A/B average has three causes -- no effect, never
+// ran, or two effects cancelling -- and the arms' avg turn alone cannot tell them apart. This counts
+// the two things that distinguish them: how often the rule's PRECONDITION is on the board at all
+// (a doomed fade token / a token engine among the eligible victims), and how often it actually
+// FLIPS the chosen victim. "Rarely reached but correct" and "reached constantly and irrelevant" are
+// opposite findings that both show up as a 0.000t delta.
+//
+// Counts every call, so it is dominated by ROLLOUT picks rather than real turns
+// ([[rollout-not-play-is-the-denominator]]) -- which is the right denominator here, because the
+// rank's job is to shape the SEARCH's victim choice.
+namespace sacvictimprobe
+{
+inline bool On() { static const bool v = EnvOn("MTG_SAC_VICTIM_PROBE"); return v; }
+inline std::atomic<long long> g_calls{0};        // CanonicalSacVictim calls with >=1 eligible victim
+inline std::atomic<long long> g_doomed_reach{0}; // ...of those, at least one DOOMED token eligible
+inline std::atomic<long long> g_doomed_flip{0};  // ...and the -1 changed which victim won
+inline std::atomic<long long> g_eng_reach{0};    // ...at least one TOKEN ENGINE (Shroofus) eligible
+inline std::atomic<long long> g_eng_flip{0};     // ...and the +1000 changed which victim won
+struct Dump
+{
+    ~Dump()
+    {
+        if (!On()) { return; }
+        const long long c = g_calls.load();
+        const auto pct = [c](long long n)
+        { return c > 0 ? (100.0 * static_cast<double>(n) / static_cast<double>(c)) : 0.0; };
+        std::fprintf(stderr,
+                     "[sac-victim-probe] calls=%lld  doomed: reach=%lld (%.2f%%) flip=%lld (%.3f%%)"
+                     "  engine: reach=%lld (%.2f%%) flip=%lld (%.3f%%)\n",
+                     c, g_doomed_reach.load(), pct(g_doomed_reach.load()),
+                     g_doomed_flip.load(), pct(g_doomed_flip.load()),
+                     g_eng_reach.load(), pct(g_eng_reach.load()),
+                     g_eng_flip.load(), pct(g_eng_flip.load()));
+    }
+};
+inline Dump g_dump;   // inline variable => ONE object across TUs; its dtor prints at exit
+}
+
 inline int CanonicalSacVictim(const GameState& state, int controller, int source_id,
                               const std::string& need_sub,
                               bool allow_enchantment = false, bool exclude_self = false,
@@ -9260,6 +9311,13 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
     // Matters most for the Skirk multi-sac burst, which sacrifices several victims in one turn.
     int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();
     const std::vector<int> doomed = DoomedTokenCreators(state);
+    // Probe state (MTG_SAC_VICTIM_PROBE). Run it with the levers ON: it answers "when the rule is
+    // enabled, how often is it reached and how often does it flip the pick", which is what a flat
+    // A/B needs explained. With the levers off `doomed` is empty by construction, so reach reads 0.
+    const bool probe = sacvictimprobe::On();
+    bool any_doomed = false, any_eng = false;
+    int vid_nod = -1, vr_nod = std::numeric_limits<int>::max();   // counterfactual: no doomed -1
+    int vid_noe = -1, vr_noe = std::numeric_limits<int>::max();   // counterfactual: no engine +1000
     for (const Permanent& v : state.battlefield)
     {
         if (v.controller_index != controller) { continue; }
@@ -9290,6 +9348,40 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
         { continue; }
         const int rank = SacExpendabilityRank(v, source_id, &doomed);
         if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
+        if (probe)
+        {
+            // Re-derive the two predicates here rather than having the rank report them: this is a
+            // diagnostic path, and threading two out-params through a function called inside a sort
+            // comparator would cost the hot path for a probe nobody runs in production.
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(v.card);
+            const bool pdoomed = !doomed.empty() && v.is_token && v.created_by_number != 0
+                              && std::find(doomed.begin(), doomed.end(),
+                                           v.created_by_number) != doomed.end();
+            const bool peng = pd != nullptr && pd->params.combat_damage_tokens_per_damage > 0
+                           && SacVictimEngineOn();
+            if (pdoomed) { any_doomed = true; }
+            if (peng)    { any_eng    = true; }
+            const int r_nod = rank + (pdoomed ? 1 : 0);      // undo the doomed bonus
+            const int r_noe = rank - (peng ? 1000 : 0);      // undo the engine defer
+            if (r_nod < vr_nod) { vr_nod = r_nod; vid_nod = v.card.m_number; }
+            if (r_noe < vr_noe) { vr_noe = r_noe; vid_noe = v.card.m_number; }
+        }
+    }
+    if (probe && victim_id >= 0)
+    {
+        sacvictimprobe::g_calls.fetch_add(1, std::memory_order_relaxed);
+        if (any_doomed)
+        {
+            sacvictimprobe::g_doomed_reach.fetch_add(1, std::memory_order_relaxed);
+            if (vid_nod != victim_id)
+            { sacvictimprobe::g_doomed_flip.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (any_eng)
+        {
+            sacvictimprobe::g_eng_reach.fetch_add(1, std::memory_order_relaxed);
+            if (vid_noe != victim_id)
+            { sacvictimprobe::g_eng_flip.fetch_add(1, std::memory_order_relaxed); }
+        }
     }
     return victim_id;
 }
