@@ -201,14 +201,41 @@ toughness SBA on arrival."*
    else, both behind `MTG_FUNGUS_M2_DEVOUR` (default ON). Recorded there from the user on 2026-09-23:
    *"doing mycoloth in the second main is important, because you want to attack with existing
    creatures and then sacrifice them."* That comment already names the Beastmaster consequence too.
-3. **Revisit `DevourCountCandidates` — but the analysis above needs correcting.** Because Mycoloth is
-   cast in the SECOND main, the bodies that attacked are already **tapped** when the devour axis is
-   enumerated, so `CanAttackFull` is false for them and the attack-protecting machinery is **already
-   self-inert**: `free_k` collapses to `own` and is then not pushed (the push requires
-   `free_k < own`), and the ladder's this-turn quest rung never fires because no `bodies[i].atk` is
-   true. So there is probably nothing to *remove* — which also explains why the landmark menu's
-   measured narrowing came from dropping the `big`-body rungs rather than from `free_k`. **Verify with
-   `MTG_DEVOUR_TRACE=1`, which prints `free=` and `outlet=`, before acting on it.**
+3. **`DevourCountCandidates`: DO NOT drop the attack-protecting rungs. Measured, and it refutes two
+   earlier readings of mine — both of them wrong in the same direction.**
+
+   I claimed first that those rungs were *dead weight* (because devour is post-combat) and then that
+   they were *already self-inert* (because the attacked bodies would be tapped). `MTG_DEVOUR_TRACE`
+   says neither:
+
+   | | emissions |
+   |---|---|
+   | devour axis emitted for **main 1** | **34,782 (87%)** |
+   | devour axis emitted for **main 2** | 5,218 (13%) |
+
+   and `free_k = 0` in 2,112 of 2,275 landmark emissions — i.e. the most expendable body on the
+   ladder *can* attack, so eating anything costs an attack. The bodies are not tapped.
+
+   **Why**, and it is structural: `ClassifyMainPhase`/`MainPhaseOverride` is applied by a `remove_if`
+   *after* `CollectActions` has already built the variants, and `MainPhaseFilterActive` requires
+   **`SearchedPlayActive()`** — *"SEARCHED play only (USER doctrine: no greedy solve within the
+   search). At depth 0 the deferred casts would be decided by the greedy second main — the forbidden
+   pairing."* So at d0 and in the greedy playout tails the filter **stands down** and Mycoloth really
+   is offered pre-combat. That is deliberate: the same function carries *"NO PLAYOUT CARVE-OUT HERE,
+   and that is a USER RULING rather than an omission."*
+
+   So the user's dominance argument is right about the **searched** turn, where the pin is live, and
+   would be wrong as a blanket narrowing of the hook — which serves both phases, with the pre-combat
+   emissions in the majority.
+
+   **And do not re-derive the obvious cost fix either.** Standing the filter down inside a playout is
+   recorded in-code as REJECTED BY THE USER, 2026-09-23, measured at 1.07x: *"I don't want to cast it
+   in main 1 in either situation. That makes no sense whatsoever. The purpose of casting it second
+   main is to have the attack phase in-between."* The rollout's second main must stay a second main;
+   only its PRICE is negotiable.
+
+   `MTG_DEVOUR_TRACE` now prints the phase (`m1`/`m2`) for exactly this reason — without it a `free=`
+   reading cannot be attributed to a phase, which is how both wrong inferences happened.
 4. The **lethal projection** is then the one real addition left, and it is the user's point: *"it
    should be easy to figure out when Mycoloth will be lethal, and it normally would be. That would be
    an easy choice there."* Mirror `FadeKLandmarks`' `k_win_now` / `k_win_next` collapse — judged on the

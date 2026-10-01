@@ -18754,8 +18754,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             if (s_devour_trace)
             {
-                std::fprintf(stderr, "[devour-enum] %s: own=%d pushing %d variants k={",
-                             a.card_name.str().c_str(), own, static_cast<int>(ks.size()));
+                // THE PHASE IS PART OF THE ANSWER, and leaving it out cost a wrong inference
+                // (2026-10-01): the devour axis is collected for BOTH mains, so a `free=0` in
+                // [devour-cands] -- "eating even the most expendable body costs an attack" -- says
+                // nothing about whether this emission is the pre-combat one that gets phase-filtered
+                // away or the post-combat one that is really played. MainPhaseOverride pins Mycoloth
+                // to Main2 for this deck, so only the m2 line matters, and the trace has to say which
+                // it is before anything is concluded from it.
+                std::fprintf(stderr, "[devour-enum] %s: m%d own=%d pushing %d variants k={",
+                             a.card_name.str().c_str(), is_pre_combat ? 1 : 2, own,
+                             static_cast<int>(ks.size()));
                 for (std::size_t z = 0; z < ks.size(); ++z)
                 { std::fprintf(stderr, "%s%d", z ? "," : "", ks[z]); }
                 std::fprintf(stderr, "}\n");
