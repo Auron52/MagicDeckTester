@@ -15227,6 +15227,50 @@ static int BuildStormGoffLine(const std::vector<Action>& cands, std::vector<int>
 // enumeration collapses to it. This is why a mono-red deck floats RED, never a dead off-colour (the
 // old W,U,B,R,G order defaulted ties to White). Shared so both float sources enumerate the identical
 // ordered set. NOT hardcoded red -- a blue deck floats blue, etc.
+// CEILING census for the sac-outlet pool's COLOUR gate. See the read site in CollectActions.
+// MTG_SAC_POOL_PROBE, default OFF -> one branch on a static bool and otherwise byte-identical.
+namespace sacpoolprobe
+{
+inline constexpr std::size_t kMaxN    = 8;
+inline constexpr std::size_t kMaxCols = 5;
+inline bool On() { static const bool v = EnvOn("MTG_SAC_POOL_PROBE"); return v; }
+inline std::atomic<long long> g_reached{0};       // mana-outlet emissions that reach the pool gate
+inline std::atomic<long long> g_blocked{0};       // ...blocked because the colour fan is not a singleton
+inline std::atomic<long long> g_would_pool{0};    // ...and which would otherwise have POOLED
+inline std::atomic<long long> g_would_pool_n{0};  // sum of family sizes over g_would_pool
+inline std::array<std::atomic<long long>, kMaxN + 1>    g_n_hist{};
+inline std::array<std::atomic<long long>, kMaxCols + 1> g_cols{};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!On()) { return; }
+        const long long r = g_reached.load(), b = g_blocked.load(), w = g_would_pool.load();
+        const auto pct = [](long long n, long long d)
+        { return d > 0 ? (100.0 * static_cast<double>(n) / static_cast<double>(d)) : 0.0; };
+        std::fprintf(stderr,
+                     "[sac-pool-probe] gate reached=%lld  blocked-by-colour=%lld (%.2f%%)"
+                     "  of those WOULD-POOL=%lld (%.2f%% of reached)  avg family N=%.2f\n",
+                     r, b, pct(b, r), w, pct(w, r),
+                     w > 0 ? static_cast<double>(g_would_pool_n.load()) / static_cast<double>(w) : 0.0);
+        std::fprintf(stderr, "[sac-pool-probe] would-pool family size N:");
+        for (std::size_t i = 2; i <= kMaxN; ++i)
+        {
+            const long long v = g_n_hist[i].load();
+            if (v > 0) { std::fprintf(stderr, "  N=%zu:%lld", i, v); }
+        }
+        std::fprintf(stderr, "\n[sac-pool-probe] would-pool colour-fan width:");
+        for (std::size_t i = 2; i <= kMaxCols; ++i)
+        {
+            const long long v = g_cols[i].load();
+            if (v > 0) { std::fprintf(stderr, "  cols=%zu:%lld", i, v); }
+        }
+        std::fprintf(stderr, "\n");
+    }
+};
+inline Dump g_dump;
+}
+
 static std::vector<std::string> ChosenFloatColorCandidates(const GameState& state)
 {
     const Player& ap = state.players[state.active_player_index];
@@ -15301,6 +15345,76 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
     const int cap = EnvInt("MTG_SAC_COLOR_CAP", 0);
     if (cap > 0 && static_cast<int>(colors.size()) > cap) { colors.resize(static_cast<std::size_t>(cap)); }
     return colors;
+}
+
+// THE POOL GATE'S COLOUR FAN, SCOPED TO THIS TURN'S SINKS (MTG_SAC_POOL_TURN_COLOR, default OFF).
+//
+// ChosenFloatColorCandidates above scans hand + LIBRARY + graveyard + battlefield, which asks "could
+// this colour ever be wanted by this DECK". For the sac-outlet POOL that question is far too wide,
+// and the cost is not hypothetical: on Fungus candidate-b the whole black splash is THREE cards in
+// sixty (1 Slimefoot {1}{B}{G}, 2 Deathspore Thallid {1}{B}), and because they sit in the library
+// all game the fan is {G,B} on EVERY board, on EVERY turn, in EVERY rollout. The pool's gate demands
+// a singleton fan, so those three cards disable the collapse 100% of the time (measured:
+// MTG_SAC_POOL_PROBE reported blocked-by-colour = 100.00% of 4,425,133 gate arrivals, of which
+// 37.48% would otherwise have pooled). Nothing reported it, because the pool going quiet is not an
+// error -- it is a fall-through to the per-source powerset.
+//
+// So this asks the narrower question: could the colour be wanted by a sink THIS TURN. A floated
+// colour empties at end of turn, so the only consumers are casts/activations in this same turn, and
+// a colour with no pip demanded by anything in hand / on board / in the graveyard is payable only
+// against GENERIC -- which the kept colour pays equally well. On that slice it is a dominance
+// argument rather than a preference.
+//
+// WHAT IT CAN LOSE, stated rather than glossed: a plan that floats {B} SPECULATIVELY and then draws
+// into the black card later in the same turn (Psychotrope Thallid's draw). The float colour is
+// committed when the plan is enumerated, while the drawn card is still in the library, so dropping
+// library demand drops that line. It is a narrow case -- one Psychotrope in the list, and the
+// breakpoint continuation after the draw re-enumerates with the card in HAND where this scan does
+// see it -- but it is a real one, which is why this is a HEURISTIC narrowing at DEFAULT OFF and not
+// a fold. It is also deliberately scoped to the POOL GATE only: the per-source path keeps the full
+// fan, so Lotus Bloom / Apex of Power and every non-pooling board are untouched.
+static std::vector<std::string> SacPoolTurnColorCandidates(const GameState& state)
+{
+    // A provider that collapses the fan itself (Lotus Bloom's haste-and-red rule) already answers a
+    // narrower question than this one; defer rather than compete with it.
+    if (ResolveProvider(state).RestrictSacColorsToHasteAndRed())
+    { return ChosenFloatColorCandidates(state); }
+    static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+    const Player& ap = state.players[state.active_player_index];
+    int demand[5] = { 0, 0, 0, 0, 0 };
+    auto scan = [&](const Card& card)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(card);
+        if (!cd || cd->card.IsLand()) { return; }
+        const ManaCost& mc = cd->card.m_mana_cost;
+        demand[0] += mc.white; demand[1] += mc.blue; demand[2] += mc.black;
+        demand[3] += mc.red;   demand[4] += mc.green;
+    };
+    // HAND and BATTLEFIELD and GRAVEYARD -- every zone a cast or activation can be paid for out of
+    // this turn. NOT the library: that is the whole narrowing.
+    for (const Card& c : ap.hand)      { scan(c); }
+    for (const Card& c : ap.graveyard) { scan(c); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        scan(p.card);
+    }
+    std::vector<int> idx;
+    for (int c = 0; c < 5; ++c) { if (demand[c] > 0) { idx.push_back(c); } }
+    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return demand[a] > demand[b]; });
+    std::vector<std::string> colors;
+    for (int c : idx) { colors.push_back(kColorLetters[c]); }
+    // NO COLOURED SINK AT ALL this turn: every candidate is then equivalent (generic only), but
+    // returning an empty list would make the caller's singleton test read as "pool anything". Fall
+    // back to the deck-wide answer so the pooled float is a colour the deck can actually use.
+    if (colors.empty()) { return ChosenFloatColorCandidates(state); }
+    return colors;
+}
+
+bool SacPoolTurnColorEnabled()
+{
+    static const bool v = EnvOn("MTG_SAC_POOL_TURN_COLOR");
+    return heurarm::Flag(heurarm::SAC_POOL_TURN_COLOR, v);
 }
 
 // MTG_SAC_COLOR_FOLD -- DEFAULT ON (adopted 2026-08-21); =0 reverts to the per-colour fan. Read once
@@ -23375,9 +23489,60 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // not be the same enumeration. Those boards stay on the per-source path.
                 std::vector<std::string> pool_cols;
                 if (sd->params.sac_outlet_add_mana_any_color)
-                { pool_cols = ChosenFloatColorCandidates(state); }
+                {
+                    // MTG_SAC_POOL_TURN_COLOR narrows the fan to THIS TURN's sinks, which is what
+                    // lets the singleton gate below pass on a deck with a small off-colour splash.
+                    // Scoped to this gate: the per-source path further down keeps the full fan.
+                    pool_cols = SacPoolTurnColorEnabled() ? SacPoolTurnColorCandidates(state)
+                                                          : ChosenFloatColorCandidates(state);
+                }
                 else
                 { pool_cols.push_back(sd->params.sac_outlet_add_mana_color); }
+                // CEILING census for the colour gate (MTG_SAC_POOL_PROBE, default OFF -> one branch
+                // on a static). The 2.29x pool went SILENTLY OFF when this deck's list gained a
+                // black splash: the fan became {G,B} and every board fell through to the per-source
+                // powerset. Nothing reports that, so this counts how much the gate is actually
+                // costing -- how often it blocks a family that would OTHERWISE have pooled, and how
+                // big those families are (the collapse is 2^(2N) -> |counts|+1, so N is the size).
+                if (sacpoolprobe::On())
+                {
+                    sacpoolprobe::g_reached.fetch_add(1, std::memory_order_relaxed);
+                    if (pool_cols.size() > 1)
+                    {
+                        sacpoolprobe::g_blocked.fetch_add(1, std::memory_order_relaxed);
+                        // Would it have pooled but for the colour fan? Replays the SAME two tests the
+                        // pooled path uses, so this is the ceiling of a colour fix and not a guess.
+                        std::vector<int> probe_ids;
+                        bool probe_agree = true;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != state.active_player_index) { continue; }
+                            if (CardDatabase::Instance().LookupCached(q.card) != sd) { continue; }
+                            if (is_pre_combat && !HumanPlayActive()
+                                && ResolveProvider(state).DeferSacOutletPreCombat(state, q, is_mana_outlet))
+                            { continue; }
+                            const int qv = CanonicalSacVictim(state, state.active_player_index,
+                                                              q.card.m_number, need_sub,
+                                                              sd->params.sac_outlet_allows_enchantment,
+                                                              sd->params.sac_outlet_excludes_self);
+                            if (qv < 0) { continue; }
+                            if (qv != victim_id) { probe_agree = false; break; }
+                            probe_ids.push_back(q.card.m_number);
+                        }
+                        if (probe_agree && probe_ids.size() >= 2)
+                        {
+                            sacpoolprobe::g_would_pool.fetch_add(1, std::memory_order_relaxed);
+                            sacpoolprobe::g_would_pool_n.fetch_add(
+                                static_cast<long long>(probe_ids.size()), std::memory_order_relaxed);
+                            const std::size_t b = std::min<std::size_t>(probe_ids.size(),
+                                                                        sacpoolprobe::kMaxN);
+                            sacpoolprobe::g_n_hist[b].fetch_add(1, std::memory_order_relaxed);
+                            sacpoolprobe::g_cols[std::min<std::size_t>(pool_cols.size(),
+                                                 sacpoolprobe::kMaxCols)].fetch_add(
+                                1, std::memory_order_relaxed);
+                        }
+                    }
+                }
                 bool pooled = false;
                 if (pool_cols.size() == 1)
                 {

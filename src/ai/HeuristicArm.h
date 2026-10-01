@@ -298,6 +298,7 @@ enum Slot : int
     // purely from the neighbour's load. A pooled queue puts both arms on the box at once.
     SAC_VICTIM_DOOMED,        // MTG_SAC_VICTIM_DOOMED   a token its own creator will destroy (a faded-out Saproling Burst) is one step MORE expendable, so it loses a tie to an equal-power permanent body. USER: "prioritize 1/1 saprolings unless the Saproling Burst saprolings are the same size or smaller" (default OFF)
     SAC_VICTIM_ENGINE,        // MTG_SAC_VICTIM_ENGINE   a combat-damage TOKEN ENGINE (Shroofus Sproutsire) joins the `scaling` defer tier, so its 1/1 body is not eaten as ordinary Saproling fodder. USER: "I don't mean never shroofus, but Shroofus should be the last to go" -- DEFERRED, not excluded (default OFF)
+    SAC_POOL_TURN_COLOR,      // MTG_SAC_POOL_TURN_COLOR  the sac-outlet POOL's colour fan is scoped to THIS TURN's sinks (hand + battlefield + graveyard) instead of the deck-wide scan that includes the LIBRARY. Fungus candidate-b's black splash is 3 cards in 60, and because they sit in the library all game the fan is {G,B} on every board -- which trips the pool's singleton gate and silently disables the collapse on 100% of 4,425,133 gate arrivals (37.48% of them would otherwise pool). A HEURISTIC narrowing: it can drop a plan that floats {B} speculatively and then draws the black card the same turn (default OFF)
     COUNT
 };
 
@@ -557,6 +558,7 @@ inline const char* Name(int slot)
         "MTG_BP_NOBP_SITE9",
         "MTG_SAC_VICTIM_DOOMED",
         "MTG_SAC_VICTIM_ENGINE",
+        "MTG_SAC_POOL_TURN_COLOR",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
