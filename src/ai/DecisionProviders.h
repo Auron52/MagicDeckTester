@@ -1902,6 +1902,33 @@ void FungusCertReasonReport();
 class FungusProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM (DecisionProvider::BpChainSlotOptIn). The arm reserves
+    // a slot for the j-th continuation that itself opens a FURTHER breakpoint, for the case where
+    // that continuation ranks PAST the wave width and no rank variant can reach it. On this
+    // archetype it is enormously active and almost never that case: MTG_DEDUP_CENSUS at d1/b3 reads
+    // 98,933 chain applies in 25 games on the candidate-B list (~188x the shipped list per game) of
+    // which 99.5% are duplicates -- 68.9% `covered` (the rank arm already scored that exact entry)
+    // and 29.3% `empty` (nothing chainable), against 1.80% `past_W`.
+    //
+    // ADOPTED 2026-10-01. Measured on BOTH lists this provider serves, at three cells, and it is
+    // PLAY-IDENTICAL at every one of them -- zero digests moved out of 3,600+ games:
+    //
+    //   list          cell            units/ms   quality   digests moved
+    //   shipped       d3/b10          0.9922     +0.0      0/8
+    //   candidate-B   d1/b3 (gen)     0.990      +0.0      0/12   (and 0/8 in a first sample)
+    //   candidate-B   d3/b10          0.9945     +0.0      0/8
+    //
+    // PLAY-IDENTITY IS THE POINT HERE, not the ~1%. candidate-B's MULLIGAN GENERATION runs at d1/b3
+    // (its sidecar's mull_gen_depth / mull_gen_budget_ms) and takes DAYS, so 1% is tens of minutes --
+    // but more importantly a lever that cannot change the play cannot invalidate a keep table being
+    // fitted to that play, so unlike the greedy-walk charge (0.915x at W=16 but 12/12 digests moved)
+    // this one is safe to switch on in the MIDDLE of a generation. See
+    // docs/design/fungus-candidate-b-generation-cost.md.
+    //
+    // Note `past_W` is 1.80% rather than the 0.00% that justified the other per-deck opt-outs, so the
+    // arm does sometimes find its case here -- it just never changed the committed line at any cell
+    // measured. `MTG_BP_CHAIN_SLOT=1` restores the fleet default and keeps the A/B control alive.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::Implemented, "ProvenWinlessThisTurn is overridden below" }; }
     const char* Name() const override { return "Fungus"; }
