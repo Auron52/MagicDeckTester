@@ -13447,16 +13447,17 @@ static BpArm DedupArmOf(const TurnSolver::Plan& plan)
 // C=2, with every mover inside churn either way. Same gain for less work and less churn, so the
 // minimal setting is the default; C=2 stays reachable through the knob if a future chain deck needs
 // the second slot.
-static int BpChainSlots()
+// ...and it is now resolved PER JOB and PER DECK rather than once per process. Per-job because the
+// count is what an A/B varies and an env static pins one value process-wide, which would make a
+// (count x deck) matrix one batch per cell -- the defect pooled-ab-needs-arms-innermost exists to
+// stop. Per-deck because `past_w`, the share of chain applies that are the case the arm was BUILT
+// for, is a property of the deck's continuation lists: 0.20% on snow against load-bearing on
+// Dragonstorm. See DecisionProvider::BpChainSlotOptIn.
+static int BpChainSlots(const GameState& state)
 {
-    static const int c = []() -> int
-    {
-        const char* v = std::getenv("MTG_BP_CHAIN_SLOT");
-        if (v == nullptr || *v == '\0') { return 1; }   // DEFAULT ON
-        const int n = std::atoi(v);
-        return n < 0 ? 0 : n;
-    }();
-    return c;
+    const int job = valuearm::t_arm.bp_chain_slot;
+    if (job >= 0) { return job; }
+    return BpChainSlotFor(state);
 }
 
 // Defined with the wave-0 selector far below; the chain slot reads the same predicate.
@@ -42046,6 +42047,10 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     const int  s_max_base = BpMaxBase();
     const int  sites  = BpWave0SiteMask(state);   // wave-0 SELECTION only; the wave phase uses the full mask
     const bool dig_bp = BpDigFanoutPending(state, sites);
+    // Hoisted out of the chain loop below: the count is now a per-job / per-deck resolution rather
+    // than a process static, so reading it in the loop CONDITION would call ResolveProvider once per
+    // emitted chain variant per base plan. It cannot change within one call.
+    const int  chain_slots = BpChainSlots(state);
     std::vector<TurnSolver::Plan> variants;
     int fanned = 0;
     for (std::size_t base_i = 0; base_i < plans.size(); ++base_i)
@@ -42144,7 +42149,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
         // CONTINUES the chain, which the value ranker buries because it buys options rather than
         // board. bp_all = true so a chain turn keeps chaining at EVERY breakpoint it reaches -- the
         // Apex-on-Apex shape is one decision repeated, exactly the case bp_all exists for.
-        for (int j = 0; j < BpChainSlots(); ++j)
+        for (int j = 0; j < chain_slots; ++j)
         {
             TurnSolver::Plan v = p;
             v.bp_choice = kBpChainChoice + j;

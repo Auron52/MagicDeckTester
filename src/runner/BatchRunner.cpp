@@ -694,6 +694,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // with "flags": {"MTG_SOLVE_CHARGE": true} -- the flag says WHETHER to charge, this says HOW MUCH,
     // and the sweep needs both varying inside one pool.
     if (jspec.contains("solve_charge_w")) { j.arm.solve_charge_w = jspec["solve_charge_w"].get<int>(); }
+    if (jspec.contains("bp_chain_slot")) { j.arm.bp_chain_slot = jspec["bp_chain_slot"].get<int>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).
     // An UNKNOWN name throws rather than being ignored: a silently-dropped flag reads as "this arm was

@@ -836,6 +836,30 @@ public:
     // recoverable=210,097 UNRECOVERABLE=0 on this engine.
     virtual bool FoldSearchOdometerOptIn() const { return false; }
 
+    // BpChainSlotOptIn -- the per-deck count of RESERVED CHAIN-CONTINUATION breakpoint slots
+    // (MTG_BP_CHAIN_SLOT). -1 = no opinion = the shipped default of 1. Return 0 to stop emitting the
+    // arm on this deck.
+    //
+    // WHY THIS IS A PER-DECK HOOK AND NOT A CONSTANT. The chain slot exists for a chainable
+    // continuation ranked PAST the wave width -- Dragonstorm's rank 32 of 47, where it is
+    // load-bearing: without it claude_s1_gi0 and claude_s26_gi25 both regress T4 -> T5, bisected to
+    // that continuation. So it can never come off globally. But `past_w` -- the fraction of chain
+    // applies that are actually the case the arm was built for -- is a property of the DECK's
+    // continuation lists, and on snow it is 0.20%. There, 99.8% of the arm's applies land inside
+    // wave 0's own window and reach a state a sibling already scored.
+    //
+    // AND THE DUPLICATE RATE IS NOT THE LEVER, which is the lesson this hook carries. Collapsing the
+    // duplicates (MTG_BP_W0_CHAIN_COLLAPSE, which is sound and verified) is worth -0.03% units on
+    // snow; declining to EMIT the arm is worth -1.88% units and -10.72% `cand_scored` over 150
+    // games with win turns identical chunk by chunk. A duplicate STATE is not a removable CANDIDATE
+    // -- the candidate still costs an apply to discover it is a duplicate, so the saving is in never
+    // generating it. See docs/design/per-decision-work-census.md for both tables.
+    //
+    // The reader (BpChainSlotFor) resolves per-job arm -> explicitly-set env -> this hook -> 1, the
+    // same precedence as SolveChargeWeightOptIn, so `MTG_BP_CHAIN_SLOT=1` restores the fleet default
+    // on an opted-out deck and keeps the A/B control available after adoption.
+    virtual int BpChainSlotOptIn() const { return -1; }
+
     // GradesNoWinLeaf -- DEFAULT ON. When the rollout reaches the horizon with no win, publish the
     // resulting position's OPPONENT LIFE as the tie-break instead of letting every hopeless line
     // score the identical `max_turns + 1` and fall through to `plan.value`. See

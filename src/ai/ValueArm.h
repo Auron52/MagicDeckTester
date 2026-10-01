@@ -131,6 +131,14 @@ struct Arm
     // W in {1,4,16,...} x the fleet in ONE pooled batch. An env static pins one W per process.
     // 1 (and unset) = today's asserted 1:1 rate, byte-identical. See GreedyChargeGuard.
     int         solve_charge_w    = -1;     // <=0 unset => env => 1
+    // CHAIN-SLOT COUNT (MTG_BP_CHAIN_SLOT): how many chain continuations get a reserved breakpoint
+    // slot. Here rather than in heurarm for the same reason as solve_charge_w -- the knob is an int
+    // (0 = arm off, 1 = shipped default, 2 = reachable) and heurarm::Arm is boolean-only -- and for
+    // the same measurement reason: the arm's own census says collapsing its DUPLICATES is 5x smaller
+    // than not emitting it (snow 150 games: -0.03% units for the collapse vs -1.88% units / -10.72%
+    // candidates for `=0`), so what has to be measured is (slot count x deck) and an env static pins
+    // one count per process. -1 unset => env => the deck's BpChainSlotOptIn => 1.
+    int         bp_chain_slot     = -1;
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
     // heuristic leaf on a deck that ships a model. Note this must be explicit: sidecar PRESENCE is

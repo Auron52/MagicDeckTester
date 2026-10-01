@@ -1614,6 +1614,35 @@ public:
     // winning a turn SOONER -- the tail being the population the value-leaf and mulligan
     // generations actually pay for. Lossless: MTG_FOLD_VERIFY recoverable=210,097 UNRECOVERABLE=0.
     bool FoldSearchOdometerOptIn() const override { return true; }
+    // ...and STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (see
+    // DecisionProvider::BpChainSlotOptIn). The arm reserves a slot for the continuation that
+    // CONTINUES the chain -- which on Snow is 0.20% of its applies (`past_w`); the other 99.8% land
+    // inside wave 0's own window and reach a state a sibling variant already scored.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds (1705000+1000i, 1,600 games per arm per cell over
+    // d3/b10 + d5/b20, arms innermost, null arm per cell):
+    //
+    //   cell     core-ms   null    units    avg turns        games
+    //   d3/b10   0.971     0.994   0.9731   6.0488 both      +0.0
+    //   d5/b20   1.013     1.006   0.9860   6.0450 both      +0.0
+    //
+    // units -1.93% pooled (the train-seed run read -1.88%, so it replicates), `cand_scored`
+    // -12.93% (293,350 -> 255,427 on a paired 20-game counter read; train read -10.72%), and the
+    // quality cost is EXACTLY ZERO -- identical average winning turn to four decimals in both
+    // cells, on 1,600 games each. core-ms is deliberately NOT claimed: pooled 0.9943 against a null
+    // arm spanning +-0.6%, i.e. a null. What is claimed is deterministic work removed at no cost,
+    // which is `optimization-vs-estimand-change`: same result, less work.
+    //
+    // WHY THIS IS PER DECK AND NEVER GLOBAL: the arm is load-bearing on Dragonstorm, where
+    // claude_s1_gi0 and claude_s26_gi25 both regress T4 -> T5 without it, bisected to a
+    // rank-32-of-47 continuation. `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is
+    // how the A/B control survives the adoption.
+    //
+    // AND NOTE WHAT WAS *NOT* ADOPTED: MTG_BP_W0_CHAIN_COLLAPSE, which removes this arm's DUPLICATE
+    // applies soundly and is worth -0.03% units. Collapsing duplicates inside an arm that almost
+    // never pays off is optimising the wrong thing by 60x -- the apply that discovers a duplicate
+    // has already been paid for. See docs/design/snow-cost-2026-10-01.md §12.3.
+    int BpChainSlotOptIn() const override { return 0; }
     // Scrying Sheets holds its tap for the {1}{S} look ability while the board can still PAY that
     // ability without it -- the plain ladder ranks a {C}-only land 5 ("spend it FIRST"), which is
     // exactly backwards for a land whose tap has a second, better use. USER 2026-09-08, found while
@@ -2406,6 +2435,21 @@ inline bool FoldSearchOdometerFor(const GameState& s)
     static const int env_v = (e != nullptr && *e != '\0') ? std::atoi(e) : -1;   // -1 unset
     if (env_v >= 0) { return env_v != 0; }
     return ResolveProvider(s).FoldSearchOdometerOptIn();
+}
+
+// Reserved chain-continuation slots for this deck (see DecisionProvider::BpChainSlotOptIn for why
+// the count is per deck). Explicitly-set env wins, so MTG_BP_CHAIN_SLOT=1 restores the fleet default
+// on an opted-out deck -- the A/B control has to survive the adoption. A negative env value means
+// "off" exactly as the old reader did (`n < 0 ? 0 : n`), kept so the knob's documented behaviour is
+// unchanged for anyone who set it.
+inline int BpChainSlotFor(const GameState& s)
+{
+    static const char* e = std::getenv("MTG_BP_CHAIN_SLOT");
+    static const bool env_set = (e != nullptr && *e != '\0');
+    static const int env_v = env_set ? std::atoi(e) : -1;
+    if (env_set) { return env_v < 0 ? 0 : env_v; }
+    const int deck = ResolveProvider(s).BpChainSlotOptIn();
+    return deck >= 0 ? deck : 1;   // -1 = no opinion = the shipped default
 }
 
 // Searched dork attack/hold contested test (MTG_DORK_ATK_SEARCH; DecisionProviders.cpp).
