@@ -147,6 +147,46 @@ Three things fall out, and the first is the most important:
 3. **The rejection is back-loaded**: turns 7 and 8 are 79% of all subset visits and 76% of all
    rejects. It tracks board width, as the mechanism predicts.
 
+### 2c. DEVOUR WIDTH IS NOT THE COST (measured 2026-10-01, a NEGATIVE result worth keeping)
+
+`MTG_BRANCH_HEAVY=3` on the same rollout showed the heaviest decision (turn 6, board 22) decomposing
+as `14 x 14 (Mycoloth devour, two copies) x 3 x 3 (Burst X) x 5 x 5 (Mycon sac) x 2 = 88,200`.
+
+**Why the devour ladder was 13 of 14 wide.** `DevourCountCandidates` emits one rung per *contested*
+body and `big` is `EffectivePower() >= 2`. The eight Saprolings on that board are not 1/1s: Saproling
+Burst mints them at a printed 0/0 and `RefreshFadeTokens` writes their live P/T as the Burst's
+remaining fade counters, so every one read as big and bought its own rung. The fodder floor the
+per-body ladder is built around **did not exist on the board where it was meant to pay**. (The `0/0`
+in the token name is deliberate — a stable name for `m_name_hash` and the TT key as counters fall.)
+
+**A landmark menu fixes the width and buys nothing.** `MTG_FUNGUS_DEVOUR_LANDMARKS` (default OFF)
+replaces the ladder with a computed menu — decline / free-fodder prefix / last-irreplaceable-outlet /
+Beastmaster quest rungs / eat-all, at most five and independent of board width, the same shape
+`FadeKLandmarks` already uses for the Burst's own k.
+
+| | off | on | delta |
+|---|---|---|---|
+| win turn | 7 | 7 | unchanged |
+| wall | 11,714 ms | 11,831 ms | **+1.0% (no gain)** |
+| odometer | 56,017,966 | 19,742,411 | −64.8% |
+| plans | 5,134,973 | 4,488,263 | −12.6% |
+| **subset visits** | 43,664,421 | 43,313,150 | **−0.8%** |
+| heaviest call | 88,200 | 10,368 | −88% |
+
+The conclusion rests on the deterministic counter, not the timing: **subset visits moved 0.8%.** The
+walk was already pruning those devour branches, so the odometer was counting a space nobody walked.
+
+Two things follow, and both constrain what to try next:
+
+* **The odometer bounds the prize and does not predict it** — now measured twice on this deck. An
+  88% cut to the heaviest decision's space was worth zero wall.
+* **Plan construction is not the bottleneck either.** Plans fell 12.6% with no wall change. What is
+  left with real mass is the **43.7 M subset visits** and the per-subset predicate work inside them.
+
+This also confirms, at a far larger cut, what `DevourCountCandidates`' own comment already said and an
+earlier draft of this document cited against it: *"worth ~6.6% at d1/b3 … It is NOT a fix for the slow
+rollouts … Do not cite it as one."*
+
 ### How big is the prize, honestly
 
 25.03% of visits is what a leaf-level constraint currently discards. That is **not** a 4x, and the
