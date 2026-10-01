@@ -1,5 +1,25 @@
 # Fungus: candidate wins for mulligan-profile GENERATION (and general usage)
 
+> **CORRECTION, 2026-10-01 — THIS DOC'S FIRST DRAFT USED THE WRONG LIST.** USER: *"we should be
+> looking at the new fungus list not the old one."* The NEW list is
+> **`decks/Fungus/candidate-b-2026-09/Fungus.cod`** and it is a near-total rebuild, not a tweak:
+> Sol Ring, 4 Mycoloth, 4 Undercellar Myconid, 4 Saproling Burst, Slimefoot, Deathspore/Vitaspore
+> Thallid, Concordant Crossroads, Brightcap Badger, Shroofus Sproutsire — and a completely different
+> mana base of **4 Forest / 4 Secluded Courtyard / 4 Peat Bog / 4 Hickory Woodlot / 4 Blooming
+> Marsh** against the old 19 Forest + 3 Simic Growth Chamber.
+>
+> **Two consequences.** (1) The sections below marked OLD LIST are measured on the wrong deck and are
+> kept only as the contrast. (2) **The land-aura host heuristic is NOT inert after all** — Secluded
+> Courtyard, Peat Bog and Hickory Woodlot are *exactly* the three cards the user's rule names, and all
+> three are in this list. I previously reported the rule as inert on Fungus; that was true of the OLD
+> list only, where every land is green and non-depletion. On the new list every class A/B/C/D row
+> fires. `MTG_LAND_AURA_HOST_PICK` should be re-measured here before anything else about it is
+> believed.
+>
+> The new list is also far more expensive: at d3, 100 games, it runs **415,548 enumeration calls /
+> 17.26 M odometer / 4.19 M plans**, against the old list's 201,894 / 4.26 M / 0.94 M over *200*
+> games — roughly **8.7x the calls and 17x the plans per game**.
+
 2026-10-01. Written because the overnight window is for generation, and the question asked was
 *"look for any other wins we can consider for the mulligan profile generation ... or for general
 usage ... Of the Fungus deck."*
@@ -53,6 +73,107 @@ cannot see the regime generation pays for.** Attempts to reproduce it from the g
 the unwon d3 game (`--seed 2128 --game-index 126`) costs 0.10 s and raising `--max-turns` to 20
 changes nothing, because the deck still wins on turn 9.
 
+## THE NEW LIST: which turns are particularly slow, and what is on them
+
+USER: *"it would be best to look at particularly slow turns"* / *"analyze which turns are particularly
+slow."*
+
+### Per-turn, NEW list, CURRENT binary (d3 b10, 100 games, `--threads 1`)
+
+| turn | calls | sum_odo | plans | dedup | avg_odo | avg board |
+|---|---:|---:|---:|---:|---:|---:|
+| 3 | 28,809 | 696,423 | 119,211 | 98,579 | 24.2 | 4.9 |
+| 4 | 79,607 | 1,889,682 | 495,420 | 422,414 | 23.7 | 7.1 |
+| **5** | **156,792** | 4,378,310 | **1,334,377** | 1,217,701 | 27.9 | 9.4 |
+| 6 | 73,429 | 2,949,305 | 741,598 | 708,010 | 40.2 | 11.8 |
+| 7 | 28,190 | 1,700,616 | 451,591 | 433,881 | 60.3 | 12.0 |
+| **8** | 38,039 | **5,417,591** | 1,029,671 | **1,024,735** | **142.4** | 11.7 |
+| | 415,548 | 17,255,406 | 4,188,689 | 3,919,483 | | |
+
+**Two different slow turns, for two different reasons:**
+
+* **Turn 5 is slow by VOLUME** — 37.7% of all calls and 31.9% of all plans, at an ordinary width
+  (avg_odo 27.9). It is simply where the most decisions happen.
+* **Turn 8 is slow by WIDTH and prunes essentially not at all** — avg_odo **142.4**, 3.5–6x every
+  turn before it, 31.4% of the whole odometer from 9.2% of the calls, and dedup removes
+  **0.5%** (1,029,671 → 1,024,735). Turn 8 is the horizon edge (`max_turns=8`), which matches
+  `fungus-value-leaf-status.md`'s finding that **99.7% of this deck's evaluations sit at the horizon
+  edge**. The engine builds a million plans on the last turn it will ever look at, and almost none of
+  them are duplicates it can drop.
+
+**REGIME CAVEAT:** the §"The real turns" table in `fungus-slow-rollout-diagnosis-2026-09-30.md` is the
+KEEP-REPLAY regime and reports turn 6 owning 73.7% of the odometer with turn 8 owning 53.7% of plans.
+That is a different workload from this goldfish run and the two must not be compared cell-for-cell.
+What survives both: **turn 8 is a blowup, and its dedup rate is ~0 in both.**
+
+### What the heaviest turn-8 decisions are made of — and the win
+
+All three heaviest decisions in the run are turn 8, and all three have the same shape:
+
+```
+HEAVY rank=1 odo=3200 turn=8 board=15 visits=1255 plans=1119 dedup=1119 reenumerated=4
+  BOARD lands=4 perms=Utopia Mycon,Concordant Crossroads,Utopia Mycon,Psychotrope Thallid,Saproling Burst
+  GROUP size=4 Utopia Mycon [sacForMana:colour=G:victim=1005 | colour=B:victim=1005 | sacN=2:colour=G | sacN=2:colour=B]
+  GROUP size=4 Utopia Mycon [ ... BYTE-IDENTICAL ... ]
+  + 6 size-1 groups
+```
+
+Two things that were not true of the old list:
+
+1. **The colour fan is now 2, not 1.** Utopia Mycon adds one mana of ANY colour, resolved through
+   `ChosenFloatColorCandidates`. The card's own note says *"In this mono-green deck the fan returns
+   the singleton {G}, so it costs exactly one action and no plan-space growth — but it stays honest
+   if the deck splashes."* **The deck now splashes** (Blooming Marsh, Peat Bog, Slimefoot,
+   Deathspore Thallid), so the fan returns {G, B} and every Mycon group doubles.
+2. **THE POOLING IS PER PHYSICAL SOURCE, so two Utopia Mycons do not pool with each other.**
+   `CollectMultiVariantSacSources` matches on `s.id == a.sac_source_id`, so each Mycon gets its own
+   group and its own `x5` in the odometer: **(1+4)² = 25 slots.**
+
+   **But two Utopia Mycons are perfectly interchangeable.** The ability is *"Sacrifice a Saproling:
+   Add one mana of any color"* — no `{T}`, no self-sacrifice, so the Mycon is not consumed and
+   activating A twice reaches exactly the state of activating A once and B once. The real axis is
+   *"sacrifice k Saprolings total, producing a multiset of colours"*: for k ≤ 2 over {G, B} that is
+   **6 outcomes, against 25 enumerated** — and it grows as (1+4)^n in the number of Mycons on board,
+   on a deck running four of them.
+
+   This is the SAME defect the within-source count pool fixed at **2.29x** (`MTG_SAC_OUTLET_POOL`,
+   adopted 2026-09-23) — one level out. It is a **sound identity fold**, not a heuristic: the sources
+   are indistinguishable, so no line is lost. **This is the most promising concrete win found, it is
+   in the sac-outlet lane rather than the breakpoint lane, and it lands on the heaviest turn of the
+   list that is actually being generated.**
+
+   Related open item already on file: doc item 7, *"two co-selected creature-sac outlets, or conclude
+   the reservation guard is play-inert"*. Note both groups above name **the same `victim=1005`**, and
+   `dupSacSrc=0` — the duplicate-source filter does not fire because the SOURCES differ; only
+   `overFodder` (40 rejects of 1,255 visits) stands between co-selecting both and double-sacrificing
+   one Saproling.
+
+### The new list's generation tail: 213.8 hours
+
+`decks/Fungus/candidate-b-2026-09/Fungus.keepmodel.exhaustive.raw.json.slow.log` — **3,923 slow
+rollouts, 213.8 HOURS**, median **38.9 s**, max **25,713 s = 7 h 08 m for ONE rollout** (the old
+list: 275 rollouts, 15.7 h, max 2 h 02 m — so **13.6x the tail**).
+
+| phase | count | hours | share |
+|---|---:|---:|---:|
+| **keep-rollout** | 3,338 | **201.90** | **94.4%** |
+| discovery | 492 | 10.73 | 5.0% |
+| play-digest | 93 | 1.16 | 0.5% |
+
+**All five slowest rollouts contain Psychotrope Thallid** — still a 1-of — and three of five contain
+Secluded Courtyard:
+
+```
+25713 s  Psychotrope Thallid x1; Doubling Season x2; Bloom...
+22263 s  Secluded Courtyard x2; Psychotrope Thallid x1; F...
+20781 s  Psychotrope Thallid x1; Peat Bog x1; Forest x1; D...
+16319 s  Secluded Courtyard x1; Psychotrope Thallid x1; M...
+15283 s  Secluded Courtyard x1; Psychotrope Thallid x1; Fo...
+```
+
+`keep-rollout` at 94.4% means the tail is the rollouts themselves, not discovery or the play-digest
+battery — so a per-rollout lever is the one that pays.
+
 ## Candidate wins, most promising first
 
 ### A. A TARGETED tail cap, not a bigger global `MTG_DECISION_WORK_X`
@@ -98,7 +219,15 @@ five Saprolings, draw five" is **not expressible as a single plan** — it exist
 breakpoint continuations. If that chain is budget- or rank-limited, deep draw lines may be
 unreachable at any budget, which is the "missing arm is silent" asymmetry pointing the other way.
 
-### C. The land-aura fold's GENERATION value is unmeasured and should exceed its play value
+### C2. The host HEURISTIC, re-measured on the land base it was written for — modest
+
+Now that the right list is in hand, `MTG_LAND_AURA_HOST_PICK` was A/B'd on it (d3 b10, 100 games,
+`--threads 1`, user CPU): **109.74 s off → 107.69 s on = 1.019x, avg win turn IDENTICAL at 5.4400.**
+One pair only, so treat the ratio as indicative; the quality-neutrality is the useful part. So even on
+4 Secluded Courtyard / 4 Peat Bog / 4 Hickory Woodlot — the exact shape the rule was stated for — it
+is a ~2% effect. Worth having under the collapse doctrine, not worth a GT re-accept on its own.
+
+### C. The land-aura FOLD's generation value is unmeasured and should exceed its play value
 
 `MTG_LAND_AURA_HOST_FOLD` shipped today at **1.026x on the d3 cell** (see
 `land-aura-host-decision.md`). That number is the *turn-5 regime floor*, because the fold's reach is
