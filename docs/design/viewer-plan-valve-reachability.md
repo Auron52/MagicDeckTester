@@ -187,6 +187,63 @@ pooling-only frame as an *unreported* truncation, which is backwards — that is
 player nothing). That gap was unreachable on the EDF walk the gate drives, because that deck has no
 Equipment and nothing there can pool.
 
+## 5b. "Equip all free" — why it only equipped a few, and what is left
+
+> "Equip all free was available, but it only equipped a few."
+> — USER, 2026-10-02
+
+Three causes, in the order they were found. **None of them is the valve**, which is worth stating
+plainly because two of my own diagnoses in this document pointed there: the groups the valve drops
+on these frames are CASTS (measured `dropped_names`: Golem-Skin Gauntlets, Dwalin, Colossus Hammer).
+
+1. **`MTG_PLAY_PLANS_CAP` is 200.** The gesture scanned `d.plans`, which is a ranked 200-plan slice
+   of tens of thousands. On a T4 frame with 14 loose pieces, **zero** had an equip action anywhere
+   in the emitted slice. Scanning a ranked window for one KIND of action is the wrong instrument.
+2. **The affordance must name the copy the ENGINE offers.** Deriving pieces from board state made
+   every entry unenumerable:
+   ```
+   equip=Accorder's Shield       -> choose
+   equip=Accorder's Shield@40    -> accept
+   equip=Accorder's Shield#3@40  -> legal_not_enumerated
+   ```
+   `MTG_EQUIP_COPY_COLLAPSE` keeps one canonical representative per interchangeable class, and its
+   own note warns "the surviving representative can put a different PHYSICAL copy on the host".
+   `free_equips` is therefore harvested from the enumerated actions' `sac_source_id`. An affordance
+   that offers unenumerable moves is worse than none.
+3. **On those frames the engine enumerates no free equip for an unattached piece at all**, so the
+   honest affordance correctly offers nothing. A bundle fails at k=1 as surely as at k=10.
+
+**THE REMAINING FIX IS THE USER'S OWN PROPOSAL** (*"Maybe equip all free to x"*, and *"We shouldn't
+be counting on the unpruned search to fit"*): one enumerated action with one member per host,
+instead of N independent equip digits the bound can never all hold — 14 pieces x ~4 hosts is `4^14`
+against 65,536, so at most ~8 can EVER be separate digits whatever the keep policy. All 18 dispatch
+sites are mapped from Balan's `Action::Kind::AttachAllEquipment`. Its **apply cannot be reused**: it
+attaches every Equipment and bypasses equip costs, which is correct for Balan's printed ability and
+a rules violation on an arbitrary host. The free variant needs its own selection — unattached,
+`EquipCostGenericNow == 0`, `equip_sacrifices_prior_host` and `equip_grants_shroud` carved out.
+
+### Two measurement traps, both the wrong predicate
+
+* **Counting equips without filtering to UNATTACHED counts MOVES.** This produced a reported "free
+  equips reachable 0 -> 7" when the real figure was 0-1, which went into a commit message before it
+  was caught. Retracted in `b1d835c3`.
+* **A bare `equip=<name>@<host>` matches ANY copy**, so an `accept` does not prove a LOOSE piece is
+  enumerable — it was matching a move of an already-attached copy. That ambiguity is exactly why the
+  `#<src>` form exists.
+
+### Two more reporting bugs in the valve's own numbers, both user-spotted
+
+* `kept_positions` reported **3265173504 against a 65,536 bound** — impossible. The pooling step
+  wrote the field unconditionally, and because it is a `std::max` across the per-land inner calls an
+  INTERMEDIATE post-pooling estimate latched and beat the real final figure.
+* `positions_full` printed **-9223372036854775808**: the raw product is a double that runs past
+  1e19, so `static_cast<long long>` was UB. `viewerplancap::PositionsText` now prints integers below
+  1e15 exactly and 3 significant figures above.
+
+Both are the same species as §1 — a number shown to the player that no stage of the engine ever
+produced — which is the argument for making the history line say something checkable: the user found
+all three of these by reading it.
+
 ## 6. Guards
 
 * `test/scenarios/kittyv2_viewer_wide_equip_board_still_offers_equip.json` — a staged wide metalcraft
