@@ -1,6 +1,6 @@
 {
  "_comment": "The decision protocol's P/T LABEL must include attached Equipment. Found by the KittyEquipment v2 5d sweep: a Sram carrying eight Equipment (a Colossus Hammer among them) that was about to attack for 19 printed as 'Sram, Senior Edificer (2/2)', because the four label sites summed only the state-free reads plus (at one site) the characteristic-defining base and lord bonuses -- never AuraBonusFor/EquipBonusFor. This is the ONLY P/T the protocol prints anywhere (the board serialisation carries none), so the player had no way to see their real clock; Dwalin's hone counters were invisible by the same omission. All four sites now share ProtocolPTLabel. Chooser-guarded, so ground-truth inert. This fixture drives a Skateboard ETB (a mandatory both-sides `target` whose options are labelled with P/T) on a board where Sram wears a Colossus Hammer, and pins that the label reads 12/12 rather than 2/2.",
- "deck": "decks/KittyEquipmentV2/KittyEquipmentV2.cod",
+ "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
  "turn": 4,
  "on_the_play": true,
  "max_turns": 4,

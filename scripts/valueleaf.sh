@@ -418,9 +418,34 @@ if [ ${#DECK_DIRS[@]} -gt 0 ]; then
     DECK_TABLE=(); _keys=()
     for _dd in "${DECK_DIRS[@]}"; do
         _dd=${_dd%/}
-        _stem=$(basename "$_dd")
-        _key=$(echo "$_stem" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')
         [ -d "$_dd" ] || { echo "no such deck dir: $_dd"; exit 2; }
+        # STEM AND KEY COME FROM THE REGISTRY, not from basename(dir).
+        #
+        # This used to be `_stem=$(basename "$_dd")`, which silently assumes the folder name IS the
+        # file stem. That is true only for a SHIPPING list. A VERSION of a list lives at
+        # `decks/<Deck>/v<N>-<slug>/` and its files are named after the PARENT deck -- the layout
+        # CLAUDE.md prescribes for an archived or candidate list, and the one the engine needs,
+        # because every sidecar is resolved directory-relative off the profile. So on a version
+        # folder basename() produced `v2-puresteel-hammer`, this refused with "no profile at
+        # .../v2-puresteel-hammer.profile.json", and the whole generation pipeline looked as though
+        # it could not address a versioned list at all.
+        #
+        # It can: deck_registry.discover() has always found these, under the compound key
+        # `<parent>_<variant>` (and tools/play/server.js lists them the same way, as
+        # "<Deck> -- <variant>"). Only this hand-rolled resolution disagreed with it. Asking the
+        # registry for (key, stem) is also what keeps the two from drifting again -- the registry's
+        # own docstring is about exactly this failure mode ("a registry that must be edited by hand
+        # is a registry that is wrong"), and `--shell` already emits the key|dir|stem row this loop
+        # builds.
+        _reg=$(python3 scripts/deck_registry.py --shell "$ROW_GAMES" | awk -F'|' -v d="$_dd" '$2==d{print; exit}')
+        if [ -z "$_reg" ]; then
+            echo "no registry entry for deck dir $_dd"
+            echo "  scripts/deck_registry.py discovers decks/<Stem>/ -- and decks/<Stem>/<Variant>/ --"
+            echo "  holding <Stem>.cod|.txt AND <Stem>.profile.json (files named after the PARENT deck)."
+            exit 2
+        fi
+        _key=$(printf '%s' "$_reg" | cut -d'|' -f1)
+        _stem=$(printf '%s' "$_reg" | cut -d'|' -f3)
         [ -e "$_dd/$_stem.profile.json" ] || { echo "no profile at $_dd/$_stem.profile.json -- run analyze_deck.py first"; exit 2; }
         # REGRESSION-SUITE MEMBERSHIP IS A PRECONDITION (user directive, 2026-09-26). Checked here --
         # per deck, before phase 0 freezes anything and before a single game is played -- because the

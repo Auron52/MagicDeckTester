@@ -624,6 +624,41 @@ inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const E
     if (root.contains("search_leaf_first_turn_depth"))
         profile.search_leaf_first_turn_depth = root["search_leaf_first_turn_depth"].get<int>();
 
+    // MULLIGAN-GENERATION CONTRACT, from the PROFILE (user, 2026-10-02: the gen setting "should be
+    // part of the mulligan profile chain instead").
+    //
+    // mull_gen_depth / mull_gen_budget_ms / expected_buckets used to live ONLY in <stem>.value.json,
+    // written by the value leaf's phase F -- which made the mulligan profile depend on the whole
+    // value-leaf run for three numbers it does not otherwise need. That ordering was defended on the
+    // grounds that a mulligan gen run before the leaf measures the slow path, but generation runs at
+    // LOW depth (KittyEquipment derived d3/b3), where the leaf's acceleration barely applies; and
+    // going leaf-first has a real cost of its own, because with no keep table every mulligan decision
+    // falls through to lookahead bottoming -- 59% of v2's per-game units even after bottom_eval_units.
+    //
+    // The computation never needed the model: derive_mullgen_setting.py scores random openers via
+    // MTG_SCORE_HANDS ("needs no buckets, no discovery and no prior profile") against the deck's play
+    // policy, and already falls back to BuiltinDefaultPlay for a deck shipping no value_play. The
+    // dependency was STORAGE -- the sidecar was simply the only file with a value_play block to write
+    // into -- and it could not be satisfied by creating one, because sidecar PRESENCE is what
+    // activates the value hybrid in play (`enabled: false` is NOT off; see the value-leaf skill's
+    // trap 1). The profile is the correct home: it is per-deck, it already carries the other per-deck
+    // search-shape keys (search_leaf_depth above, bottom_eval_* in the mulligan block), and reading
+    // it here activates nothing.
+    //
+    // PRECEDENCE falls out of the call order and needs no special case: AttachValueSidecar runs AFTER
+    // this and re-parses value_play from the sidecar when one exists, so a deck that later ships a
+    // value leaf is governed by it, and a deck that never does is governed by its profile. Only the
+    // three GENERATION keys are read here -- deliberately not target_depth/budget_ms/enabled, because
+    // those DRIVE and LOCK play (ValuePlay::drives), and a profile must not be able to do that: the
+    // adopt-on-approval route for a play policy is the sidecar's recommend->accept exercise.
+    if (root.contains("value_play") && root["value_play"].is_object())
+    {
+        const nlohmann::json& pvp = root["value_play"];
+        profile.value_play.mull_gen_depth     = pvp.value("mull_gen_depth", 0);
+        profile.value_play.mull_gen_budget_ms = pvp.value("mull_gen_budget_ms", 0);
+        profile.value_play.expected_buckets   = pvp.value("expected_buckets", 0);
+    }
+
     if (root.contains("keep_model"))
         profile.keep_model = KeepModelFromJsonObj(root["keep_model"]);
 

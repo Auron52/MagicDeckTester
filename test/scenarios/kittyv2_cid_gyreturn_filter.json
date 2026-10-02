@@ -1,6 +1,6 @@
 {
  "_comment": "NEGATIVE control for Cid's rebuy target filter: Plains is in the graveyard but is not an Equipment, so gy_return_requires_subtype must reject it. Without this, a filter that returned everything would still pass the two positive fixtures.",
- "deck": "decks/KittyEquipmentV2/KittyEquipmentV2.cod",
+ "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
  "turn": 5,
  "on_the_play": true,
  "max_turns": 5,

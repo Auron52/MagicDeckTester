@@ -107,7 +107,25 @@ def write_mull_gen(vpath, depth, budget):
     txt = vpath.read_text()
     i = txt.find('"value_play"')
     if i < 0:
-        raise SystemExit("no value_play object in %s" % vpath)
+        # NO value_play BLOCK AT ALL -- the profile route (user, 2026-10-02: put the gen setting in
+        # the mulligan chain). A deck that ships no value leaf has no sidecar to carry the block, and
+        # one must NOT be created for it: sidecar presence activates the value hybrid in play. So the
+        # three generation keys go in <stem>.profile.json, which MulliganProfileIO::ParseDeckProfileJson
+        # reads (generation keys only -- never target_depth/budget_ms/enabled, which drive and lock
+        # play). Insert the block after the root object's opening brace, matching the file's own
+        # indentation, and keep the byte-preserving text edit rather than a json round-trip for the
+        # same reason the in-place branch below exists.
+        root_br = txt.index("{")
+        m = re.search(r'\n([ \t]*)"', txt[root_br:])
+        ind = m.group(1) if m else "  "
+        ins = ('\n%s"value_play": { "mull_gen_depth": %d, "mull_gen_budget_ms": %d },'
+               % (ind, depth, budget))
+        out = txt[:root_br + 1] + ins + txt[root_br + 1:]
+        d = json.loads(out)
+        assert d["value_play"]["mull_gen_depth"] == depth
+        assert d["value_play"]["mull_gen_budget_ms"] == budget
+        vpath.write_text(out)
+        return
     open_br = txt.index("{", i)
     depth_ct, end = 0, None
     for j in range(open_br, len(txt)):            # brace-match to find this object's end
@@ -198,10 +216,29 @@ def main():
     if binary is None:
         raise SystemExit("no mtg-analyze binary; run ./build.sh first")
 
+    # TARGET FILE. With a value leaf the sidecar owns the block (and its value_play carries the play
+    # policy the candidates are scored against). WITHOUT one, the deck's PROFILE owns it -- see
+    # write_mull_gen's insert branch and MulliganProfileIO::ParseDeckProfileJson.
+    #
+    # This used to `raise SystemExit` outright, which made the mulligan profile wait on a whole
+    # value-leaf run for three numbers it does not need (user, 2026-10-02: the step "should be part
+    # of the mulligan profile chain instead"). Nothing about the COMPUTATION needed the model: the
+    # scorer is MTG_SCORE_HANDS, which "needs no buckets, no discovery and no prior profile", and the
+    # play reference already falls back to BuiltinDefaultPlay below. Only the storage needed a file.
+    #
+    # And the refusal was self-defeating in exactly the way the fallback's own comment describes: the
+    # decks with no sidecar are the decks whose generation silently inherits the d5/b20 built-in
+    # default, i.e. the ones with the most to gain -- KittyEquipment lost 4.44x for weeks that way.
     vpath = deck.parent / (deck.stem + ".value.json")
+    ppath = deck.parent / (deck.stem + ".profile.json")
     if not vpath.exists():
-        raise SystemExit("no value sidecar at %s -- run the value-leaf first (this step is its "
-                         "LAST phase, and it needs the play settings the matrix derived)" % vpath)
+        if not ppath.exists():
+            raise SystemExit("no value sidecar at %s and no profile at %s -- run analyze_deck first"
+                             % (vpath, ppath))
+        vpath = ppath
+        print("no value sidecar -- deriving against the deck's BUILT-IN play settings and writing\n"
+              "  the generation contract into %s (a sidecar must NOT be created for this: its mere\n"
+              "  PRESENCE would activate the value hybrid in play)." % ppath.name)
     vjson = json.load(open(vpath))
     vp = vjson.get("value_play") or {}
     trust = vjson.get("value_trust_depth")
