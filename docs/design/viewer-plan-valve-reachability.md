@@ -195,6 +195,21 @@ Equipment and nothing there can pool.
   deleting equip groups.
 * `test/viewer_client_check.js` — "equip all free to X" selection logic (see
   `viewer-line-macros.md` §Feature 4).
+* `test/viewer_checks.sh` — **FAILS, and BOTH of its failures are PRE-EXISTING.** Verified by running
+  the identical checks against HEAD built in a worktree:
+  * *protocol check*, `--strict`: tally reproduces exactly — `35 ok, 306 repaired, 0 play-drift,
+    0 shuffle-dead, 3 board-diverged, 1 enum-gap (Hinata2), 10 mull-drift (CritterLifegain),
+    0 contract-fail` over 355 refs. The number that matters for a change that alters a human-play
+    MENU is **0 play-drift**: no saved reference's recorded plan index moved. (A menu change shifting
+    indices is the real hazard here — references replay recorded click indices — so this is the
+    assertion that licenses the valve work, not the aggregate pass/fail.)
+  * *validate-line check*: `1646 accept, 229 choose, 0 unsupported, 317 skipped, 9 known-fail(v1
+    limits), **9 REGRESSION**` — and the base worktree prints the same line and the same nine
+    entries, diffed byte-for-byte. They are Snow `NO_VALIDATION_BLOCK` / blue-source payment lines
+    plus one Auras `{W}{W}` line; Snow additionally carries an uncommitted GT rebaseline
+    (memory: `snow-cost-levers-2026-09-30`), which is the likely cause. **Not investigated here, and
+    not caused here.** Do not read this gate as green, and do not read it as a regression from this
+    branch; equally, do not rebaseline it on the strength of this work.
 * `test/viewer_plan_space_check.py` — **PRE-EXISTING FAILURE, not caused by this work and not fixed by
   it:** the EDF HANG-1 line does not reach a terminal within 400 decisions. Base HEAD built in a
   worktree fails the identical assertion with the identical biggest-plan-list (57,343); this branch is
