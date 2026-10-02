@@ -60,6 +60,16 @@
      one expecting a win). Muted, outlined, and no pulse -- the pulse is the promise. */
   #planbar .combooff.unproven { background:none; color:#d6b84c; border:1px dashed #6a5c2a;
                                 font-weight:600; animation:none; }
+  /* "⚔ Equip all free" sits on the RIGHT with ⚡ Combo Off (USER 2026-10-02: "it should be somewhere
+     on the right, but not in the history panel, just like Combo Off"). `margin-left:auto` on
+     WHICHEVER of the two comes first is what pushes the pair right, so both carry it -- with Combo
+     Off rendered second it keeps the gold button in the rightmost position it has always had.
+     Deliberately NOT gold and NOT pulsing: the pulse is Combo Off's promise that the turn is a
+     verified win, and this is a convenience, so it must not read as one. */
+  #planbar .freeeq { margin-left:auto; font-weight:600; color:#d9e6f2; background:#2f3a46;
+                     border:1px solid #4a5a6a; }
+  #planbar .freeeq:hover { background:#3a4654; border-color:#6a7f94; }
+  #planbar .freeeq + .combooff { margin-left:8px; }
   #planbar .chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
   #planbar .chip { display:inline-flex; align-items:center; gap:5px; background:#2a313b; border:1px solid var(--line);
       border-radius:13px; padding:2px 6px 2px 4px; font-size:12px; }
@@ -2022,6 +2032,15 @@ function comboOffPlan(){
 // side column: USER 2026-09-07, "I'd prefer the combo off button to actually be on the right of the
 // board, rather than in the history. It is a bit too out of the way over there." The old side-panel
 // slot is emptied rather than removed, so nothing else needs to know where it moved.
+function freeEquipButtonHtml(){
+  const hosts = freeEquipHosts();
+  if (!hosts.length) return '';
+  const n = hosts.reduce((m,h)=>Math.max(m,h.pieces.length),0);
+  return `<button id="freeeq" class="freeeq" title="Attach every loose Equipment that costs {0} to `
+       + `equip right now (metalcraft makes these free) to one creature, as a single line — instead `
+       + `of dragging them one at a time. Equipment still in hand needs a cast, so drag those.">`
+       + `⚔ Equip all free (${n})</button>`;
+}
 function comboOffButtonHtml(){
   const p = comboOffPlan();
   if (!p) return '';
@@ -2442,14 +2461,15 @@ function renderPlanbar() {
     // lines. Offered only when there is a loopable committed tail this turn and the queue is empty
     // (see loopAvailable), so like Repeat it is never a dead control.
     (loopAvailable()?`<button id="loopp" class="ghost" title="Repeat the last lines you committed this turn, N times — e.g. activate Kitchen, blink to untap, crack the Clue. They commit back to back and stop at the first iteration the board cannot pay.">⟲ Loop last lines ×N</button>`:'')+
-    // "EQUIP ALL FREE TO X" (USER 2026-10-02). Offered only when some creature has >= 2 free loose
-    // Equipment waiting, so like the two ⟲ macros it is never a dead control. The host is picked in
-    // the dialog rather than inferred: with Golem-Skin Gauntlets in the deck WHICH creature carries
-    // the pile is a real decision, and it is the "to x" half of what was asked for.
-    (freeEquipHosts().length?`<button id="freeeq" class="ghost" title="Attach every loose Equipment that costs {0} to equip right now (metalcraft) to one creature, as a single line — instead of dragging them one at a time. Equipment in hand still needs a cast, so drag those.">⚔ Equip all free →</button>`:'')+
     `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
     tip+
+    // "EQUIP ALL FREE TO X" (USER 2026-10-02). Sits with ⚡ Combo Off at the END of the plan bar --
+    // "it should be somewhere on the right, but not in the history panel, just like Combo Off" --
+    // rather than among the left-hand ghost controls, because like Combo Off it is a whole-line
+    // gesture rather than an edit of the queued block. Offered only when some creature has >= 2 free
+    // loose pieces waiting, so like the ⟲ macros it is never a dead control.
+    freeEquipButtonHtml()+
     comboOffButtonHtml();
   $('commit').onclick = commitLine;
   $('committurn').onclick = commitTurn;

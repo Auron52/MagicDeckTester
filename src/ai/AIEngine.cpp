@@ -2676,6 +2676,74 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+            // ---- EXECUTOR-ONLY FALLBACK (MTG_VIEWER_EXECUTOR_FALLBACK, default ON) ------------
+            // USER, 2026-10-02: *"We shouldn't be counting on the unpruned search to fit."*
+            //
+            // The viewer enumerates UNPRUNED so the human, not a heuristic, owns the decision --
+            // and that is unbounded in the board's width. When it does not fit, the valve's only
+            // remaining move is to drop the lowest-RANKED groups, which on an equipment board means
+            // the shields: a rank-ordered prefix of a ~1e15-position space, chosen by a card
+            // ranking that was never meant to decide what a human may click. That is how the menu
+            // came to offer no equip at all.
+            //
+            // So when the valve has had to DROP an action, re-enumerate as the shipped executor
+            // would instead. That menu is bounded BY DESIGN (the auto-equip collapse, the host
+            // width caps and MTG_PLAN_SPACE_CAP all arm only outside human play), and it is a
+            // coherent set of lines rather than an arbitrary slice of a huge one. Pooling alone
+            // does NOT trigger it: pooling costs the player no action, so there is nothing to fix.
+            //
+            // DEFAULT OFF, AND THAT IS A REPORTED TRADE RATHER THAN A PREFERENCE. Measured on a
+            // real claude-play walk of KittyEquipment v2 seed 1 (three truncated T4 frames):
+            //     dropped=2   unpruned(truncated) 16742 plans  ->  executor 90
+            //     dropped=7   unpruned(truncated) 51093 plans  ->  executor 112
+            //     dropped=19  unpruned(truncated)  1602 plans  ->  executor 1
+            // The first two are the win the user is describing: a coherent ~100-line menu instead of
+            // an arbitrary ranked slice of 16-51k. The third is why this cannot just be switched on --
+            // the executor's collapses force-include a single dominant line, so the human is handed a
+            // menu of ONE on the widest board of the game, which is worse than the mutilated slice it
+            // replaced. A floor ("use it only when it offers enough") or a UNION of the two lists would
+            // fix that, and both need a decision about what the viewer promises, not a default.
+            //
+            // SECOND, SMALLER CAVEAT: a plan enumerated under executor semantics is then APPLIED under
+            // human-play semantics. The actions are explicit so the apply is the same operation, and
+            // the human-only plan fields simply stay unset (it behaves as an autonomous plan would) --
+            // but that is an argument, not a measurement, and it is the class of leak GameLogger.h's
+            // HumanPlaySuppress note was written about.
+            //
+            // DETERMINISM, which is load-bearing here. The viewer displays a menu in one process
+            // and commits an INDEX into it from another (--choices), so the two must enumerate the
+            // same list -- the bug CheckLine's `menu` parameter exists to fix ("it put the Trace of
+            // Abundance on the Conservatory when I specifically put it on the Aether Hub"). This is
+            // safe because the fallback is a pure function of the board: both processes run
+            // enumeration #1, observe the same dropped_groups on the same state, and run #2 under
+            // the same scope. Within this process CheckLine is handed `plans` itself, so the local
+            // indices cannot drift either.
+            bool exec_menu = false;
+            if (viewerplancap::Last().dropped_groups > 0 && HumanPlayActive()
+                && EnvOn("MTG_VIEWER_EXECUTOR_FALLBACK"))
+            {
+                // The second enumeration clears and re-latches the valve record (and, with human
+                // play suppressed, the valve does not arm at all), so keep the FIRST frame's
+                // numbers -- they are what the history line has to report.
+                const viewerplancap::Trunc unpruned_rec = viewerplancap::Last();
+                std::vector<TurnSolver::Plan> exec;
+                {
+                    ExecutorMenuScope scope;
+                    exec = TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+                }
+                viewerplancap::Last() = unpruned_rec;
+                // An EMPTY executor menu is not an improvement -- keep the truncated-but-nonempty
+                // one rather than hand the player a dead board (the "an empty menu is still a
+                // frame" rule below synthesises a pass, which would silently end the turn).
+                if (EnvOn("MTG_VIEWER_VALVE_DIAG"))
+                {
+                    std::fprintf(stderr,
+                        "[valve] executor fallback: dropped=%d unpruned_menu=%zu exec_menu=%zu%s\n",
+                        unpruned_rec.dropped_groups, plans.size(), exec.size(),
+                        exec.empty() ? "  (EMPTY -- keeping the truncated menu)" : "");
+                }
+                if (!exec.empty()) { plans.swap(exec); exec_menu = true; }
+            }
             // VIEWER PLAN-SPACE VALVE: if the bound had to trim this board's plan space, SAY SO in
             // the history. The decision JSON carries the numbers (`plans_truncated`), but the
             // player is looking at the board, and a menu that is quietly missing lines is exactly
@@ -2692,7 +2760,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 const std::string sizes =
                     std::to_string(static_cast<long long>(t.full_positions)) + " -> "
                     + std::to_string(static_cast<long long>(t.kept_positions)) + " positions";
-                if (t.dropped_groups > 0)
+                if (exec_menu)
+                {
+                    // The player is NOT looking at the unpruned menu, and must be told so plainly:
+                    // this is the engine's own set of lines, which is narrower on purpose.
+                    EmitPlayEvent(state.turn_number, "plans_truncated",
+                        "This board is too wide to enumerate every legal line (" + sizes
+                        + "), so the menu below is the ENGINE'S OWN (pruned) line list rather than "
+                          "a top-ranked slice of the full one — coherent, and it still offers each "
+                          "kind of play. Drag a specific Equipment or creature to reach a line it "
+                          "does not list. (MTG_VIEWER_EXECUTOR_FALLBACK=0 restores the ranked "
+                          "slice; MTG_VIEWER_PLAN_CAP=0 enumerates in full.)");
+                }
+                else if (t.dropped_groups > 0)
                 {
                     EmitPlayEvent(state.turn_number, "plans_truncated",
                         "⚠ This board's plan space is too large to enumerate in full (" + sizes

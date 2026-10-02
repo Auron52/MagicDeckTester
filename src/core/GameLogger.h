@@ -1387,6 +1387,34 @@ struct HumanPlaySuppress
     HumanPlaySuppress& operator=(const HumanPlaySuppress&) = delete;
 };
 
+// RAII: enumerate as the SHIPPED EXECUTOR would -- human-play widenings off AND the unprune gates
+// closed. Both are needed and neither is sufficient: `open_all` (TurnSolver's equip host width) is
+// `HumanPlayActive() || DecisionUnpruned(EquipHost)`, so suppressing only human play leaves the
+// menu wide in a claude-play session, which always sets MTG_UNPRUNED.
+//
+// USER, 2026-10-02, on the viewer's plan-space valve rank-dropping whole actions off a wide
+// KittyEquipment v2 board: *"Is there a way with the viewer to just let it go into executor-only
+// mode or perhaps just do this when we go over the limit? We shouldn't be counting on the unpruned
+// search to fit."* That is the right shape. An unpruned enumeration is unbounded in the board's
+// width, so on a wide board SOMETHING has to give -- and a rank-ordered prefix of a 1e15-position
+// space is an arbitrary slice that silently deletes whole kinds of play, whereas the executor's own
+// menu is a COHERENT one the engine is designed to fit (it carries the auto-equip collapse, the
+// host-width caps and MTG_PLAN_SPACE_CAP, none of which human play arms).
+//
+// Restores on exit so nested scopes compose, exactly like HumanPlaySuppress.
+struct ExecutorMenuScope
+{
+    bool saved_human;
+    bool saved_unpruned;
+    ExecutorMenuScope()
+        : saved_human(g_human_play_suppressed), saved_unpruned(g_unpruned_suppressed)
+    { g_human_play_suppressed = true; g_unpruned_suppressed = true; }
+    ~ExecutorMenuScope()
+    { g_human_play_suppressed = saved_human; g_unpruned_suppressed = saved_unpruned; }
+    ExecutorMenuScope(const ExecutorMenuScope&)            = delete;
+    ExecutorMenuScope& operator=(const ExecutorMenuScope&) = delete;
+};
+
 // ---- COMBO OFF finish scope (human play only) -------------------------------------------------
 // Live only while the COMBO OFF plan is being VERIFIED or APPLIED. Inside it, the two "the engine
 // must not cast out of a human's hand" gates stand down, because pressing COMBO OFF is precisely the
