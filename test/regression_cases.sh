@@ -19,6 +19,18 @@
 # (value/eval/constraints/keepmodel.exhaustive) directory-relative off the profile path.
 declare -A DECK_FILE=(
   [fungus]=decks/Fungus/Fungus.cod
+  # fungusb: the Fungus ADOPTION CANDIDATE (candidate-b), carried ALONGSIDE the incumbent for the
+  # duration of the transition and removed only when one list fully retires the other. This is the
+  # user's 2026-10-01 proposal -- "maybe we should actually have new versions of lists in the
+  # regression test ... and then we remove the old one once it has been fully retired" -- and it
+  # resolves a genuine deadlock: suite entry is a REQUIRED precondition for the mulligan profile,
+  # but the profile is what validates the list, so an adoption candidate could never legally reach
+  # either. See docs/design/suite-entry-for-list-transitions.md for the costing.
+  # This is NOT a screening list. "NEVER COMMIT SCREENING / CANDIDATE LISTS" still holds in full:
+  # the many transient <Deck>A/<Deck>B trial lists stay under logs/ and never get a decks/ folder.
+  # candidate-b is one already-screened list being validated to REPLACE the shipped one, and its
+  # decklist + profile are already tracked here.
+  [fungusb]=decks/Fungus/candidate-b-2026-09/Fungus.cod
   [slivers]=decks/slivers_vial/slivers_vial.txt
   [burn]=decks/burn/burn.txt
   [th]=decks/treasure_hunt/treasure_hunt.txt
@@ -48,6 +60,7 @@ declare -A DECK_FILE=(
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
+  [fungusb]=decks/Fungus/candidate-b-2026-09/Fungus.profile.json
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
@@ -96,6 +109,16 @@ SMOKE_CASES=(
   "fungus  0 1001 1000 0"
   "fungus  3 1001  150 10"
   "fungus  5 1001   75 20"
+  # fungusb (adoption candidate): HALF the incumbent's searched counts, deliberately. The point of
+  # these cases is a DIGEST that tracks this list's play through the multi-day mulligan generation --
+  # a digest does that at any game count, while the per-game cost here is ~14x the incumbent's
+  # (measured 4.0 s/game at d5/b20, 2026-10-01). Half-sized, candidate-b adds roughly 5 core-min to
+  # smoke against a 15 min x 24 core budget. Sized to be cheap enough that carrying two variants of
+  # the suite's most expensive deck is uncontroversial; re-sizing upward is fair game once the list
+  # is adopted and the incumbent's cases come out.
+  "fungusb 0 1001  500 0"
+  "fungusb 3 1001   75 10"
+  "fungusb 5 1001   40 20"
   "slivers 0 1001 1000 0"
   "slivers 3 1001  250 10"
   "slivers 5 1001  150 20"
@@ -397,6 +420,15 @@ REGRESSION_CASES=(
   "fungus  3 3003  200 10"
   "fungus  5 2002  100 20"
   "fungus  5 3003  100 20"
+  # fungusb (adoption candidate): half the incumbent's searched counts -- see the SMOKE block for why.
+  # Both seeds are kept at each searched depth: a one-seed cell cannot distinguish a real play change
+  # from the metric quantum, and this list is about to spend days under a generation that must be
+  # invalidated the moment its play moves.
+  "fungusb 0 2002  500 0"
+  "fungusb 3 2002  100 10"
+  "fungusb 3 3003  100 10"
+  "fungusb 5 2002   50 20"
+  "fungusb 5 3003   50 20"
   "slivers 0 2002 1000 0"
   "slivers 3 2002  400 10"
   "slivers 3 3003  400 10"

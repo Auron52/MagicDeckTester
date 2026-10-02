@@ -53,6 +53,32 @@ d3/b10 150, d5/b20 75) with the ms/game measured 2026-10-01:
 The regression tier's budget is 45 min wall x 24 cores = 1080 core-min. So candidate-b is **14x the
 incumbent and still under 1% of the tier**, and carrying both is under 1.1%.
 
+## ADOPTED 2026-10-02, and the projection above was OPTIMISTIC — here are the real numbers
+
+The cases are in (`[fungusb]`, half the incumbent's searched counts), GT accepted for all 8 keys.
+Measured from the tier run that created them, not projected:
+
+| tier | fungusb core-s | core-min | % of that tier's budget | makespan impact |
+|---|---|---|---|---|
+| smoke | 465.9 | 7.8 | 2.2% of 360 | 112s -> 141s |
+| regression | 1564.7 | 26.1 | 2.4% of 1080 | 288s -> 325s |
+
+So the honest figure is **~2.4%, not 0.93%** — the table above sized candidate-b off the *smoke*
+case shapes and then compared against the *regression* budget. Still cheap, and the number that
+actually matters for a shared box is the makespan: **+37s on the regression tier, +29s on smoke**,
+because the pooled queue absorbs the extra games into the existing load-imbalance tail.
+
+Two things worth recording from that run:
+
+* **Cost is strongly seed-dependent.** s3003 is ~1.8x s2002 at BOTH searched depths (d5: 523.3s vs
+  264.4s; d3: 482.5s vs 294.5s). Any future per-case sizing should expect that spread rather than
+  treating one seed's cost as the cell's cost.
+* **d5 buys nothing over d3 on this list, so far.** d3 5.4400/5.4600 vs d5 5.4800/5.4400 — flat, and
+  one of the two seeds is nominally WORSE at the deeper search. At 50 games the quantum is 0.02/game
+  so this is 1-2 games and settles nothing, but it is the first hint that candidate-b's depth
+  economics deserve their own look, which per CLAUDE.md is a SETTINGS question (the depth matrix),
+  not a search-hack one.
+
 ## The 3x rule is NOT what this is about, and the distinction matters
 
 CLAUDE.md's 3x cost rule is **per-game at the deck's worst searched case**, and it is per-game
