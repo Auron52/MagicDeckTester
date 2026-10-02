@@ -956,7 +956,10 @@ function deckMaturity(dir, name, hasProfile, version) {
 //     path under logs/play/.session/ and EVERY later spawn for that game -- interactive child,
 //     stateless fallback, /api/validate, the hints, /api/save, /api/save-reference -- runs the COPY.
 //     A rebuild mid-session can no longer change a half-played game's replay semantics. A new game
-//     (different deck/seed/game-index) re-pins, so new games pick the new binary up immediately.
+//     (different deck/seed/game-index) re-pins, and so does RESTARTING the same game while its
+//     choices list is still empty (see sessionFor: at decision 0 there is no half-played game to
+//     protect, and refusing to re-pin there meant re-testing a fix on the same seed silently kept
+//     the old engine forever).
 //
 //  2. AUDIT THE SAVE. Pinning cannot cover a server restarted mid-game, an engine nondeterminism, or
 //     a carrier that stops threading through. So the save is VERIFIED before it is published: the
@@ -1017,10 +1020,39 @@ function dropPin(sess) {
   try { fs.unlinkSync(sess.bin); } catch (e) {}
 }
 
+// Is the pinned copy older than the binary on disk? mtime, not content: a copy is made with
+// copyFileSync, which does NOT preserve mtime, so the pin's mtime is when it was TAKEN -- exactly
+// the comparison wanted. Any error reads as "not stale", so a missing/unreadable file can never
+// cause a re-pin mid-game.
+function pinIsStale(sess) {
+  try { return fs.statSync(BIN).mtimeMs > fs.statSync(sess.bin).mtimeMs; }
+  catch (e) { return false; }
+}
+
 let pinWarned = false;
 function sessionFor(p) {
   const key = gameKey(p);
-  if (gsession && gsession.key === key) return gsession;
+  // RE-PIN AT THE START OF A GAME, even when the key is unchanged.
+  //
+  // The pin exists to stop a mid-session rebuild from changing a HALF-PLAYED game's replay. At
+  // decision 0 there is no half-played game to protect, so holding a stale image there protects
+  // nothing and costs the obvious thing: RESTARTING THE SAME GAME -- which is exactly what a human
+  // does to re-test a fix -- keeps the old engine forever, because gameKey is
+  // deck|version|seed|gameIndex|maxTurns and a restart changes none of them. The note above claims
+  // "new games pick the new binary up immediately"; that was only true if you also changed the
+  // seed. USER, 2026-10-02, trying to test a just-built feature: *"Are you sure the server is
+  // updated? I'm getting the same behaviour"* -- and it was, in the half it serves from disk (the
+  // client), while the engine was a 60-minute-old copy.
+  //
+  // Gated on an EMPTY choices list, which is the one honest signal that nothing has been played
+  // yet, and on the pinned image actually being older than the build. Mid-game requests carry
+  // their choices and keep their pin untouched, so the incident the pinning was written for
+  // (docs: the turn-4 session published as a won-on-turn-7 log) stays closed.
+  const fresh = !Array.isArray(p.choices) || p.choices.length === 0;
+  if (gsession && gsession.key === key) {
+    if (!(fresh && gsession.pinned && pinIsStale(gsession))) { return gsession; }
+    console.log('  re-pinning the engine: the build is newer and this game has not been played yet.');
+  }
   if (gsession) { killIsession(); dropPin(gsession); }
   const pin = PIN_BIN ? pinEngineBinary() : null;
   // SAY SO when the pin could not be taken. Falling back to the shared binary is the right call --
