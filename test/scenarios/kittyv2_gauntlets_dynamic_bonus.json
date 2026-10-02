@@ -1,6 +1,6 @@
 {
  "_comment": "GOLEM-SKIN GAUNTLETS' bonus is DYNAMIC (+1/+0 for EACH Equipment attached to it), the first equipment bonus in the pool that is not a constant. Pins the arithmetic at the one place it is summed, EquipBonusFor: a 2/2 Sram wearing 2 Bone Saws (+1/+0 each) and 1 Gauntlets counts THREE attached Equipment, so the Gauntlets grants +3 (it counts ITSELF -- it is attached to that creature) and the attack is 2+2+3 = 7. The one-pass form (sum of scalers x count) is what makes this exact for multiple scalers; the naive per-equipment recount would be O(n^2) at the hottest helper in the engine. A constructed board because the pruned search does not reliably stack three specific Equipment on one host by turn 3.",
- "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "deck": "decks/KittyEquipmentV2/KittyEquipmentV2.cod",
  "turn": 3,
  "on_the_play": true,
  "max_turns": 3,

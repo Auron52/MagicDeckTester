@@ -47,7 +47,7 @@ declare -A DECK_FILE=(
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
-  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod
+  [kittyv2]=decks/KittyEquipmentV2/KittyEquipmentV2.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
@@ -78,7 +78,7 @@ declare -A DECK_PROF=(
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
-  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json
+  [kittyv2]=decks/KittyEquipmentV2/KittyEquipmentV2.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
@@ -225,7 +225,7 @@ SMOKE_CASES=(
   "kitty 0 1001 1000 0"
   "kitty 3 1001  250 10"
   "kitty 5 1001  150 20"
-  # kittyv2: KittyEquipment v2-puresteel-hammer -- the CANDIDATE list (Puresteel Paladin / Sram /
+  # kittyv2: decks/KittyEquipmentV2 -- the CANDIDATE list (Puresteel Paladin / Sram /
   # Colossus Hammer / Sigarda's Aid / Dwalin + 0-cost shields), carried as a SECOND kitty deck
   # until it is adopted, at which point it takes `kitty`'s rows and v1's are dropped (user,
   # 2026-10-02: "a second Kitty deck until adoption when we drop the old one").

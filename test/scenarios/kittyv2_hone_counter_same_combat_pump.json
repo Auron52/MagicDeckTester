@@ -1,6 +1,6 @@
 {
  "_comment": "DWALIN'S HONE TRIGGER RESOLVES IN THE DECLARE-ATTACKERS STEP, so the +1/+0 per counter applies to the SAME combat (the Beastmaster Ascension property). Board: a 2/1 Dwalin wearing one Bone Saw, attacking alone. On attack, one hone counter lands on EVERY Equipment we control -- here the attached Bone Saw -- so Dwalin hits for base 2 + Bone Saw 1 + hone 1 = 4, not 3. This fixture is the guard on the attack PROJECTIONS too: they read EquipBonusFor without firing the trigger, so without the CountAttackHonePump addend the search values this attack at 3 while the executor deals 4, which is exactly the projection-vs-executor divergence class.",
- "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "deck": "decks/KittyEquipmentV2/KittyEquipmentV2.cod",
  "turn": 3,
  "on_the_play": true,
  "max_turns": 3,

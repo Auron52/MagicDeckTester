@@ -709,9 +709,20 @@ It is also **temporary**. An exhaustive keep table replaces lookahead bottoming 
 `no-lookahead-bottoming`: "the profile replaces BOTH keep and lookahead"), so the moment v2 ships a
 mulligan profile this knob has nothing left to bind and the +0.0060 goes away with it.
 
-### 8e. Admitted
+### 8e. Admitted — and moved to its own deck folder
 
-`decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json` ships
+The generation pipeline discovers decks as `decks/<Stem>/` holding `<Stem>.cod` **and**
+`<Stem>.profile.json` (`scripts/deck_registry.py`), and a NESTED directory is deliberately invisible
+to it — that invisibility is what keeps an archived predecessor list out of the registry. v2 was
+parked at `decks/KittyEquipment/v2-puresteel-hammer/`, the archive-shaped location, so
+`valueleaf.sh status` refused it outright. It now lives at `decks/KittyEquipmentV2/` with a matching
+stem. The move is play-neutral by construction and by measurement: `DetectDecisionProvider` keys on
+decklist CONTENTS, not on name or path, and all three `kittyv2` smoke digests are byte-identical
+across the move (107 passed / 0 changed / 0 new). On adoption this folder's contents replace
+`decks/KittyEquipment/` and v1 is archived beneath it, at which point the stem-keyed artefacts
+(`.value.json`, `.keepmodel.*`) are renamed with it.
+
+`decks/KittyEquipmentV2/KittyEquipmentV2.profile.json` ships
 `"bottom_eval_units": 600`, and `kittyv2` is registered in all three tiers of
 `test/regression_cases.sh` at a fifth of v1's counts (overnight at a quarter, since those budgets are
 2×). The official gate reading:

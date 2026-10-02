@@ -1,6 +1,6 @@
 {
  "_comment": "CID'S '{2}, {T}: Return target Equipment or Vehicle card from your graveyard to your hand' must be ENUMERATED as a board activation, or a human cannot express it in the viewer. This exists because Stage 5h's sweep reported it as a HARD MISS -- 'Cid in play in 17/80 games, untapped past its arrival turn in 12/80, and no enumerated action ever carried verb:gyreturn' -- and the cause is NOT wiring but reachability: a goldfish graveyard fills only by cleanup discard, so seed-driven play rarely puts an Equipment there while Cid is also untapped. Same reason the Haven of the Spirit Dragon rebuy fixtures are constructed boards. BOTH graveyard Equipment must validate, so a collapse to a first-match target would fail. Note Cid TAPS but is NOT sacrificed (gy_return_sacrifices_source false), unlike Haven -- which is what makes the ability repeatable and what makes tapping it cost that turn's attack.",
- "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "deck": "decks/KittyEquipmentV2/KittyEquipmentV2.cod",
  "turn": 5,
  "on_the_play": true,
  "max_turns": 5,
