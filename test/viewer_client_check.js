@@ -1875,6 +1875,72 @@ async function testColorlessFirstTapOrder() {
     if (fFails.length) { anyFail = true; console.log(`\u2717 equip all free: ${fFails.length} fail`); fFails.forEach(m=>console.log('  - '+m)); }
     else { console.log('\u2713 equip all free to X (bundles only FREE, LOOSE, un-queued battlefield Equipment; idempotent)'); }
   }
+  // ...AND THE SINGLE-ACTION ROUTE, which is what the gesture actually ships as.
+  //
+  // The N-token route tested above is the FALLBACK, kept only for an engine that does not publish
+  // `free_equip_all` (a replay of an older reference, or a game still pinned to a pre-feature
+  // binary). It cannot be made to work on the boards this feature exists for: it writes one
+  // `equip=` per piece, and N independent equip digits do not fit the viewer's plan-space bound at
+  // any keep policy, so most of those tokens name groups the valve dropped and CheckLine rejects
+  // them. That is what the user reported as "it only equipped a few". When the engine offers
+  // Action::Kind::AttachAllFreeEquipment the viewer must take it instead and queue exactly ONE
+  // entry -- so this asserts the preference, the single entry, and the token it encodes to.
+  {
+    const oFails = [];
+    const win = buildDom();
+    const S = win.__getS();
+    win.renderBoard = () => {};
+    S.over = false;
+    S.plan = [];
+    // Deliberately BOTH fields present, with the per-piece one listing only two pieces while the
+    // bundle covers eleven. If the viewer preferred `free_equips` the count would read 2 and ten
+    // pieces would be left behind -- which is the exact under-delivery being fixed, so the
+    // disagreement between the two numbers is the test.
+    S.decision = {
+      type: 'main_phase',
+      me: { battlefield: [
+        { num: 1,  name: 'Kor Duelist' },
+        { num: 2,  name: 'Puresteel Paladin' },
+        { num: 10, name: 'Kite Shield', is_equip: true, attached_to: 0 },
+        { num: 11, name: 'Kite Shield', is_equip: true, attached_to: 0 },
+      ] },
+      free_equips: [ { host: 1, host_name: 'Kor Duelist',
+                       pieces: [ { src: 10, name: 'Kite Shield' },
+                                 { src: 11, name: 'Kite Shield' } ] } ],
+      free_equip_all: [ { host: 1, host_name: 'Kor Duelist',      pieces: 11 },
+                        { host: 2, host_name: 'Puresteel Paladin', pieces: 11 },
+                        // Below FREE_EQUIP_MIN: a one-piece bundle is just a drag, so it must not
+                        // be offered (a dead-ish control is what the \u27f2 macros avoid being).
+                        { host: 3, host_name: 'Sram, Senior Edificer', pieces: 1 } ],
+      plans: [],
+    };
+    const offers = win.freeEquipOffers();
+    if (offers.length !== 2) {
+      oFails.push(`expected 2 bundle hosts offered, got ${JSON.stringify(offers)}`);
+    } else if (offers[0].count !== 11) {
+      oFails.push(`offer count came from the wrong field: ${offers[0].count} (want 11, the bundle's)`);
+    }
+    const n = win.queueAllFreeEquips(1, 'Kor Duelist');
+    if (n !== 11) { oFails.push(`queueAllFreeEquips returned ${n}, expected 11`); }
+    if (S.plan.length !== 1) {
+      oFails.push(`expected ONE queued entry, got ${S.plan.length}: `
+                  + JSON.stringify(S.plan.map(e=>e.verb)));
+    } else {
+      const e = S.plan[0];
+      if (e.verb !== 'equipallfree') { oFails.push(`queued verb is ${e.verb}, expected equipallfree`); }
+      if (e.hostNum !== 1)           { oFails.push(`queued hostNum is ${e.hostNum}, expected 1`); }
+      const tok = win.LineBuild.encodeLine(S.plan);
+      if (tok !== 'equipallfree=1') { oFails.push(`encoded to "${tok}", expected "equipallfree=1"`); }
+    }
+    // IDEMPOTENT, and for a different reason than the N-token route: there is one entry to find, so
+    // a second click must recognise it rather than stack a duplicate the engine would reject.
+    if (win.queueAllFreeEquips(1, 'Kor Duelist') !== 0) {
+      oFails.push('a second bundle click queued a duplicate entry');
+    }
+    if (S.plan.length !== 1) { oFails.push(`plan grew to ${S.plan.length} entries on re-click`); }
+    if (oFails.length) { anyFail = true; console.log(`\u2717 equip all free (single action): ${oFails.length} fail`); oFails.forEach(m=>console.log('  - '+m)); }
+    else { console.log('\u2713 equip all free is ONE action when the engine offers it (free_equip_all preferred over free_equips; encodes equipallfree=<host>)'); }
+  }
   // Equipping decided from HAND: one drop queues the cast AND the equip (needs a real game walk).
   {
     let ehFails;

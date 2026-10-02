@@ -5849,6 +5849,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                        "attach all equipment"); }
             }
         }
+        else if (a.kind == Action::Kind::AttachAllFreeEquipment)
+        {
+            // Equip-all-free (executor mirror -- same shared ApplyAttachAllFreeEquipment). No
+            // TapForCost: the cost is {0} by construction and the apply re-prices every piece.
+            // The log names the REALISED count, not the enumerated one, so a bundle that declined
+            // a piece (metalcraft lost mid-plan, a co-selected equip got there first) says so.
+            const int n = ApplyAttachAllFreeEquipment(state, state.active_player_index,
+                                                      a.sac_victim_id);
+            if (m_logger && n > 0)
+            { m_logger->LogAbility(a.sac_victim_id, bf_name(a.sac_victim_id),
+                                   "equip all free (" + std::to_string(n) + ")"); }
+        }
         else if (a.kind == Action::Kind::PutFromHandAbility)
         {
             // Stoneforge put (executor mirror -- same shared ApplyPutFromHand).

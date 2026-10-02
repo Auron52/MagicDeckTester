@@ -996,6 +996,40 @@ void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id)
     for (int id : to_move) { ApplyEquip(state, controller, id, balan_id); }
 }
 
+// The human-play "equip all free to X" bundle (see the SpellEffects.h declaration note). Shares
+// Balan's collect-ids-first discipline for the same reason -- ApplyEquip can reallocate the
+// battlefield -- but shares NOTHING of its cost handling: each piece is re-priced here and skipped
+// unless it is genuinely {0}.
+int ApplyAttachAllFreeEquipment(GameState& state, int controller, int host_id)
+{
+    const std::vector<std::pair<int, int>> to_attach =
+        FreeAttachableEquipment(state, controller, host_id);
+    int done = 0;
+    for (const std::pair<int, int>& it : to_attach)
+    {
+        // RE-CHECK PER PIECE, on the LIVE board rather than the snapshot above. Three things can
+        // have changed since it was taken, and all three are reachable: ApplyEquip reallocates the
+        // battlefield; an earlier attach in this very loop can have sacrificed a permanent and so
+        // flipped metalcraft off, un-freeing everything after it; and a co-selected `equip=` action
+        // earlier in the plan can have claimed this piece already. Each failure just skips the
+        // piece -- which costs nothing, because the activation it would have been was free.
+        const Permanent* eq = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == it.first)
+            { eq = &p; break; }
+        }
+        if (!eq || eq->equipped_to != 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(eq->card);
+        if (!d || !d->params.is_equipment) { continue; }
+        if (EquipCostGenericNow(state, controller, *d, host_id) != 0) { continue; }
+        if (!CanAttachEquip(state, controller, it.first, host_id))    { continue; }
+        ApplyEquip(state, controller, it.first, host_id);
+        ++done;
+    }
+    return done;
+}
+
 // Stoneforge Mystic's tap-put (see the SpellEffects.h declaration note).
 bool ApplyPutFromHand(GameState& state, int controller, int source_id,
                       const std::string& put_name)

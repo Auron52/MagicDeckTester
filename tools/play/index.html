@@ -900,7 +900,51 @@ function freeEquipHosts() {
   out.sort((a,b)=> b.pieces.length - a.pieces.length);
   return out;
 }
+// ---- THE SINGLE-ACTION ROUTE, which is the one that actually delivers the gesture -------------
+//
+// `free_equip_all` is the engine publishing its own Action::Kind::AttachAllFreeEquipment offers:
+// ONE action per legal host, covering every free loose piece. Prefer it over `free_equips`
+// whenever it is there, because the N-token route below CANNOT be made to work on the boards this
+// feature exists for -- it queues one `equip=` per piece, and N independent equip digits do not
+// fit the viewer's plan-space bound at any keep policy (14 pieces x ~4 hosts is 4^14 against
+// 65,536), so the valve drops most of the equip groups and CheckLine rejects the tokens naming
+// them. That is what the user saw: *"Equip all free was available, but it only equipped a few."*
+//
+// The N-token route is KEPT, not deleted, and only as the fallback for an engine that does not
+// publish the field -- a replay of a reference saved before this existed, or a pinned binary from
+// before it landed (server.js pins the engine per game, so a session in flight keeps the old one).
+function freeEquipAllHosts() {
+  const d = S.decision;
+  if (!d || d.type!=='main_phase' || !Array.isArray(d.free_equip_all)) return [];
+  return d.free_equip_all
+           .filter(h => h && h.host > 0 && (h.pieces|0) >= FREE_EQUIP_MIN)
+           .map(h => ({ hostNum: h.host, hostName: h.host_name || ('#'+h.host),
+                        count: h.pieces|0 }))
+           .sort((a,b)=> b.count - a.count);
+}
+// Either route's hosts, in one shape, so the button and the picker never branch on which is live.
+function freeEquipOffers() {
+  const one = freeEquipAllHosts();
+  if (one.length) return one;
+  return freeEquipHosts().map(h => ({ hostNum: h.hostNum, hostName: h.hostName,
+                                      count: h.pieces.length }));
+}
 function queueAllFreeEquips(hostNum, hostName) {
+  // ONE entry when the engine offers the bundle. It is not N queued equips that happen to commit
+  // together -- it is a single enumerated action, so the whole gesture either validates or does
+  // not, and the player cannot end up with a partial attach that looked complete.
+  if (freeEquipAllHosts().some(h => h.hostNum === hostNum)) {
+    if (S.plan.some(p => p.kind==='activate' && p.verb==='equipallfree' && p.hostNum===hostNum)) {
+      flashHint(`${hostName} is already set to receive every free Equipment on this line.`);
+      return 0;
+    }
+    const n = (freeEquipAllHosts().find(h => h.hostNum === hostNum) || {}).count || 0;
+    S.plan.push({ kind:'activate', verb:'equipallfree', name:hostName, hostNum,
+                  srcNum:hostNum, src:hostName });
+    flashHint(`Equipping ${hostName} with ${n} free Equipment — commit the phase to resolve them.`);
+    renderBoard();
+    return n;
+  }
   const pieces = freeEquipPiecesFor(hostNum);
   let n = 0;
   pieces.forEach(pc => { if (queueEquip(pc.name, hostNum, hostName, pc.srcNum, false)) { n++; } });
@@ -910,13 +954,13 @@ function queueAllFreeEquips(hostNum, hostName) {
   return n;
 }
 function freeEquipPickerHtml(){
-  const hosts = freeEquipHosts();
+  const hosts = freeEquipOffers();
   let h=`<h3>Equip all free Equipment — to which creature?</h3>`;
   h+=`<div class="sub">Attaches every LOOSE Equipment whose equip cost is {0} <em>right now</em> `
    +`(metalcraft makes these free) to one creature, as a single line. Equipment still in hand is not `
    +`included — that needs a cast, so drag those. Anything left over can be attached on a later line.</div>`;
   h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
-  hosts.forEach(x=>{ h+=`<button class="primary" data-feh="${x.hostNum}">${esc(x.hostName)} — ${x.pieces.length} free</button>`; });
+  hosts.forEach(x=>{ h+=`<button class="primary" data-feh="${x.hostNum}">${esc(x.hostName)} — ${x.count} free</button>`; });
   h+=`<button class="ghost" data-feh="0">Cancel</button></div>`;
   return h;
 }
@@ -927,7 +971,7 @@ function renderFreeEquipPicker(){
   panel.querySelectorAll('[data-feh]').forEach(el=>{
     el.onclick=()=>{ const n=+el.dataset.feh; S.freeEquipPick=null;
       if (n>0) {
-        const h=freeEquipHosts().find(x=>x.hostNum===n);
+        const h=freeEquipOffers().find(x=>x.hostNum===n);
         if (h) { queueAllFreeEquips(n, h.hostName); }
       }
       renderBoard(); };
@@ -1336,7 +1380,16 @@ function jitteModeLabel(m){ return JITTE_MODE_LABEL[m] || ('mode ' + m); }
 // shares (toggleActivate, the bfThumb ⟳ badge, auraAttThumb), so the badge count and the picker can
 // never disagree about how many activations a click has to choose between.
 function clickActivationOptions(name){
-  const opts = activationOptions(name).filter(o=>o.verb!=='equip' && !(o.blinkCount > 3));
+  // `equipallfree` is filtered out HERE for the same reason `equip` is, and the consequence of not
+  // doing so is sharper. Its engine action names the HOST, so the option lands on the host
+  // CREATURE's click affordance -- and a creature normally has no activations at all, which means
+  // opts.length would be 1 and toggleActivate queues a single option WITHOUT opening a picker. So
+  // clicking your own Kor Duelist to look at it would silently queue "attach all eleven Equipment
+  // to this creature". The gesture has its own ⚔ button on the plan bar, which is where the user
+  // asked for it: *"it should be somewhere on the right, but not in the history panel, just like
+  // 'Combo Off'."*
+  const opts = activationOptions(name).filter(o=>o.verb!=='equip' && o.verb!=='equipallfree'
+                                                 && !(o.blinkCount > 3));
   const wantFused = clueFuseEnabled();
   // Only collapse when BOTH members of the pair are present, which is exactly the case the engine's
   // `makes_clue` flag creates. A source with no investigate is untouched, and so is one where some
@@ -2051,9 +2104,9 @@ function comboOffPlan(){
 // board, rather than in the history. It is a bit too out of the way over there." The old side-panel
 // slot is emptied rather than removed, so nothing else needs to know where it moved.
 function freeEquipButtonHtml(){
-  const hosts = freeEquipHosts();
+  const hosts = freeEquipOffers();
   if (!hosts.length) return '';
-  const n = hosts.reduce((m,h)=>Math.max(m,h.pieces.length),0);
+  const n = hosts.reduce((m,h)=>Math.max(m,h.count),0);
   return `<button id="freeeq" class="freeeq" title="Attach every loose Equipment that costs {0} to `
        + `equip right now (metalcraft makes these free) to one creature, as a single line — instead `
        + `of dragging them one at a time. Equipment still in hand needs a cast, so drag those.">`
@@ -2429,6 +2482,9 @@ function renderPlanbar() {
               : p.verb==='taplife'   ? ' ⟳ gain life per Elf'
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
+              // The HOST is the chip's `name` for this one (the engine's action names the host too),
+              // so the chip reads "Kor Duelist ⚔ equip all free" -- which is the whole gesture.
+              : p.verb==='equipallfree' ? ' ⚔ equip all free'
               : p.verb==='sfput'     ? ' ⟳ put from hand'
               : p.verb==='jittemode' ? ' \u27f3 ' + jitteModeLabel(p.mode)
               : p.verb==='sacout'    ? ' ⟳ sacrifice'

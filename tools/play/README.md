@@ -427,7 +427,7 @@ external-chooser surface exposes:
   - Route **mulligan/keep/bottom** and **combat (attackers/blockers)** through the chooser too,
     for a fully human-controlled game.
 - **v1 line-check limits:** validates land + plain casts + tutors + every board activation
-  (`sacout=` / `equip=` / `attachall=` / `sfput=` / `jittemode=`); only **{X}** casts report
+  (`sacout=` / `equip=` / `equipallfree=` / `attachall=` / `sfput=` / `jittemode=`); only **{X}** casts report
   *unsupported*. The affordability sim models same-turn rock ramp + colour availability but uses the
   enumerator's over-approximate multi-colour "wild" mana, so a rare colour-contention line could
   read *legal* when the real payment can't make it — caught on artifact review. Reconciliation is

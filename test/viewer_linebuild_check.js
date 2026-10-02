@@ -259,6 +259,16 @@ function checkActivationVerbs() {
     [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip', srcNum: 7 },
      'equip=Bonesplitter#7'],
     [{ name: 'Balan, Wandering Knight', src: 'Balan, Wandering Knight', kind: 'activate', verb: 'attachall' }, 'attachall=Balan, Wandering Knight'],
+    // EQUIP-ALL-FREE names the HOST's m_number, not a card name -- the one verb in NUM_VERBS. Two
+    // Kor Duelists in play are genuinely different hosts, so a by-name token could not say which
+    // (the same reason `equip=` carries `@<host>`); and the engine action's card_name IS the host's
+    // name, so a name-valued token would also be indistinguishable from a cast of a same-named card.
+    [{ name: 'Kor Duelist', src: 'Kor Duelist', kind: 'activate', verb: 'equipallfree', hostNum: 19 },
+     'equipallfree=19'],
+    // No hostNum => 0, which the engine reads as its "any host" wildcard rather than as a
+    // malformed token. That is what keeps a hand-typed line and a scenario fixture usable.
+    [{ name: 'Kor Duelist', src: 'Kor Duelist', kind: 'activate', verb: 'equipallfree' },
+     'equipallfree=0'],
     [{ name: 'Colossus Hammer', src: 'Stoneforge Mystic', kind: 'activate', verb: 'sfput' }, 'sfput=Colossus Hammer'],
     [{ name: "Umezawa's Jitte", src: "Umezawa's Jitte", kind: 'activate', verb: 'jittemode', mode: 1 }, 'jittemode=1'],
     // BLINK: the target is part of the decision, and so is the COUNT. Human play offers one blink

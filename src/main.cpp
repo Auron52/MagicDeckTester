@@ -477,6 +477,14 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 break;
             case Action::Kind::AttachAllEquipment:
                 tag = a.card_name + ": attach all Equipment"; break;
+            case Action::Kind::AttachAllFreeEquipment:
+                // The COUNT is the whole information content of this entry (see the SummarizePlan
+                // label): "equip all free (2)" and "equip all free (11)" are very different plays.
+                // Recomputed from the shared predicate, never carried on the Action.
+                tag = "equip all free ("
+                    + std::to_string(FreeAttachableEquipment(s, s.active_player_index,
+                                                             a.sac_victim_id).size())
+                    + ") \xE2\x86\x92 " + a.card_name.str(); break;
             case Action::Kind::PutFromHandAbility:
                 tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; break;
             case Action::Kind::JitteModeAbility:
@@ -1823,6 +1831,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::UntapCreature
              || ac.kind == Action::Kind::Equip
              || ac.kind == Action::Kind::AttachAllEquipment
+             || ac.kind == Action::Kind::AttachAllFreeEquipment
              || ac.kind == Action::Kind::PutFromHandAbility
              || ac.kind == Action::Kind::GraveyardExileAbility
              || ac.kind == Action::Kind::GraveyardReturnAbility
@@ -1901,6 +1910,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // cast of the Equipment it puts both read `cast=Colossus Hammer`, and equipping the
                 // Bonesplitter in play reads the same as casting the copy in hand.
                 if (ac.kind == Action::Kind::AttachAllEquipment)      { os << ", \"verb\": \"attachall\""; }
+                else if (ac.kind == Action::Kind::AttachAllFreeEquipment)
+                { os << ", \"verb\": \"equipallfree\", \"host\": " << ac.sac_victim_id
+                     << ", \"pieces\": "
+                     << FreeAttachableEquipment(s, s.active_player_index, ac.sac_victim_id).size(); }
                 else if (ac.kind == Action::Kind::PutFromHandAbility) { os << ", \"verb\": \"sfput\""; }
                 else if (ac.kind == Action::Kind::Equip)              { os << ", \"verb\": \"equip\""; }
                 else if (ac.kind == Action::Kind::JitteModeAbility)
@@ -2251,6 +2264,48 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             fe << "] }";
         }
         if (any) { os << "  \"free_equips\": [" << fe.str() << "],\n"; }
+        // ...AND THE SINGLE-ACTION FORM, which is the one that actually answers the user's request.
+        // `free_equips` above lets the viewer queue N separate `equip=` tokens, and that can only
+        // ever bundle pieces the valve left IN the menu -- on the reported frames it left almost
+        // none, because N independent equip digits do not fit the plan-space bound at any keep
+        // policy (14 pieces x ~4 hosts = 4^14 vs 65,536). Action::Kind::AttachAllFreeEquipment is
+        // ONE action per host instead, so one group of (1 + hosts) replaces that product.
+        //
+        // Harvested from the FULL `plans` list for the same reason `free_equips` is: the emitted
+        // slice is capped at MTG_PLAY_PLANS_CAP (200) and ranked, so a bundle can be perfectly
+        // enumerable -- and `equipallfree=<host>` perfectly acceptable to CheckLine, which sees the
+        // whole list -- while never appearing in the JSON the viewer renders. Publishing it
+        // separately is what makes the button's offer and the line's acceptance the same question.
+        {
+            std::map<int, std::pair<std::string, int>> all_free;   // host -> (name, pieces)
+            for (const TurnSolver::Plan& pl : plans)
+            {
+                for (const Action& ac : pl.actions)
+                {
+                    if (ac.kind != Action::Kind::AttachAllFreeEquipment) { continue; }
+                    if (ac.sac_victim_id == 0) { continue; }
+                    std::pair<std::string, int>& slot = all_free[ac.sac_victim_id];
+                    if (!slot.first.empty()) { continue; }
+                    slot.first  = EnchantTargetName(s, ac.sac_victim_id);
+                    slot.second = static_cast<int>(
+                        FreeAttachableEquipment(s, s.active_player_index, ac.sac_victim_id).size());
+                }
+            }
+            if (!all_free.empty())
+            {
+                os << "  \"free_equip_all\": [";
+                bool f2 = true;
+                for (const std::pair<const int, std::pair<std::string, int>>& h : all_free)
+                {
+                    if (!f2) { os << ", "; }
+                    f2 = false;
+                    os << "{ \"host\": " << h.first << ", \"host_name\": ";
+                    JsonStr(os, h.second.first);
+                    os << ", \"pieces\": " << h.second.second << " }";
+                }
+                os << "],\n";
+            }
+        }
     }
     // An EXPLICIT pass entry, so a menu holding only optional variants (a tuck, an inert self-sac)
     // still shows "do nothing" as a listed choice rather than an implicit -1 (5d sweep, gi 2/6:
@@ -3547,7 +3602,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 // "land=<name>", "cast=<name>", "vial=<name>", "retrace=<name>", "landsedge=<n>",
 // "sacout=<outlet name>" (repeat for repeat activations),
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
-// "attachall=<name>", "sfput=<equipment name>", "jittemode=<1|2>", "gyexile=<1|2>",
+// "attachall=<name>", "equipallfree=<host m_number>", "sfput=<equipment name>",
+// "jittemode=<1|2>", "gyexile=<1|2>",
 // "channel=<card name>", "tap=<name>#<m_number>:<W|U|B|R|G|C>" (the manual tap/pay fallback --
 // docs/design/viewer-manual-tap-pay.md), or the bare word "pass". Card
 // names may contain spaces and commas (no MTG name contains ';' or '='), so they pass through
@@ -3578,6 +3634,11 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
+        // "equipallfree=<host m_number>": the mass-attach bundle. 0 (or an unparseable value) is
+        // the "any host" wildcard every other verb already honours, which is what lets a scenario
+        // fixture ask for the gesture without hard-coding a card number.
+        else if (key == "equipallfree")
+        { ls.equip_all_free.push_back(std::atoi(val.c_str())); }
         // "equip=<name>[#<source num>][@<host num>]": equip an Equipment already in play. The two
         // optional m_numbers pin WHICH copy attaches to WHICH creature -- see LineSpec::EquipSpec.
         // No MTG card name contains '#' or '@', so splitting on them cannot tear a name in half;

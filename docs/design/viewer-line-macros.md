@@ -410,6 +410,69 @@ and claiming otherwise) is `viewer-plan-valve-reachability.md`. The macro could 
 on its own: a committed line must match an **enumerated plan index**, so a gesture cannot synthesise
 a line the enumerator never produced — `legal_not_enumerated` is a reject, not a fallback.
 
+### …and the N-token form was not enough. It is now the FALLBACK.
+
+> "Equip all free was available, but it only equipped a few."
+> — USER, 2026-10-02, after the above shipped
+
+**The macro was working exactly as written; the premise was wrong.** It queues one `equip=` token
+per piece, so it can only ever bundle equips that are *in the menu* — and N independent equip digits
+cannot all be. 14 loose pieces × ~4 hosts is `4^14` against the viewer's 65,536-position bound, so
+at most ~8 can be separate digits **whatever the keep policy is**, and the valve must drop the rest.
+Measured on the reported frames: `OFFERED=0 hosts=0`, with 8–14 pieces sitting loose and 18–29
+groups dropped. No viewer-side change can reach a plan the enumerator never produced.
+
+The user named the structural answer before any of this was measured — *"Is there a way with the
+viewer to just let it go into executor-only mode or perhaps just do this when we go over the limit?
+We shouldn't be counting on the unpruned search to fit."* — and the enumeration-side form of it is
+**`Action::Kind::AttachAllFreeEquipment`**: one action per legal host, covering every free loose
+piece, with all hosts in **one** mutual-exclusion family. A product of digits becomes a group of
+`(1 + hosts)`.
+
+| | N `equip=` tokens | one `equipallfree=<host>` |
+|---|---|---|
+| plan-space cost | `Π(1 + hosts)` over pieces — `4^14` on the reported board | `1 + hosts` |
+| survives the valve | only the few groups the rank-fill kept | the free-group seed keeps it |
+| failure mode | partial attach that looked complete | validates or does not, as one unit |
+
+Three properties worth stating because each closed a bug found while building it:
+
+* **It is emitted only under `HumanPlayActive()`**, which is the whole correctness argument for
+  adding an action to the enumerator: the search never sees this kind, so every autonomous decision
+  and every GT number is byte-identical *by construction* rather than by measurement. The search
+  wants none of it either — the AUTO-EQUIP collapse already force-includes the best mass-equip line,
+  and that collapse is itself gated `&& !HumanPlayActive()`, so the two are exact complements.
+* **It is not Balan.** `ApplyAttachAllEquipment` attaches *every* Equipment and bypasses equip costs
+  — correct for a printed ability, a rules violation on an arbitrary creature. The bundle re-prices
+  every piece through `EquipCostGenericNow` **at apply**, per piece, and skips any that is no longer
+  free (metalcraft can switch off mid-plan when an earlier attach sacrifices something).
+* **The host needs its own sub-decision token.** One action per host, every one carrying the host's
+  name as its `card_name`, so without a sub they share a dedup signature. Measured: a wildcard
+  `equipallfree=0` on a two-host board graded `accept / 1 variant` without it and `choose / 2
+  variants` with it. That is the third time this exact collapse has been found in `TurnSolver.cpp` —
+  loyalty, then `Equip`, now the bundle.
+
+One shared predicate, `FreeAttachableEquipment`, answers "which pieces, in what order" for **four**
+readers: the enumeration's offer gate, the menu label's count, the published `free_equip_all`
+affordance, and the apply. A menu entry promising an attach the apply then declines is the defect
+class `CanAttachEquip` exists to close, and a bundle multiplies it by N. Pinned by nine unit tests
+in `test/unit/test_equip_all_free.cpp`, one of which asserts the predicate's size and the apply's
+return value are equal over a board holding one of every shape.
+
+The gated-piece case is the one place **order decides legality**: O-Naginata's "power 3 or greater"
+reads the host's power *with everything already attached*, so the predicate banks the ungated
+pieces' `equip_power_bonus` first and admits gated ones against `host power + bank` — the same
+correction the enumeration's `reachable_bonus` makes, and it returns them last so the attaches
+happen in that order. Under-credited for a per-equipment scaler (Golem-Skin Gauntlets' flat field is
+0), which is the safe direction: `ApplyEquip` re-checks and declines, so an over-credit could only
+ever cost a skipped piece, never an illegal attach.
+
+`equipallfree` is also **filtered out of the board-click path**, like `equip` before it, and the
+consequence of not doing so is sharper: the action names the host, so the option would land on the
+host *creature's* click affordance — and a creature normally has no activations, so `opts.length`
+would be 1 and `toggleActivate` queues a single option **without opening a picker**. Clicking your
+own Kor Duelist to look at it would silently queue "attach all eleven Equipment to this creature".
+
 ## Deliberately not done
 
 * **Repeating a block that contains a land drop, a Land's Edge discard or a pre-tap.** Each is either

@@ -21996,6 +21996,99 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(a));
                 }
             }
+
+            // ---- "EQUIP ALL FREE TO <host>": ONE action for N attaches (HUMAN PLAY ONLY) --------
+            //
+            // USER 2026-10-02: *"We probably should have a shortcut for equip all to x"*,
+            // *"(particularly for free equips)"*, *"Maybe equip all free to x."* -- and then, after a
+            // viewer-side macro that queued N separate `equip=` clicks shipped: *"Equip all free was
+            // available, but it only equipped a few."*
+            //
+            // IT WAS NEVER A VIEWER BUG. A macro can only bundle equips that are IN the menu, and N
+            // independent equip digits cannot all be: 14 loose pieces x ~4 hosts is 4^14 against the
+            // viewer's 65,536-position bound, so at most ~8 can ever be separate digits whatever the
+            // keep policy is. The user drew that conclusion first -- *"Is there a way with the viewer
+            // to just let it go into executor-only mode or perhaps just do this when we go over the
+            // limit? We shouldn't be counting on the unpruned search to fit."* This is the
+            // enumeration-side answer to it: one group of (1 + hosts) members instead of a product.
+            //
+            // HUMAN PLAY ONLY, and that gate is the whole correctness argument for adding an action
+            // to the enumerator at all: the search never sees this kind, so every autonomous
+            // decision, every regression digest and every GT number is byte-identical BY
+            // CONSTRUCTION rather than by measurement. The search does not want it either -- the
+            // AUTO-EQUIP collapse already force-includes the best mass-equip line, and that collapse
+            // is itself gated `&& !HumanPlayActive()`, so the two are exact complements.
+            //
+            // NOT Balan. Balan's apply attaches EVERY Equipment and bypasses equip costs, which is
+            // correct for a printed ability and a rules violation for an arbitrary creature; this
+            // bundles only pieces that already cost {0}, leaves attached pieces alone, and re-checks
+            // all of it at apply (ApplyAttachAllFreeEquipment).
+            if (HumanPlayActive())
+            {
+                for (const Host& h : hosts)
+                {
+                    if (h.in_hand) { continue; }   // a host must already BE a permanent to receive
+                    // Shroud blocks the equip TARGET (CR 702.18b). Unlike the per-pair loop there is
+                    // no shroud dance to offer here -- the bundle cannot first move the Greaves off
+                    // -- so a shrouded host simply gets no bundle, and its individual `equip=`
+                    // offers (which do model the dance) are untouched.
+                    bool          shrouded  = false;
+                    InternedName  host_name;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index
+                            || q.card.m_number != h.id) { continue; }
+                        int ssrc  = 0;
+                        shrouded  = CreatureHasShroud(q, state, &ssrc);
+                        host_name = q.card.m_name;
+                        break;
+                    }
+                    if (shrouded || host_name.str().empty()) { continue; }
+                    // What the bundle would really move, through the SHARED predicate the apply
+                    // and the labels use (FreeAttachableEquipment), so a menu entry can never
+                    // promise an attach the apply declines. It reads the battlefield directly
+                    // rather than this block's `equips` vector, which is the right thing twice
+                    // over: that vector has already been narrowed by the order-class pass above,
+                    // and a bundle must see every loose piece.
+                    const std::vector<std::pair<int, int>> pieces =
+                        FreeAttachableEquipment(state, state.active_player_index, h.id);
+                    // TWO pieces minimum. At one piece the bundle is behaviourally identical to the
+                    // single `equip=` action already in the menu, so offering it is a duplicate
+                    // entry and a wasted digit -- the same reason the viewer's FREE_EQUIP_MIN is 2.
+                    if (pieces.size() < 2) { continue; }
+                    int worth = 0;
+                    for (const std::pair<int, int>& pc : pieces)
+                    {
+                        const CardDefinition* ed2 = nullptr;
+                        for (const Permanent& e : state.battlefield)
+                        {
+                            if (e.controller_index == state.active_player_index
+                                && e.card.m_number == pc.first)
+                            { ed2 = CardDatabase::Instance().LookupCached(e.card); break; }
+                        }
+                        if (!ed2) { continue; }
+                        const int rd2 = rider_delta(ed2, h.id);
+                        if (rd2 > 0) { worth += rd2; }
+                    }
+                    Action a;
+                    a.kind           = Action::Kind::AttachAllFreeEquipment;
+                    a.card_name      = host_name;   // the HOST, not a piece: the label names it
+                    a.hand_index     = -1;
+                    a.cost           = ManaCost{};      // {0} by construction (checked per piece)
+                    a.sac_source_id  = 0;               // ONE family for every host (see the enum)
+                    a.sac_victim_id  = h.id;            // the host, exactly as Equip encodes it
+                    // DELIBERATELY NOT chosen_x. The piece count is recomputed at label time from
+                    // the same shared predicate instead, because `chosen_x > 0` is the CATCH-ALL
+                    // arm of the sub-decision builder: any kind carrying it gets an "X=<n>" variant
+                    // token, i.e. a "choose how to resolve" dialog asking the player about an
+                    // internal number. That is precisely the dialog spam the blink/Jitte carve-out
+                    // right above it exists to suppress (USER, seed 11 T6: "spammed by dialogs that
+                    // shouldn't exist"), and a count that is not a choice must not become one.
+                    a.eval           = worth > 0 ? worth : static_cast<int>(pieces.size());
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
         }
 
         // Garth One-Eye: one GarthActivate variant per un-chosen, goldfish-live name. Disenchant
@@ -25576,6 +25669,19 @@ static int ActivationFamilyKey(const Action& a)
         // bounds it to one activation per Pod per plan.
         case Action::Kind::ActivatePod:
             return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
+        // "Equip all free to <host>": ONE family across EVERY host, not one per host -- which is
+        // why it needs its own case instead of riding the source-keyed line above. The variants
+        // are alternatives, not co-selectable: bundling everything onto A and then onto B is just
+        // "onto B", so N hosts must cost (1 + N) positions and not 2^N. That is the entire reason
+        // this action exists (see Action::Kind::AttachAllFreeEquipment), so keying it per source
+        // would reintroduce the product it was added to remove.
+        //
+        // A FIXED key, deliberately not derived from any id: `-1000 - id` only ever produces
+        // <= -1000 for a real id, and 0 is the "independent bit" sentinel, so -999 is unreachable
+        // by every other kind here. Keying on sac_source_id == 0 would have worked today and
+        // silently collided with the first grouped kind that ever emits a sourceless action.
+        case Action::Kind::AttachAllFreeEquipment:
+            return -999;
         // Sac-outlet BURSTS and PERSIST LOOPS (sac_count > 1): one burst per outlet per plan.
         // These were independent bits, and the Melira closer-castable unlock (MTG_POD_HAND_PAIR)
         // emits one variant per (outlet x persist body x purpose) on combo boards -- the 2^k that
@@ -32657,6 +32763,7 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
         case Action::Kind::AnimateLand:
         case Action::Kind::TapForTokenPay:
         case Action::Kind::AttachAllEquipment:
+        case Action::Kind::AttachAllFreeEquipment:
         case Action::Kind::PutFromHandAbility:
         case Action::Kind::JitteModeAbility:
         case Action::Kind::Equip:
@@ -36963,6 +37070,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // fires; stranded-outlet safe if Balan left the battlefield).
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyAttachAllEquipment(state, state.active_player_index, a.sac_source_id); }
+        }
+        else if (a.kind == Action::Kind::AttachAllFreeEquipment)
+        {
+            // Equip-all-free: no cost to tap for ({0} by construction, and the apply re-prices
+            // every piece), so there is no TapForCostDirect gate here -- adding one would be a
+            // no-op that could only ever fail spuriously.
+            ApplyAttachAllFreeEquipment(state, state.active_player_index, a.sac_victim_id);
         }
         else if (a.kind == Action::Kind::PutFromHandAbility)
         {
@@ -41851,6 +41965,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Balan attach-all: which Balan (legend rule -> effectively one).
                 case Action::Kind::AttachAllEquipment:
                     msf.push_back("BALAN#" + std::to_string(act.sac_source_id)); break;
+                // Equip-all-free: which HOST is the decision (sac_source_id is 0 for all of them,
+                // so keying on it the way BALAN does would dedup every host down to one entry --
+                // the enchant_target lesson, which has now cost this file three separate bugs).
+                case Action::Kind::AttachAllFreeEquipment:
+                    msf.push_back("EQALLFREE#" + std::to_string(act.sac_victim_id)); break;
                 // Stoneforge put: which source AND which card are distinct decisions
                 // (the enchant_target dedup lesson -- variants differing only in the put card
                 // must not collapse in human play or the search).
@@ -60574,6 +60693,19 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         { cast_names.push_back(LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability)); }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         { cast_names.push_back(a.card_name + ": attach all Equipment"); }
+        // The COUNT rides the label, because it is the only thing distinguishing "this bundles the
+        // two loose shields" from "this bundles all eleven" -- the same reason the sac-outlet count
+        // and the Jitte repeat count are in their labels. Recomputed from the shared predicate
+        // rather than carried on the Action (see the emission note on why not chosen_x); with no
+        // state to read it degrades to the bare verb rather than to a wrong number.
+        else if (a.kind == Action::Kind::AttachAllFreeEquipment)
+        {
+            const int n = st ? static_cast<int>(FreeAttachableEquipment(
+                                   *st, st->active_player_index, a.sac_victim_id).size())
+                             : 0;
+            cast_names.push_back("equip all free" + (n > 0 ? " (" + std::to_string(n) + ")" : "")
+                                 + " \xE2\x86\x92 " + a.card_name.str());
+        }
         else if (a.kind == Action::Kind::PutFromHandAbility)
         { cast_names.push_back("put " + a.card_name + " from hand"); }
         else if (a.kind == Action::Kind::JitteModeAbility)
@@ -61070,6 +61202,37 @@ static bool EquipsMatch(const std::vector<TurnSolver::LineSpec::EquipSpec>& want
     return EquipAssign(want, have, used, 0);
 }
 
+// Does a plan's set of AttachAllFreeEquipment actions bundle onto exactly the hosts the line
+// DECLARED? Hosts are m_numbers; a spec entry of 0 is the "any host" wildcard the other verbs
+// already use, which is what lets a hand-written line or a scenario fixture say "bundle somewhere"
+// without hard-coding a card number. Equal sizes in BOTH directions for the EquipsMatch reason: a
+// plan that mass-attaches when the line asked for none is a different play.
+//
+// First-fit is sound HERE, unlike for equips/blinks, because there is only one wildcard field and
+// at most one non-wildcard value can match any given action -- so a wildcard can never "eat" the
+// only candidate another entry needed. The sort makes concrete ids outrank wildcards anyway.
+static bool EquipAllFreeMatch(const std::vector<int>& want, const std::vector<int>& have)
+{
+    if (want.size() != have.size()) { return false; }
+    if (want.empty()) { return true; }
+    std::vector<int> w = want, h = have;
+    std::sort(w.begin(), w.end(), std::greater<int>());   // concrete ids first, 0s last
+    std::sort(h.begin(), h.end(), std::greater<int>());
+    std::vector<bool> used(h.size(), false);
+    for (int id : w)
+    {
+        bool hit = false;
+        for (std::size_t j = 0; j < h.size(); ++j)
+        {
+            if (used[j]) { continue; }
+            if (id != 0 && id != h[j]) { continue; }
+            used[j] = true; hit = true; break;
+        }
+        if (!hit) { return false; }
+    }
+    return true;
+}
+
 // Backtracking assignment behind BlinksMatch -- the EquipAssign shape, one wildcard field instead of
 // two. A spec entry's `target == 0` means "any target", so first-fit could reject a matchable pair
 // ("Emiel@42" + "Emiel" against actions "Emiel->200002" + "Emiel->42" fails if the wildcard eats 42
@@ -61159,6 +61322,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
+                      spec.equip_all_free.empty() &&
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.gy_plays.empty() && spec.channels.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
@@ -61315,6 +61479,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
         std::vector<LineSpec::BlinkSpec> blinkActs;
+        std::vector<int> freeAllHosts;   // one host m_number per AttachAllFreeEquipment action
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
@@ -61343,6 +61508,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { jitteModes.push_back(a.gy_exile_mode); continue; }
             if (a.kind == Action::Kind::Equip)
             { equipActs.push_back({ a.card_name, a.sac_source_id, a.sac_victim_id }); continue; }
+            // Equip-all-free: ALWAYS its own verb, never the legacy cast multiset -- its card_name
+            // is the HOST's name, so a fallback would let `cast=Kor Duelist` match a plan that
+            // bundles ten attaches onto a Duelist already in play. Exactly the ambiguity the
+            // `equip=` note above records, and the reason that one has no legacy split either.
+            if (a.kind == Action::Kind::AttachAllFreeEquipment)
+            { freeAllHosts.push_back(a.sac_victim_id); continue; }
             if (gyexile_declared && a.kind == Action::Kind::GraveyardExileAbility)
             { gyExileModes.push_back(a.gy_exile_mode); continue; }
             if (gyreturn_declared && a.kind == Action::Kind::GraveyardReturnAbility)
@@ -61437,6 +61608,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             if (v2 != sortedJitteModes) { continue; }
         }
         if (!EquipsMatch(spec.equips, equipActs)) { continue; }
+        if (!EquipAllFreeMatch(spec.equip_all_free, freeAllHosts)) { continue; }
         if (!BlinksMatch(spec.blinks, blinkActs)) { continue; }
         if (gyexile_declared)
         {
@@ -61971,6 +62143,22 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                     {
                         addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " equips to",
                                hn, art, "equip", a.sac_victim_id);
+                    }
+                }
+                // EQUIP-ALL-FREE host: the same decision, and it needs the same sub for the same
+                // reason. One bundle action per legal host, every one carrying the host's name as
+                // its card_name -- so with no sub they share a dedup signature and all but the
+                // first-enumerated host silently disappear. MEASURED here, not assumed: a wildcard
+                // `equipallfree=0` on a two-host board graded `accept / 1 variant` (one host
+                // offered) without this, and `choose / 2 variants` with it. Third time this exact
+                // collapse has been found in this file -- loyalty, then Equip, now the bundle.
+                if (a.kind == Action::Kind::AttachAllFreeEquipment && a.sac_victim_id != 0)
+                {
+                    const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
+                    if (!hn.empty())
+                    {
+                        addSub("equip all free \xE2\x86\x92 " + hn, "equip all free onto",
+                               hn, a.card_name.str(), "equipallfree", a.sac_victim_id);
                     }
                 }
                 // Umezawa's Jitte's non-combat modes: mode 1 shrinks a creature (sac_victim_id names
@@ -63661,7 +63849,8 @@ static const char* PlanDumpKindName(Action::Kind k)
         "SacForMana", "TapForTokens", "SacCreatureOutlet", "Channel", "GarthActivate",
         "ActivateLoyalty", "Equip", "GYReturn", "GYPlay", "GYExile", "AttachAllEquipment",
         "PutFromHand", "JitteMode", "RevealTop", "Pump", "AnimateLand", "TapForTokenPay",
-        "UntapCreature", "Blink", "ACTIVATE", "Pod", "GYExileGrow", "ComboRoute", "Eternalize"
+        "UntapCreature", "Blink", "ACTIVATE", "Pod", "GYExileGrow", "ComboRoute", "Eternalize",
+        "AttachAllFree"
     };
     const int i = static_cast<int>(k);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

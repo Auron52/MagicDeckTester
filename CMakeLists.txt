@@ -308,6 +308,7 @@ add_executable(mtg-test
     test/unit/test_in_place_rename.cpp
     test/unit/test_battle_cry.cpp
     test/unit/test_double_strike_grants.cpp
+    test/unit/test_equip_all_free.cpp
     test/unit/test_prevent_damage.cpp
     test/unit/test_prevent_damage_spells.cpp
     test/unit/test_prevent_damage_creatures.cpp

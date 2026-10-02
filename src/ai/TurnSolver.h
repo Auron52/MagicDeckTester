@@ -195,6 +195,27 @@ struct Action
                              // = the graveyard card, hand_index = -1, cost = eternalize_cost. The
                              // token's own ETB fires (FireOwnEtbTriggers, unpinned -> the provider's
                              // graveyard pick / the human's dig chooser). Appended LAST.
+        AttachAllFreeEquipment, // "Attach every FREE, UNATTACHED Equipment you control to one host"
+                             // -- ONE action covering N attaches. sac_victim_id = the host,
+                             // sac_source_id = 0 (all variants share ONE mutual-exclusion family:
+                             // attaching everything to A and then to B is just "to B"), cost = {0}
+                             // by construction. NOT Balan: this has no source permanent and no
+                             // printed ability behind it, so it may never bypass an equip cost --
+                             // every bundled piece must already cost {0} (Puresteel metalcraft),
+                             // re-checked per piece AT APPLY, and a piece that stopped being free
+                             // is simply skipped.
+                             //
+                             // EMITTED ONLY UNDER HumanPlayActive(). It exists because N
+                             // independent equip digits can never all fit the viewer's plan-space
+                             // bound -- 14 loose pieces x ~4 hosts is 4^14 against 65,536 -- so the
+                             // valve must drop equip groups and "every action is reachable one
+                             // click at a time" stops being true (USER 2026-10-02: *"I can't equip
+                             // various equipment"*, then *"Maybe equip all free to x"*). One group
+                             // of (1 + hosts) members replaces that product. Autonomous play needs
+                             // none of this: it already collapses mass-equipping greedily
+                             // (AUTO-EQUIP, which itself stands down under human play), so the
+                             // human-play gate keeps the search byte-identical BY CONSTRUCTION
+                             // rather than by measurement.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -1706,6 +1727,15 @@ public:
         // because equipping that one MOVES it. 0 == any.
         struct EquipSpec { std::string name; int source = 0; int host = 0; };
         std::vector<EquipSpec> equips;
+        // "equipallfree=<host m_number>": AttachAllFreeEquipment, one entry per activation (in
+        // practice at most one -- the variants are one mutual-exclusion family). Matched ALWAYS
+        // against its own verb, never folded into the ordinary cast multiset, for exactly the
+        // reason `equips` is: the action's card_name is the HOST's name, so a legacy fallback
+        // would let `cast=Kor Duelist` match a plan that bundles ten attaches onto a Duelist
+        // already in play. An EMPTY list therefore means "this line attaches nothing in bulk".
+        // The host is an m_number and not a name because two Kor Duelists are genuinely
+        // different hosts (the same lesson EquipSpec::host records).
+        std::vector<int>       equip_all_free;
         // "gyexile=<mode>": Deathrite Shaman's graveyard-exile activations, one entry per activation,
         // carrying the MODE (1 = exile an instant/sorcery, each opponent loses 2; 2 = exile a creature,
         // gain 2). Its own verb for the same reason `equip=` has one: the action names the SOURCE

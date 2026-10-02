@@ -94,6 +94,12 @@
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
   const MODE_VERBS = { jittemode: true, gyexile: true };
+  // ...and the verbs whose value is a BOARD M_NUMBER rather than a card name or a mode int.
+  //   equipallfree=  "attach every FREE loose Equipment to this creature", ONE engine action
+  //                  covering N attaches                                  (LineSpec::equip_all_free)
+  // It names the HOST's number because two Kor Duelists in play are genuinely different hosts --
+  // the same reason `equip=` carries `@<host>` rather than trusting a by-name sub-decision.
+  const NUM_VERBS = { equipallfree: true };
   function lineVerb(p) {
     // A CHANNEL entry is the one non-'activate' kind with its own verb: its source is a card in HAND
     // (so it is not a board activation) but it is not a cast either -- "{1}{R}, Discard this card"
@@ -429,7 +435,9 @@
       if (isPreTap(p)) continue;               // already emitted above, and it has no verb
       const v = lineVerb(p);
       if (v === 'cast') continue;
-      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name)
+      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode)
+                            : NUM_VERBS[v] ? String(p.hostNum || 0)
+                            : p.name)
                  + (v === 'equip' ? equipIds(p) : v === 'blink' ? blinkIds(p) : ''));
     }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);

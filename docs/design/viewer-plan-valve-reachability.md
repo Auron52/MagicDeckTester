@@ -213,14 +213,65 @@ on these frames are CASTS (measured `dropped_names`: Golem-Skin Gauntlets, Dwali
 3. **On those frames the engine enumerates no free equip for an unattached piece at all**, so the
    honest affordance correctly offers nothing. A bundle fails at k=1 as surely as at k=10.
 
-**THE REMAINING FIX IS THE USER'S OWN PROPOSAL** (*"Maybe equip all free to x"*, and *"We shouldn't
-be counting on the unpruned search to fit"*): one enumerated action with one member per host,
-instead of N independent equip digits the bound can never all hold — 14 pieces x ~4 hosts is `4^14`
-against 65,536, so at most ~8 can EVER be separate digits whatever the keep policy. All 18 dispatch
-sites are mapped from Balan's `Action::Kind::AttachAllEquipment`. Its **apply cannot be reused**: it
-attaches every Equipment and bypasses equip costs, which is correct for Balan's printed ability and
-a rules violation on an arbitrary host. The free variant needs its own selection — unattached,
-`EquipCostGenericNow == 0`, `equip_sacrifices_prior_host` and `equip_grants_shroud` carved out.
+### 5c. The fix was the user's own proposal, and it is now BUILT
+
+> "Maybe equip all free to x." / "We shouldn't be counting on the unpruned search to fit."
+> — USER, 2026-10-02
+
+**`Action::Kind::AttachAllFreeEquipment`**: one enumerated action per legal host, every host in
+**one** mutual-exclusion family, instead of N independent equip digits the bound can never all hold.
+14 pieces × ~4 hosts is `4^14` against 65,536, so at most ~8 could EVER be separate digits whatever
+the keep policy; one group of `(1 + hosts)` replaces that product outright, and because every member
+costs `{0}` the **free-group seed** (§2) keeps it.
+
+Measured on the staged wide board — 20 loose pieces in five four-of classes, two legal hosts:
+
+```
+equipallfree=0                 -> choose, 2 variants
+   variant 596  equip all free (20) -> Puresteel Paladin
+   variant 597  equip all free (20) -> Sram, Senior Edificer
+equipallfree=0;equipallfree=0   -> legal_not_enumerated   (one family: never two bundles in a plan)
+equipallfree=999999             -> legal_not_enumerated   (no such host)
+```
+
+Balan's **apply could not be reused**, and the reason is a rules question, not a convenience one:
+`ApplyAttachAllEquipment` attaches *every* Equipment and **bypasses equip costs** — correct for a
+printed ability (that is Balan's whole point against Colossus Hammer's `{8}`) and a rules violation
+on an arbitrary creature. The bundle is shorthand for N Equip *activations*, so it re-prices every
+piece through `EquipCostGenericNow` **at apply, per piece**, and skips any that is no longer free.
+Its own selection, in `FreeAttachableEquipment`: unattached, `{0}` now, not animated, with
+`equip_sacrifices_prior_host` and `equip_grants_shroud` carved out, and min-power pieces lifted by
+the bundle's own banked power and returned last so the attaches happen in that order.
+
+**ONE PREDICATE, FOUR READERS** — the enumeration's offer gate, the menu label's count, the published
+`free_equip_all` affordance, and the apply. A menu entry promising an attach the apply then declines
+is the defect class `CanAttachEquip` exists to close, and a bundle multiplies it by N; one of the
+nine unit tests in `test/unit/test_equip_all_free.cpp` asserts the predicate's size equals the
+apply's return value over a board holding one of every shape.
+
+**Emitted only under `HumanPlayActive()`.** That is the correctness argument for adding an action to
+the enumerator at all: the search never sees the kind, so every autonomous decision and every GT
+number is byte-identical *by construction*. It is also the right division of labour — the AUTO-EQUIP
+collapse already force-includes the best mass-equip line for the search, and that collapse is itself
+gated `&& !HumanPlayActive()`, so the two are exact complements.
+
+Three bugs found while building it, each worth recording because each is a repeat of a lesson this
+file already holds:
+
+* **The pass shortcut at CheckLine stage 0 had to learn the new verb.** Its own comment says so —
+  *"EVERY new verb must be added here or a line made up ONLY of it silently grades `accept /
+  plan_index -1 / pass`"* — and the first probe did exactly that: `equipallfree=999999` graded
+  **accept**. An accept for a line the engine then does not play is strictly worse than a reject,
+  because the player sees no error at all.
+* **The host needed its own sub-decision token.** One action per host, all carrying the host's name
+  as `card_name`, so without a sub they share a dedup signature: a wildcard `equipallfree=0` on a
+  two-host board graded `accept / 1 variant` and only one host was reachable. Third time this exact
+  collapse has been found in `TurnSolver.cpp` — loyalty, then `Equip`, now the bundle.
+* **The piece count must NOT ride `Action::chosen_x`.** `chosen_x > 0` is the *catch-all* arm of the
+  sub-decision builder, so carrying the count there produced a literal `X=20` variant token — a
+  "choose how to resolve" dialog asking the player about an internal number, which is precisely the
+  dialog spam the blink/Jitte carve-out beside it exists to suppress. The count is recomputed from
+  the shared predicate instead.
 
 ### Two measurement traps, both the wrong predicate
 
@@ -250,8 +301,22 @@ all three of these by reading it.
   board; `validate_line: "equip=Kite Shield"` must not come back `legal_not_enumerated`. It pins the
   user-visible consequence rather than the internals, so it fails if a future change goes back to
   deleting equip groups.
-* `test/viewer_client_check.js` — "equip all free to X" selection logic (see
-  `viewer-line-macros.md` §Feature 4).
+* `test/scenarios/kittyv2_equip_all_free_is_one_action.json` — the same board, asserting
+  `equipallfree=0` grades `choose` with **2** variants both labelled `equip all free (20)`. The
+  variant COUNT is the assertion that both hosts survive the sub-decision dedup; the label
+  substring is the assertion that the bundle really covers all twenty pieces and not a handful.
+* `test/unit/test_equip_all_free.cpp` — nine cases over `FreeAttachableEquipment` and
+  `ApplyAttachAllFreeEquipment`: the happy path, the no-metalcraft control (nothing in this deck
+  has a printed equip of `{0}`, so with the grant gone the bundle is empty — the two tests are each
+  other's control), each of the four carve-outs, the min-power lift and its negative, and the
+  predicate-equals-apply invariant. **These are the primary pin**, because the action is human-play
+  only: no seed-driven regression run executes this code at all, so the suite cannot test it.
+* `test/viewer_client_check.js` — both routes: the N-token selection logic (see
+  `viewer-line-macros.md` §Feature 4) and the single-action route, which asserts `free_equip_all` is
+  PREFERRED over `free_equips` (the stub deliberately makes the two disagree, 11 pieces vs 2), that
+  exactly ONE plan entry is queued, and that it encodes to `equipallfree=<host>`.
+* `test/viewer_linebuild_check.js` — `equipallfree=<host m_number>` encoding, including the
+  no-`hostNum` form falling back to the engine's `0` wildcard rather than a malformed token.
 * `test/viewer_checks.sh` — **FAILS, and BOTH of its failures are PRE-EXISTING.** Verified by running
   the identical checks against HEAD built in a worktree:
   * *protocol check*, `--strict`: tally reproduces exactly — `35 ok, 306 repaired, 0 play-drift,

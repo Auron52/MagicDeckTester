@@ -3365,6 +3365,21 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
 // as on a normal Equip, and equip costs are bypassed (attach, not the Equip action).
 void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id);
 
+// ApplyAttachAllFreeEquipment -- body in SpellEffects.cpp. The HUMAN-PLAY bundle gesture "equip
+// everything that is free onto this creature": a shorthand for N separate Equip ACTIVATIONS, not a
+// printed ability, so unlike Balan's attach-all above it may NOT bypass an equip cost. Every piece
+// it moves must already cost {0} on this board (Puresteel Paladin's metalcraft grant), and the
+// freeness, the unattached-ness and the host's legality are ALL re-checked here, per piece --
+// never trusted from the enumeration -- because metalcraft can switch off mid-plan and a
+// co-selected Equip can have claimed a piece first. A piece that fails any check is skipped, which
+// costs nothing: the activation it would have been was free. Returns how many pieces attached (0 =
+// a full no-op, the stranded-outlet pattern).
+//
+// It deliberately will NOT move an ALREADY-ATTACHED piece. Stripping a creature is a real
+// strategic decision and the per-piece `equip=` offer is where the human makes it; a bulk gesture
+// silently un-equipping a double-striker would be the opposite of a convenience.
+int ApplyAttachAllFreeEquipment(GameState& state, int controller, int host_id);
+
 // ApplyPutFromHand -- body in SpellEffects.cpp. Stoneforge Mystic's "{1}{W}, {T}: put an
 // Equipment card from your hand onto the battlefield" (mana paid by the caller; this taps the
 // source). The named card enters UNATTACHED through the shared enter cascade (Puresteel's draw
@@ -9133,6 +9148,103 @@ inline bool CanAttachEquip(const GameState& state, int controller, int equip_id,
     if (eqd && eqd->params.equip_min_power > 0
         && EquipGatePowerOf(*host, state) < eqd->params.equip_min_power) { return false; }
     return true;
+}
+
+// Which pieces would "equip all free to <host_id>" attach, in the order it will attach them?
+//
+// ONE PREDICATE, FOUR READERS -- the enumeration's "offer it at all" gate, the apply's selection,
+// the menu label's count, and the viewer affordance main.cpp publishes. That is not tidiness: a
+// menu entry promising an attach the apply then declines is the exact defect class CanAttachEquip
+// above was added to close, and this bundle multiplies the opportunity by N.
+//
+// Returned IN ATTACH ORDER: ungated pieces first, then min-power-gated ones by rising threshold.
+// That order is load-bearing, not cosmetic -- O-Naginata's "power 3 or greater" gate reads the
+// host's power WITH everything already attached, so a Bonesplitter placed first is what makes the
+// Naginata legal at all. (The same reasoning as the Equip enumeration's order_class pass.)
+// `.second` carries each piece's equip_min_power, for callers that want to explain the order.
+//
+// THE SELECTION RULES, each load-bearing:
+//   * UNATTACHED ONLY. Moving an attached piece is a strip -- it trades away the current host's
+//     rider -- which is a real decision belonging to the per-piece `equip=` offer, not to a bulk
+//     convenience gesture.
+//   * FREE ONLY, priced live. This is shorthand for N separate Equip ACTIVATIONS, not a printed
+//     ability like Balan's, so it may never bypass an equip cost. Under Puresteel Paladin's
+//     metalcraft every Equipment is {0} regardless of its printed cost, which is what makes the
+//     gesture worth having at all.
+//   * shroud-granting pieces are skipped: attaching one makes every LATER equip illegal, so
+//     bundling it silently would cost the player the rest of their turn.
+//   * Grafted Wargear is skipped: its equip commits the host to a future sacrifice, which is a
+//     price, not a free action.
+//   * An ANIMATED Equipment is a creature and cannot be attached to anything (CR 301.5c).
+inline std::vector<std::pair<int, int>> FreeAttachableEquipment(const GameState& state,
+                                                                int controller, int host_id)
+{
+    std::vector<std::pair<int, int>> out;
+    bool host_ok = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == host_id
+            && (p.card.IsCreature() || p.is_animated)) { host_ok = true; break; }
+    }
+    if (!host_ok) { return out; }
+    // Pass 1 collects the UNGATED pieces and banks the power they will add; pass 2 then admits a
+    // min-power piece against host power + that bank. Without the two passes the gate is judged on
+    // the board as it stands BEFORE the bundle attaches anything, so a 1/1 host is refused an
+    // O-Naginata that a Bonesplitter in the very same bundle makes legal -- the identical mistake
+    // the Equip enumeration's `reachable_bonus` credit exists to undo (see EquipMinPowerLastEnabled,
+    // and the USER fix it came from: ordering O-Naginata last is only half of it).
+    //
+    // The bank is the FLAT equip_power_bonus, which is what that credit uses too, so a
+    // per-equipment scaler (Golem-Skin Gauntlets, whose flat field is 0) is under-credited. That
+    // direction is the safe one twice over: ApplyEquip re-checks equip_min_power at attach time and
+    // silently declines, so an over-credit could only ever cost a skipped piece, never an illegal
+    // attach -- and under-crediting cannot even do that.
+    int bank = 0;
+    std::vector<std::pair<int, int>> gated;
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.controller_index != controller) { continue; }
+        if (e.equipped_to != 0)               { continue; }
+        if (e.card.m_number == host_id)       { continue; }   // never self
+        if (e.is_animated)                    { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (!d || !d->params.is_equipment)         { continue; }
+        if (d->params.equip_grants_shroud)         { continue; }
+        if (d->params.equip_sacrifices_prior_host) { continue; }
+        if (EquipCostGenericNow(state, controller, *d, host_id) != 0) { continue; }
+        if (d->params.equip_min_power > 0)
+        { gated.push_back({ e.card.m_number, d->params.equip_min_power }); continue; }
+        if (!CanAttachEquip(state, controller, e.card.m_number, host_id)) { continue; }
+        out.push_back({ e.card.m_number, 0 });
+        bank += d->params.equip_power_bonus;
+    }
+    if (!gated.empty())
+    {
+        int pw = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == host_id)
+            { pw = EquipGatePowerOf(p, state); break; }
+        }
+        // Smallest threshold first, each admitted piece banking its own bonus for the next -- so a
+        // ladder of gated pieces lifts itself exactly as the attaches will.
+        std::stable_sort(gated.begin(), gated.end(),
+            [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+            { return a.second < b.second; });
+        for (const std::pair<int, int>& g : gated)
+        {
+            if (pw + bank < g.second) { continue; }
+            out.push_back(g);                     // appended AFTER the ungated: the attach order
+            const CardDefinition* gd = nullptr;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == controller && p.card.m_number == g.first)
+                { gd = CardDatabase::Instance().LookupCached(p.card); break; }
+            }
+            if (gd) { bank += gd->params.equip_power_bonus; }
+        }
+    }
+    return out;
 }
 
 inline void ApplyEquip(GameState& state, int controller, int equip_id, int creature_id)

@@ -156,6 +156,17 @@ Balan's attach-all, Stoneforge's put, the Equip itself and the Jitte -1/-1 / lif
 `main_phase` plan lines (`equip=` / `attachall=` / `sfput=` / `jittemode=` LineSpec verbs) — see
 **Board activations** below for how a human reaches them.
 
+**"Equip all free to X" is a plan line too, and it is the one activation with NO board-click
+affordance.** `equipallfree=<host m_number>` (`Action::Kind::AttachAllFreeEquipment`) is one action
+covering N attaches, emitted only under human play, reached from the **⚔ button on the plan bar**
+and nowhere else. The exclusion from the click path is deliberate and not merely a style choice:
+the action names the HOST, so the option would attach itself to the host *creature's* click
+affordance — and a creature normally offers no activations, so `opts.length` would be 1 and the
+single-option fast path queues **without opening a picker**. Clicking a creature to look at it
+would silently queue "attach every loose Equipment to this creature". Same exclusion, same
+reasoning, as `equip=` (which moved to drag-and-drop). See `docs/design/viewer-line-macros.md`
+§Feature 4 for why one action replaced the N-token macro.
+
 **Replicate moved from a resolution dialog to a PLAN VARIANT (2026-08-26).** Its count is now
 `Action::replicate_count`, fanned under human play as one cast variant per k with the cost priced at
 `effective + k x printed`, and surfaced as a `replicate` `CheckLine` SubChoice (the splice pattern).
