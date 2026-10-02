@@ -99,6 +99,14 @@ decks/**/*.keepmodel.exhaustive*.json
 # re-created on demand -- the journal is deleted by a run that finishes.
 decks/**/*.keepmodel.gencache.json
 decks/**/*.journal
+# ... and every derivative of it: the automatic rolling backups (.journal.bak1/.bak2, written every
+# MTG_JOURNAL_BACKUP_S), mullgen.sh's pre-run snapshot (.journal.backup-<stamp>) and the resume gate's
+# preserved rejects (.journal.rejected.<epoch>). `*.journal` does NOT match these -- it anchors on the
+# END of the name -- so without this line a multi-day generation would start reporting 350 MB of
+# untracked files. These exist because a journal is the ONLY copy of days of compute and is not in git;
+# they are deliberately kept on disk (USER 2026-10-02: "Disk space is cheap. Losing work like this is
+# extremely expensive") and nothing prunes them automatically.
+decks/**/*.journal.*
 decks/**/*.slow.log
 scripts/*.so
 

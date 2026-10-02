@@ -465,6 +465,92 @@ case "$CMD" in
         exit 3
       }
     fi
+    # ---- IRREPLACEABLE-ARTIFACT PREFLIGHT (2026-10-02) -------------------------------------------
+    # WHY THIS EXISTS. On 2026-10-02 a 350 MB / 5.58M-record candidate-b journal -- DAYS of compute,
+    # the only copy in existence -- was destroyed by running this driver with the wrong recipe. The
+    # journal was rolled at `fast` (R=30); the run was launched as `complete` (R=40). The in-engine
+    # resume gate refused it exactly as designed and then TRUNCATED it, roughly ten minutes later,
+    # behind bucket discovery, into an append-mode gen.log nobody reads live. The operator had set
+    # MTG_KEEP_RETAIN_FOREIGN and believed that covered it; it does not -- R is compared several
+    # links EARLIER in the resume gate's short-circuit chain, so the play-identity check that flag
+    # overrides was never even reached.
+    #
+    # Three things had to be true for that loss, and this blocks all three:
+    #   1. The refusal came TOO LATE to be acted on  -> this runs before any rollout, at second 0.
+    #   2. There was no second copy               -> this COPIES the journal aside unconditionally,
+    #      before any gate runs, and REFUSES to start if the copy fails. Journals are gitignored
+    #      (.gitignore `decks/**/*.journal`), so a backup here is the only backup that will exist.
+    #      A hardlink would NOT do: truncation acts on the inode, so a link shares the destruction.
+    #   3. The mismatching field was not named     -> this names it, and names the recipe that WOULD
+    #      resume the journal, so the fix is one word rather than a re-derivation.
+    #
+    # It deliberately checks only fields knowable WITHOUT running discovery (R, depth, budget_ms,
+    # max_mull, seed_base). bucket_fp / play_digest need discovery and stay with the in-engine gate,
+    # which now preserves rather than truncates (ExhaustiveKeep.cpp). This catches the case that
+    # actually happened, at the only moment where catching it is free.
+    JOURNAL="$DECKDIR/$STEM.keepmodel.exhaustive.raw.json.journal"
+    if [ -e "$JOURNAL" ]; then
+      JSZ=$(stat -c%s "$JOURNAL")
+      BAK="$JOURNAL.backup-$(date -u +%Y%m%dT%H%M%SZ)"
+      cp --reflink=auto "$JOURNAL" "$BAK" || {
+        echo "REFUSING TO RUN: a banked journal exists at $JOURNAL ($((JSZ/1024/1024)) MB) and it" >&2
+        echo "could not be copied to $BAK. That copy is the ONLY protection this artifact has" >&2
+        echo "(journals are gitignored). Free some space or move it yourself, then re-run." >&2
+        exit 3
+      }
+      log "banked journal BACKED UP before anything ran: $BAK ($((JSZ/1024/1024)) MB)"
+      log "  (delete it once this run has clearly superseded it -- nothing prunes it automatically)"
+      python3 - "$JOURNAL" "$RECIPE" "$DECKDIR/$STEM.value.json" <<'PREFLIGHT' || exit 3
+import json, sys
+jpath, recipe, vpath = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    meta = json.loads(open(jpath).readline())
+    meta = meta.get("meta", meta)
+except Exception as e:
+    print(f"[preflight] journal header unreadable ({e}) -- the in-engine gate will judge it; "
+          f"it is backed up either way", flush=True)
+    sys.exit(0)
+# R is a pure function of the recipe. Anything else -> do not guess, let the engine decide.
+recipe_R = {"fast": 30, "complete": 40}.get(recipe)
+want = {}
+if recipe_R is not None:
+    want["R"] = recipe_R
+try:
+    vp = (json.load(open(vpath)).get("value_play") or {})
+    if "mull_gen_depth" in vp:     want["depth"]     = vp["mull_gen_depth"]
+    if "mull_gen_budget_ms" in vp: want["budget_ms"] = vp["mull_gen_budget_ms"]
+except Exception:
+    pass
+bad = [(k, meta.get(k), v) for k, v in want.items() if meta.get(k) != v]
+print(f"[preflight] banked journal: " +
+      ", ".join(f"{k}={meta.get(k)}" for k in
+                ("R", "K", "depth", "budget_ms", "max_mull", "play_digest") if k in meta), flush=True)
+if not bad:
+    print(f"[preflight] fields checkable without discovery MATCH recipe `{recipe}` -- "
+          f"the journal can be resumed (bucket_fp / play_digest still judged in-engine)", flush=True)
+    sys.exit(0)
+print("\n" + "=" * 78, file=sys.stderr)
+print(f"REFUSING TO RUN: the banked journal CANNOT be resumed by recipe `{recipe}`.", file=sys.stderr)
+for k, got, exp in bad:
+    print(f"    {k}: journal has {got}, this run would use {exp}", file=sys.stderr)
+if any(k == "R" for k, _, _ in bad):
+    jr = meta.get("R")
+    match = {30: "fast", 40: "complete"}.get(jr)
+    print(f"\n  R is the rollouts/hand count and it is set BY THE RECIPE: fast=30, complete=40.", file=sys.stderr)
+    if match:
+        print(f"  This journal was rolled at R={jr}, so the recipe that resumes it is `{match}`:",
+              file=sys.stderr)
+        print(f"      bash scripts/mullgen.sh run <deck> {match}", file=sys.stderr)
+    else:
+        print(f"  This journal's R={jr} matches no standard recipe.", file=sys.stderr)
+print("\n  MTG_KEEP_RETAIN_FOREIGN does NOT override this. It admits a foreign PLAY DIGEST only,", file=sys.stderr)
+print("  and R is compared earlier in the resume gate -- so that flag cannot save a recipe mismatch.", file=sys.stderr)
+print("\n  Starting anyway would discard every banked cell-side. If that is genuinely what you want,", file=sys.stderr)
+print("  move the journal aside yourself first; this driver will not do it for you.", file=sys.stderr)
+print("=" * 78 + "\n", file=sys.stderr)
+sys.exit(3)
+PREFLIGHT
+    fi
     : > "$REPORT"
     # A regen must keep the incumbent to compare against -- and to restore if the new one loses.
     if [ -e "$PROF" ]; then cp -f "$PROF" "$PREV"; log "regeneration: incumbent saved -> $PREV"; fi

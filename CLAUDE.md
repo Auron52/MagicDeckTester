@@ -320,6 +320,37 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     (server.js: `refsOnArchivedList`). Leaving them at top level silently credits the OLD list's
     hand-played games to the NEW one and lends it a green bench it never earned.
 
+- **A GENERATION JOURNAL IS DAYS OF COMPUTE AND THE ONLY COPY — COPY IT ASIDE BEFORE YOU RUN
+  ANYTHING NEAR IT (user directive, 2026-10-02).** The user's words, after the loss below:
+  *"we need to absolutely stop this from EVER HAPPENING AGAIN"*, and on the remedy: *"Disk space is
+  cheap. Losing work like this is extremely expensive."*
+  * **What happened.** A 350 MB / 5.58M-record Fungus candidate-b keep journal was destroyed by
+    launching `mullgen.sh run` with the **wrong recipe**: the journal was rolled at `fast` (**R=30**),
+    the run was launched as the default `complete` (**R=40**). The in-engine resume gate refused it
+    exactly as designed — and the refusal then **truncated** it, ten minutes later, behind bucket
+    discovery, into an append-mode `gen.log` nobody reads live. Journals are gitignored, so there was
+    no second copy anywhere. Unrecoverable.
+  * **`MTG_KEEP_RETAIN_FOREIGN` DOES NOT COVER THIS, and assuming it did is what made the mistake.**
+    It admits a foreign **play digest** only. The resume gate is a short-circuit chain —
+    `bucket_fp && deck_fp && seed_base && K && max_mull && equiv_seed && R && PlayIdentityAllows(...)`
+    — so a mismatched **R** fails several links *before* the check that flag overrides, and the flag
+    is never consulted. **Read the journal's own header first** (`head -c 1200 <journal>` prints all
+    of K, R, bucket_fp, deck_fp, play_digest, commit, depth, budget_ms, max_mull, seed_base) and
+    **match the recipe to its R: `fast` = 30, `complete` = 40.**
+  * **A gate refusing is NOT proof the artifact is dead — read WHICH field refused.** Here it was
+    resumable; just not by the recipe that was asked for.
+  * **The mechanical protections now in place (do not rely on them instead of the rule above):**
+    `mullgen.sh run` copies any existing journal aside *before anything runs* and **refuses to start**
+    on a recipe/depth/budget mismatch, naming the recipe that would resume it; the generator writes
+    **automatic rolling backups** (`.journal.bak1`/`.bak2`, `MTG_JOURNAL_BACKUP_S`, default 900 s) so
+    a loss is bounded to minutes; and the resume gate now **renames a rejected journal aside instead
+    of truncating it**, exiting rather than truncating if that rename fails.
+  * **The agent-side rule that still matters, because tooling cannot cover every path:** before any
+    command that could write near an irreplaceable artifact, **`cp` it aside first**. One inode
+    operation against days of compute is never a close call. And **`MTG_KEEP_RETAIN_VERIFY` is
+    diagnostic-only** — it returns *before* the journal is opened, so it must never be set on a real
+    generation run, and it cannot serve as a cheap pre-flight because it sits behind discovery.
+
 - **Each deck lives in its own folder under `decks/`, not the repo root.** The
   per-deck folder layout is `decks/<name>/` holding the decklist
   (`decks/<name>/<name>.txt` or `.cod`) plus its generated profile

@@ -2298,6 +2298,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     std::string journal_path;                // cfg.out_raw + ".journal"
     std::mutex journal_mtx;
     std::ofstream journal_f;
+    // Automatic rolling journal backup -- see the block at the end of journal_append for the rationale
+    // and the rotation order. Seconds between snapshots; 0 disables (nothing in the repo sets it to 0).
+    const long long journal_backup_s = EnvInt("MTG_JOURNAL_BACKUP_S", 900);
+    // Seeded to now, so the FIRST snapshot lands one interval in rather than on record one (at which
+    // point there is nothing worth copying).
+    std::chrono::steady_clock::time_point journal_backup_last = std::chrono::steady_clock::now();
     // MIXED-PROVENANCE: the id every record THIS process writes is stamped with. 0 = the engine that
     // opened the journal (the overwhelmingly common case, and the value a record predating the field
     // reads as); a retained resume declares a new id for itself with a `prov` line and sets this, so
@@ -2364,6 +2370,54 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         journal_f << "}\n";
         journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
         gen_prog.note_journal_write();
+        // ---- AUTOMATIC ROLLING BACKUP (MTG_JOURNAL_BACKUP_S, default 900s; 0 disables) ------------
+        // USER DIRECTIVE 2026-10-02, after a 350 MB / 5.58M-record journal -- days of compute -- was
+        // destroyed: *"We need automatic updates ... Disk space is cheap. Losing work like this is
+        // extremely expensive."* So this is not opt-in and it is not a flag anyone has to remember.
+        //
+        // WHY IT IS SOUND TO COPY HERE. We hold journal_mtx, and every record above is already
+        // flushed, so the file on disk is always a whole number of complete lines -- a copy taken at
+        // this point needs no quiescing and can never capture a half-written record. Doing it on the
+        // monitor thread instead would need exactly this lock anyway.
+        //
+        // TWO generations, rotated so a crash can never leave zero good copies: bak1 is renamed to
+        // bak2 FIRST (atomic), then the live journal is copied to bak1.tmp and renamed into place
+        // (atomic). At every instant at least one complete backup exists, plus the live journal.
+        // Bounded at 2 copies rather than unbounded timestamps: ~2x the journal, which is the "cheap"
+        // the user meant, without a multi-day run quietly filling the disk with 40 snapshots.
+        //
+        // These are NOT resumable inputs and must not be mistaken for one: the resume gate only ever
+        // opens `<out_raw>.journal`, and these end in .bak1/.bak2. To use one, copy it over the
+        // journal path deliberately. They are gitignored alongside the journal itself.
+        if (journal_backup_s > 0)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - journal_backup_last).count()
+                >= journal_backup_s)
+            {
+                journal_backup_last = now;
+                std::error_code ec;
+                const std::string b1 = journal_path + ".bak1";
+                const std::string b2 = journal_path + ".bak2";
+                const std::string tmp = journal_path + ".bak1.tmp";
+                if (std::filesystem::exists(b1, ec)) { std::filesystem::rename(b1, b2, ec); }
+                std::filesystem::copy_file(journal_path, tmp,
+                                           std::filesystem::copy_options::overwrite_existing, ec);
+                if (!ec) { std::filesystem::rename(tmp, b1, ec); }
+                const auto sz = std::filesystem::file_size(journal_path, ec);
+                if (!ec)
+                {
+                    std::cerr << "[keepgen]   journal auto-backup -> " << b1 << " ("
+                              << (sz / (1024 * 1024)) << " MB; previous rotated to .bak2)\n" << std::flush;
+                }
+                else
+                {
+                    std::cerr << "[keepgen]   WARNING: journal auto-backup FAILED (" << ec.message()
+                              << ") -- the live journal is intact but UNPROTECTED; free disk space\n"
+                              << std::flush;
+                }
+            }
+        }
     };
 
     auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
