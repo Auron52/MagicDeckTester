@@ -831,8 +831,26 @@ function handEquipSrcFor(name, hostNum) {
 // per-render part (what is still loose, what the player already queued) is filtered on top.
 function freeEquipScan() {
   const d = S.decision;
-  if (!d || d.type!=='main_phase' || !Array.isArray(d.plans)) return null;
+  if (!d || d.type!=='main_phase') return null;
   if (d.__feScan) return d.__feScan;
+  // PREFER THE PUBLISHED AFFORDANCE (`free_equips`, see src/main.cpp). Mining `d.plans` cannot
+  // work on the boards this feature exists for: the engine emits only the first
+  // MTG_PLAY_PLANS_CAP (200) plans, ranked, so on a wide board the window is all casts and holds
+  // no equip at all -- measured, a T4 frame with 14 loose pieces had ZERO of them represented.
+  // That is what the user saw as "it only equipped a few". The queued line still validates because
+  // the cap is an EMISSION limit and CheckLine sees the full list.
+  if (Array.isArray(d.free_equips)) {
+    const byHost = new Map(), names = new Map();
+    d.free_equips.forEach(h => {
+      names.set(h.host, h.host_name || ('#'+h.host));
+      const m = new Map();
+      (h.pieces||[]).forEach(p => m.set(p.src, p.name));
+      byHost.set(h.host, m);
+    });
+    d.__feScan = { byHost, names };
+    return d.__feScan;
+  }
+  if (!Array.isArray(d.plans)) return null;
   const byHost = new Map();     // hostNum -> Map(equipSrcNum -> card name)
   const names  = new Map();     // hostNum -> host display name
   d.plans.forEach(pl => (pl.actions||[]).forEach(a => {

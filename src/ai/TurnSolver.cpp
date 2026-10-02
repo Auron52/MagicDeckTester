@@ -26197,12 +26197,19 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 if (!try_add(r.second)) { continue; }   // this kind will not fit; later kinds may
                 kinds.push_back(k);
             }
-            // ...THEN EVERY FREE GROUP, because a ZERO-COST action is never a trade-off.
+            // EVERY FREE GROUP FIRST, because a ZERO-COST action is never a trade-off.
             //
             // USER, 2026-10-02, after the one-per-kind seed shipped: *"Equip all free was available,
             // but it only equipped a few"* -- the gesture can only bundle equips that are IN the
             // menu, and the rank-fill had dropped most of the equip groups. One-per-kind guarantees
             // SOME equip is offered; it does not get the player the line they asked for.
+            //
+            // ORDER IS LOAD-BEARING, and getting it wrong is what made the first cut of this
+            // measure 0-1 free equips reachable instead of all of them: the one-per-kind seed ran
+            // FIRST, and a single wide cast group can consume the whole 65,536 budget on its own,
+            // leaving `try_add` nothing to fit the cheap free groups into. Free groups are both the
+            // cheapest in positions and the only ones that cost the player nothing to be offered,
+            // so they are seeded before anything competes for the budget.
             //
             // The rule is general, not an equipment special case: a group every member of which
             // costs 0 mana cannot compete for the pool, so adding it to the menu removes nothing
@@ -26223,7 +26230,25 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 bool all_free = true;
                 for (int j : g)
                 { if (cands[j].cost.ManaValue() != 0) { all_free = false; break; } }
-                if (all_free) { try_add(r.second); }
+                if (all_free && try_add(r.second))
+                {
+                    // Record the kind so the one-per-kind pass below does not spend budget adding a
+                    // SECOND group of a kind a free group already covers.
+                    const int k = static_cast<int>(cands[g.front()].kind);
+                    if (std::find(kinds.begin(), kinds.end(), k) == kinds.end())
+                    { kinds.push_back(k); }
+                }
+            }
+            // ...THEN one group per remaining KIND, so no whole class of play vanishes.
+            for (const std::pair<int, int>& r : vranked)
+            {
+                const std::vector<int>& g = groups[r.second];
+                if (g.empty()) { continue; }
+                const int k = static_cast<int>(cands[g.front()].kind);
+                if (std::find(kinds.begin(), kinds.end(), k) != kinds.end()) { continue; }
+                // vranked is sorted by rank, so the first group of a kind IS its best-ranked one.
+                if (!try_add(r.second)) { continue; }   // this kind will not fit; later kinds may
+                kinds.push_back(k);
             }
             kept = std::move(seed);
         }

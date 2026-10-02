@@ -2165,8 +2165,92 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                << ", \"pooled_groups\": " << vt.pooled_groups
                << ", \"positions\": " << viewerplancap::PositionsText(vt.kept_positions)
                << ", \"positions_full\": " << viewerplancap::PositionsText(vt.full_positions)
-               << ", \"why\": \"viewer plan-space bound (MTG_VIEWER_PLAN_CAP=0 to lift)\" },\n";
+               << ", \"why\": \"viewer plan-space bound (MTG_VIEWER_PLAN_CAP=0 to lift)\"";
+            // The NAMES of what was dropped, not just the count -- a count is not diagnosable (it
+            // cost a round trip with the user to establish that the missing groups were the shields).
+            if (!vt.dropped_names.empty())
+            { os << ", \"dropped_names\": "; JsonStr(os, vt.dropped_names); }
+            os << " },\n";
         }
+    }
+    // ---- FREE-EQUIP AFFORDANCE (human play only) --------------------------------------------
+    // Every "attach this loose Equipment to that creature for {0}" move the ENGINE OFFERS on this
+    // board, harvested from the FULL `plans` list and deduped by (equipment copy, host).
+    //
+    // TWO THINGS THIS HAS TO GET RIGHT, and the first cut of it got both wrong.
+    //
+    // 1. IT MUST NOT BE MINED FROM THE EMITTED PLANS. The viewer's "⚔ Equip all free" gesture first
+    //    scanned `d.plans`, and the USER reported it "only equipped a few". `MTG_PLAY_PLANS_CAP` is
+    //    200 by default, so on a wide board the viewer is shown the first 200 of tens of thousands
+    //    of plans -- the top-RANKED ones, i.e. casts. Measured on a T4 frame with 14 loose pieces:
+    //    ZERO of them appeared in the emitted slice. `plans` here is the full list, before that cap.
+    //
+    // 2. IT MUST NAME THE COPY THE ENGINE OFFERS, not any copy on the battlefield. Deriving the
+    //    pieces from board state instead produced an affordance whose every entry was REJECTED:
+    //        equip=Accorder's Shield       -> choose
+    //        equip=Accorder's Shield@40    -> accept
+    //        equip=Accorder's Shield#3@40  -> legal_not_enumerated
+    //    With MTG_EQUIP_COPY_COLLAPSE on (default since 2026-10-01) the fungible-copy fold keeps ONE
+    //    canonical representative per interchangeable class, and its own note warns that "the
+    //    surviving representative can put a different PHYSICAL copy on the host". Copy #3 was simply
+    //    not the representative. Harvesting `sac_source_id` off the enumerated actions is therefore
+    //    not a convenience -- it is the only way the queued `equip=<name>#<src>@<host>` token can
+    //    match, and a viewer affordance that offers unenumerable moves is worse than none.
+    //
+    // Bounded (hosts x surviving representatives), additive, and human-play only, so no autonomous
+    // decision JSON changes.
+    if (HumanPlayActive())
+    {
+        // The equipment still UNATTACHED right now. Re-equipping an attached piece is a MOVE -- it
+        // trades away the current host's rider -- which is a real decision and must not be bundled.
+        std::set<int> loose;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index || p.equipped_to != 0) { continue; }
+            const CardDefinition* d2 = CardDatabase::Instance().LookupCached(p.card);
+            if (d2 && d2->params.is_equipment && !p.is_animated
+                && !d2->params.equip_sacrifices_prior_host     // Wargear: its equip has a real cost
+                && !d2->params.equip_grants_shroud)            // shroud makes every LATER equip illegal
+            { loose.insert(p.card.m_number); }
+        }
+        // host -> (equipment copy -> name), in the engine's own enumeration order.
+        std::map<int, std::map<int, std::string>> by_host;
+        std::map<int, std::string>                host_names;
+        for (const TurnSolver::Plan& pl : plans)
+        {
+            for (const Action& ac : pl.actions)
+            {
+                if (ac.kind != Action::Kind::Equip) { continue; }
+                if (ac.sac_victim_id == 0 || ac.sac_source_id <= 0)   { continue; }
+                if (ac.cost.ManaValue() != 0)                         { continue; }
+                if (loose.find(ac.sac_source_id) == loose.end())      { continue; }
+                by_host[ac.sac_victim_id][ac.sac_source_id] = ac.card_name.str();
+                if (host_names.find(ac.sac_victim_id) == host_names.end())
+                { host_names[ac.sac_victim_id] = EnchantTargetName(s, ac.sac_victim_id); }
+            }
+        }
+        bool any = false;
+        std::ostringstream fe;
+        for (const std::pair<const int, std::map<int, std::string>>& h : by_host)
+        {
+            if (h.second.empty()) { continue; }
+            if (any) { fe << ", "; }
+            any = true;
+            fe << "{ \"host\": " << h.first << ", \"host_name\": ";
+            JsonStr(fe, host_names[h.first]);
+            fe << ", \"pieces\": [";
+            bool first = true;
+            for (const std::pair<const int, std::string>& pc : h.second)
+            {
+                if (!first) { fe << ", "; }
+                first = false;
+                fe << "{ \"src\": " << pc.first << ", \"name\": ";
+                JsonStr(fe, pc.second);
+                fe << " }";
+            }
+            fe << "] }";
+        }
+        if (any) { os << "  \"free_equips\": [" << fe.str() << "],\n"; }
     }
     // An EXPLICIT pass entry, so a menu holding only optional variants (a tuck, an inert self-sac)
     // still shows "do nothing" as a listed choice rather than an implicit -1 (5d sweep, gi 2/6:
