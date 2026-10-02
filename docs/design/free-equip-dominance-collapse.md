@@ -596,3 +596,135 @@ memo cap this cannot shift play under budget pressure.
 `MTG_FOLD_SEARCH_ODO` decision and measured at -0.8%. Given this result — walking is free, evaluating
 is not — the next lever should target **`consider()` call volume** (30.3M calls for 3.5M plans in one
 game), not the odometer.
+
+## 8. Suite admission (2026-10-02) — and the cost was never where §2 said
+
+The standing goal changed shape on 2026-10-02: the user asked to *"continue optimizing at least
+until we could add the deck to the regression test"*, carried as a **second** kitty deck until v2 is
+adopted and v1 dropped. That reframing is what exposed the error at the root of every cost number in
+this document.
+
+### 8a. The 7.8× gap was an artefact of my own probe settings
+
+Every figure in §§2–7 was measured at `--budget-ms 250`. **The suite runs kitty at budget 10 (d3)
+and 20 (d5)** — a 25× smaller per-decision allowance. Measured at the gate's own settings:
+
+| case | v1 ms/game | v2 ms/game | v2 units/game |
+|---|---|---|---|
+| d3 s2002 | 173.2 | 3148.5 | 134,403 |
+| d3 s3003 | 219.9 | 2205.5 | 130,092 |
+| d5 s2002 | 211.9 | **4941.1** | 220,020 |
+| d5 s3003 | 189.6 | 4363.4 | 231,501 |
+
+v1's control lands at 219.9 against a cached 231.977, so the harness is faithful. The gate's budget
+is 3100.38 ms/game (3× fivecolour), so v2 was **1.59× over, not 7.8×**. The reported gap had been
+inflated ~5× for the whole investigation by a probe setting nobody re-derived.
+
+The lesson generalises past this deck: **a cost measured off-policy is not this deck's cost.** The
+repo already says so for the opposite error — selesnya's suite note warns that an *unbudgeted* probe
+read 4× over budget — and the same trap works in the other direction when the probe budget is
+*larger* than the shipped one. Price a deck at the settings it will actually be tested at, before
+drawing any conclusion about what is expensive about it.
+
+### 8b. 82.4% of the cost is not the game being played
+
+The per-decision census (`MTG_TURN_CENSUS`) at the gate's settings, seed 2002:
+
+```
+rows=50   units_total=666,241
+units by probe:  probe=0  rows= 4  units=117,017 (17.6%)
+                 probe=1  rows=46  units=549,224 (82.4%)
+```
+
+`probe=1` is `AIEngine::RolloutWinTurnFrom` — a **complete trial game played to LABEL a decision**,
+one per legal bottoming subset, each re-paying the whole game's search. v2 has no keep table, so
+every mulligan decision falls through to lookahead bottoming and plays those games.
+
+This is the Snow finding (memory `snow-cost-is-segment-reentry`: bottoming = 59.6% of Snow's units)
+in a new place, and it makes the suite gate **circular for a new deck**: v2 is too expensive for the
+suite *because* it lacks a keep table, and it cannot have a keep table until it is in the suite. v1
+is not a comparable baseline at all — it ships both a keep model and a value leaf, and the 23× gap
+between the two lists is mostly those two artefacts, not the two decklists.
+
+### 8c. Two levers refuted before the one that worked
+
+**`MTG_SOLVE_CHARGE` (the greedy-walk budget charge) — refuted, and it never armed.** The shape was
+exactly right: v2's heaviest decision enters the subset walk **715,483** times against an 18,000-unit
+budget calibrated on node work alone, and overruns that budget 3.45×. Swept W ∈ {16,32,64,128,256}
+against base over 960 games: **all 24 jobs byte-identical to base**, with units up only ~17k/game
+where one decision alone has 716k walk visits — i.e. the charge bills ~5.6% of the walk, because the
+walk runs where no budgeted host holds the guard. The flag's own comment had already recorded this
+for v1 ("a deck the lever cannot help paid the accounting in full"); v2 answers the same.
+
+*This is the third instance in this document of a null that meant "the mechanism never armed" rather
+than "the effect is absent"* (§3c retracted, §7e the hone-counter disarm). The check that
+distinguishes them is always the same: count what the mechanism actually did, not what changed.
+
+**`search_leaf_depth: 0` — refuted on quality, and the precedent did not transfer.** The census
+matched Melira's note almost word for word — one full greedy subset walk per simulated rollout turn,
+and the walk's filters reject *nothing* (`sub_passed == sub_entered`, zero rejects; Melira: "99.5% of
+visited subsets survive every feasibility filter"). Melira ships `search_leaf_depth: 0` at 6.5×
+faster and equal-or-better win turns. On v2, 500 held-out games per arm:
+
+| arm | ×ms | ×units | Δavg | cells lost |
+|---|---|---|---|---|
+| base | 1.000 | 1.000 | — | 0/10 |
+| `bottom_eval_units: 300` | 0.541 | 0.369 | +0.0060 | 3/10 |
+| `search_leaf_depth: 0` | 0.485 | 0.578 | +0.0480 | 9/10 |
+| `search_leaf_depth: 0` + `first_turn_depth: 1` | **1.307** | 1.538 | +0.1040 | 10/10 |
+| both the leaf lever and the cap | 0.064 | 0.147 | +0.0900 | 10/10 |
+
+v2's 1-ply leaf is **load-bearing**: equipment attach sequencing is precisely what a greedy
+projection mis-ranks, so removing it costs 24 games in 500. And `search_leaf_first_turn_depth: 1` is
+**more expensive than base** (1.307×) — a cheap leaf fits more rollouts in the budget, and each of
+those rollouts then pays a full searched ply at its first turn, work the unit accounting under-prices.
+Matching cost *shape* to a precedent says nothing about matching its quality *dependence*.
+
+### 8d. The lever: `bottom_eval_units`, and where its cliff actually is
+
+Bounding the trial games is a shipped per-deck profile knob with two precedents (Melira Pod,
+Prevent Damage) and a measured value on Snow. The label a bottoming trial game needs is a *relative*
+ranking of hands, not an exact win turn — which is what the `bottom_eval_*` note says in so many
+words — so capping the trial game's per-decision work is a collapse, not a quality choice. It is
+still **lossy**, so it was earned on held-out seeds (the gate reads 2002/3003, so those are train).
+
+500 held-out games per arm: `u300`, `u600`, `u900` are **quality-identical on every one of 10 cells**
+(avg 4.8600 vs base 4.8540, Δ +0.0060 = three games finishing one turn later), and cost is flat
+across them (0.554× / 0.579× / 0.585×). A flat quality region means picking the cheapest point is not
+overfitting — but the region's lower EDGE was unmeasured, so it was probed:
+
+| cap | ×ms (held-out d5) | avg | cells worse |
+|---|---|---|---|
+| base | 1.000 | 4.8480 | — |
+| u75 | 0.332 | 4.8760 | **4/5** |
+| u150 | 0.344 | 4.8520 | 1/5 |
+| u300 | 0.371 | 4.8520 | 1/5 |
+| u600 | 0.379 | 4.8520 | 1/5 |
+
+The break is between 75 and 150. **Shipped 600** — mid-region with 4× margin to the measured cliff
+rather than 2×, directly measured at the gate cells rather than extrapolated, and 11% dearer than
+the sweep's extreme for that margin.
+
+It is also **temporary**. An exhaustive keep table replaces lookahead bottoming outright (memory
+`no-lookahead-bottoming`: "the profile replaces BOTH keep and lookahead"), so the moment v2 ships a
+mulligan profile this knob has nothing left to bind and the +0.0060 goes away with it.
+
+### 8e. Admitted
+
+`decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json` ships
+`"bottom_eval_units": 600`, and `kittyv2` is registered in all three tiers of
+`test/regression_cases.sh` at a fifth of v1's counts (overnight at a quarter, since those budgets are
+2×). The official gate reading:
+
+```
+kittyv2 / fivecolour = 2148.100 / 1033.460 = 2.08x   (limit 3x)
+VERDICT: PASS -- kittyv2 may be added to the suite.
+```
+
+### 8f. What the suite numbers say about the LIST, and why it is not yet an answer
+
+At smoke, v2 wins about half a turn later than v1 (d3 5.0400 vs 4.4480; d5 4.9200 vs 4.4667). That
+is **not** a verdict on the decklist. v1 ships an adopted exhaustive keep model and a value leaf; v2
+ships neither, and both of those improve play, not just cost. The two lists become comparable only
+once v2 has the same artefacts — which is exactly the next stage, and the reason suite membership had
+to come first.

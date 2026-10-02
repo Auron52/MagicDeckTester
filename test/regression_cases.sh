@@ -47,6 +47,7 @@ declare -A DECK_FILE=(
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
+  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
@@ -77,6 +78,7 @@ declare -A DECK_PROF=(
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
+  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
@@ -223,6 +225,32 @@ SMOKE_CASES=(
   "kitty 0 1001 1000 0"
   "kitty 3 1001  250 10"
   "kitty 5 1001  150 20"
+  # kittyv2: KittyEquipment v2-puresteel-hammer -- the CANDIDATE list (Puresteel Paladin / Sram /
+  # Colossus Hammer / Sigarda's Aid / Dwalin + 0-cost shields), carried as a SECOND kitty deck
+  # until it is adopted, at which point it takes `kitty`'s rows and v1's are dropped (user,
+  # 2026-10-02: "a second Kitty deck until adoption when we drop the old one").
+  #
+  # SIZING, and why the counts are a fifth of v1's. This list costs ~10x v1 per game at the gate
+  # cells (measured 2026-10-02: 2.0 s/game d3 b10, 2.46 s/game d5 b20 vs v1's 0.17-0.22) and the
+  # reason is ARTIFACTS, not play: v1 ships an exhaustive keep model AND a value leaf; v2 ships
+  # neither, because both generators are gated BEHIND suite membership. With no keep table every
+  # mulligan decision falls back to lookahead bottoming, which plays a complete trial game per
+  # legal removal subset -- the per-decision census put 82.4% of v2's gate-settings work inside
+  # those trial games (probe=1 rows), against 17.6% for the game actually being played. The
+  # profile therefore ships `bottom_eval_units: 600` to bound the trial games (see the profile and
+  # docs/design/free-equip-dominance-collapse.md SS8); that is 0.58x core-ms for +0.006 avg turns
+  # on 500 held-out games, and it goes INERT the moment a keep table lands, since the table
+  # replaces lookahead bottoming outright.
+  #
+  # Gated metric (worst searched REGRESSION case, d5 b20) = 2458 ms/game against the 3100 ms/game
+  # budget (3x fivecolour) => 0.79x, so the 3x rule passes with margin. Counts are a fifth of
+  # v1's so the TOTAL this adds (~630 core-s regression, ~325 smoke) stays in selesnya's class;
+  # the avg/digest fingerprint does not get weaker with fewer games, only the avg's resolution.
+  # No kittyv22hg row: v1's 2HG case covers the archetype's heads/life reads and this list is a
+  # temporary second entry.
+  "kittyv2 0 1001 1000 0"
+  "kittyv2 3 1001  100 10"
+  "kittyv2 5 1001   50 20"
   # dragons: mono-red Dragons ramp (Sol Ring/Dragonspeaker into 5-8 drops; wins ~T5.7-6.2, the
   # slowest clock in the suite after hinata). Same probe: d0 ~0.0004 s/game, d3 b10 ~0.98 s/game,
   # d5 b20 ~2.0 s/game -- 0.44x/0.52x minotaur. Defaults/static keep; ships a value leaf (no trust),
@@ -525,6 +553,13 @@ REGRESSION_CASES=(
   "kitty 3 3003  300 10"
   "kitty 5 2002  250 20"
   "kitty 5 3003  250 20"
+  # kittyv2: see the SMOKE block. These are the GATED cells (worst searched case d5 b20 = 2458
+  # ms/game, 0.79x the 3100 budget). Measured at exactly these counts 2026-10-02.
+  "kittyv2 0 2002 1000 0"
+  "kittyv2 3 2002  100 10"
+  "kittyv2 3 3003  100 10"
+  "kittyv2 5 2002   50 20"
+  "kittyv2 5 3003   50 20"
   # dragons: same shape (~26 min ST added at the probed costs; pools inside the existing makespan).
   "dragons 0 2002 1000 0"
   "dragons 3 2002  300 10"
@@ -882,6 +917,22 @@ OVERNIGHT_CASES=(
   "kitty 5 5005  500 40"
   "kitty 5 6006  500 40"
   "kitty 5 7007  500 40"
+  # kittyv2: see the SMOKE block. The standard 4-seed shape at a QUARTER of v1's counts, because
+  # the overnight budgets are 2x the gate's: at ~4.0 s/game d3 b20 and ~4.9 s/game d5 b40 (2x the
+  # measured gate rates) the full shape would add ~7.2 core-hours to a tier that runs ~9.6, which
+  # is not a trim-later amount. A quarter puts this at ~1.8 core-hours -- exactly v1's own add.
+  "kittyv2 0  4004 2000 0"
+  "kittyv2 0  6006 2000 0"
+  "kittyv2 0  8008 2000 0"
+  "kittyv2 0 10010 2000 0"
+  "kittyv2 3 4004  250 20"
+  "kittyv2 3 5005  250 20"
+  "kittyv2 3 6006  250 20"
+  "kittyv2 3 7007  250 20"
+  "kittyv2 5 4004  125 40"
+  "kittyv2 5 5005  125 40"
+  "kittyv2 5 6006  125 40"
+  "kittyv2 5 7007  125 40"
   # dragons: same shape. Probed at b20/b40: d3 ~1.39 s/game, d5 ~3.60 s/game (0.54x/0.45x
   # minotaur) => ~3.6 core-hours added. Combined with kitty this is ~+5.4 core-hours on a tier
   # that ran ~9.6 core-hours, i.e. ~40 min wall on a free box against an 8 h budget.

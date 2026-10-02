@@ -130,6 +130,14 @@
    "total_core_ms": 223103,
    "worst_case": "kitty_regression_d3_s3003"
   },
+  "kittyv2": {
+   "cost_per_game_ms": 2148.1,
+   "jobs": 5,
+   "key": "kittyv2",
+   "tier": "regression",
+   "total_core_ms": 523099,
+   "worst_case": "kittyv2_regression_d5_s2002"
+  },
   "knights": {
    "cost_per_game_ms": 137.6,
    "jobs": 6,
