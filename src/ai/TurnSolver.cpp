@@ -26293,17 +26293,75 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 kept_est = e;
                 return true;
             };
+            // A GROUP'S CHEAPEST MEMBER, and whether the turn's pool could pay it. Used to split
+            // the covering key below and to prefer an AFFORDABLE representative of a class.
+            auto group_min_mv = [&](const std::vector<int>& g) -> int
+            {
+                int m = std::numeric_limits<int>::max();
+                for (int j : g) { m = std::min(m, cands[j].cost.ManaValue()); }
+                return m == std::numeric_limits<int>::max() ? 0 : m;
+            };
+            const int pool_total = static_cast<int>(pl.Total());
+            // THE COVERING KEY IS (kind, free-or-paid), NOT the kind alone.
+            //
+            // USER, 2026-10-02, hand-playing seed 1: a rejected `cast=Colossus Hammer` at T3 with
+            // {W}1 floating -- *"This prevented my T3 win. Because the moment I can play a colossus
+            // hammer there it is an easy win."* The line was rules-legal and NOT ENUMERATED: 19,746
+            // plans, and the only casts anywhere in them were the two MV-0 artifacts.
+            //
+            // THE MECHANISM. Every hand cast shares ONE Action::Kind (CastFromHand) while its GROUP
+            // is per hand SLOT, so "one group per kind" guarantees exactly ONE castable card out of
+            // a twelve-card hand -- and on that board the best-RANKED CastFromHand group was a {0}
+            // Cathar's Shield, which spent the single slot on a free cast and left every PAID cast
+            // to the rank-drop. `dropped_names` said so plainly: Shadowspear, Shadowspear, Puresteel
+            // Paladin, Cid, Golem-Skin Gauntlets, Dwalin, +8 more -- the whole hand.
+            //
+            // A free cast and a paid cast are not one class of play. The free ones cannot compete
+            // for mana (which is why they get their own pass below) and the paid ones are what the
+            // turn's mana is FOR. So each gets a guaranteed representative, and within the paid
+            // class an AFFORDABLE group is preferred over a better-ranked unaffordable one -- with
+            // {W}1 floating, Puresteel Paladin ({W}{W}) is not a play and Colossus Hammer ({1}) is,
+            // so handing the slot to the higher-ranked Paladin would waste it.
+            auto cover_key = [&](const std::vector<int>& g) -> int
+            { return static_cast<int>(cands[g.front()].kind) * 2 + (group_min_mv(g) == 0 ? 1 : 0); };
+            // THE BUNDLE GOES FIRST, before anything competes for the budget.
+            //
+            // AttachAllFreeEquipment is one group of (1 + hosts) that makes EVERY free loose
+            // Equipment reachable, where the individual equip groups cost (1 + hosts) EACH and
+            // multiply -- 18 of them is 3^18 against a 65,536 bound, so they cannot all survive and
+            // the bound must eat most of them. One cheap group buys what fourteen expensive ones
+            // could not. It needs an explicit pass because its Action carries no `def`, so
+            // SituationalCardRank scores it -1 and `vranked` sorts it DEAD LAST -- the single
+            // highest-value free group on an equipment board would otherwise be the first squeezed
+            // out. (This is the enumeration-side payoff of building the bundle at all.)
             for (const std::pair<int, int>& r : vranked)
             {
                 const std::vector<int>& g = groups[r.second];
                 if (g.empty()) { continue; }
-                const int k = static_cast<int>(cands[g.front()].kind);
-                if (std::find(kinds.begin(), kinds.end(), k) != kinds.end()) { continue; }
-                // vranked is sorted by rank, so the first group of a kind IS its best-ranked one.
-                if (!try_add(r.second)) { continue; }   // this kind will not fit; later kinds may
-                kinds.push_back(k);
+                if (cands[g.front()].kind != Action::Kind::AttachAllFreeEquipment) { continue; }
+                if (try_add(r.second)) { kinds.push_back(cover_key(g)); }
             }
-            // EVERY FREE GROUP FIRST, because a ZERO-COST action is never a trade-off.
+            // ...THEN one group per (kind, free-or-paid) class, AFFORDABLE first within the class.
+            for (int pass = 0; pass < 2; ++pass)      // pass 0 = affordable only, pass 1 = the rest
+            {
+                for (const std::pair<int, int>& r : vranked)
+                {
+                    const std::vector<int>& g = groups[r.second];
+                    if (g.empty()) { continue; }
+                    if (std::find(seed.begin(), seed.end(), r.second) != seed.end()) { continue; }
+                    const int ck = cover_key(g);
+                    if (std::find(kinds.begin(), kinds.end(), ck) != kinds.end()) { continue; }
+                    // The pool bound is the same over-approximation the rest of the valve uses; it
+                    // only decides WHICH representative of a class is preferred, never whether the
+                    // class gets one, so an optimistic read costs at most a less useful pick.
+                    const bool affordable = group_min_mv(g) <= pool_total;
+                    if (pass == 0 && !affordable) { continue; }
+                    // vranked is sorted by rank, so the first group of a class IS its best-ranked.
+                    if (!try_add(r.second)) { continue; }   // this class will not fit; later ones may
+                    kinds.push_back(ck);
+                }
+            }
+            // EVERY REMAINING FREE GROUP, because a ZERO-COST action is never a trade-off.
             //
             // USER, 2026-10-02, after the one-per-kind seed shipped: *"Equip all free was available,
             // but it only equipped a few"* -- the gesture can only bundle equips that are IN the
@@ -26338,19 +26396,22 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 { if (cands[j].cost.ManaValue() != 0) { all_free = false; break; } }
                 if (all_free && try_add(r.second))
                 {
-                    // Record the kind so the one-per-kind pass below does not spend budget adding a
-                    // SECOND group of a kind a free group already covers.
-                    const int k = static_cast<int>(cands[g.front()].kind);
-                    if (std::find(kinds.begin(), kinds.end(), k) == kinds.end())
-                    { kinds.push_back(k); }
+                    // Mark the (kind, FREE) class only -- never the paid one. Marking the bare kind
+                    // here is what let a {0} shield's cast satisfy "CastFromHand is covered" and so
+                    // cost the user their T3 Colossus Hammer; see the cover_key note above.
+                    const int ck = cover_key(g);
+                    if (std::find(kinds.begin(), kinds.end(), ck) == kinds.end())
+                    { kinds.push_back(ck); }
                 }
             }
-            // ...THEN one group per remaining KIND, so no whole class of play vanishes.
+            // ...and a final sweep for any class still unrepresented (a class whose turn came when
+            // the budget was momentarily full can fit once the passes above have settled).
             for (const std::pair<int, int>& r : vranked)
             {
                 const std::vector<int>& g = groups[r.second];
                 if (g.empty()) { continue; }
-                const int k = static_cast<int>(cands[g.front()].kind);
+                if (std::find(seed.begin(), seed.end(), r.second) != seed.end()) { continue; }
+                const int k = cover_key(g);
                 if (std::find(kinds.begin(), kinds.end(), k) != kinds.end()) { continue; }
                 // vranked is sorted by rank, so the first group of a kind IS its best-ranked one.
                 if (!try_add(r.second)) { continue; }   // this kind will not fit; later kinds may

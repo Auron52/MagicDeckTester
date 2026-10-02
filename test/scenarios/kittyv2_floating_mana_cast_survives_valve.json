@@ -1,0 +1,33 @@
+{
+ "_comment": "The USER's rejected T3 frame (seed 1 gi 0, main_ordinal 9), reduced to the mechanism: 11 loose Equipment, BOTH lands tapped, {W}1 floating, and Colossus Hammer in hand. Plains removed from hand so no land drop can mask the floating-mana payment. cast=Colossus Hammer is rules-legal ({W} pays {1}) and MUST be enumerated.",
+ "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "turn": 3, "on_the_play": false, "max_turns": 3,
+ "active_life": 20, "opponent_life": 20,
+ "floating_mana": { "W": 1 },
+ "battlefield": [
+  { "name": "Puresteel Paladin", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Sram, Senior Edificer", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Accorder's Shield", "controller": 0, "tapped": false },
+  { "name": "Accorder's Shield", "controller": 0, "tapped": false },
+  { "name": "Accorder's Shield", "controller": 0, "tapped": false },
+  { "name": "Bone Saw", "controller": 0, "tapped": false },
+  { "name": "Bone Saw", "controller": 0, "tapped": false },
+  { "name": "Bone Saw", "controller": 0, "tapped": false },
+  { "name": "Cathar's Shield", "controller": 0, "tapped": false },
+  { "name": "Dragonfire Blade", "controller": 0, "tapped": false },
+  { "name": "Golem-Skin Gauntlets", "controller": 0, "tapped": false },
+  { "name": "Spidersilk Net", "controller": 0, "tapped": false },
+  { "name": "Spidersilk Net", "controller": 0, "tapped": false },
+  { "name": "Ancient Den", "controller": 0, "tapped": true },
+  { "name": "Plains", "controller": 0, "tapped": true }
+ ],
+ "hand": ["Cathar's Shield", "Cathar's Shield", "Cid, Freeflier Pilot", "Colossus Hammer",
+          "Dwalin, Weaponmaster", "Golem-Skin Gauntlets", "Puresteel Paladin",
+          "Puresteel Paladin", "Shadowspear", "Shadowspear", "Spidersilk Net",
+          "Sram, Senior Edificer"],
+ "library_filler": "Plains", "library_size": 20,
+ "depth": 1, "budget_ms": 200,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "validate_line": "cast=Colossus Hammer",
+ "expect_verdict": "accept"
+}
