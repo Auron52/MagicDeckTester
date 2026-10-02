@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "USER RULING 2026-10-02. candidate-b is an UNSETTLED list, and the user's reason for merging is",
+    "that reason rather than card similarity: 'this list is by no means finalized, so wasting all of",
+    "this time generating the ideal profile is kind of a waste.' Discovery finds K=22 here, which is",
+    "1,184,040 size-7 cells against the shipped Fungus list's 77,520 at K=14 -- the cell count is a",
+    "multiset count C(K+6,7), so it explodes in K and K is the only knob that moves it combinatorially.",
+    "These four groups take K 22 -> 17 (245,157 cells, -79%).",
+    "WHEN THE LIST IS FINALIZED, delete this file and regenerate at full K for the shipping table.",
+    "Every group below is a DELIBERATE LOSS OF FIDELITY: the keep policy cannot distinguish cards",
+    "inside a group, so a hand holding one is scored as though it held any of them."
+  ],
+  "merge": [
+    {
+      "cards": ["Peat Bog", "Hickory Woodlot"],
+      "why": "The same card with a different colour: both enter TAPPED with two depletion counters, both tap+remove a counter for TWO mana, both sacrifice themselves when empty. Only the colour differs (Peat Bog {B}{B}, Hickory Woodlot {G}{G}). USER accepted on the grounds that the deck has a fair amount of colourless cost to pay -- Doubling Season {4}{G}, Saproling Burst {4}{G} and Mycoloth {3}{G}{G} are 12 of 60 cards, and generic pips are exactly what a {B}{B} land pays in a nearly-mono-green deck. The residual error is that Peat Bog cannot pay a GREEN pip while Hickory Woodlot can."
+    },
+    {
+      "cards": ["Vitaspore Thallid", "Deathspore Thallid"],
+      "why": "Identical spore engines on an identical body: both two mana, both 1/1, both 'upkeep: add a spore counter' + 'remove three: create a 1/1 Saproling'. They differ ONLY in the sacrifice payoff -- Vitaspore grants haste, Deathspore gives a creature -1/-1 -- and -1/-1 is INERT when goldfishing (the opponent is passive and never blocks), so on the axis that the keep table is fitted to, one of the two differences does not exist. Residual error: the colour requirement ({1}{G} vs {1}{B}, against a 3-card black splash) and Vitaspore's haste, which is live in a deck that also plays Concordant Crossroads."
+    },
+    {
+      "cards": ["Brightcap Badger", "Shroofus Sproutsire", "Psychotrope Thallid"],
+      "why": "THE UNSETTLED 1-OF SLOT, which is a judgement about the LIST rather than about the cards. All three are singletons the user is not yet committed to: 'both uncommon 1-ofs that can have something cast on 3 mana ... I don't even know if they make the cut yet.' Psychotrope and Shroofus are exact twins on the axes a keep decision reads -- both {2}{G}, both 1/1 -- and Badger is the {3}{G} 3/4 outlier. USER placed Psychotrope here rather than with the spore Thallids, which is the better call: it leaves the spore group a clean single-cost tier and groups by curve position, which is what a keep decision actually turns on. This is the LOOSEST group in the file: it blurs three genuinely different effects (a mana-granting lord, an exponential combat-damage token engine, and a spore body with a draw outlet). It is defensible only because each is one card in sixty, so few hands contain any of them -- and it should be the FIRST group revisited if these cards survive into the final list."
+    },
+    {
+      "cards": ["Forest", "Blooming Marsh"],
+      "why": "In the window a keep decision covers, these are the same land. Blooming Marsh 'enters tapped unless you control two or fewer other lands', i.e. it is UNTAPPED for the opening hand and the first few turns, which is the only period a mulligan decision can see; and it taps for {G}, which is what this deck needs. USER noted the real objection and accepted it: 'one cannot produce black, but there isn't that much black yet' -- black is Deathspore Thallid x2 and Slimefoot x1, three cards in sixty, and Blooming Marsh is one of 12 black-capable sources alongside Peat Bog and Secluded Courtyard."
+    }
+  ],
+  "keep_apart": [
+    {
+      "cards": ["Secluded Courtyard", "Forest"],
+      "why": "NOT a user instruction -- an agent-added veto against an unsound merge that discovery could reach at a different threshold, recorded here so it is a decision rather than an accident. Secluded Courtyard's coloured mana is spendable ONLY on creature spells of the chosen type (or abilities of such sources); its unrestricted output is {C}. This deck is 13/60 NONCREATURE spells -- Doubling Season x4, Saproling Burst x4, Beastmaster Ascension x2, Wild Growth x2, Concordant Crossroads x1 -- so a Courtyard cannot help cast ANY of them, including all four copies of the deck's best card. Merging it with Forest would systematically overstate the castability of exactly the cards whose presence makes a hand worth keeping, biasing the policy toward keeping hands that cannot function. See the memory note on Unclaimed Territory / restricted mana for the same hazard."
+    }
+  ]
+}

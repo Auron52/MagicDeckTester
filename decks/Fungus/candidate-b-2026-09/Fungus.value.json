@@ -5,6 +5,6 @@
  "value_play": {
   "mull_gen_depth": 1,
   "mull_gen_budget_ms": 3,
-  "expected_buckets": 22
+  "expected_buckets": 17
  }
 }
