@@ -731,8 +731,8 @@ public:
     // loop is weaker than the m1 loop. The blanket-drop variant stays out regardless (it
     // re-bloats to 5.96M units for no quality gain).
     //
-    // HALF-RESCUED 2026-09-06 (logs/hinata_m2axes): the wave walker was built (MTG_M2_WAVES)
-    // and measured NULL -- the missing lines were never EMITTED, because the searched
+    // HALF-RESCUED 2026-09-06 (logs/hinata_m2axes): the wave walker was built (MTG_M2_WAVES, unconditional since
+    // 2026-10-02) and measured NULL -- the missing lines were never EMITTED, because the searched
     // sub-decision AXES (ponder keep-vs-shuffle, tutor, etb-dig...) were M1-HOST-ONLY
     // (AppendSubdecisionAxes in TurnSolver.cpp, the ROOT CAUSE FOUND section of
     // searched-second-main-unconditional.md). With MTG_M2_AXES giving the m2 hosts the same

@@ -3,6 +3,7 @@
 #include "../core/EnvFlags.h"
 #include "../core/MemBudget.h"
 #include "TurnSolver.h"
+#include "ContPinScope.h"
 #include "ManaPayment.h"
 #include "PlanContext.h"
 #include "LandPlay.h"
@@ -1171,7 +1172,7 @@ enum Site
     kLookaheadGroupWave,   // SolveWithLookahead: group-wave scorer
     kEscEval,              // SolveWithLookahead: condemnation escalation re-evaluation
     kFsBpNode,             // FullSearchLine: breakpoint-NODE continuation children (MTG_BP_NODE)
-    kFsM2Wave,             // FSLineTail m2 loop: deferred wave variants (MTG_M2_WAVES)
+    kFsM2Wave,             // FSLineTail m2 loop: deferred wave variants (unconditional)
     // APPEND LAST ONLY -- see the enum's note below; these ordinals index a persisted name table
     // and the census's u_* column order.
     kGreedyWalk,           // EnumeratePlans' subset walk, one unit per W visits (MTG_SOLVE_CHARGE)
@@ -4997,88 +4998,8 @@ static bool SecondMainUnproductive(const GameState& state)
     return true;
 }
 
-// =================================================================================================
-// NO GREEDY INSIDE THE SEARCH WINDOW -- A FATAL TRIPWIRE, NOT A FLAG
-// =================================================================================================
-//
-// *** USER DIRECTIVE 2026-10-01, and it is the REASON this is an abort rather than a counter: ***
-//   "I want to end this with code deletion. I don't want it coming on again."
-//   "It has been a long time since I started pushing agents to remove this and it keeps recurring.
-//    One of the agents even mentioned throwing an error or aborting if we hit greedy in the search
-//    window. I think I would like to do that as I am seriously tired of this coming back."
-//   "It needs to cause a full failure to run if it happens anywhere." / "So that we are forced to
-//    fix it."
-//
-// THE RULE. `TurnSolver::Solve()` is the greedy one-shot plan chooser -- it picks a main-phase play
-// without searching. The governing doctrine (USER 2026-09-05, verbatim in
-// docs/design/greedy-in-the-searched-window-status.md) permits greedy in exactly four places:
-// beyond the search horizon, this-turn combo go-off heuristics, mana allocation, and non-dork
-// attack decisions. Only the FIRST of those can reach this function, so the invariant is simply:
-//
-//     TurnSolver::Solve() may be entered only where the search has NO depth left to spend.
-//
-// WHY A COUNTER WAS NOT ENOUGH, which is the whole point. greedysite below already counted this and
-// printed it, behind MTG_M2_YIELD_STATS -- off by default. A diagnostic nobody runs cannot stop a
-// regression, and the history here is three separate re-introductions (the per-deck interior-m2
-// opt-ins, deleted 2026-09-05; the bp-continuation fallbacks, deleted 2026-09-17; and the rollout
-// second main, deleted 2026-10-01). Each was removed, each came back as a new code path, and each
-// was invisible until someone went looking. This makes the invariant unskippable.
-//
-// WHY THE DEPTH IS A FRAME AND NOT ONE GLOBAL. The question "is there depth left" is LOCAL: the
-// playout's per-turn solve legitimately runs at `turn_depth` (search_leaf_depth, normally 0) while
-// an outer SolveWithLookahead frame still holds depth 5. Keying on the outermost frame would abort
-// every run on a legal playout. So every function that carries a search depth opens a Frame with
-// ITS OWN depth, and the guard reads the innermost -- which is the depth the dispatching site is
-// actually operating at. kNoSearch means no search frame is on the stack at all (the live
-// executor's own turn), where greedy is the normal d0 play path.
-//
-// IF THIS TRIPS: do not silence it and do not add a flag to bypass it. The dispatch site it names
-// is a main-phase decision inside the searched window; route it through the search (the ladder is
-// in searched-second-main-unconditional.md), or -- with USER APPROVAL, never an agent's call --
-// stop considering that phase at all. Those are the only two sanctioned outcomes, per USER
-// 2026-10-01: "We either do not consider the main at all, or we search it."
-namespace greedywindow
-{
-inline constexpr int kNoSearch = -1;          // no search frame on the stack -> greedy is the play path
-inline thread_local int t_depth = kNoSearch;  // innermost search frame's REMAINING depth
-
-// RAII. Unconditional (not behind a flag): one thread-local int store per search frame, which is a
-// decision-scale write, and a guard that can be configured off is the thing the user asked to end.
-struct Frame
-{
-    int prev;
-    explicit Frame(int d) : prev(t_depth) { t_depth = d; }
-    ~Frame() { t_depth = prev; }
-};
-
-[[noreturn]] inline void Trip(const char* site, int depth)
-{
-    std::fprintf(stderr,
-        "\n*** FATAL: GREEDY PLAN CHOICE INSIDE THE SEARCH WINDOW ***\n"
-        "    site: %s\n"
-        "    the innermost search frame still has depth %d remaining, so this decision had search\n"
-        "    budget available and took a one-shot heuristic instead.\n"
-        "\n"
-        "    This is a DOCTRINE VIOLATION, not a tuning question (USER 2026-09-05 / 2026-10-01):\n"
-        "    greedy is permitted only BEYOND the search horizon, for this-turn combo go-off\n"
-        "    heuristics, mana allocation, and non-dork attack decisions.\n"
-        "\n"
-        "    Fix it by routing this site through the search, or -- WITH USER APPROVAL ONLY -- by not\n"
-        "    considering the phase at all. Do NOT add a flag to bypass this check; it is deliberately\n"
-        "    fatal because this class of regression has been removed three times and returned three\n"
-        "    times. See docs/design/greedy-in-the-searched-window-status.md.\n\n",
-        site, depth);
-    std::fflush(stderr);
-    // abort(), not an exception: a throw can be caught by a worker-thread boundary and demoted to a
-    // per-job error, which is exactly the "invisible until someone looks" failure this replaces.
-    std::abort();
-}
-
-inline void Require(const char* site)
-{
-    if (t_depth > 0) { Trip(site, t_depth); }
-}
-}
+// (namespace greedywindow -- the fatal in-window greedy tripwire -- lives in TurnSolver.h, beside
+//  TurnSolver::GreedyPermit, which is the only thing that calls it.)
 
 // MTG_M2_YIELD_STATS -- what does the post-combat main actually PRODUCE? (diagnostic, inert by
 // default). The candidate-side picture (MTG_CONSIDER_STATS) says the second main is the single
@@ -16465,7 +16386,16 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
         }
         if (pick >= 0) { remaining[pick] = std::max(0, remaining[pick] - amt); }
     }
-    return "R";   // `self` not found in `acts` (defensive; no call site does this)
+    // `self` not found in `acts`: a CALLER CONTRACT VIOLATION, and fatal on purpose. This used to
+    // return "R" under a comment claiming no call site did it -- one did (the executor's recorded-
+    // continuation replay passed the OUTER plan), and the quiet fallback turned a searched BBB Lotus
+    // sac into RRR, unpaid Karrthus and a lost turn (Dragonstorm s4004 gi107). A wrong colour is a
+    // silent lockstep break; a crash names the call site in the first smoke run.
+    std::fprintf(stderr, "\nFATAL: TurnSolver::SacFloatColorFor called with a `self` (%s) that is not an "
+                         "element of `acts` -- pass the vector being iterated.\n",
+                 self.card_name.str().c_str());
+    std::fflush(stderr);
+    std::abort();
 }
 
 // This also drops the provider float-colour collapse from the FOLDED path, deliberately.
@@ -29457,27 +29387,23 @@ namespace solvememo
 
 TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
 {
-    // A permit is a CLAIM that the greedy pick sits outside every search window. Checked in every
-    // build (not an assert that vanishes under NDEBUG): a false claim is the forbidden in-window
-    // greedy pick, and it must stop the run loudly.
-    if (remaining_depth > 0)
-    {
-        std::fprintf(stderr, "\nFATAL: greedy TurnSolver::Solve() requested INSIDE the search window "
-                             "(site %d, remaining depth %d). USER HARD RULE 2026-09-30 -- see "
-                             "docs/design/no-greedy-in-search-window.md.\n",
-                     static_cast<int>(site), remaining_depth);
-        std::fflush(stderr);
-        std::abort();
-    }
+    // A permit is a CLAIM that the greedy pick sits outside every search window, and it is checked
+    // two ways (greedywindow::InWindow): the claim itself (`remaining_depth`, which the call site
+    // supplies) and the innermost open search frame (greedywindow::t_depth, which the HOSTS supply).
+    // Each covers the other's blind spot -- a mislabelled call site cannot pass on the frame, and a
+    // Solve reached from a host that forgot its frame cannot pass on the claim. Every build, not an
+    // assert that vanishes under NDEBUG: a false claim is the forbidden in-window greedy pick.
+    // This is the ONE check: Solve/SolveUncached cannot be entered without constructing a permit.
+    greedywindow::Require(site == GreedySite::HorizonLeaf ? "GreedyPermit(HorizonLeaf)"
+                                                          : "GreedyPermit(D0Runner)",
+                          remaining_depth);
 }
 
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
-    // THE TRIPWIRE. This is the greedy plan chooser; entering it with search depth still on the
-    // innermost frame is the doctrine violation the user has had removed three times. See
-    // greedywindow above for the rule, the frame semantics and what to do if this fires.
-    greedywindow::Require(is_pre_combat ? "TurnSolver::Solve (pre-combat main)"
-                                        : "TurnSolver::Solve (second main)");
+    // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
+    // claimed depth and the innermost search frame -- see greedywindow in TurnSolver.h). There is
+    // no way in here without one, so there is nothing further to check.
     // Memo only inside a search decision (a driver frame is on the stack): the decision epoch is
     // fresh there, and the live executor path stays untouched by construction. A bound
     // MTG_CANTRIP_ORDER site bypasses (the ban changes Solve's candidate set per site).
@@ -33344,6 +33270,32 @@ void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Ac
                      [&](const Action& x, const Action& y) { return rank_of(x) < rank_of(y); });
 }
 
+
+// A breakpoint continuation's during-cast pins, installed for the block that applies it, and
+// recorded onto the first action that continuation adds to `sink` so the executor's record replay
+// installs the same pins (see ContPins, TurnSolver.h). When a continuation carries NO pins but an
+// earlier continuation in the same recorded vector did, it records an EMPTY set -- the replay
+// resets on every tagged action, so this keeps the earlier pins from leaking forward.
+struct ContPinFrame
+{
+    ContPins                    pins;
+    std::optional<ContPinScope> scope;
+    std::vector<Action>*        sink;
+    std::size_t                 before;
+    ContPinFrame(const TurnSolver::Plan& p, std::vector<Action>* s)
+        : pins(ContPinsOf(p)), sink(s), before(s != nullptr ? s->size() : 0)
+    { if (pins.Any()) { scope.emplace(&pins); } }
+    ~ContPinFrame()
+    {
+        if (sink == nullptr || sink->size() <= before) { return; }
+        bool tag = pins.Any();
+        for (std::size_t i = before; !tag && i-- > 0;) { if ((*sink)[i].cont_pins) { tag = true; } }
+        if (tag) { (*sink)[before].cont_pins = std::make_shared<const ContPins>(pins); }
+    }
+    ContPinFrame(const ContPinFrame&) = delete;
+    ContPinFrame& operator=(const ContPinFrame&) = delete;
+};
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
@@ -34132,6 +34084,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
             // bp_choice == 0 is always emitted, so gating on it counts each occurrence exactly once.
             if (plan.bp_choice == 0) { BpCands(site, g_bp_cands_last, BpSearchWidth()); }
+            // MTG_BP_CONT_TRACE=<turn> (diagnostic, print-only, default 0 = off): the continuation
+            // LIST a breakpoint offers on that turn, once per list (rank 0). "Is the line in the
+            // list at all?" is the first question for a line the search cannot express, and no
+            // other trace prints the list itself.
+            {
+                static const int s_cont_turn = EnvInt("MTG_BP_CONT_TRACE", 0);
+                if (s_cont_turn > 0 && plan.bp_choice == 0 && state.turn_number == s_cont_turn)
+                {
+                    std::string hs;
+                    for (const Card& hc : state.ActivePlayer().hand)
+                    { hs += hc.m_name.str(); if (hc.m_is_staged) { hs += "(s)"; } hs += ","; }
+                    std::fprintf(stderr, "[bp-cont] T%d %s site=%d n=%zu land_played=%d hand=[%s]\n",
+                                 state.turn_number, is_pre_combat ? "m1" : "m2", site, cands.size(),
+                                 state.ActivePlayer().lands_played_this_turn, hs.c_str());
+                    for (std::size_t ci = 0; ci < cands.size(); ++ci)
+                    { std::fprintf(stderr, "[bp-cont]   #%zu %s\n", ci, FsPlanText(cands[ci]).c_str()); }
+                }
+            }
             // CHAIN PRE-SCAN (MTG_BP_W0_CHAIN_COLLAPSE; see w0collapse::ChainOn). Rank 0 is
             // standing at this breakpoint with the continuation list already in hand, and the
             // CHAIN variant of the same base plan will resolve its slot by walking exactly this
@@ -34367,6 +34337,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         if (!sp.land_decided || sp.land_to_play.empty()) { return; }
         if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
+        // The continuation's OWN land scry/surveil pin (Plan::scry_choice), exactly as the outer
+        // plan's land play installs its own -- a continuation land used to scry by heuristic.
+        std::optional<ScriptedTopChoice> stc;
+        if (sp.scry_choice >= 0) { stc.emplace(sp.scry_choice); }
         if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face, sp.rad_mode))
         { return; }
         if (out_breakpoint != nullptr && sink != nullptr)
@@ -35720,6 +35694,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
+                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
@@ -35755,6 +35730,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // applying only extra.actions would silently discard the search's land choice.
                 TurnSolver::Plan extra;
                 bp_searched_plan(1, extra);   // resolves to the plan's continuation or EMPTY
+                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
@@ -36119,6 +36095,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 bp_searched_plan(2, extra);   // resolves to the plan's continuation or EMPTY
+                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 // Lotus Bloom: the staged Dragonstorm/rituals grew this pre-pass first (the
                 // executor's breakpoint replay had the same gap) -- now the shared loop.
@@ -36182,6 +36159,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                     TurnSolver::Plan extra;
                     bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
+                    ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                     bp_play_searched_land(extra, my_bp_sink);
                     apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
@@ -36382,6 +36360,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           BpNewOnlyActive(state), &pre_plan_acts);
                         TurnSolver::Plan extra;
                         bp_searched_plan(6, extra);   // resolves to the plan's continuation or EMPTY
+                        ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                         bp_play_searched_land(extra, my_bp_sink);
                         apply_continuation_precasts(extra);
                         apply_plan_actions(extra.actions, extra.searched_order);
@@ -37221,6 +37200,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     TurnSolver::Plan extra;
                     bp_searched_plan(7, extra);   // resolves to the plan's continuation or EMPTY
+                    ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
                     bp_play_searched_land(extra, nullptr);
                     apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
@@ -37430,6 +37410,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                     { _ct_before.push_back(q.card.m_number); }
                                 }
                             }
+                            ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
                             bp_play_searched_land(extra, nullptr);
                             apply_continuation_precasts(extra);
                             apply_plan_actions(extra.actions, extra.searched_order);
@@ -37907,6 +37888,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::Plan extra;
         if (bp_searched_plan(9, extra))
         {
+            ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
             bp_play_searched_land(extra, nullptr);
             apply_continuation_precasts(extra);
             apply_plan_actions(extra.actions, extra.searched_order);
@@ -38107,6 +38089,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::cerr << line << "\n";
             }
         }
+        ContPinFrame _cpf(extra, out_breakpoint);   // the continuation's own during-cast pins (ContPins)
         bp_play_searched_land(extra, out_breakpoint);
         // CONTINUATION TRAITS (lockstep with the executor's breakpoint replay): the deferred
         // continuation is its own mini-plan, so price and pay it under PlanTraits computed from
@@ -38287,6 +38270,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // the searched attempt counted the site's successes as greedy too -- which is the
                 // exact reading error the counter exists to prevent.
                 bp_searched_plan(4, extra);   // resolves to the plan's continuation or EMPTY
+                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
@@ -45258,14 +45242,27 @@ static const bool s_legacy_land_sig    = !s_complete_land_sig;
 // the capability asymmetry behind hinata's systematic all-Main2 loss (28 worse / 4 better;
 // docs/design/searched-second-main-unconditional.md, ROOT CAUSE FOUND). Factoring changes NOTHING
 // for the m1 caller (same call point, same body, byte-identical); the m2 hosts call it behind
-// MTG_M2_AXES, always at g_bp_enum_depth == 0 (a breakpoint continuation list is not a new
-// decision and must not fan out -- BpEnumEntryFor's rule, the guard AppendBreakpointVariants
-// itself applies). Known inert-duplicate cost when called at m2: Plan::dig_choice is consumed on
+// MTG_M2_AXES. Inside a breakpoint continuation derivation only the DURING-CAST axes fan out (the
+// continuation IS a decision, and carries their pins -- ContPins; corrected 2026-10-02: the old rule
+// here, "a continuation list is not a new decision and must not fan out", left every sub-decision
+// cast inside a continuation to the heuristic). Known inert-duplicate cost when called at m2: Plan::dig_choice is consumed on
 // the is_pre_combat apply path only (ApplyPlanDirect), so the cycle/sac-draw dig axis's m2
 // variants score identically to their base plan and tie-break away (Auras is the only opt-in).
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all)
 {
+    // INSIDE A BREAKPOINT CONTINUATION DERIVATION (g_bp_enum_depth > 0) only the DURING-CAST axes
+    // fan out -- the ones whose pins a continuation carries (ContPins, TurnSolver.h): scry (its land),
+    // tutor, ETB dig, Ponder, ETB counter, sac-land, saga chapter I, and the sac-creature re-point
+    // (an ACTION field, recorded with the action). Whole-plan payment policy (tapmode, fresh-spend)
+    // and the pins consumed after the apply (discard, Vial charge, fling, Tectonic, sweep, Land's
+    // Edge, Lackey, saga target, dig) belong to the OUTER plan; fanned out here they would be inert
+    // duplicates. Before 2026-10-02 the no-drop and second-main paths skipped this function entirely
+    // inside a derivation, so a continuation's Ponder / tutor / scry resolved by heuristic -- a
+    // greedy choice inside the search window (hinata s7007 gi75 lost a turn at d8 b0) -- while the
+    // drop-available path fanned EVERY axis, and every one of those variants was inert because no
+    // continuation pin was ever installed.
+    const bool cont_axes_only = g_bp_enum_depth > 0;
     // Where `all` ended before the axes ran. Everything appended past here is a CLONE of some plan
     // already in the list, and the loop at the end of this function un-stamps the one field a clone
     // must not inherit. See the note there.
@@ -45610,7 +45607,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // Emitted only when the board actually holds an untapped mana creature the hold could bite on
     // -- otherwise mode 1 pays identically and the variant is a duplicate that costs a rollout to
     // discover it changed nothing (the same guard the cleanup-discard axis learned to apply).
-    if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive())
+    if (!cont_axes_only && DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive())
     {
         const int active_bf = state.active_player_index;
         bool has_dork = false;
@@ -45653,7 +45650,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // nine suite decks never reach a cleanup discard at all, and a variant pinning an index nothing
     // consumes is a duplicate plan that costs a rollout to discover it changed nothing.
     const int discard_width = ResolveProvider(state).CleanupDiscardSearchWidth();
-    if (discard_width > 1 && !HumanPlayActive())
+    if (!cont_axes_only && discard_width > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
         for (const TurnSolver::Plan& p : all)
@@ -45683,7 +45680,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // Gated on a Vial actually being there to consume the pin -- on the battlefield now, or cast by
     // this very plan (the Vial's first upkeep is the turn after it lands). A variant pinning an index
     // nothing consumes is a duplicate plan that costs a rollout to discover it changed nothing.
-    if (VialAxisEnabled() && !HumanPlayActive())
+    if (!cont_axes_only && VialAxisEnabled() && !HumanPlayActive())
     {
         auto is_vial = [](const CardDefinition* d)
         { return d != nullptr && d->params.upkeep_adds_charge; };
@@ -45746,7 +45743,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // is precisely what the search evaluates. So the base plan carries the ranked default and
     // this emits DECLINE plus one variant per legal victim. Skipped in human play, where the
     // viewer surfaces the choice through the `sacrifice` decision instead.
-    if (FlingAxisEnabled() && !HumanPlayActive())
+    if (!cont_axes_only && FlingAxisEnabled() && !HumanPlayActive())
     {
         const int me = state.active_player_index;
         int  fling_src_id = -1;
@@ -45800,7 +45797,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // is resolving expensive Giants and whose only other card selection is Giant Harbinger. Which
     // is better depends on whether the game ends soon, so the base plan carries
     // ResolveAttackModalMode's default and these two variants let the search overrule it.
-    if (TectonicAxisEnabled() && !HumanPlayActive())
+    if (!cont_axes_only && TectonicAxisEnabled() && !HumanPlayActive())
     {
         const int me = state.active_player_index;
         bool modal_present = false;
@@ -45979,7 +45976,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // keep-or-spend call was an engine rule; now the base plan keeps the rule and this axis adds the
     // "sweep anyway" variant, so the search prices damage-now against mana-for-main-2. Emitted only
     // where a sweep can do something: a Remedy-live drip deck, or an armed Prevent Damage board.
-    if (is_pre_combat && !HumanPlayActive())
+    if (!cont_axes_only && is_pre_combat && !HumanPlayActive())
     {
         const int ctrl = state.active_player_index;
         bool live = state.dmg_events_armed;
@@ -46021,7 +46018,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // variants for the counts the PROVIDER keeps (LandsEdgeFireCandidates, default hold /
     // fire-all -- the full 0..L fan was too wide to search). A variant equal to the provider's
     // count lands on its base plan's state and the post-apply dedup skips it (PlanIsAxisVariant).
-    if (!HumanPlayActive())
+    if (!cont_axes_only && !HumanPlayActive())
     {
         const int ctrl = state.active_player_index;
         bool le_live = false;
@@ -46091,7 +46088,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // SEARCHED GOBLIN LACKEY PUT -- the same post-dedup fan-out, keyed on the BOARD rather than on a
     // cast: the trigger belongs to a Lackey already in play, not to anything in `actions`. Only the
     // pre-combat plan can carry it, since the put resolves in that combat's damage step.
-    if (LackeyAxisEnabled() && LackeyAxisWidth() > 1 && !HumanPlayActive() && is_pre_combat)
+    if (!cont_axes_only && LackeyAxisEnabled() && LackeyAxisWidth() > 1 && !HumanPlayActive() && is_pre_combat)
     {
         const std::size_t cands_now = LackeyCandidateCountNow(state);
         const std::size_t k = std::min(cands_now, LackeyAxisWidth());
@@ -46264,7 +46261,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // -- a Saga entering now takes its chapter I on entry and its first TARGETING chapter next
     // turn. A pin nothing consumes is a duplicate plan that costs a rollout to discover it changed
     // nothing, which is exactly what the Vial axis's gate exists to avoid.
-    if (SagaTargetAxisEnabled() && !HumanPlayActive())
+    if (!cont_axes_only && SagaTargetAxisEnabled() && !HumanPlayActive())
     {
         auto is_saga = [](const CardDefinition* d)
         { return d != nullptr && d->params.saga_chapters > 0; };
@@ -46502,7 +46499,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // whose simulated combat does not kill THIS turn is discarded there, never scored. Magnet
     // live -> the hold is already released for real (PaySacSpendableNow) and every variant would
     // be a duplicate world.
-    if (FreshSpendAxisEnabled() && g_fresh_axis_enum && TreasurePaySourceEnabled()
+    if (!cont_axes_only && FreshSpendAxisEnabled() && g_fresh_axis_enum && TreasurePaySourceEnabled()
         && PaySacFreshHoldEnabled() && !HumanPlayActive()
         && !CopyMagnetLive(state, state.active_player_index))
     {
@@ -46539,7 +46536,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // (DigDecisionSearched: Auras) so Treasure Hunt's measured greedy gate and every digless
     // deck stay byte-identical; gated on a source being payable BEFORE the casts, since a turn
     // that cannot afford any dig makes all three worlds identical.
-    if (!HumanPlayActive() && ResolveProvider(state).DigDecisionSearched()
+    if (!cont_axes_only && !HumanPlayActive() && ResolveProvider(state).DigDecisionSearched()
         && ResolveProvider(state).HasAnyDigSource(state))
     {
         ManaPool dig_pool = AvailableManaPool(state);
@@ -46713,8 +46710,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     // bp_choice >= 0, which is what keeps the two additive rather than a cross product).
     // AppendBreakpointVariants self-gates on g_bp_enum_depth != 0.
     AppendBreakpointVariants(state, plans);
-    if (g_bp_enum_depth == 0)
-    { AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans); }
+    AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans);   // during-cast axes only inside a derivation
     AppendVialOrderVariants(state, plans);   // self-gated on g_bp_enum_depth == 0
     return plans;
 }
@@ -46964,12 +46960,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // (second main, drop consumed), and so does every main-1 RE-SOLVE after the land is down --
         // the executor's post-draw breakpoint re-solve, most importantly. Both used to be bare, so a
         // tutor / scry / Ponder cast there resolved by the provider's front pick while the same cast
-        // one solve earlier was searched. A breakpoint continuation derivation still never fans
-        // (BpEnumEntryFor's rule; same guard AppendBreakpointVariants applies above).
-        if (g_bp_enum_depth == 0)
+        // one solve earlier was searched. Inside a breakpoint continuation derivation only the
+        // DURING-CAST axes fan (see AppendSubdecisionAxes; the continuation carries their pins).
         {
             const std::size_t n0 = plans.size();
-            AppendSubdecisionAxes(state, is_pre_combat, plans);
+            AppendSubdecisionAxes(state, is_pre_combat, plans);   // during-cast axes only inside a derivation
             g_nodrop_enum[is_pre_combat ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
             g_nodrop_axis_vars[is_pre_combat ? 1 : 0].fetch_add(
                 static_cast<long long>(plans.size() - n0), std::memory_order_relaxed);
@@ -51466,20 +51461,18 @@ namespace m2stats
     inline Dumper g_dumper;
 }
 
-// MTG_M2_WAVES (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): the m2 plan
-// loop below runs the deferred wave phase FSLineWin's pre loop has always had. Without it, a
-// second-main plan's breakpoint continuations are searched only where the NODE hosts them
-// (site 3, root turn by default) and NESTED continuations (bp_at >= 1) are reachable by NOTHING
-// -- the walker's nesting discovery is the one mechanism that opens those slots. Measured
-// motivation (logs/hinata_cost, 2026-09-06): hinata's own all-Main2 doctrine is 42% cheaper and
-// +0.29 WORSE, and full node hosting (MTG_BP_NODE_ROOTTURN=0, +65% units) does not close the
-// gap -- the loss is in the chains only the wave walker can reach. Lossless by construction:
-// strictly ADDS scored lines, deletes none.
-static bool M2WavesEnabled()
-{
-    static const bool env_on = EnvOn("MTG_M2_WAVES");
-    return heurarm::Flag(heurarm::M2_WAVES, env_on);
-}
+// THE M2 DEFERRED WAVE PHASE IS UNCONDITIONAL (2026-10-02; was MTG_M2_WAVES, default OFF, DELETED).
+// The m2 plan loop runs the same deferred wave phase FSLineWin's pre loop has always had. Without it,
+// a second-main plan's breakpoint continuations past wave 0's W ranks, and every NESTED continuation
+// (bp_at >= 1), were reachable by NOTHING -- at any budget, including d8 b0. That is a hard cap
+// inside the search window, i.e. a lossy truncation, and it was the measured root cause of five of
+// the nine searched games that did not recover at --depth 8 --budget-ms 0 (2026-10-02): burn s5005
+// gi564/gi885 (Light Up the Stage -> staged Mountain -> second Light Up the Stage is continuation
+// rank #2 of 5, W=2), hinata gi355/gi308, hinata2hg gi61. Lossless by construction: it strictly
+// ADDS scored lines and deletes none. It was parked OFF on 2026-09-06 because it measured NULL on
+// hinata's all-Main2 arm, where the missing lines were never EMITTED (the m2 axes gap, since fixed)
+// -- a null on one arm is not a reason to leave a line unreachable everywhere. No lever: USER HARD
+// RULE 2026-09-30 (no-greedy-in-search-window.md) -- an unreachable rank is not a tuning choice.
 
 // ---- EMPTY-SECOND-MAIN FAST PATH (MTG_M2_EMPTY_FAST, default ON) -------------------------------
 // When the deferred-cast gate has already proven the post-combat main can do nothing, the plan loop
@@ -51652,11 +51645,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // full-lookahead fallback) -- minus the copy and the empty apply. Byte-identical by
         // construction and verified by digest; MTG_M2_EMPTY_FAST=0 restores the loop for the A/B.
         //
-        // Scoped to the exotic-hosting-free configuration: the m2 fixpoint (M2FixModeFor) and the
-        // deferred waves (M2WavesEnabled) both re-host the empty plan, so they keep the loop. Both
-        // are default OFF, so the decks that opt into the deferred-cast gate take this path.
+        // Scoped to the exotic-hosting-free configuration: the m2 fixpoint (M2FixModeFor) re-hosts the
+        // empty plan, so it keeps the loop (default OFF). The deferred wave phase (unconditional since
+        // 2026-10-02) does NOT need the loop here: SecondMainUnproductive proves the phase can do
+        // nothing, so no plan opens a breakpoint and the walker would be empty.
         const bool m2_deferred_only = ResolveProvider(state).SecondMainNeedsDeferredCast();
-        if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0 && !M2WavesEnabled()
+        if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0
             && SecondMainUnproductive(state))
         {
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
@@ -52328,13 +52322,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
         }
 
-        // ---- M2 DEFERRED CONTINUATION WAVES (MTG_M2_WAVES; see M2WavesEnabled above) -----------
+        // ---- M2 DEFERRED CONTINUATION WAVES (unconditional since 2026-10-02; see the note above FSLineTail) --
         // The m1 host's walker, re-hosted with THIS loop's scoring tail (post-combat apply, no
         // SimulateCombat, FSLineWin recursion at the same depth). Same anytime contract, same
         // prefix-resume cache, same walker `limit` semantics (the beam's carve-out is respected:
         // waves stay inside whatever the loop scanned). Dedup shares node_child_seen, so a wave
         // variant is checked against every node child and every recorded base plan.
-        if (M2WavesEnabled() && BpWavesHere(budget))
+        if (BpWavesHere(budget))
         {
             BpWaveWalker walker(state, post, m2_scanned);
             if (!walker.Empty())
@@ -52595,6 +52589,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    // The search-window frame GreedyPermit checks (greedywindow, TurnSolver.h): THIS node's remaining
+    // depth. The full-line search is the deepest host there is, and before this frame a greedy Solve
+    // reached anywhere beneath it -- FSLineTail's second main, a breakpoint apply -- read whatever
+    // frame happened to be outside the whole search (usually none) and passed. Its second main is
+    // inside this frame on purpose: that main is part of THIS turn, which the window includes.
+    const greedywindow::Frame _gw(depth);
 #ifdef MTG_PROFILE
     if (state.turn_number >= 0 && state.turn_number < 12) { PROF_INC(fsw_by_turn[state.turn_number]); }
     if (depth >= 0 && depth < 12)                         { PROF_INC(fsw_by_depth[depth]); }

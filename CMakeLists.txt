@@ -288,6 +288,7 @@ add_executable(mtg-test
     test/unit/test_bucket_policy.cpp
     test/unit/test_cost_reducers.cpp
     test/unit/test_subtype_registry.cpp
+    test/unit/test_greedy_window.cpp
     test/unit/test_cumulative_upkeep.cpp
     test/unit/test_terastodon_k.cpp
     test/unit/test_swords_redirect.cpp

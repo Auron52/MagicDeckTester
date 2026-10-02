@@ -4,6 +4,9 @@
 #include "PlanContext.h"   // PlanTraits (ComputePlanTraits below); header is Action-free on purpose
 #include "SearchBudget.h"
 #include <chrono>
+#include <memory>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -17,6 +20,35 @@ class TranspositionTable;  // per-decision SimulateToEnd memo (see Transposition
 // The valuation scalars (eval, direct_damage, ...) are populated by CollectActions
 // at enumeration time and read by the subset evaluators; the apply/execute paths
 // re-derive costs and effects from the card definition, so they ignore those fields.
+// THE DURING-CAST SUB-DECISION PINS OF A BREAKPOINT CONTINUATION (2026-10-02).
+// A plan's searched sub-decisions (which Ponder disposition, which tutor target, which ETB-dig card,
+// ...) are PLAN-level pins, installed once for the OUTER plan's apply. A breakpoint continuation is
+// itself a plan chosen from a list, but its pins were never installed: every sub-decision cast
+// inside a continuation fell to the provider's heuristic pick -- a greedy choice inside the search
+// window (USER HARD RULE 2026-09-30, docs/design/no-greedy-in-search-window.md). Measured cost:
+// hinata s7007 gi75 lost a turn at d8 b0 because "Preordain -> Ponder, SHUFFLE" was inexpressible
+// (the continuation's Ponder always took the heuristic's keep).
+// Only the pins consumed WHILE the continuation's own casts resolve belong here. Whole-plan payment
+// policy (tapmode / fresh-spend) and pins consumed after the apply (cleanup discard, Vial charge,
+// combat triggers, Land's Edge, sweep) stay with the outer plan.
+// It rides the committed line on the FIRST recorded action of the continuation (Action::cont_pins),
+// so the executor's replay installs exactly what the search scored (ContPinScope, ContPinScope.h).
+struct ContPins
+{
+    int etbdig     = -1;   // Plan::etbdig_choice
+    int saga_ch1   = -1;   // Plan::saga_ch1_choice
+    int ponder     = -1;   // Plan::ponder_choice
+    int etbcounter = -1;   // Plan::etbcounter_choice
+    int tutor      = -1;   // Plan::tutor_choice
+    int scry       = -1;   // Plan::scry_choice (the continuation's own land drop)
+    std::vector<int> sac;  // Plan::sac_pins
+    bool Any() const
+    {
+        return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
+            || scry >= 0 || !sac.empty();
+    }
+};
+
 struct Action
 {
     enum class Kind
@@ -490,6 +522,11 @@ struct Action
                                        // cheaper and is itself a lord-buffed Minotaur; the aura mode
                                        // dodges summoning sickness and pumps a creature that can
                                        // attack NOW). false = the ordinary creature cast.
+    std::shared_ptr<const ContPins> cont_pins;
+                                       // Set ONLY on the first recorded action of a breakpoint
+                                       // continuation whose plan carried during-cast pins (see
+                                       // ContPins). The executor's record replay installs them for
+                                       // that continuation. Null everywhere else (copy = no atomics).
     int         ponder_keep      = -1;
                                        // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
                                        // call. CollectActions emits TWO variants (1 = keep top N in
@@ -611,6 +648,100 @@ struct Action
 // Sacrifice-land spells are always placed last in the execution order so
 // that other spells have already tapped their lands before the sacrifice
 // fires, minimising the real cost of the additional cost.
+// =================================================================================================
+// NO GREEDY INSIDE THE SEARCH WINDOW -- A FATAL TRIPWIRE, NOT A FLAG
+// =================================================================================================
+//
+// *** USER DIRECTIVE 2026-10-01, and it is the REASON this is an abort rather than a counter: ***
+//   "I want to end this with code deletion. I don't want it coming on again."
+//   "It has been a long time since I started pushing agents to remove this and it keeps recurring.
+//    One of the agents even mentioned throwing an error or aborting if we hit greedy in the search
+//    window. I think I would like to do that as I am seriously tired of this coming back."
+//   "It needs to cause a full failure to run if it happens anywhere." / "So that we are forced to
+//    fix it."
+//
+// THE RULE. `TurnSolver::Solve()` is the greedy one-shot plan chooser -- it picks a main-phase play
+// without searching. The governing doctrine (USER 2026-09-05, verbatim in
+// docs/design/greedy-in-the-searched-window-status.md) permits greedy in exactly four places:
+// beyond the search horizon, this-turn combo go-off heuristics, mana allocation, and non-dork
+// attack decisions. Only the FIRST of those can reach this function, so the invariant is simply:
+//
+//     TurnSolver::Solve() may be entered only where the search has NO depth left to spend.
+//
+// WHY A COUNTER WAS NOT ENOUGH, which is the whole point. greedysite below already counted this and
+// printed it, behind MTG_M2_YIELD_STATS -- off by default. A diagnostic nobody runs cannot stop a
+// regression, and the history here is three separate re-introductions (the per-deck interior-m2
+// opt-ins, deleted 2026-09-05; the bp-continuation fallbacks, deleted 2026-09-17; and the rollout
+// second main, deleted 2026-10-01). Each was removed, each came back as a new code path, and each
+// was invisible until someone went looking. This makes the invariant unskippable.
+//
+// WHY THE DEPTH IS A FRAME AND NOT ONE GLOBAL. The question "is there depth left" is LOCAL: the
+// playout's per-turn solve legitimately runs at `turn_depth` (search_leaf_depth, normally 0) while
+// an outer SolveWithLookahead frame still holds depth 5. Keying on the outermost frame would abort
+// every run on a legal playout. So every function that carries a search depth opens a Frame with
+// ITS OWN depth, and the guard reads the innermost -- which is the depth the dispatching site is
+// actually operating at. kNoSearch means no search frame is on the stack at all (the live
+// executor's own turn), where greedy is the normal d0 play path.
+//
+// IF THIS TRIPS: do not silence it and do not add a flag to bypass it. The dispatch site it names
+// is a main-phase decision inside the searched window; route it through the search (the ladder is
+// in searched-second-main-unconditional.md), or -- with USER APPROVAL, never an agent's call --
+// stop considering that phase at all. Those are the only two sanctioned outcomes, per USER
+// 2026-10-01: "We either do not consider the main at all, or we search it."
+namespace greedywindow
+{
+inline constexpr int kNoSearch = -1;          // no search frame on the stack -> greedy is the play path
+inline thread_local int t_depth = kNoSearch;  // innermost search frame's REMAINING depth
+
+// RAII. Unconditional (not behind a flag): one thread-local int store per search frame, which is a
+// decision-scale write, and a guard that can be configured off is the thing the user asked to end.
+struct Frame
+{
+    int prev;
+    explicit Frame(int d) : prev(t_depth) { t_depth = d; }
+    ~Frame() { t_depth = prev; }
+};
+
+[[noreturn]] inline void Trip(const char* site, int depth)
+{
+    std::fprintf(stderr,
+        "\n*** FATAL: GREEDY PLAN CHOICE INSIDE THE SEARCH WINDOW ***\n"
+        "    site: %s\n"
+        "    the innermost search frame still has depth %d remaining, so this decision had search\n"
+        "    budget available and took a one-shot heuristic instead.\n"
+        "\n"
+        "    This is a DOCTRINE VIOLATION, not a tuning question (USER 2026-09-05 / 2026-10-01):\n"
+        "    greedy is permitted only BEYOND the search horizon, for this-turn combo go-off\n"
+        "    heuristics, mana allocation, and non-dork attack decisions.\n"
+        "\n"
+        "    Fix it by routing this site through the search, or -- WITH USER APPROVAL ONLY -- by not\n"
+        "    considering the phase at all. Do NOT add a flag to bypass this check; it is deliberately\n"
+        "    fatal because this class of regression has been removed three times and returned three\n"
+        "    times. See docs/design/no-greedy-in-search-window.md and\n"
+        "    docs/design/greedy-in-the-searched-window-status.md.\n\n",
+        site, depth);
+    std::fflush(stderr);
+    // abort(), not an exception: a throw can be caught by a worker-thread boundary and demoted to a
+    // per-job error, which is exactly the "invisible until someone looks" failure this replaces.
+    std::abort();
+}
+
+// THE ONE PREDICATE both checks reduce to, kept pure so test_greedy_window.cpp can prove the gate
+// FIRES (a gate nobody has seen trip may be a silent no-op): a greedy pick is inside the window when
+// the CALLER's claimed remaining depth is positive OR the innermost open search frame still holds
+// depth. Either alone has a blind spot -- a claim is only as honest as the call site that makes it,
+// and a frame only exists where a host opened one -- so the permit checks both.
+inline bool InWindow(int claimed_depth)
+{
+    return claimed_depth > 0 || t_depth > 0;
+}
+
+inline void Require(const char* site, int claimed_depth = 0)
+{
+    if (InWindow(claimed_depth)) { Trip(site, claimed_depth > 0 ? claimed_depth : t_depth); }
+}
+}
+
 class TurnSolver
 {
 public:

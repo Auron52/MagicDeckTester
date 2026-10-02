@@ -2,6 +2,7 @@
 #include "HeuristicArm.h"
 #include "../core/EnvFlags.h"
 #include "AIEngine.h"
+#include "ContPinScope.h"
 #include "DecisionProviders.h"
 #include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
@@ -4206,10 +4207,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                          _rec_traits.mid_turn_casts ? 1 : 0, static_cast<int>(recs.size()));
         }
 
+        // The continuation's during-cast pins (ContPins), recorded by ApplyPlanDirect's
+        // ContPinFrame onto the first action of each continuation. Reset on EVERY tagged action: an
+        // empty tag is how a later pin-less continuation stops an earlier one's pins leaking forward.
+        std::optional<ContPinScope> rec_pins;
+        int rec_scry = -1;
         for (const Action& a : recs)
         {
+            if (a.cont_pins)
+            {
+                rec_pins.reset();
+                rec_pins.emplace(a.cont_pins.get());
+                rec_scry = a.cont_pins->scry;
+            }
             if (a.kind == Action::Kind::PlayLand)
-            { // Replay the land the SEARCH played, not just a land with the same name. Passing
+            { std::optional<ScriptedTopChoice> _rstc;   // the continuation land's own scry pin
+              if (rec_scry >= 0) { _rstc.emplace(rec_scry); rec_scry = -1; }
+              // Replay the land the SEARCH played, not just a land with the same name. Passing
               // only the name here replayed an MDFC as its FRONT face and a fetchland with no
               // target, so a recorded cast that depended on the searched face's colour stranded
               // (auras gi20: Boulderloft {W} searched, Branchloft {G} replayed, Hyena Umbra {W}
@@ -4226,9 +4240,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
  }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+            // `recs`, NOT `plan.actions`: SacFloatColorFor finds `self` in the list by POINTER
+            // identity and charges demand from THAT list, so it must be the list being replayed --
+            // the search's apply resolved the same sac against the continuation (sp.actions). Passing
+            // the OUTER plan found no `self` and no continuation demand, so the colour fell back to
+            // red: Dragonstorm s4004 gi107 T5 sacrificed Lotus Bloom for RRR where the search had
+            // taken BBB for Karrthus, Karrthus went unpaid, and the committed T5 kill became T6.
             else if (a.kind == Action::Kind::SacForMana)
             { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                              TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
+                              TurnSolver::SacFloatColorFor(state, recs, a), a.ritual_float, a.sac_victim_id); }
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -4360,7 +4380,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 static const bool s_karoo_lockstep = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
                 if (extra.land_decided && !extra.land_to_play.empty()
                     && !(s_karoo_lockstep && karoo_deferred))
-                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
         if (!bp_searched_here)
@@ -4410,9 +4432,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 static const bool s_karoo_lockstep2 = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
                 if (extra.land_decided && !extra.land_to_play.empty()
                     && !(s_karoo_lockstep2 && karoo_deferred))
-                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
+        // The chosen continuation's during-cast pins (ContPins) for its casts below -- the twin of
+        // ApplyPlanDirect's ContPinFrame. Whichever route set `extra` (rank, chain, EMPTY, or the
+        // searched re-solve), its own searched sub-decisions are the ones it was scored with.
+        const ContPins rdb_pins = ContPinsOf(extra);
+        std::optional<ContPinScope> rdb_scope;
+        if (rdb_pins.Any()) { rdb_scope.emplace(&rdb_pins); }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
         if (BpTraceEnabled())
@@ -5333,7 +5363,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             // (mirrors bp_play_searched_land; no Karoo reservation can be live
                             // this deep in the trailing pass -- it was consumed after the casts).
                             if (extra.land_decided && !extra.land_to_play.empty())
-                            { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                            { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
                         }
                     }
                     if (!pod_bp_searched)
@@ -5363,7 +5395,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // The re-solve's LAND DROP -- twin of the main site (MTG_BP_RESOLVE_LAND).
                         if (BpResolveLandEnabled() && extra.land_decided
                             && !extra.land_to_play.empty())
-                        { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                        { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
                     }
                     // Precasts (SacForMana / Suspend / convoke taps) exactly as
                     // resolve_draw_breakpoint's pre-pass, then the casts in the executor's clean
@@ -5371,6 +5405,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // dispatcher -- the chain itself. Scope note: pod continuations belong to the
                     // one pod deck (Melira), which plays no Vial / opaque-order card -- extend
                     // this applier before a pod deck that does ever exists.
+                    const ContPins ca_pins = ContPinsOf(extra);   // the continuation's during-cast pins (ContPins)
+                    std::optional<ContPinScope> ca_scope;
+                    if (ca_pins.Any()) { ca_scope.emplace(&ca_pins); }
                     for (const Action& ca : extra.actions)
                     {
                         if (ca.kind == Action::Kind::SacForMana)
@@ -5921,13 +5958,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 extra       = cands[plan.bp_choice];
                 pe_searched = true;
                 if (extra.land_decided && !extra.land_to_play.empty())
-                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
         if (pe_searched)
         {
             // Precasts, then the casts in the executor's canonical order, then the continuation's
             // ACTIVATIONS through the trailing dispatcher (the site-7 applier shape).
+            const ContPins ca_pins = ContPinsOf(extra);   // the continuation's during-cast pins (ContPins)
+            std::optional<ContPinScope> ca_scope;
+            if (ca_pins.Any()) { ca_scope.emplace(&ca_pins); }
             for (const Action& ca : extra.actions)
             {
                 if (ca.kind == Action::Kind::SacForMana)

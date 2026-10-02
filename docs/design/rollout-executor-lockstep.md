@@ -545,3 +545,32 @@ not order, so #5's partition cannot touch it; and it only reaches the non-commit
 line's second m2 plan goes through `TakeTurn`, which merges first). Next step: count executor stranded-
 kill scans with a non-empty `staged_cards` on the hinata cells; if any, merge (and restore) around the
 scan the way `TakeTurn` does.
+
+## #12 — the executor's record replay resolved a folded sac colour against the WRONG list (FIXED 2026-10-02)
+
+`TurnSolver::SacFloatColorFor(state, acts, self)` resolves a folded (colour-agnostic) SacForMana's
+float colour from the coloured demand of `acts`, walking the sac actions in order and returning the
+pick that belongs to `self` -- found by POINTER identity. Every caller iterates `acts` and passes the
+element, except one: `AIEngine::TakeTurn`'s `replay_recorded` iterated the recorded continuation
+(`recs`) but passed the OUTER plan's `plan.actions`. `self` was never found, and the function's
+"defensive" fallback (commented "no call site does this") returned red.
+
+Dragonstorm ov d5 s4004 gi107, T5: the committed line's Apex of Power continuation sacrificed Lotus
+Bloom for {B}{B}{B} (the search applied the continuation against its own actions, which include
+Karrthus' {B}); the executor replayed it for {R}{R}{R}, could not pay Karrthus' {B}+{G} from one
+Unclaimed Territory, skipped it, and the Dragons lost haste -- the committed T5 kill realised T6.
+Read off `MTG_BP_TRACE`'s `[bp-pay]` lines: `apply ... float=B3 R12` vs `exec ... float=B0 R15`.
+
+Fix: pass `recs`. And the fallback is now FATAL -- a wrong colour is a silent lockstep break; the
+abort caught a stale build on its first run, which is the point.
+
+## #13 — a continuation's sub-decision pins were never installed in EITHER world (FIXED 2026-10-02)
+
+See `no-greedy-in-search-window.md` step 35 (`ContPins`). Lockstep contract: the pins the search
+installed for a continuation ride the first recorded action of that continuation
+(`Action::cont_pins`); the executor's record replay resets its pin scope on every tagged action (an
+EMPTY tag is how a later pin-less continuation stops an earlier one's pins leaking forward), and
+the three index-based routes install `ContPinsOf(extra)` directly. Known remaining asymmetry: the
+Vial-ORDER axis (`vial_after_casts`, a whole-plan ordering flag) still does not fan inside a
+continuation -- the record replay has no way to reproduce a plan-level ordering -- so a
+continuation's Vial-put-vs-cast order is the default rule. OPEN.
