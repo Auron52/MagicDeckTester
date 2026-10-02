@@ -4134,6 +4134,35 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                          && TurnSolver::EquipmentDrawBreakpoint(state, *d)));
     };
 
+    // The DEFERRED acquisition classes inside is_draw_engine: Soulfire's staged dig and the tutor
+    // fetch (MTG_ACQ_RESOLVE), and the tutor-to-top reset (MTG_TOP_RESOLVE). ApplyPlanDirect does
+    // NOT resolve these at the cast -- it arms deferred_cantrip_resolve, casts the rest of the
+    // plan, and only then runs the continuation (the plain-cantrip shape). So at a main-plan cast
+    // the executor must not replay or re-solve them inline either: a committed segment replays
+    // through the end-of-main catch-all, and the no-commit fallback re-solves at the same point
+    // (acq_pending below). Replaying inline cast the plan's remaining spells AFTER the
+    // continuation, where its untaps / fetched mana made affordable casts the search had scored
+    // as unaffordable -- the realised turn then spent the mana its committed kill needed (hinata
+    // reg d5 s2002 gi25: Soulfire -> [Spasm untap, Gamble] inline, then Expressive Iteration +
+    // Ornithopter ate the T5 Spasm+Crackle mana; committed T5, realised T6). An inline draw-engine
+    // class on the same card keeps its inline replay (the search arms that one at the cast).
+    auto acq_deferred = [&](const std::string& name) -> bool
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        if (d == nullptr) { return false; }
+        const bool deferred = (AcqResolveEnabled()
+                               && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
+                           || (TopResolveEnabled() && d->params.tutor_to_top);
+        if (!deferred) { return false; }
+        const bool inline_class = d->tmpl == CardTemplate::DrawUntilNonland
+                               || d->params.cascade_max_mv > 0 || d->params.shuffle_reveal_freecast
+                               || d->params.etb_exile_until_nonland || d->params.stages_cards
+                               || d->params.expressive_iteration || d->params.impulse_exile > 0
+                               || (TurnSolver::EquipmentDrawBreakpointInline()
+                                   && TurnSolver::EquipmentDrawBreakpoint(state, *d));
+        return !inline_class;
+    };
+
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the
     // EXACT cards the search recorded (plan.breakpoint_actions / Action::breakpoint_casts)
     // after a draw engine revealed them, instead of RE-SOLVING from the post-draw state.
@@ -4626,6 +4655,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!seg.empty()) { replay_recorded(seg); }
         bp_replayed = true;
     };
+    // The no-commit fallback's half of acq_deferred: remember the arming cast (the LAST one wins,
+    // like ApplyPlanDirect's deferred_cantrip_site; the hand snapshot follows deferred_hand_before
+    // -- tutor-to-top keeps it EMPTY) and re-solve once, after the main casts, beside the catch-all.
+    bool                  acq_pending = false;
+    const CardDefinition* acq_site    = nullptr;
+    std::vector<int>      acq_hand;
+    auto arm_acq_deferred = [&](const std::string& name)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        acq_pending = true;
+        acq_site    = d;
+        pin_rdb_hand();
+        if (d != nullptr && TopResolveEnabled() && d->params.tutor_to_top
+            && !(AcqResolveEnabled() && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)))
+        { acq_hand.clear(); }
+        else { acq_hand = rdb_hand; }
+    };
     // PARTITION truncation (MTG_EQUIP_DRAW_BP_INLINE) -- executor twin of ApplyPlanDirect's
     // bp_truncate. Once a site-6 continuation has run at the cast that drew, the rest of this
     // plan's casts belong to that continuation's section and the rollout did NOT apply them here;
@@ -4804,7 +4850,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
-            if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
+            if (s_full_depth && acq_deferred(a.card_name))
+            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
+            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
@@ -4977,7 +5025,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
-            if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
+            if (s_full_depth && acq_deferred(a.card_name))
+            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
+            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
@@ -6049,6 +6099,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // exact cycles/sacrifices and dug-Treasure-Hunt line the search committed.
     // End-of-main catch-all: every recorded segment no main-level breakpoint trigger reached
     // (all of them when none fired -- the historical case -- else only the later ordinals).
+    if (acq_pending && !staged_break && !fd_plan_committed)
+    {
+        acq_pending        = false;
+        rdb_site           = acq_site;
+        rdb_hand           = acq_hand;
+        rdb_site_activated = false;   // a CAST-armed site
+        if (TurnSolver::BreakpointHandSnapshotWanted(state))
+        {
+            rdb_plan_casts.clear();
+            for (const Action& pa : plan.actions)
+            {
+                if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+            }
+        }
+        resolve_draw_breakpoint(0);
+    }
     if (!staged_break && fd_plan_committed && !plan.breakpoint_actions.empty())
     {
         std::vector<Action> rest;

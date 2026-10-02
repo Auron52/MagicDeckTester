@@ -55655,8 +55655,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // SimulateCombat over-counts vs real execution.
         GameState copy  = state;
         bool      first = true;
+        // A scratch RECORDING sink, as every FSLineWin/FSLineTail apply passes one: with a null
+        // sink, a cantrip cast inside a continuation defers its own continuation instead of
+        // resolving it inline, so this replay scored a different turn than the search did
+        // (rollout-executor-lockstep.md #15 -- gi25's T5 kill read as opp 8 here).
+        std::vector<Action> fd_sink;
         for (const PhasePlan& pp : line.phases)
         {
+            fd_sink.clear();
             if (pp.is_pre_combat && !first)
             {
                 if (!SimulateEndAndStartNextTurn(copy)) { break; }
@@ -55689,14 +55695,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     std::cerr << " (libsize=" << lib.size() << ")\n";
                 }
                 g_bp_trace_arm = BpTraceEnabled();
-                ApplyPlanDirect(copy, pp.plan, true);
+                ApplyPlanDirect(copy, pp.plan, true, &fd_sink);
                 g_bp_trace_arm = false;
                 SimulateCombat(copy);
             }
             else
             {
                 g_bp_trace_arm = BpTraceEnabled();
-                ApplyPlanDirect(copy, pp.plan, false);
+                ApplyPlanDirect(copy, pp.plan, false, &fd_sink);
                 g_bp_trace_arm = false;
             }
             int my_creatures = 0;

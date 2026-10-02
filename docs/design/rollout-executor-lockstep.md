@@ -574,3 +574,47 @@ the three index-based routes install `ContPinsOf(extra)` directly. Known remaini
 Vial-ORDER axis (`vial_after_casts`, a whole-plan ordering flag) still does not fan inside a
 continuation -- the record replay has no way to reproduce a plan-level ordering -- so a
 continuation's Vial-put-vs-cast order is the default rule. OPEN.
+
+## #14 — the executor replayed a DEFERRED acquisition continuation INLINE (FIXED 2026-10-02)
+
+`ApplyPlanDirect` resolves the acquisition classes -- Soulfire's staged dig and the tutor fetch
+(`MTG_ACQ_RESOLVE`), the tutor-to-top reset (`MTG_TOP_RESOLVE`) -- DEFERRED: the cast arms
+`deferred_cantrip_resolve`, the rest of the plan is cast, and only then does the continuation run.
+`AIEngine::TakeTurn` listed the same cards in `is_draw_engine` "so the numbering agrees", which is
+the INLINE hook: at full depth it replayed the recorded segment the moment the card resolved, then
+cast the plan's remaining spells. When the continuation untaps or fetches mana, casts the search
+had scored as UNAFFORDABLE become affordable in the real game and spend mana the committed line
+needed later.
+
+Hinata reg d5 s2002 gi25, T5 main 1: the search applied Soulfire, then Expressive Iteration and
+Ornithopter (both unaffordable, skipped), then the continuation [Island, Reality Spasm untap, Gamble];
+main 2 cast Expressive Iteration -> Ponder -> [Reality Spasm untap, Crackle with Power] for the kill.
+The executor replayed the continuation at Soulfire, then cast Expressive Iteration + Ornithopter in
+main 1, and main 2's Spasm + Crackle had no mana: committed T5, realised T6.
+
+Fix: `acq_deferred` (the deferred classes, minus any card that also carries an inline class) skips
+the at-cast hook in both main-plan cast loops. A committed segment replays through the existing
+end-of-main catch-all -- the point the search's deferred re-solve runs at -- and the no-commit
+fallback re-solves there once (`acq_pending`, the LAST arming cast's site, like
+`deferred_cantrip_site`). Plain cantrips already worked this way; site 6 (Equipment draw) documents
+the same rule. The continuation-loop and depth-0 second-pass routes are unchanged.
+
+Found with a TEMP probe at FSLineTail's `OpponentHasLost(s2)` return: re-applying the winning plan
+to an identical state gave opp 8, re-applying with a capture vector gave -2 -- see #15.
+
+## #15 — a cantrip cast INSIDE a continuation resolves its own continuation at different points in recording vs scoring mode (found + closed 2026-10-02)
+
+`ApplyPlanDirect` with `out_breakpoint` set (recording: every FSLineWin/FSLineTail apply) resolves a
+plain cantrip cast inside a continuation INLINE (`sink_stack` non-empty, so it records nested).
+With `out_breakpoint == nullptr` (scoring: the `[fd-pred]` replay, and any other null-sink caller)
+the sink stack is always empty, so the same cantrip DEFERS its continuation to after the main
+casts. Same plan, same state, different outcome: gi25's T5 main-2 plan scored opp -2 recorded and
+opp 8 un-recorded. The executor follows the recording semantics (nested `breakpoint_casts` replay
+inline), so the committed line is consistent; the `[fd-pred]` diagnostic was not.
+
+Audit of the null-sink callers: every search-window apply (FSLineWin / FSLineTail, m1 and m2, node
+children, waves) passes a sink. The null-sink callers are `Solve` / `SolveWithLookahead` /
+`EnumeratePlans` internals (the d0 runner and the no-commit fallback, whose executor route --
+`resolve_draw_breakpoint` + the second pass -- also defers), rollouts, and two diagnostics (`nil`,
+`[fd-pred]`). Each mode therefore matches the executor route that consumes its plans. Fixed the one
+that did not: `[fd-pred]` now replays with a scratch sink, as the search applied the line.
