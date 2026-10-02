@@ -2825,13 +2825,41 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             try { hm = nlohmann::json::parse(firstline); } catch (...) { hm = nlohmann::json(); }
             const PoolFp jfp = ComputePoolFp(deck, eq, K);
             const auto& m = hm.contains("meta") ? hm["meta"] : hm;
-            matched = m.value("bucket_fp", 0ULL) == jfp.bucket
-                   && m.value("deck_fp", 0ULL) == jfp.deck
-                   && m.value("seed_base", ~0ULL) == cfg.seed
-                   && m.value("K", -1) == K
-                   && m.value("max_mull", -1) == cfg.max_mull
-                   && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                   && m.value("R", -1LL) == static_cast<long long>(cfg.rollouts)
+            // NAME THE FIELD THAT MISMATCHED (2026-10-02). These seven are a short-circuit && chain,
+            // so the first failure decided the verdict and the only thing printed was the generic
+            // "fingerprint MISMATCH" -- which cost a 350 MB / 5.58M-record banked journal. The
+            // operator had set MTG_KEEP_RETAIN_FOREIGN (correctly) and reasonably concluded the
+            // journal was unusable, when in fact PlayIdentityAllows was NEVER REACHED: `R` differed
+            // (journal 30 from a `fast` recipe, run 40 from `complete`) and R is compared two links
+            // EARLIER in this chain. The retain flag cannot override any of these seven, and nothing
+            // said so. Each check now records its own reason, evaluated eagerly so every mismatching
+            // field is reported, not just the first -- an operator deciding whether to relaunch with
+            // a different recipe needs the whole list.
+            std::vector<std::string> jmiss;
+            auto jchk = [&jmiss](bool ok, const std::string& what) { if (!ok) { jmiss.push_back(what); } return ok; };
+            const bool fp_ok =
+                 static_cast<int>(jchk(m.value("bucket_fp", 0ULL) == jfp.bucket,
+                     "bucket_fp (the discovered equivalence classes differ -- re-discovery moved them)"))
+               + static_cast<int>(jchk(m.value("deck_fp", 0ULL) == jfp.deck, "deck_fp (different decklist)"))
+               + static_cast<int>(jchk(m.value("seed_base", ~0ULL) == cfg.seed, "seed_base"))
+               + static_cast<int>(jchk(m.value("K", -1) == K, "K (bucket count)"))
+               + static_cast<int>(jchk(m.value("max_mull", -1) == cfg.max_mull, "max_mull"))
+               + static_cast<int>(jchk(m.value("equiv_seed", 0ULL) == cfg.equiv_seed, "equiv_seed"))
+               + static_cast<int>(jchk(m.value("R", -1LL) == static_cast<long long>(cfg.rollouts),
+                     "R (rollouts/hand: journal " + std::to_string(m.value("R", -1LL)) + " vs this run "
+                     + std::to_string(cfg.rollouts) + " -- RECIPE MISMATCH, `fast` is R=30 and `complete` "
+                     "is R=40; relaunch with the recipe the journal was rolled at to resume it)"))
+               == 7;
+            if (!jmiss.empty())
+            {
+                std::cerr << "[keepgen] RESUME(journal): " << journal_path
+                          << " cannot be resumed -- " << jmiss.size() << " field(s) differ:\n";
+                for (const std::string& w : jmiss) { std::cerr << "[keepgen]     - " << w << "\n"; }
+                std::cerr << "[keepgen]   (MTG_KEEP_RETAIN_FOREIGN does NOT override any of these --"
+                             " it admits a foreign PLAY DIGEST only, which is checked after all of them)\n"
+                          << std::flush;
+            }
+            matched = fp_ok
                    // A restart after a PLAY-LOGIC change is likewise a different run, not a
                    // continuation of this one. The header has carried both fields since it was
                    // first written; until now nothing read them.
@@ -3332,6 +3360,46 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     if (journal_on && !journal_path.empty())
     {
         const bool keep = journal_resumed && std::filesystem::exists(journal_path);
+        // NEVER SILENTLY DESTROY A JOURNAL WE DECLINED TO RESUME (2026-10-02). `std::ios::out`
+        // truncates, so the line below used to annihilate a rejected journal the instant the run
+        // reached it -- and the only warning was the resume gate's own "a fresh journal will
+        // overwrite it", emitted ~10 minutes earlier (behind bucket discovery) in a log nobody reads
+        // live. That is how a 350 MB / 5.58M-record candidate-b journal, representing days of
+        // compute, was lost on 2026-10-02: the run was launched with the wrong RECIPE (`complete`
+        // R=40 against a journal rolled at `fast` R=30), the gate refused it exactly as designed, and
+        // then the refusal deleted the evidence.
+        // A rejected journal is not garbage. It is the only copy of that work -- journals are
+        // gitignored (.gitignore `decks/**/*.journal`), so there is no second copy anywhere -- and it
+        // may well be resumable by a DIFFERENT invocation (the matching recipe, the matching depth).
+        // Renaming costs one inode operation and nothing else; it is pure upside against a loss that
+        // cannot be undone. The file is left for the operator to inspect or delete, and its size is
+        // printed so the cost of keeping it is visible rather than a surprise.
+        if (!keep && std::filesystem::exists(journal_path))
+        {
+            std::error_code ec;
+            const auto sz = std::filesystem::file_size(journal_path, ec);
+            const std::string aside = journal_path + ".rejected."
+                                    + std::to_string(static_cast<long long>(std::time(nullptr)));
+            std::error_code rec;
+            std::filesystem::rename(journal_path, aside, rec);
+            if (!rec)
+            {
+                std::cerr << "[keepgen] journal PRESERVED, not overwritten: " << journal_path << " -> "
+                          << aside << " (" << (ec ? 0 : sz / (1024 * 1024)) << " MB). It could not be"
+                             " resumed by THIS run (see the field list above), but it may be resumable by"
+                             " another -- do not delete it until you are sure. A fresh journal starts now.\n"
+                          << std::flush;
+            }
+            else
+            {
+                // Could not rename -> do NOT truncate. Losing the run is recoverable; losing the
+                // journal is not.
+                std::cerr << "[keepgen] FATAL: journal " << journal_path << " could not be resumed and"
+                             " could not be moved aside (" << rec.message() << "). REFUSING to truncate it"
+                             " -- move or delete it yourself, then re-run.\n" << std::flush;
+                std::exit(1);
+            }
+        }
         journal_f.open(journal_path, keep ? (std::ios::out | std::ios::app) : std::ios::out);
         if (!journal_f.is_open())
         {
