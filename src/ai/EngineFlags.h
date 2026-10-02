@@ -1429,9 +1429,15 @@ inline double Positions()
 struct Trunc
 {
     int    dropped_groups = 0;   // groups the valve removed (max over the per-land inner calls)
+    // Groups removed by POOLING interchangeable duplicates instead of dropping a card's choices --
+    // counted separately because the two narrowings are not the same promise to the player. Dropping
+    // a group removes an ACTION from the menu (the defect the user hit: "I can't equip various
+    // equipment"); pooling a class removes only the redundant Nth copy of an action whose 1st copy
+    // is still offered, so every action remains reachable. The history line says which happened.
+    int    pooled_groups  = 0;
     double full_positions = 0;   // odometer product before the shrink
     double kept_positions = 0;   //   ... and after
-    bool   Fired() const { return dropped_groups > 0; }
+    bool   Fired() const { return dropped_groups > 0 || pooled_groups > 0; }
 };
 
 // Live accumulator, written by CapGroupsBySituationalRank.

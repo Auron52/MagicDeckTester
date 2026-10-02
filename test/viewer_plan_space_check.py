@@ -35,9 +35,11 @@ WHAT IT ASSERTS, on the replayed HANG-1 line:
   2. no frame's enumerated plan count exceeds `--max-plans` (default 4x the position bound, which
      covers the per-land-option multiplier);
   3. no single frame costs more than `--max-frame-cpu` seconds of CPU;
-  4. the truncation is REPORTED where it fires: `plans_truncated` carries dropped_groups >= 1 and
-     positions <= positions_full, and the frame also emits a `plans_truncated` play event, so a
-     human sees a bounded menu rather than a silently short one.
+  4. the truncation is REPORTED where it fires: `plans_truncated` carries dropped_groups +
+     pooled_groups >= 1 and positions <= positions_full, and the frame also emits a
+     `plans_truncated` play event, so a human sees a bounded menu rather than a silently short one.
+     (Two narrowings, reported separately since 2026-10-02: DROPPED groups take an action out of the
+     menu, POOLED groups only remove a redundant duplicate of an action that is still offered.)
 
 WHY IT IS NOT IN test/viewer_checks.sh.  It costs minutes, not seconds: the board that explodes is
 ~210 committed segments into a go-off turn and there is no shortcut to it -- a `--scenario` fixture
@@ -172,9 +174,16 @@ def main():
         tr = r["truncated"]
         if not tr:
             continue
-        if int(tr.get("dropped_groups", 0)) < 1:
-            fails.append("ordinal %s reports plans_truncated with dropped_groups=%s"
-                         % (r["ordinal"], tr.get("dropped_groups")))
+        # EITHER narrowing counts as "something was narrowed, and it was reported". The valve has
+        # two of them now: it DROPS a group (an action leaves the menu) or it POOLS interchangeable
+        # duplicates (every action stays reachable, only the redundant Nth copy of one goes). A
+        # dropped-groups-only test reads a pooling-only frame as an unreported truncation, which is
+        # backwards -- that is the frame that cost the player nothing. This line never fired on the
+        # EDF walk below (that deck has no Equipment, so nothing there can pool), so the gap would
+        # have surfaced only on an equipment deck, where it would have been a false failure.
+        if int(tr.get("dropped_groups", 0)) + int(tr.get("pooled_groups", 0)) < 1:
+            fails.append("ordinal %s reports plans_truncated with dropped_groups=%s pooled_groups=%s"
+                         % (r["ordinal"], tr.get("dropped_groups"), tr.get("pooled_groups")))
         if float(tr.get("positions", 0)) > float(tr.get("positions_full", 0)):
             fails.append("ordinal %s reports kept positions %s > full %s"
                          % (r["ordinal"], tr.get("positions"), tr.get("positions_full")))

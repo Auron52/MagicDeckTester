@@ -2684,13 +2684,32 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // See EngineFlags.h viewerplancap for the measurement that set the bound.
             if (viewerplancap::Last().Fired())
             {
-                EmitPlayEvent(state.turn_number, "plans_truncated",
-                    "⚠ This board's plan space is too large to enumerate in full ("
-                    + std::to_string(static_cast<long long>(viewerplancap::Last().full_positions))
-                    + " combinations); the menu shows the top-ranked "
-                    + std::to_string(static_cast<long long>(viewerplancap::Last().kept_positions))
-                    + ". Every action is still reachable one click at a time. "
-                      "(MTG_VIEWER_PLAN_CAP=0 enumerates in full.)");
+                // SAY WHICH NARROWING HAPPENED. Pooling interchangeable duplicates and dropping a
+                // card's choices are different promises, and reporting both as "top-ranked" is how
+                // the old line came to claim reachability it did not deliver. USER, 2026-10-02:
+                // *"That's actually an incorrect message. I can't equip various equipment."*
+                const viewerplancap::Trunc& t = viewerplancap::Last();
+                const std::string sizes =
+                    std::to_string(static_cast<long long>(t.full_positions)) + " -> "
+                    + std::to_string(static_cast<long long>(t.kept_positions)) + " positions";
+                if (t.dropped_groups > 0)
+                {
+                    EmitPlayEvent(state.turn_number, "plans_truncated",
+                        "⚠ This board's plan space is too large to enumerate in full (" + sizes
+                        + "); the menu shows the top-ranked lines and "
+                        + std::to_string(t.dropped_groups)
+                        + " group(s) of choices were DROPPED, so some actions are not offered "
+                          "this turn. (MTG_VIEWER_PLAN_CAP=0 enumerates in full.)");
+                }
+                else
+                {
+                    EmitPlayEvent(state.turn_number, "plans_truncated",
+                        "This board is wide (" + sizes + "), so "
+                        + std::to_string(t.pooled_groups)
+                        + " interchangeable duplicate(s) were pooled: identical Equipment is offered "
+                          "once instead of once per copy. Every action is still offered; attach a "
+                          "further copy on the next line.");
+                }
             }
             // AN EMPTY MENU IS STILL A FRAME. "cast nothing is always enumerated" was not true:
             // EnumerateMainPlans returns an EMPTY vector when it believes there is nothing to do,

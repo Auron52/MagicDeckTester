@@ -635,7 +635,7 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
           // ({at, turn, entries}); `loopPick` is the open two-step dialog ({k:null} = "how many
           // lines?", {k:N} = "how many times?"); `macroRun` describes an expansion currently
           // committing, so a mid-chain rejection can say WHICH iteration stopped it.
-          committed:[], loopPick:null, macroRun:null };
+          committed:[], loopPick:null, macroRun:null, freeEquipPick:null };
 
 // The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
 // archived list, the version folder it lives in. Both travel on every request.
@@ -795,6 +795,117 @@ function handEquipSrcFor(name, hostNum) {
   });
   return src;
 }
+// ---- "EQUIP ALL FREE TO X" (docs/design/viewer-line-macros.md) ------------------------------
+// USER, 2026-10-02, playing KittyEquipment v2 in the viewer: *"We probably should have a shortcut
+// for equip all to x"*, *"(particularly for free equips)"*, *"Maybe equip all free to x."*
+//
+// On a Puresteel Paladin board metalcraft makes EVERY Equipment's equip cost {0}, so attaching a
+// dozen loose shields is a dozen identical drags for a line the player already knows they want.
+// Like the other two line macros this is a pure QUEUE EDIT -- it pushes ordinary `equip` entries
+// through queueEquip and changes nothing about the protocol, the line grammar or what the engine is
+// asked ("expand in the VIEWER, not the engine").
+//
+// FREENESS COMES FROM THE ENGINE, via the `equip_cost` published on each equip action -- never from
+// the printed Equip cost. Metalcraft makes a {3} Kite Shield free, and a same-turn metalcraft flip
+// makes it free only for some plans; re-deriving that client-side would be a second implementation
+// of a rule the engine already owns, and it would be wrong the first time the rule changed.
+//
+// BATTLEFIELD EQUIPMENT ONLY, and that is a correctness line rather than a simplification: a
+// hand-side equip rides a CAST in the same line, so bundling those would queue casts the player
+// never asked for (and on a tight board could not pay). Those stay a drag, which already works.
+//
+// ONE PASS PER DECISION, CACHED. renderBoard runs on every click and consults this to decide
+// whether to offer the button, while d.plans on exactly the boards this feature is for can hold
+// tens of thousands of entries -- so scanning per render would put the cost of the feature on every
+// click of the widest boards in the game. The scan depends only on the decision; the cheap
+// per-render part (what is still loose, what the player already queued) is filtered on top.
+function freeEquipScan() {
+  const d = S.decision;
+  if (!d || d.type!=='main_phase' || !Array.isArray(d.plans)) return null;
+  if (d.__feScan) return d.__feScan;
+  const byHost = new Map();     // hostNum -> Map(equipSrcNum -> card name)
+  const names  = new Map();     // hostNum -> host display name
+  d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
+    if (a.verb!=='equip' || !(a.equip_host>0)) return;
+    if (!names.has(a.equip_host)) { names.set(a.equip_host, a.equip_host_name||('#'+a.equip_host)); }
+    // `equip_cost` absent (an artifact saved before it was published) is NOT free -- unknown must
+    // never read as 0, or an older reference would offer a bundle the engine will charge for.
+    if (a.equip_cost !== 0 || !(a.equip_src > 0)) return;
+    let s = byHost.get(a.equip_host);
+    if (!s) { s = new Map(); byHost.set(a.equip_host, s); }
+    s.set(a.equip_src, a.card);
+  }));
+  d.__feScan = { byHost, names };
+  return d.__feScan;
+}
+// The free, LOOSE, not-already-queued Equipment this gesture would attach to `hostNum`.
+function freeEquipPiecesFor(hostNum) {
+  const sc = freeEquipScan();
+  if (!sc) return [];
+  const src = sc.byHost.get(hostNum);
+  if (!src) return [];
+  const loose = new Set();
+  (((S.decision||{}).me||{}).battlefield||[]).forEach(p => {
+    if (p.is_equip && !(p.attached_to > 0)) { loose.add(p.num); }
+  });
+  const queued = new Set(S.plan.filter(p=>p.kind==='activate' && p.verb==='equip' && p.srcNum)
+                               .map(p=>p.srcNum));
+  const out = [];
+  src.forEach((name, srcNum) => {
+    if (loose.has(srcNum) && !queued.has(srcNum)) { out.push({ srcNum, name }); }
+  });
+  // Stable order, so a macro'd line -- and the reference that saves it -- is reproducible.
+  out.sort((a,b)=> a.srcNum - b.srcNum);
+  return out;
+}
+// Offered only for a host with at least two free pieces waiting: one is already just a drag, and a
+// dead control is the thing the ⟲ macros and the ⛏ Tap toggle are careful never to be.
+const FREE_EQUIP_MIN = 2;
+function freeEquipHosts() {
+  const sc = freeEquipScan();
+  if (!sc) return [];
+  const out = [];
+  sc.names.forEach((hostName, hostNum) => {
+    const pieces = freeEquipPiecesFor(hostNum);
+    if (pieces.length >= FREE_EQUIP_MIN) { out.push({ hostNum, hostName, pieces }); }
+  });
+  out.sort((a,b)=> b.pieces.length - a.pieces.length);
+  return out;
+}
+function queueAllFreeEquips(hostNum, hostName) {
+  const pieces = freeEquipPiecesFor(hostNum);
+  let n = 0;
+  pieces.forEach(pc => { if (queueEquip(pc.name, hostNum, hostName, pc.srcNum, false)) { n++; } });
+  // queueEquip flashes per piece; say what the GESTURE did, which is the thing the player asked for.
+  flashHint(n ? `Equipping ${hostName} with ${n} free Equipment — commit the phase to resolve them.`
+              : `No free loose Equipment to attach to ${hostName}.`);
+  return n;
+}
+function freeEquipPickerHtml(){
+  const hosts = freeEquipHosts();
+  let h=`<h3>Equip all free Equipment — to which creature?</h3>`;
+  h+=`<div class="sub">Attaches every LOOSE Equipment whose equip cost is {0} <em>right now</em> `
+   +`(metalcraft makes these free) to one creature, as a single line. Equipment still in hand is not `
+   +`included — that needs a cast, so drag those. Anything left over can be attached on a later line.</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  hosts.forEach(x=>{ h+=`<button class="primary" data-feh="${x.hostNum}">${esc(x.hostName)} — ${x.pieces.length} free</button>`; });
+  h+=`<button class="ghost" data-feh="0">Cancel</button></div>`;
+  return h;
+}
+function renderFreeEquipPicker(){
+  const panel=$('decpanel'), back=$('decback');
+  back.className='modal'; back.style.display='block';
+  panel.className='show modal'; panel.innerHTML=freeEquipPickerHtml();
+  panel.querySelectorAll('[data-feh]').forEach(el=>{
+    el.onclick=()=>{ const n=+el.dataset.feh; S.freeEquipPick=null;
+      if (n>0) {
+        const h=freeEquipHosts().find(x=>x.hostNum===n);
+        if (h) { queueAllFreeEquips(n, h.hostName); }
+      }
+      renderBoard(); };
+  });
+}
+
 // The attach targets for a QUEUED plan entry, whichever kind of attachment it is. One funnel so the
 // #playfield drop handler and the dragstart wiring never have to branch on aura-vs-equipment.
 function attachTargetsForEntry(e) {
@@ -887,7 +998,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; S.loopPick=null; S.macroRun=null; S.passArm=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; S.loopPick=null; S.macroRun=null; S.freeEquipPick=null; S.passArm=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -2233,6 +2344,7 @@ function renderBoard() {
   else if (S.tapPick) renderTapPicker();          // queue-time "tap it for which mana?" (manual tap/pay)
   else if (S.repeatPick) renderRepeatPicker();    // queue-time "repeat the block how many times?" (line macros)
   else if (S.loopPick) renderLoopPicker();        // queue-time "loop the last K committed lines ×N?" (line macros)
+  else if (S.freeEquipPick) renderFreeEquipPicker();  // queue-time "equip all free Equipment to which creature?"
   else hideDecPanel();
 }
 
@@ -2330,6 +2442,11 @@ function renderPlanbar() {
     // lines. Offered only when there is a loopable committed tail this turn and the queue is empty
     // (see loopAvailable), so like Repeat it is never a dead control.
     (loopAvailable()?`<button id="loopp" class="ghost" title="Repeat the last lines you committed this turn, N times — e.g. activate Kitchen, blink to untap, crack the Clue. They commit back to back and stop at the first iteration the board cannot pay.">⟲ Loop last lines ×N</button>`:'')+
+    // "EQUIP ALL FREE TO X" (USER 2026-10-02). Offered only when some creature has >= 2 free loose
+    // Equipment waiting, so like the two ⟲ macros it is never a dead control. The host is picked in
+    // the dialog rather than inferred: with Golem-Skin Gauntlets in the deck WHICH creature carries
+    // the pile is a real decision, and it is the "to x" half of what was asked for.
+    (freeEquipHosts().length?`<button id="freeeq" class="ghost" title="Attach every loose Equipment that costs {0} to equip right now (metalcraft) to one creature, as a single line — instead of dragging them one at a time. Equipment in hand still needs a cast, so drag those.">⚔ Equip all free →</button>`:'')+
     `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
     tip+
@@ -2340,6 +2457,7 @@ function renderPlanbar() {
   if ($('clearp')) $('clearp').onclick = clearPlan;
   if ($('repeatp')) $('repeatp').onclick = ()=>{ S.repeatPick = true; renderBoard(); };
   if ($('loopp'))   $('loopp').onclick   = ()=>{ S.loopPick = { k:null }; renderBoard(); };
+  if ($('freeeq'))  $('freeeq').onclick  = ()=>{ S.freeEquipPick = true; renderBoard(); };
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
   // Aura chips: drag onto a creature in the field to (re)assign the enchant target (routes through
   // the #playfield drop handler via the stamped text/planidx; see retargetPlanAura).
@@ -5169,7 +5287,7 @@ async function newGame() {
       // The committed-segment log the LOOP macro reads, and its dialog/run state. A new game has
       // no committed lines, so all three reset with everything else -- carrying `committed` across
       // would offer to loop a block from the previous game.
-      committed:[], loopPick:null, macroRun:null };
+      committed:[], loopPick:null, macroRun:null, freeEquipPick:null };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;

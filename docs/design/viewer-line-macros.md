@@ -363,6 +363,53 @@ viewer path emits and no digest folds.
 | `test/viewer_line_macros_check.py` (in `test/viewer_checks.sh`) | `need=C` diverts **exactly one** pick and says so in the trace; `need=U` on an already-served board diverts **nothing**; no declaration diverts nothing; `MTG_UNTAP_LINE_DEMAND=0` is a real off switch; the investigate half really creates a Clue and the deferred crack is enumerated on the frame it produces; a repeated block's second iteration validates against the frame the first produced; and — on the USER'S OWN loop (`claude_s6_gi5`, prefix 60) — one iteration is played by hand, handed to the **real `tools/play/linebuild.js`** via node, and the resulting k×n lines are driven one at a time with the BOARD asserted per iteration (a Clue made, that Clue spent, a card drawn, the lands untapped again, a constant non-zero pool cost), plus that the pre-fix flattened line is **illegal for the Clue**, plus that a stale-target loop stops after a whole iteration rather than mid-one |
 | `test/scenarios/edf_fused_clue_*.json` (in `test/scenarios.sh`, gated by `regression.sh`) | both halves of the fused gesture validate on a synthetic board, and the one-line form is **illegal** — the tripwire for the deferral |
 
+## Feature 4 — ⚔ Equip all free → X
+
+> "We probably should have a shortcut for equip all to x" / "(particularly for free equips)" /
+> "Maybe equip all free to x."
+> — USER, 2026-10-02, playing KittyEquipment v2
+
+On a Puresteel Paladin board metalcraft makes **every** Equipment's equip cost `{0}`, so attaching a
+dozen loose shields is a dozen identical drags for a line the player already knows they want. The
+gesture is a plan-bar button plus a central host picker — the `.pbtns` idiom the two ⟲ macros use —
+and like them it is a **pure queue edit**: it pushes ordinary `equip` entries through `queueEquip`,
+so a macro'd line commits, replays and saves as the line the player would have dragged by hand.
+
+**On the plan bar, not on the creature's thumb**, deliberately. Adding a second option to a board
+click is what put a modal on the most-repeated click in the EDF deck (Feature 1's regression above);
+the plan bar has no such chokepoint. The host is **picked in the dialog rather than inferred**,
+because with Golem-Skin Gauntlets in the deck *which* creature carries the pile is a real decision —
+and it is the "to x" half of what was asked for.
+
+**Freeness comes from the engine**, via a new `equip_cost` published on each equip action — never
+from the printed Equip cost. Metalcraft makes a `{3}` Kite Shield free, and a same-turn metalcraft
+flip makes it free only for *some* plans; re-deriving that client-side would be a second
+implementation of a rule the engine already owns, and it would be wrong the first time the rule
+changed. Same reason `makes_clue` is a published flag rather than a card-name test.
+
+What the bundle takes, and what it leaves — each exclusion has a reason, and
+`viewer_client_check.js` puts one of every excluded shape next to the two it should take:
+
+| shape | taken? | why |
+|---|---|---|
+| free, loose battlefield Equipment | **yes** | the gesture |
+| `equip_cost` > 0 | no | not free *right now* |
+| already attached | no | equipping it again is a **move**, trading away the current host's rider |
+| still in hand (no `equip_src`) | no | rides a CAST in the same line, so bundling would queue casts the player never asked for and might not afford — those stay a drag |
+| `equip_cost` absent | no | an artifact saved before the field existed; unknown must never read as free |
+| already queued by the player | no | idempotent, so a second click cannot duplicate or re-aim |
+
+Offered only when some host has **≥ 2** free loose pieces waiting (one is already just a drag), so
+like the ⟲ controls it is never dead. The scan over `d.plans` is **cached on the decision**:
+`renderBoard` runs on every click and consults it to decide whether to show the button, while
+`d.plans` on exactly the boards this feature is for can hold tens of thousands of entries — scanning
+per render would put the cost of the feature on every click of the widest boards in the game.
+
+It is the usability half of a pair; the reachability half (the valve was *deleting* equip actions
+and claiming otherwise) is `viewer-plan-valve-reachability.md`. The macro could not have fixed that
+on its own: a committed line must match an **enumerated plan index**, so a gesture cannot synthesise
+a line the enumerator never produced — `legal_not_enumerated` is a reject, not a fallback.
+
 ## Deliberately not done
 
 * **Repeating a block that contains a land drop, a Land's Edge discard or a pre-tap.** Each is either

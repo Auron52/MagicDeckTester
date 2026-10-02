@@ -1812,6 +1812,69 @@ async function testColorlessFirstTapOrder() {
     if (eqFails.length) { anyFail = true; console.log(`✗ equip: ${eqFails.length} fail`); eqFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ equip (Equipment: DRAGGED onto a creature → equip= line + stamped host → accepted → attached)'); }
   }
+  // "EQUIP ALL FREE TO X" selection logic (USER 2026-10-02). SYNTHETIC, not a game walk: the
+  // gesture only appears with >= 2 free LOOSE Equipment on one host, and a self-driving walk does
+  // not reliably build that board -- the same reason the Cid rebuy and multi-victim sac cases are
+  // driven directly. What matters here is precisely which pieces the bundle picks up, so the stub
+  // puts one of every excluded shape next to the two it should take.
+  {
+    const fFails = [];
+    const win = buildDom();
+    const S = win.__getS();
+    win.renderBoard = () => {};          // the stub decision is not a full board
+    S.over = false;
+    S.plan = [];
+    S.decision = {
+      type: 'main_phase',
+      me: { battlefield: [
+        { num: 1,  name: 'Puresteel Paladin' },
+        { num: 10, name: 'Kite Shield',      is_equip: true, attached_to: 0 },
+        { num: 11, name: 'Kite Shield',      is_equip: true, attached_to: 0 },
+        { num: 12, name: 'Colossus Hammer',  is_equip: true, attached_to: 0 },
+        { num: 13, name: 'Bone Saw',         is_equip: true, attached_to: 1 },
+      ] },
+      plans: [ { actions: [
+        { card: 'Kite Shield',     verb: 'equip', equip_host: 1, equip_host_name: 'Puresteel Paladin', equip_src: 10, equip_cost: 0 },
+        { card: 'Kite Shield',     verb: 'equip', equip_host: 1, equip_host_name: 'Puresteel Paladin', equip_src: 11, equip_cost: 0 },
+        // equip_cost 2: NOT free right now, so the bundle must leave it.
+        { card: 'Colossus Hammer', verb: 'equip', equip_host: 1, equip_host_name: 'Puresteel Paladin', equip_src: 12, equip_cost: 2 },
+        // free, but ALREADY ATTACHED -- equipping it again is a MOVE, never part of "equip all free".
+        { card: 'Bone Saw',        verb: 'equip', equip_host: 1, equip_host_name: 'Puresteel Paladin', equip_src: 13, equip_cost: 0 },
+        // free, but no equip_src => it is in HAND and rides a cast; must not be bundled.
+        { card: 'Spidersilk Net',  verb: 'equip', equip_host: 1, equip_host_name: 'Puresteel Paladin', equip_cost: 0 },
+        // equip_cost ABSENT (an artifact saved before the field existed): unknown must not read free.
+        { card: 'Kite Shield',     verb: 'equip', equip_host: 1, equip_host_name: 'Puresteel Paladin', equip_src: 14 },
+      ] } ],
+    };
+    const hosts = win.freeEquipHosts();
+    if (hosts.length !== 1 || hosts[0].hostNum !== 1) {
+      fFails.push(`expected exactly one offered host (#1), got ${JSON.stringify(hosts.map(h=>h.hostNum))}`);
+    } else if (hosts[0].pieces.length !== 2) {
+      fFails.push(`expected 2 free pieces, got ${hosts[0].pieces.length}: `
+                  + JSON.stringify(hosts[0].pieces));
+    } else {
+      const got = hosts[0].pieces.map(p=>p.srcNum).sort((a,b)=>a-b).join(',');
+      if (got !== '10,11') { fFails.push(`expected pieces 10,11; got ${got}`); }
+    }
+    const n = win.queueAllFreeEquips(1, 'Puresteel Paladin');
+    if (n !== 2) { fFails.push(`queueAllFreeEquips returned ${n}, expected 2`); }
+    const eq = S.plan.filter(e=>e.kind==='activate' && e.verb==='equip');
+    if (eq.length !== 2) { fFails.push(`expected 2 queued equips, got ${S.plan.length} entries`); }
+    if (eq.some(e=>e.target !== 1)) { fFails.push('a queued equip did not target the chosen host'); }
+    if (eq.map(e=>e.srcNum).sort((a,b)=>a-b).join(',') !== '10,11') {
+      fFails.push(`queued the wrong copies: ${eq.map(e=>e.srcNum).join(',')}`);
+    }
+    // IDEMPOTENT: the pieces are queued now, so the gesture has nothing left to add and the button
+    // must stop offering that host (otherwise a second click would re-aim or duplicate entries).
+    if (win.queueAllFreeEquips(1, 'Puresteel Paladin') !== 0) {
+      fFails.push('a second "equip all free" queued something again');
+    }
+    if (win.freeEquipHosts().length !== 0) {
+      fFails.push('host still offered after everything free was queued (dead control)');
+    }
+    if (fFails.length) { anyFail = true; console.log(`\u2717 equip all free: ${fFails.length} fail`); fFails.forEach(m=>console.log('  - '+m)); }
+    else { console.log('\u2713 equip all free to X (bundles only FREE, LOOSE, un-queued battlefield Equipment; idempotent)'); }
+  }
   // Equipping decided from HAND: one drop queues the cast AND the equip (needs a real game walk).
   {
     let ehFails;

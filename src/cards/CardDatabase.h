@@ -3389,6 +3389,30 @@ struct CardDefinition
     // is never left at its default in a live DB -- RebuildInternedIndex runs at the end of every
     // LoadFromJson AND every Register, so every reachable definition has been visited.
     bool enter_watcher   = false;
+    // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
+    // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
+    // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).
+    //
+    // WHY A RAW-JSON DIGEST AND NOT A HAND-WRITTEN FIELD LIST. The only consumer today is
+    // BuildFungibleEquipClasses (TurnSolver.cpp), whose own comment states the rule: "this list is
+    // 'every field that can differentiate two copies' and an incomplete one is the documented
+    // failure mode". A hand-written list of equip-relevant params is exactly that failure waiting to
+    // happen -- CardParams has hundreds of fields and an Equipment may also be a mana rock, carry an
+    // activated ability, or draw on ETB, any one of which breaks interchangeability. So this digests
+    // the SOURCE OF TRUTH: the canonicalised `parameters` object plus the card's own printed
+    // characteristics. A param that does not exist yet is covered the day it is added, with no edit
+    // here. This is the same "read straight off the RAW JSON, mechanical and complete" discipline
+    // LoadFromJson's subtype pre-interning adopted after a hand-written list covered 4 of ~15 params.
+    //
+    // DELIBERATELY EXCLUDED: `name` (the whole point -- Cathar's Shield and Accorder's Shield carry
+    // byte-identical parameters and differ only here) and `oracle_text` (prose, and it holds the
+    // [bracket note] modelling commentary, which has no bearing on play).
+    //
+    // 0 FOR A PROGRAMMATICALLY REGISTERED DEFINITION (CardDatabase::Register, used by unit tests and
+    // scenario fixtures), because there is no JSON to digest. Consumers MUST treat 0 as "no identity"
+    // and fall back to name equality, which is the pre-existing behaviour -- never as a match, or
+    // every Register-built card would fold into every other.
+    std::uint64_t behaviour_identity = 0;
     CardParams params;
 };
 

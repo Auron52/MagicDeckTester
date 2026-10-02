@@ -12375,6 +12375,16 @@ static bool EquipCopyCollapseEnabled()
     return heurarm::Flag(heurarm::EQUIP_COPY_COLLAPSE, env);   // per-JOB so one pooled batch runs both arms
 }
 
+// MTG_EQUIP_COPY_XNAME -- class fungible equip copies by BEHAVIOURAL IDENTITY rather than by card
+// name, so two Equipment that differ only in their name share one class. Default OFF: it widens the
+// fold's reach, and the parent collapse is already documented as able to move play digests (the
+// surviving representative may be a different physical copy). See the heurarm slot.
+static bool EquipCopyXnameEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_COPY_XNAME");
+    return heurarm::Flag(heurarm::EQUIP_COPY_XNAME, env);   // per-JOB so one pooled batch runs both arms
+}
+
 // Bounded so the per-position check can keep its state in a fixed array (it runs once per odometer
 // position). Real boards reach 2-4 classes; groups past the bound simply keep their 2^N enumeration
 // rather than being silently mis-collapsed.
@@ -12440,7 +12450,22 @@ static int BuildFungibleEquipClasses(const GameState& state,
         const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().LookupCached(src->card);
         if (!d || !d->params.is_equipment || d->params.equip_sacrifices_prior_host) { continue; }
         std::string s = "E|";
-        s += a0.card_name.c_str();
+        // CLASS BY BEHAVIOUR, NOT BY NAME (MTG_EQUIP_COPY_XNAME; see the heurarm slot for the user
+        // report and the card-data verification). Two Equipment whose cards.json entries agree on
+        // everything but the name are indistinguishable to every reader in the engine, so copies of
+        // one are interchangeable with copies of the other. `behaviour_identity` is 0 for a
+        // definition built by CardDatabase::Register (no JSON to digest), and 0 must NEVER match --
+        // fall back to the name, which is exactly the pre-existing key.
+        if (EquipCopyXnameEnabled() && d->behaviour_identity != 0)
+        {
+            std::snprintf(buf, sizeof buf, "b%llu",
+                          static_cast<unsigned long long>(d->behaviour_identity));
+            s += buf;
+        }
+        else
+        {
+            s += a0.card_name.c_str();
+        }
         std::snprintf(buf, sizeof buf, "|%d%d|h%d", src->tapped ? 1 : 0,
                       src->entered_this_turn ? 1 : 0, src->hone_counters);
         s += buf;
@@ -25940,6 +25965,52 @@ static std::vector<std::vector<int>> ViewerGroupCosts(const std::vector<Action>&
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
                           int extra_credit = 0, const GameState* etb_state = nullptr);
 
+// THE VALVE'S ESTIMATE MUST KNOW ABOUT THE COPY FOLD, OR IT LIES BY ORDERS OF MAGNITUDE.
+//
+// viewerplancap::Estimate prices the odometer as 2^ind x PROD(1 + |group_g|) -- a product over
+// digits. But MTG_EQUIP_COPY_COLLAPSE (default ON since 2026-10-01) does not remove digits: it
+// restricts the WALK to positions whose class digits are non-increasing in group order, and
+// MTG_EQUIP_COPY_SKIP jumps the odometer past the rest. So the positions actually visited are the
+// CANONICAL ones, while the estimate still multiplies as though every copy were free to vary.
+//
+// The gap is not a rounding error. For a class of n interchangeable groups each of width w, the
+// unfolded product contributes (1+w)^n but the walk visits only the non-increasing sequences, of
+// which there are C(n+w, n). On the KittyEquipment v2 board that produced this fix -- five classes
+// of four copies with two hosts -- that is 3^20 = 3.49e9 claimed against 15^5 = 759,375 real, a
+// ~4,600x overstatement. USER, 2026-10-02, reading the viewer's own warning: *"That's actually an
+// incorrect message"* and *"I don't quite get why there are so many potential plans even then."*
+// Both are correct, and this is why: the number was computed by a rule the engine stopped following.
+//
+// Returns the factor (<= 1) to apply to the raw estimate. 1.0 when the fold cannot fire.
+static double FungibleEquipFoldRatio(const std::vector<std::vector<int>>& groups,
+                                     const std::vector<int>& class_of)
+{
+    if (class_of.size() != groups.size()) { return 1.0; }
+    int    n[kMaxFungibleClasses] = { 0 };
+    int    w[kMaxFungibleClasses] = { 0 };
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        const int c = class_of[g];
+        if (c < 0 || c >= kMaxFungibleClasses) { continue; }
+        // Every group in a class has the same member list by signature construction (the per-member
+        // "victim:mana_value" tail is part of the key), so the first width seen IS the class width.
+        n[c] += 1;
+        w[c]  = static_cast<int>(groups[g].size());
+    }
+    double ratio = 1.0;
+    for (int c = 0; c < kMaxFungibleClasses; ++c)
+    {
+        if (n[c] < 2 || w[c] <= 0) { continue; }          // a lone member folds nothing
+        // folded = C(n+w, n) non-increasing sequences; unfolded = (1+w)^n.
+        double folded = 1.0;
+        for (int i = 1; i <= n[c]; ++i)
+        { folded = folded * static_cast<double>(w[c] + i) / static_cast<double>(i); }
+        const double unfolded = std::pow(1.0 + static_cast<double>(w[c]), static_cast<double>(n[c]));
+        if (unfolded > 0.0 && folded > 0.0 && folded < unfolded) { ratio *= folded / unfolded; }
+    }
+    return ratio;
+}
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index,
@@ -25974,9 +26045,97 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         const int mb = ManaPruneBound(pl, cands, 0, &state);
         std::vector<int> all(groups.size());
         for (int g = 0; g < static_cast<int>(groups.size()); ++g) { all[g] = g; }
-        const std::pair<double, double> full =
+        // FOLD-AWARE (see FungibleEquipFoldRatio): price what the walk will actually VISIT, not the
+        // unfolded digit product. Without this the valve reads a KittyEquipment v2 equipment board
+        // as ~4,600x bigger than it is and starts deleting equip actions the player needs.
+        std::vector<int> vcc;
+        if (EquipCopyCollapseEnabled()
+            && BuildFungibleEquipClasses(state, cands, groups, vcc) == 0)
+        { vcc.clear(); }
+        const double fold = FungibleEquipFoldRatio(groups, vcc);
+        const std::pair<double, double> full_raw =
             viewerplancap::Estimate(ViewerGroupCosts(cands, groups, all), num_independent, mb);
+        const std::pair<double, double> full{ full_raw.first * fold, full_raw.second * fold };
+        // MTG_VIEWER_VALVE_DIAG -- why did this frame's menu get narrowed? The valve's inputs are
+        // otherwise invisible, and the first attempt at this fix was aimed at the wrong one of them
+        // (the estimate) because there was no way to see that the equip classes were empty.
+        static const bool s_valve_diag = EnvOn("MTG_VIEWER_VALVE_DIAG");
+        if (s_valve_diag)
+        {
+            int nclass = 0;
+            for (int c : vcc) { nclass = std::max(nclass, c + 1); }
+            int n_equip_groups = 0;
+            for (const std::vector<int>& g : groups)
+            {
+                if (!g.empty() && cands[g.front()].kind == Action::Kind::Equip) { ++n_equip_groups; }
+            }
+            std::fprintf(stderr,
+                "[valve] groups=%zu ind=%d equip_groups=%d classes=%d fold=%.4g "
+                "raw_pay=%.6g folded_pay=%.6g pcap=%.6g\n",
+                groups.size(), num_independent, n_equip_groups, nclass, fold,
+                full_raw.second, full.second, pcap);
+        }
         if (full.second <= pcap && full.first <= wcap) { return; }
+        // POOL INTERCHANGEABLE DUPLICATES BEFORE DROPPING ANY ACTION. A class of n interchangeable
+        // copies offers the same menu entry n times over; keeping ONE of its groups leaves every
+        // (class -> host) action still clickable and costs the player only the ability to attach a
+        // 2nd copy of that class IN THE SAME LINE -- which the next line offers again, so this is
+        // the one narrowing that keeps the "every action is still reachable one click at a time"
+        // promise the history line makes. Dropping a card's group does NOT keep it, which is the
+        // bug this orders itself ahead of.
+        // APPLIED UNCONDITIONALLY, not only when it alone brings the frame under the bound. The
+        // first cut of this gated the pooling on "does it fit now?", and measured INERT on the very
+        // board it was written for: 32 equip groups pooled to 5 classes still estimates ~1e6 against
+        // a 65,536 bound, so the gate always failed and the ranked drop then ate the equips exactly
+        // as before. Pooling is reachability-preserving whether or not it is sufficient, and every
+        // group it removes is one the ranked drop below no longer has to pay for -- which is the
+        // whole point, because that is what leaves room for the equips to survive the drop.
+        int pooled = 0;
+        if (!vcc.empty())
+        {
+            // Decide FIRST, move second. (An earlier revision moved every group into the new vector
+            // before checking `pooled > 0`, which left `groups` holding moved-from empties on the
+            // no-op path -- i.e. it emptied the menu on exactly the frames it was meant not to
+            // touch. Counting before mutating makes the no-op path provably a no-op.)
+            std::vector<char> seen(kMaxFungibleClasses, 0);
+            std::vector<char> is_dup(groups.size(), 0);
+            for (std::size_t g = 0; g < groups.size(); ++g)
+            {
+                const int c = vcc[g];
+                if (c < 0 || c >= kMaxFungibleClasses) { continue; }
+                if (seen[c]) { is_dup[g] = 1; ++pooled; }   // an interchangeable duplicate: pool it
+                else         { seen[c] = 1; }
+            }
+            if (pooled > 0)
+            {
+                std::vector<std::vector<int>> pg;
+                std::vector<int>              ph;
+                pg.reserve(groups.size() - static_cast<std::size_t>(pooled));
+                ph.reserve(groups.size() - static_cast<std::size_t>(pooled));
+                for (std::size_t g = 0; g < groups.size(); ++g)
+                {
+                    if (is_dup[g]) { continue; }
+                    pg.push_back(std::move(groups[g]));
+                    ph.push_back(group_hand_index[g]);
+                }
+                groups.swap(pg);
+                group_hand_index.swap(ph);
+                std::vector<int> pall(groups.size());
+                for (int g = 0; g < static_cast<int>(groups.size()); ++g) { pall[g] = g; }
+                const std::pair<double, double> pe = viewerplancap::Estimate(
+                    ViewerGroupCosts(cands, groups, pall), num_independent, mb);
+                viewerplancap::Trunc& pacc = viewerplancap::Acc();
+                pacc.full_positions = std::max(pacc.full_positions, full.second);
+                pacc.kept_positions = std::max(pacc.kept_positions, pe.second);
+                pacc.pooled_groups  = std::max(pacc.pooled_groups, pooled);
+                if (s_valve_diag)
+                {
+                    std::fprintf(stderr, "[valve] pooled %d dup group(s) -> groups=%zu pay=%.6g\n",
+                                 pooled, groups.size(), pe.second);
+                }
+                if (pe.second <= pcap && pe.first <= wcap) { return; }
+            }
+        }
         const DecisionProvider& vprov = ResolveProvider(state);
         std::vector<std::pair<int, int>> vranked;
         for (int g = 0; g < static_cast<int>(groups.size()); ++g)
@@ -25992,15 +26151,51 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         }
         std::stable_sort(vranked.begin(), vranked.end(),
             [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
-        // Keep ranked groups while both estimates fit -- always at least one, like the base cap.
+        // SEED ONE GROUP PER ACTION KIND, so a whole CLASS OF PLAY cannot vanish from the menu.
+        //
+        // This is the half of the fix that addresses the user's actual report. SituationalCardRank
+        // ranks CARDS, and on an equipment board the equips it ranks lowest are the shields -- so a
+        // rank-ordered keep would fill its whole budget with casts and offer no equip at all, which
+        // is precisely *"I can't equip various equipment"* (USER, 2026-10-02). Reserving the
+        // highest-ranked group of each kind first costs a handful of positions and makes the
+        // history line's promise -- every action reachable one click at a time -- actually true for
+        // each KIND of action, which is the granularity a player reasons at. Within a kind the
+        // ranking still decides, and combinations are still narrowed; nothing here un-bounds
+        // anything, because every candidate set is tested against the same two caps below.
         std::vector<int> kept;
         std::pair<double, double> kept_est{ 0.0, 0.0 };
+        {
+            std::vector<int> seed;
+            std::vector<int> kinds;
+            for (const std::pair<int, int>& r : vranked)
+            {
+                const std::vector<int>& g = groups[r.second];
+                if (g.empty()) { continue; }
+                const int k = static_cast<int>(cands[g.front()].kind);
+                if (std::find(kinds.begin(), kinds.end(), k) != kinds.end()) { continue; }
+                // vranked is sorted by rank, so the first group of a kind IS its best-ranked one.
+                seed.push_back(r.second);
+                const std::pair<double, double> e =
+                    viewerplancap::Estimate(ViewerGroupCosts(cands, groups, seed), num_independent, mb);
+                if (seed.size() > 1 && (e.second > pcap || e.first > wcap))
+                { seed.pop_back(); continue; }   // this kind will not fit; later kinds may
+                kinds.push_back(k);
+                kept_est = e;
+            }
+            kept = std::move(seed);
+        }
         for (const std::pair<int, int>& r : vranked)
         {
+            if (std::find(kept.begin(), kept.end(), r.second) != kept.end()) { continue; }
             kept.push_back(r.second);
             const std::pair<double, double> e =
                 viewerplancap::Estimate(ViewerGroupCosts(cands, groups, kept), num_independent, mb);
-            if (kept.size() > 1 && (e.second > pcap || e.first > wcap)) { kept.pop_back(); break; }
+            // KEEP SCANNING rather than stopping at the first group that does not fit. The ranked
+            // order is by SituationalCardRank, not by width, so the group that overflows the bound
+            // is routinely followed by narrow ones that still fit -- and `break` threw those away
+            // too, costing the player actions for nothing. Skipping instead is free: every kept set
+            // is still tested against the same bound, so this can only ever ADD reachable actions.
+            if (kept.size() > 1 && (e.second > pcap || e.first > wcap)) { kept.pop_back(); continue; }
             kept_est = e;
         }
         viewerplancap::Trunc& acc = viewerplancap::Acc();

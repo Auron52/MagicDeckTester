@@ -99,6 +99,29 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         {
             def.params = BuildParamsFromJson(entry["parameters"]);
         }
+        // BEHAVIOURAL IDENTITY (see CardDefinition::behaviour_identity). Digest the WHOLE entry
+        // minus the two provably non-behavioural keys, rather than digesting a hand-picked list of
+        // behavioural ones. That direction is the load-bearing choice: including an irrelevant key
+        // only makes two cards look DIFFERENT, which merely declines a fold, whereas omitting a
+        // relevant one makes them look the SAME and licenses a wrong collapse. So this fails toward
+        // "not interchangeable", and a card param invented tomorrow is covered with no edit here.
+        //
+        // nlohmann's default `json` stores objects in a std::map, so `dump()` emits keys in sorted
+        // order and the digest is canonical regardless of how cards.json happens to be written.
+        {
+            json ident = entry;
+            for (const char* k : { "name", "oracle_text" })
+            { if (ident.contains(k)) { ident.erase(k); } }
+            const std::string s = ident.dump();
+            std::uint64_t h = 1469598103934665603ULL;            // FNV-1a 64
+            for (char c : s)
+            {
+                h ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c));
+                h *= 1099511628211ULL;
+            }
+            // 0 is reserved for "no identity" (Register-built definitions), so never hand it out.
+            def.behaviour_identity = h ? h : 1ULL;
+        }
         // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
         // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
         // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name

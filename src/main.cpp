@@ -1976,6 +1976,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     os << ", \"equip_host\": " << ac.sac_victim_id << ", \"equip_host_name\": ";
                     JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
                     if (ac.sac_source_id != 0) { os << ", \"equip_src\": " << ac.sac_source_id; }
+                    // `equip_cost` -- the generic cost IN EFFECT for this variant, which on a
+                    // metalcraft board (Puresteel Paladin) is 0 for every Equipment regardless of
+                    // its printed Equip cost. Published so the viewer's "equip all FREE here"
+                    // gesture can key off the price the engine will actually charge instead of
+                    // re-deriving metalcraft client-side -- the same reason `makes_clue` is a
+                    // published flag rather than a card-name test in the viewer. Display/affordance
+                    // only: nothing in the search or the executor reads it back.
+                    os << ", \"equip_cost\": " << ac.cost.ManaValue();
                 }
             }
             // A hand card with more than ONE way to be played needs a route in the palette for each
@@ -2150,7 +2158,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         const viewerplancap::Trunc& vt = viewerplancap::Last();
         if (vt.Fired())
         {
+            // `pooled_groups` is reported SEPARATELY from `dropped_groups` because only the latter
+            // costs the player an action (see the Trunc field note). A frame with dropped_groups 0
+            // and pooled_groups > 0 narrowed nothing the player can reach.
             os << "  \"plans_truncated\": { \"dropped_groups\": " << vt.dropped_groups
+               << ", \"pooled_groups\": " << vt.pooled_groups
                << ", \"positions\": " << static_cast<long long>(vt.kept_positions)
                << ", \"positions_full\": " << static_cast<long long>(vt.full_positions)
                << ", \"why\": \"viewer plan-space bound (MTG_VIEWER_PLAN_CAP=0 to lift)\" },\n";

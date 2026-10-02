@@ -1,0 +1,203 @@
+# The viewer plan valve: an honest size, and a reachability guarantee
+
+> "⚠ This board's plan space is too large to enumerate in full (476427292645799936 combinations) …
+> Every action is still reachable one click at a time."
+> — the viewer, to the USER, repeatedly, on KittyEquipment v2
+
+> "That's actually an incorrect message. I can't equip various equipment."
+> — USER, 2026-10-02
+
+Both halves of that exchange were real defects, and they were different defects. The number was
+wrong, and the promise was false. This documents what each one was, what fixed it, and the two
+things the investigation refuted on the way — including one of my own conclusions from earlier the
+same day.
+
+Status: **shipped**, human play only. Autonomous play, rollouts and ground truth are untouched by
+construction (every change lives inside `CapGroupsBySituationalRank`'s `valve` branch, which
+requires `HumanPlayActive()`), and that is measured rather than argued: smoke **107 passed, 0 failed,
+0 configs changed, 0 play-changed**.
+
+## 1. The number was computed by a rule the engine had stopped following
+
+`viewerplancap::Estimate` (EngineFlags.h) prices a frame as
+
+```
+raw = 2^independents x PROD over groups (1 + |group|)
+```
+
+a product over **digits**. That was right when it was written. It stopped being right when
+`MTG_EQUIP_COPY_COLLAPSE` went **default-ON (2026-10-01)**, because that collapse does not remove
+digits — it restricts the walk to positions whose interchangeable-copy digits are *non-increasing in
+group order*, and `MTG_EQUIP_COPY_SKIP` jumps the odometer past the rest. The positions actually
+visited are the **canonical** ones; the estimate kept multiplying as though every copy were free to
+vary independently.
+
+For a class of `n` interchangeable groups each of width `w`, the unfolded product contributes
+`(1+w)^n` but the walk visits only the non-increasing sequences, of which there are `C(n+w, n)`.
+Measured on the board that produced the report (`MTG_VIEWER_VALVE_DIAG`):
+
+```
+[valve] groups=44 ind=0 equip_groups=32 classes=5 fold=0.0002178
+        raw_pay=7.58997e+18   folded_pay=1.65299e+15   pcap=4096
+```
+
+**`fold = 0.0002178` — the figure shown to the player was 4,591x too large.** `FungibleEquipFoldRatio`
+now applies that factor, so the valve both reports and *decides on* a number that matches the walk.
+
+**Why the valve's payable-knapsack refinement did not save it.** `Estimate`'s second component counts
+only selections whose summed **mana value** fits `ManaPruneBound` — added so a tutor fan whose members
+mostly cannot be paid stops inflating the product (the gi4 Green Sun's Zenith incident). On a
+Puresteel Paladin board metalcraft makes **every** equip `{0}`, and the deck's five shield classes are
+all `{0}` to cast, so the knapsack constrains nothing and `pay` degenerates to exactly `raw`. The
+refinement that exists to stop over-counting is *inert on precisely the deck that over-counts worst*.
+
+## 2. The promise was false, and the cause was the ranking, not the bound
+
+`SituationalCardRank` ranks **cards**. On an equipment board the equips it ranks lowest are the
+shields — `{0}` artifacts whose role on the list is the cast (metalcraft + a Sram/Puresteel draw),
+not the attach. So a rank-ordered keep filled its whole budget with casts and offered **no equip at
+all**, which is exactly the user's report. The history line then claimed every action was still
+reachable one click at a time, which was not true of any of them.
+
+Three changes, in the order the valve now applies them:
+
+1. **Fold-aware estimate** (§1), so the shrink is decided on the real size.
+2. **Pool interchangeable duplicates before dropping any action.** A class of `n` interchangeable
+   copies offers the same menu entry `n` times; keeping one leaves every `(class -> host)` action
+   clickable and costs only the ability to attach a *second* copy of that class **in the same line**,
+   which the next line offers again. This is the one narrowing that keeps the promise.
+3. **Seed one group per action KIND**, then rank-fill. This is the half that fixes the report: it
+   guarantees a whole *class of play* cannot vanish, at the granularity a player reasons at. Within a
+   kind the ranking still decides and combinations are still narrowed; nothing is un-bounded, because
+   every candidate set is still tested against both caps.
+
+Plus `break` -> `continue` in the rank-fill: the ranked order is by card rank, not by width, so the
+group that overflows the bound is routinely followed by narrow ones that still fit, and `break` threw
+those away for nothing.
+
+**Measured, against HEAD built in a worktree** (`logs/viewerprobe/bighand.json` — the user's shape: a
+wide metalcraft board plus a big duplicate hand, since Sram/Puresteel draw on every equipment cast):
+
+| plan-space bound | base HEAD | with the fix |
+|---|---|---|
+| 65536 (default) | `choose` | `choose` |
+| 16384 | `choose` | `choose` |
+| 4096 | `legal_not_enumerated` | **`choose`** |
+| 1024 | `legal_not_enumerated` | **`choose`** |
+| 256 | `legal_not_enumerated` | **`choose`** |
+
+The equip survives at bounds **256x tighter** than default, where base HEAD loses it.
+
+### The first cut of the pooling measured INERT, and why
+
+It gated the pooling on "does this alone bring the frame under the bound?". On the very board it was
+written for, pooling 32 equip groups down to 5 classes still estimates ~1e6 against a 65,536 bound —
+so the gate always failed, the pooling never applied, and the ranked drop ate the equips exactly as
+before. Before/after was identical at every bound. Pooling is reachability-preserving whether or not
+it is *sufficient*, and every group it removes is one the ranked drop no longer has to pay for, which
+is what leaves room for the equips. It is now unconditional.
+
+`MTG_VIEWER_VALVE_DIAG` exists because of this: the first fix was aimed at the wrong input (the
+estimate) and there was no way to see that from outside.
+
+## 3. Two refutations
+
+**The valve is not always the mechanism, and raising the bound never fixes it.** With the valve fully
+off (`MTG_VIEWER_PLAN_CAP=0`) a wide board still returned `legal_not_enumerated`. That matches an
+earlier measurement (`2e7` still dropped 11 groups; `1e10` or valve-off took >7 min for ONE frame) and
+closes the question: **do not retry raising the bound.** On that particular probe the suppression was
+an entirely separate narrowing that only `MTG_UNPRUNED=1` opens — which the real viewer sets
+session-wide, so it is not reachable from the viewer, but it is a trap for anyone reproducing this
+with a `--scenario` fixture. A scenario is not a viewer; emulate one with `MTG_UNPRUNED=1
+MTG_HUMAN_PLAY=1` or measure the wrong code path.
+
+**The per-copy fungible fold was NOT missing — I claimed a ~23,000x win that was already banked.**
+Reading the user's "Cathar's Shield and Accorder's Shield are duplicates … some of them should be
+deduplicatable also, since they are all 4-ofs", I priced the interchangeable-copy fold against an
+unfolded `3^20` baseline and reported a 23,000x opportunity. `MTG_EQUIP_COPY_COLLAPSE` had been
+default-ON since the previous day, so that baseline had not existed for 24 hours. The real incremental
+win from the cross-name observation is ~5x on the equip axis (see §4), and the actionable finding was
+the *estimate*, not the fold. (Memory: `verify-done-claims-in-tree` — check flag defaults and adoption
+commits before pricing anything as missing.)
+
+## 4. Cathar's Shield == Accorder's Shield: `behaviour_identity`
+
+The user's observation is correct and verified in the card data, not assumed:
+
+```
+Cathar's Shield    {0}  {equip_cost_generic:3, equip_grants_vigilance:true, equip_tough_bonus:3, is_equipment:true}
+Accorder's Shield  {0}  {equip_cost_generic:3, equip_grants_vigilance:true, equip_tough_bonus:3, is_equipment:true}
+```
+
+Byte-identical parameters, same cost, keywords, types and subtypes. They differ in the name string
+and in oracle prose (which carries the `[bracket note]` modelling commentary). But
+`BuildFungibleEquipClasses`'s signature opens with `"E|" + a0.card_name`, so the two land in different
+classes and their cross-name symmetry is never folded: v2's equip classes are five of size 4 instead
+of `{4, 8, 4, 4}`. On a 2-host board that is `15x15 -> 45`, a **5x** cut on the equip axis.
+
+`CardDefinition::behaviour_identity` is a digest of **the whole cards.json entry minus `name` and
+`oracle_text`**, and the direction of that choice is load-bearing: including an irrelevant key only
+makes two cards look *different*, which declines a fold, whereas omitting a relevant one makes them
+look the *same* and licenses a wrong collapse. So it fails toward "not interchangeable", and a param
+invented tomorrow is covered with no edit. This is the discipline `LoadFromJson`'s subtype
+pre-interning already adopted ("read straight off the RAW JSON, mechanical and complete, which naming
+the param fields one at a time was not") after a hand-written list covered 4 of ~15 params. It is also
+exactly the hazard `BuildFungibleEquipClasses`'s own counter list names: *"this list is 'every field
+that can differentiate two copies' and an incomplete one is the documented failure mode"*.
+
+**Audited across all 486 cards**, the collisions are:
+
+| cards | equipment? |
+|---|---|
+| Cathar's Shield, Accorder's Shield | **yes** |
+| Muscle Sliver, Predatory Sliver | no |
+| Cavern of Souls, Unclaimed Territory | no |
+| Dauntless Bodyguard, Venerable Knight | no |
+| Remand, Memory Lapse | no |
+| Rancor, Audacity | no |
+| Soul Warden, Soul's Attendant | no |
+| Elvish Mystic, Llanowar Elves, Fyndhorn Elves | no |
+
+So the fold's reach is exactly the pair the user identified and nothing more — the other seven are
+non-equipment and `BuildFungibleEquipClasses` is gated on `is_equipment`.
+
+**Behind `MTG_EQUIP_COPY_XNAME`, default OFF, and NOT adopted.** It is a sound identity fold, but its
+parent collapse is already documented as able to move play digests (the surviving representative can be
+a different physical copy on an isomorphic board), and on the probe board it measured **inert** —
+identical plan indices with it on and off. It is built, tested and recorded; it is not claimed as a win.
+
+**Incidental finding, for the user's judgement, not acted on:** `Remand`/`Memory Lapse` and
+`Rancor`/`Audacity` are *not* the same card in real Magic (Remand returns the spell to hand and draws;
+Memory Lapse puts it on top of the library — and Rancor returns itself from the graveyard). Their
+entries being byte-identical is a modelling simplification the audit surfaced by accident. Card rulings
+are user-owned, so this is reported rather than changed.
+
+## 5. What the player now sees
+
+The history line distinguishes the two narrowings, because they are different promises:
+
+* **dropped** — "N group(s) of choices were DROPPED, so some actions are not offered this turn." No
+  false reachability claim.
+* **pooled** — "N interchangeable duplicate(s) were pooled: identical Equipment is offered once instead
+  of once per copy. Every action is still offered; attach a further copy on the next line."
+
+`plans_truncated` carries `pooled_groups` alongside `dropped_groups` for the same reason, and
+`test/viewer_plan_space_check.py`'s assertion 4 now accepts either (a dropped-groups-only test reads a
+pooling-only frame as an *unreported* truncation, which is backwards — that is the frame that cost the
+player nothing). That gap was unreachable on the EDF walk the gate drives, because that deck has no
+Equipment and nothing there can pool.
+
+## 6. Guards
+
+* `test/scenarios/kittyv2_viewer_wide_equip_board_still_offers_equip.json` — a staged wide metalcraft
+  board; `validate_line: "equip=Kite Shield"` must not come back `legal_not_enumerated`. It pins the
+  user-visible consequence rather than the internals, so it fails if a future change goes back to
+  deleting equip groups.
+* `test/viewer_client_check.js` — "equip all free to X" selection logic (see
+  `viewer-line-macros.md` §Feature 4).
+* `test/viewer_plan_space_check.py` — **PRE-EXISTING FAILURE, not caused by this work and not fixed by
+  it:** the EDF HANG-1 line does not reach a terminal within 400 decisions. Base HEAD built in a
+  worktree fails the identical assertion with the identical biggest-plan-list (57,343); this branch is
+  slightly faster on it (worst frame 0.58s vs 0.66s, walk 15.7s vs 19.4s CPU). The frame-count and
+  per-frame CPU assertions pass on both. Do not read this gate as green, and do not read it as a
+  regression from here.
