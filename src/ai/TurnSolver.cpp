@@ -26126,14 +26126,24 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                     ViewerGroupCosts(cands, groups, pall), num_independent, mb);
                 viewerplancap::Trunc& pacc = viewerplancap::Acc();
                 pacc.full_positions = std::max(pacc.full_positions, full.second);
-                pacc.kept_positions = std::max(pacc.kept_positions, pe.second);
                 pacc.pooled_groups  = std::max(pacc.pooled_groups, pooled);
                 if (s_valve_diag)
                 {
                     std::fprintf(stderr, "[valve] pooled %d dup group(s) -> groups=%zu pay=%.6g\n",
                                  pooled, groups.size(), pe.second);
                 }
-                if (pe.second <= pcap && pe.first <= wcap) { return; }
+                // kept_positions ONLY on the path that actually keeps this set. Writing it here
+                // unconditionally was a reporting bug (user-visible: a frame reported "-> 3265173504
+                // positions" against a 65,536 bound, which is impossible). `kept_positions` is a
+                // std::max across the per-land inner calls, so an INTERMEDIATE value written here
+                // and then exceeded by nothing later simply latches and wins over the real, much
+                // smaller final figure. Same class of defect as the estimate this file just fixed:
+                // a number reported to the player that no stage of the engine ever produced.
+                if (pe.second <= pcap && pe.first <= wcap)
+                {
+                    pacc.kept_positions = std::max(pacc.kept_positions, pe.second);
+                    return;
+                }
             }
         }
         const DecisionProvider& vprov = ResolveProvider(state);
@@ -26167,6 +26177,16 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         {
             std::vector<int> seed;
             std::vector<int> kinds;
+            auto try_add = [&](int gi) -> bool
+            {
+                seed.push_back(gi);
+                const std::pair<double, double> e =
+                    viewerplancap::Estimate(ViewerGroupCosts(cands, groups, seed), num_independent, mb);
+                if (seed.size() > 1 && (e.second > pcap || e.first > wcap))
+                { seed.pop_back(); return false; }
+                kept_est = e;
+                return true;
+            };
             for (const std::pair<int, int>& r : vranked)
             {
                 const std::vector<int>& g = groups[r.second];
@@ -26174,13 +26194,36 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 const int k = static_cast<int>(cands[g.front()].kind);
                 if (std::find(kinds.begin(), kinds.end(), k) != kinds.end()) { continue; }
                 // vranked is sorted by rank, so the first group of a kind IS its best-ranked one.
-                seed.push_back(r.second);
-                const std::pair<double, double> e =
-                    viewerplancap::Estimate(ViewerGroupCosts(cands, groups, seed), num_independent, mb);
-                if (seed.size() > 1 && (e.second > pcap || e.first > wcap))
-                { seed.pop_back(); continue; }   // this kind will not fit; later kinds may
+                if (!try_add(r.second)) { continue; }   // this kind will not fit; later kinds may
                 kinds.push_back(k);
-                kept_est = e;
+            }
+            // ...THEN EVERY FREE GROUP, because a ZERO-COST action is never a trade-off.
+            //
+            // USER, 2026-10-02, after the one-per-kind seed shipped: *"Equip all free was available,
+            // but it only equipped a few"* -- the gesture can only bundle equips that are IN the
+            // menu, and the rank-fill had dropped most of the equip groups. One-per-kind guarantees
+            // SOME equip is offered; it does not get the player the line they asked for.
+            //
+            // The rule is general, not an equipment special case: a group every member of which
+            // costs 0 mana cannot compete for the pool, so adding it to the menu removes nothing
+            // from any other line and omitting it is pure loss. It is also CHEAP in exactly the
+            // currency the valve is spending -- a free equip group contributes (1 + hosts), so ten
+            // of them cost ~3^10 rather than anything like the cast powerset. Ranking these out was
+            // the worst possible trade: the valve was paying its whole budget for lines that
+            // compete for mana while discarding the ones that never could.
+            //
+            // (This is why the shields lost. SituationalCardRank ranks CARDS, and a {0} artifact
+            // whose role on the list is the CAST ranks last -- while its EQUIP, under metalcraft, is
+            // the free action the player is actually trying to take.)
+            for (const std::pair<int, int>& r : vranked)
+            {
+                const std::vector<int>& g = groups[r.second];
+                if (g.empty()) { continue; }
+                if (std::find(seed.begin(), seed.end(), r.second) != seed.end()) { continue; }
+                bool all_free = true;
+                for (int j : g)
+                { if (cands[j].cost.ManaValue() != 0) { all_free = false; break; } }
+                if (all_free) { try_add(r.second); }
             }
             kept = std::move(seed);
         }
@@ -26203,6 +26246,23 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         acc.kept_positions = std::max(acc.kept_positions, kept_est.second);
         acc.dropped_groups = std::max(acc.dropped_groups,
                                       static_cast<int>(groups.size() - kept.size()));
+        // ...AND NAME THEM (see Trunc::dropped_names). Capped at 6 so a very wide board cannot push
+        // a wall of text into the history; the count already carries the magnitude.
+        {
+            std::string names;
+            int shown = 0, extra = 0;
+            for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+            {
+                if (std::find(kept.begin(), kept.end(), g) != kept.end() || groups[g].empty())
+                { continue; }
+                if (shown >= 6) { ++extra; continue; }
+                if (!names.empty()) { names += ", "; }
+                names += cands[groups[g].front()].card_name.str();
+                ++shown;
+            }
+            if (extra > 0) { names += ", +" + std::to_string(extra) + " more"; }
+            if (!names.empty()) { acc.dropped_names = names; }
+        }
         std::vector<char> keep(groups.size(), 0);
         for (int g : kept) { keep[g] = 1; }
         std::vector<std::vector<int>> kg;

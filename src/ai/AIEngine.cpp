@@ -2758,8 +2758,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // *"That's actually an incorrect message. I can't equip various equipment."*
                 const viewerplancap::Trunc& t = viewerplancap::Last();
                 const std::string sizes =
-                    std::to_string(static_cast<long long>(t.full_positions)) + " -> "
-                    + std::to_string(static_cast<long long>(t.kept_positions)) + " positions";
+                    viewerplancap::PositionsText(t.full_positions) + " -> "
+                    + viewerplancap::PositionsText(t.kept_positions) + " positions";
                 if (exec_menu)
                 {
                     // The player is NOT looking at the unpruned menu, and must be told so plainly:
@@ -2778,8 +2778,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         "⚠ This board's plan space is too large to enumerate in full (" + sizes
                         + "); the menu shows the top-ranked lines and "
                         + std::to_string(t.dropped_groups)
-                        + " group(s) of choices were DROPPED, so some actions are not offered "
-                          "this turn. (MTG_VIEWER_PLAN_CAP=0 enumerates in full.)");
+                        + " group(s) of choices were DROPPED"
+                        + (t.dropped_names.empty() ? std::string()
+                                                   : " (" + t.dropped_names + ")")
+                        + ", so those actions are not offered this turn. "
+                          "(MTG_VIEWER_PLAN_CAP=0 enumerates in full; "
+                          "MTG_VIEWER_EXECUTOR_FALLBACK=1 shows the engine's own menu instead.)");
                 }
                 else
                 {

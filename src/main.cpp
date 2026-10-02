@@ -2163,8 +2163,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // and pooled_groups > 0 narrowed nothing the player can reach.
             os << "  \"plans_truncated\": { \"dropped_groups\": " << vt.dropped_groups
                << ", \"pooled_groups\": " << vt.pooled_groups
-               << ", \"positions\": " << static_cast<long long>(vt.kept_positions)
-               << ", \"positions_full\": " << static_cast<long long>(vt.full_positions)
+               << ", \"positions\": " << viewerplancap::PositionsText(vt.kept_positions)
+               << ", \"positions_full\": " << viewerplancap::PositionsText(vt.full_positions)
                << ", \"why\": \"viewer plan-space bound (MTG_VIEWER_PLAN_CAP=0 to lift)\" },\n";
         }
     }

@@ -1437,6 +1437,11 @@ struct Trunc
     int    pooled_groups  = 0;
     double full_positions = 0;   // odometer product before the shrink
     double kept_positions = 0;   //   ... and after
+    // The card names of the groups that were DROPPED (comma-joined, capped). A COUNT alone is not
+    // diagnosable: "10 group(s) were DROPPED" cost a round trip with the user to establish that the
+    // missing ones were the shields, which is the whole content of the report. Names make the
+    // history line answer "what can I no longer do?" on its own.
+    std::string dropped_names;
     bool   Fired() const { return dropped_groups > 0 || pooled_groups > 0; }
 };
 
@@ -1478,6 +1483,20 @@ inline std::pair<double, double> Estimate(const std::vector<std::vector<int>>& g
     double pay = 0.0;
     for (double v : dp) { pay += v; }
     return { raw, pay * ind };
+}
+
+// A position COUNT as text, safe for any magnitude. The raw odometer product is a double and on a
+// wide board it runs past 1e19, so `static_cast<long long>` is undefined there -- it printed
+// `-9223372036854775808` (LLONG_MIN) in a user-visible history line. Integers below 1e15 print
+// exactly, because that is the range a player can read; past it, 3 significant figures in
+// scientific form, because "7.26e+10 -> 3.27e+09" is what the number is actually for.
+inline std::string PositionsText(double v)
+{
+    if (!(v > 0.0)) { return "0"; }
+    char buf[48];
+    if (v < 1e15) { std::snprintf(buf, sizeof buf, "%lld", static_cast<long long>(v)); }
+    else          { std::snprintf(buf, sizeof buf, "%.3g", v); }
+    return buf;
 }
 
 // The record for the frame currently being offered: EnumerateMainPlans clears Acc() before the
