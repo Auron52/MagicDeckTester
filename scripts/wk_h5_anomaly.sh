@@ -7,7 +7,7 @@
 # Four suspects, isolated one at a time on the SAME 8 games (seed 8008), all at depth 5 / budget 0:
 #
 #   sidecar   the deck as it now ships (value.json with leaf:none + alpha:relaxed) + MTG_LAZY_LEAF=1
-#   nolazy    same, MTG_LAZY_LEAF unset            -> is it the lazy-leaf pass?
+#   nolazy    same, MTG_LAZY_LEAF=0                -> is it the lazy-leaf pass?
 #   nosidecar value.json moved aside, lazy on      -> is it the adopted shape?
 #   plain     no sidecar, no lazy                  -> the true matrix-H baseline
 #
@@ -33,7 +33,7 @@ run_arm () {  # run_arm <tag> <lazy:0|1> <sidecar:0|1>
   [ "$side" = 0 ] && [ -f "$SIDE" ] && mv -f "$SIDE" "$STASH"
   [ "$side" = 1 ] && [ -f "$STASH" ] && mv -f "$STASH" "$SIDE"
   local env_pfx=()
-  [ "$lazy" = 1 ] && env_pfx=(env MTG_LAZY_LEAF=1) || env_pfx=(env -u MTG_LAZY_LEAF)
+  [ "$lazy" = 1 ] && env_pfx=(env MTG_LAZY_LEAF=1) || env_pfx=(env MTG_LAZY_LEAF=0)
   printf '%-10s ' "$tag"
   "${env_pfx[@]}" MTG_DUMP_UNITS=1 ./build/Release/mtg "$DECK" --profile "$PROF" \
       --games "$GAMES" --seed 8008 --depth 5 --budget-ms 0 --ignore-play-profile \

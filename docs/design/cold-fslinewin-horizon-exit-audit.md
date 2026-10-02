@@ -2,6 +2,8 @@
 
 **Status:** deferred 2026-09-27. Found while sizing the Pirates value leaf; the one confirmed instance
 (the lazy-leaf probe) is FIXED (`MTG_LAZY_LEAF_LADDER`, default ON). The rest is an unverified audit.
+**2026-10-02:** the ladder is now unconditional (the `MTG_LAZY_LEAF_LADDER=0` single-probe arm was deleted),
+and `MTG_LAZY_LEAF` itself is default ON for unlimited budgets (USER), so every unbounded run uses it.
 
 ## The rule being violated
 

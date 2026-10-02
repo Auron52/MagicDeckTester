@@ -45,6 +45,16 @@ So nearly all d8 b0 Snow time is spent re-enumerating the continuation list at a
 distinct. The flat profile also shows ~15% in allocation and string handling (`operator new`/
 `free`, `std::string` append/assign, `unordered_map<string,...>` lookups) on this path.
 
+## Finding 3 -- the rollouts were avoidable: the lazy leaf was OFF
+
+`MTG_LAZY_LEAF` (leafless ladder 1..D before the leafed ladder; commit an in-window win with no
+rollout at all) existed, was answer-identical since the ladder fix (Giants 0/400 differ, Pirates
+40/40), and refuses to fire under a limited budget -- but was default OFF and armed only on the
+value-leaf matrix's H cells. So the d8 b0 recovery runs paid a rollout at every horizon leaf of every
+pass, though Snow wins T6-T8, i.e. inside an 8-turn window for nearly every decision.
+**Flipped default ON for unlimited budgets (USER, 2026-10-02).** No tier GT can move: every
+regression cell with budget 0 is depth 0. The matrix's V arm is pinned `=0` explicitly.
+
 ## Leads (unmeasured)
 
 1. Hit rate of the BP enum memo at d8 vs d3 (`MTG_BP_ENUM_PROBE=1`) -- if the miss rate is

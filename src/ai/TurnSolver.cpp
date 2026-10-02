@@ -50950,9 +50950,17 @@ struct ForceConstantLeafGuard
 // The call site therefore REFUSES to fire under a limited budget at all, rather than leaving that
 // to the operator; DEFAULT OFF on top of that.
 // See docs/design/per-game-wall-clock-backstop.md.
+//
+// DEFAULT ON since 2026-10-02 (USER: "it should be on for unlimited budget in general"). The
+// unlimited-budget guard at the call site is what keeps it inert in budgeted play -- every regression
+// tier cell with budget 0 is depth 0, so no GT moves. What it buys is the unbounded runs: a d8 b0
+// recovery check on Snow paid a full rollout at every horizon leaf of every ladder pass (11+ h per
+// game, 75% of it in BpDeriveContinuationList under rollout applies) for decisions whose win sat
+// inside the window. `=0` (or a manifest flag) is the A/B hatch; the value-leaf matrix pins its V arm
+// to it explicitly.
 inline bool LazyLeafOn()
 {
-    static const bool env = EnvOn("MTG_LAZY_LEAF");
+    static const bool env = EnvOn("MTG_LAZY_LEAF", true);
     return heurarm::Flag(heurarm::LAZY_LEAF, env);
 }
 // (Telemetry counters live with the rest of the rollout-stats block near the top of this file --
@@ -54853,6 +54861,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                                   int* out_committed_depth)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    // MAX-TURNS HORIZON CLAMP (every budget; USER 2026-10-02). A pass at remaining depth r from turn t reaches
+    // turn t+r; FSLineWin answers no-win the moment turn_number > max_turns, so every pass deeper
+    // than max_turns - t + 1 searches the IDENTICAL tree -- but under different FSLineCache keys
+    // (BuildSimKey folds the raw remaining depth), so the ladder re-walked it in full once per extra
+    // rung. At d8 / max_turns 8 that was 1 duplicate full-size pass on T2, 4 on T5. The clamped pass
+    // is exhaustive to max_turns (no leaf is ever reached), so it is the same answer at a fraction of
+    // the work. The label path (EnumerateEarliestWins) has always used this depth. Under a budget it
+    // is not byte-identical -- the units a skipped duplicate rung would have burned are no longer
+    // spent, and the budget is denominated in units -- but nothing the search can know is lost: a rung
+    // past the last turn can only re-derive what the exhaustive rung already proved.
+    // The CALLER still sees the requested depth when the clamped rung completes: that rung IS the
+    // requested-depth search (same tree), and the hybrid's escalation test (`committed <
+    // value_min_depth`) must not read a clamp as a shallow commit and escalate where it never did.
+    const int requested_depth = depth;
+    int exhaust_depth = -1;
+    if (depth > 1)
+    {
+        exhaust_depth = std::max(1, max_turns - state.turn_number + 1);
+        if (depth > exhaust_depth) { depth = exhaust_depth; } else { exhaust_depth = -1; }
+    }
     // ORDER-CONDEMNATION root-turn authority on the COMMIT-THE-LINE path. The guard was
     // originally owned only by SolveWithLookahead, so the FSLine machinery ran with
     // g_condemn_root_turn == -1, whose fallback stamps at EVERY projected turn -- a
@@ -55384,7 +55412,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
     }
 
-    // ---- LAZY LEAF (MTG_LAZY_LEAF, default off) ------------------------------------------------
+    // ---- LAZY LEAF (MTG_LAZY_LEAF, default ON; unlimited budgets only) ------------------------------------------------
     // PURE SEARCH UNTIL THE DEPTH IS EXHAUSTED. One pass at the FULL depth with no leaf at all,
     // run BEFORE the ladder, so a decision whose win is provable inside the horizon pays for not a
     // single rollout. On a hit the whole leafed ladder -- every pass, every leaf -- is skipped; on
@@ -55404,8 +55432,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     if (LazyLeafOn() && !emul_done && depth >= 1 && (budget == nullptr || budget->Unlimited()))
     {
         const long long probe_before = budget ? budget->Used() : 0;
-        // A LEAFLESS LADDER, 1..depth, not one cold pass at `depth` (MTG_LAZY_LEAF_LADDER, default
-        // ON; =0 restores the single probe for the A/B). FSLineWin's first-verified-win exit
+        // A LEAFLESS LADDER, 1..depth, not one cold pass at `depth` (the single-probe arm,
+        // MTG_LAZY_LEAF_LADDER=0, was deleted 2026-10-02 -- it is the unsound shape). FSLineWin's first-verified-win exit
         // (FsHorizonExitOn: return on the first tail winning at or before the horizon edge) is sound
         // ONLY when every shallower pass has already been refuted -- then any in-window win sits at
         // the edge and IS the minimum. One cold pass at `depth` has no refutations beneath it, so
@@ -55413,8 +55441,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // 14/40 games committed a T5 line at T1 while a T4 win existed (the probe spent 6 units),
         // H5 avg 4.775 vs the ladder's 4.425. Laddering restores the premise; leafless_cache is
         // keyed by remaining depth, so pass p+1 reuses pass p exactly as the leafed ladder does.
-        const bool lazy_ladder = EnvOn("MTG_LAZY_LEAF_LADDER", true);
-        for (int p = lazy_ladder ? 1 : depth; p <= depth && !lazy_done; ++p)
+        for (int p = 1; p <= depth && !lazy_done; ++p)
         {
             SearchLine probe;
             {
@@ -55630,7 +55657,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         g_lad_cd_ttlook[hd].fetch_add(lad_ttlook_last, std::memory_order_relaxed); g_lad_cd_tthit[hd].fetch_add(lad_tthit_last, std::memory_order_relaxed);
         g_lad_warm_ttlook[hd].fetch_add(lad_ttlook_sum - lad_ttlook_last, std::memory_order_relaxed); g_lad_warm_tthit[hd].fetch_add(lad_tthit_sum - lad_tthit_last, std::memory_order_relaxed);
     }
-    if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
+    if (out_committed_depth != nullptr)
+    { *out_committed_depth = (committed_depth == exhaust_depth) ? requested_depth : committed_depth; }
 
     static const bool fd_trace   = EnvOn("MTG_FD_TRACE");
     if (fd_trace)
@@ -56339,7 +56367,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // value-leaf-d(k) ~= heuristic-d(k-3)); so an unverified line committed below `value_min_depth` (the
     // per-model trust depth: knights/slivers stop at d5 where their leaf matches, others escalate up to the
     // user depth) is escalated to the exact heuristic leaf. See learned-d0-policy.md.
-    bool verified = (line.win_turn <= state.turn_number + committed - 1);
+    // EXHAUSTIVE COMMIT (2026-10-02). A committed rung that reaches max_turns never touches a leaf --
+    // FSLineWin refuses turn > max_turns before its depth-0 leaf -- so its answer, win or no-win, is
+    // decided by real simulation exactly like a verified win, and no leaf could have mis-ranked it.
+    // Escalating it re-searched the same tree (deeper rungs only add turns past max_turns) with a leaf
+    // it can never reach, through a lossy escalation beam -- pure cost, and the beam made an otherwise
+    // complete no-win unusable as a proof (see AIEngine's PROVEN NO-WIN). FullSearchLine reports the
+    // requested depth when its max-turns clamp fired, so `committed` here is still comparable.
+    const bool exhaustive = state.turn_number + committed - 1 >= max_turns;
+    bool verified = exhaustive || (line.win_turn <= state.turn_number + committed - 1);
     if (nl_esc)
     {
         g_nlv_decisions.fetch_add(1, std::memory_order_relaxed);
@@ -56616,7 +56652,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // trust-5 deck whose probe reaches depth 5, every one of them) -- tallying it unconditionally reports
     // a saving the arm did not make, which is the exact trap of reading a counter instead of the units.
     const bool esc_wanted = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate || single_failed;
-    const bool escalate = esc_wanted && !xo_esc_dead;
+    const bool escalate = esc_wanted && !xo_esc_dead && !exhaustive;
     if (esc_wanted && xo_esc_dead) { EscXoSkips().fetch_add(1, std::memory_order_relaxed); }
     if (g_hybrid_stats.enabled && value_active)
     {
@@ -64812,7 +64848,7 @@ const std::string& turncensus::GateNote()
                   ? "flag set (but scoped to UNBUDGETED runs only)"
                   : "off(bplen_* = 0 -- a LEVER, not a probe)");
         t += "  lazy_leaf=";
-        t += (EnvOn("MTG_LAZY_LEAF") ? "ON" : "off(lazy_* = 0)");
+        t += (EnvOn("MTG_LAZY_LEAF", true) ? "ON(unlimited budgets only)" : "off(lazy_* = 0)");
         t += "  bp_probe=";
         t += (EnvOn("MTG_BP_PROBE") ? "ON" : "off");
         t += "  min_units=" + std::to_string(turncensus::MinUnits());

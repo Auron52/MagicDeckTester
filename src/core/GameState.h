@@ -215,6 +215,12 @@ struct GameState
     int                      consecutive_passes           = 0;
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;
+    // PROVEN NO-WIN (USER 2026-10-02: "at that point we are done and can finish"). Set by
+    // AIEngine::TakeTurn when a complete, untruncated full-line search covered every turn through
+    // max_turns and found no win: nothing later in the game can be learned that the search has not
+    // already refuted, so the game loop ends it as a no-win after this turn instead of re-searching
+    // (and running the fallback lookahead) every remaining turn. See GameEngine::PlayOutFrom.
+    bool                     proven_no_win                = false;
     bool                     opponent_lost_life_this_turn = false;
     // Was the opponent DEALT a library (and an opening hand)? See core/OpponentDeck.h. Stamped by
     // GoldFishRunner::StampDeckTraits from the decklist: false for every deck that cannot touch the

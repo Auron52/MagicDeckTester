@@ -330,6 +330,10 @@ static_assert(sizeof(Player) == 200,
 // +24 bytes (2026-09-30, rebased onto 840 on 2026-10-03; size set from a measured sizeof, main-2 land drop = newly arrived lands only): `m1start_hand_mask[2]` + `m1start_hand_turn`.
 // Classification: DERIVED -- stamped from the hand at the start of each pre-combat main, and the
 // dominance probe runs on turn-start states whose hand it already compares, so nothing to fold.
+// +bool (2026-10-02; size set from a measured sizeof after the 2026-10-03 rebase, proven no-win finish): `proven_no_win`. Classification: GAME CONTROL --
+// written only on the REAL state by AIEngine::TakeTurn after a complete search through max_turns, and
+// read only by GameEngine::PlayOutFrom to end the game. Every state a dominance probe could compare
+// inside one search carries the same value (it is never written by the search), so nothing to fold.
 static_assert(sizeof(GameState) == 864,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

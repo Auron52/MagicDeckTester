@@ -3242,6 +3242,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                             valuearm::t_deck_single = prev_s; valuearm::t_deck_alpha_relaxed = prev_a; valuearm::t_deck_fit_lazy_r = prev_lr;
                                             valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_fit_alpha = prev_fa; valuearm::t_deck_key = prev_k; }
                     } _shape(m_profile);
+                    const unsigned long long proof_trunc0 = TurnSolver::TruncEvents();
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
@@ -3308,6 +3309,40 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // (search-primary): it lets the line adapt to each draw, recovering the
                     // gi252-class lines commit-the-line locks a turn slower. Perf cost = a
                     // FullSearchLine every turn instead of once per committed line.
+                    // PROVEN NO-WIN -> FINISH (see GameState::proven_no_win). The search is a PROOF only
+                    // when it FULLY FINISHED with no line pruned (USER):
+                    //  * an UNLIMITED decision budget -- several budget-gated prunes fire on Remaining()
+                    //    before the budget is exhausted and bump no counter (the twin-reuse gate, the
+                    //    group-wave tranche bound, the m2-fix continuation skip), so under a budget "no
+                    //    truncation event" is NOT completeness. Extending this to budgeted play first needs
+                    //    every such site to report itself: docs/design/proven-no-win-finish.md;
+                    //  * no truncation event anywhere beneath it, and no order-free memo end;
+                    //  * every turn through max_turns inside the searched horizon. A rung that deep never
+                    //    reaches a leaf (FSLineWin refuses turn > max_turns first), so neither a rollout nor
+                    //    a value estimate enters it -- and the hybrid never ESCALATES it (TurnSolver EXHAUSTIVE
+                    //    COMMIT), so the lossy escalation beam cannot touch it either.
+                    // Not under a human / claude chooser: those sessions play on.
+                    {
+                        if (budget.Unlimited() && !m_external_chooser && !line.truncated
+                            && TurnSolver::TruncEvents() == proof_trunc0
+                            && line.win_turn > m_max_turns
+                            && state.turn_number + searched_depth - 1 >= m_max_turns)
+                        {
+                            state.proven_no_win = true;
+                            if (s_fd_trace)
+                            { std::fprintf(stderr, "[fd] T%d PROVEN NO-WIN through T%d -- finishing\n",
+                                           state.turn_number, m_max_turns); }
+                        }
+                        else if (s_fd_trace && line.win_turn > m_max_turns)
+                        {
+                            std::fprintf(stderr, "[fd] T%d no-win NOT proven: unlimited=%d chooser=%d "
+                                         "truncated=%d trunc_events=%llu reach=T%d (searched_depth=%d)\n",
+                                         state.turn_number, budget.Unlimited() ? 1 : 0,
+                                         m_external_chooser ? 1 : 0,
+                                         line.truncated ? 1 : 0, TurnSolver::TruncEvents() - proof_trunc0,
+                                         state.turn_number + searched_depth - 1, searched_depth);
+                        }
+                    }
                     static const bool s_fd_always_research =
                         EnvOn("MTG_FD_ALWAYS_RESEARCH");
                     const bool verified_win =
@@ -3362,6 +3397,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // next turn; once a win enters the horizon the verified line is
                     // committed as usual. This plan carries no recorded breakpoint, so a
                     // draw engine in it re-solves (below).
+                    if (state.proven_no_win)
+                    {
+                        // Nothing to play for: the game ends after this turn (GameState::proven_no_win).
+                        plan = TurnSolver::Plan{};
+                    }
+                    else
                     {
                     if (s_fd_trace)
                     { std::fprintf(stderr, "[fd] T%d pre=%d FALLBACK lookahead\n", state.turn_number, is_pre_combat_main ? 1 : 0); }

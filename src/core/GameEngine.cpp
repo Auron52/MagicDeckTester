@@ -140,6 +140,8 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
         // death in the same turn, the win still counts.
         if (CheckWinCondition(state)) { return state.turn_number; }
         if (state.ActivePlayer().HasLost()) { return -1; }
+        // The search refuted every line through max_turns (see GameState::proven_no_win).
+        if (state.proven_no_win) { return -1; }
     }
     return -1;
 }

@@ -98,6 +98,9 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
     if value_on:
         env["MTG_VALUE_MODEL"]="1"; env["MTG_VALUE_PROFILE"]=prof
         env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
+        # LAZY LEAF NOT ARMED ON V (see the H branch). Pinned explicitly since the engine default
+        # flipped ON for unlimited budgets (2026-10-02) -- popping the var no longer means "off".
+        env["MTG_LAZY_LEAF"]="0"
     else:
         env["MTG_VALUE_MODEL"]="0"
         # H CELL, LADDERED ON THE CHEAP LEAF. The committed pass is still pure heuristic

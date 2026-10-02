@@ -210,7 +210,7 @@ enum Slot : int
     SNOW_ORDER_TAPDRAW_EARLY, // MTG_SNOW_ORDER_TAPDRAW_EARLY  ...and the tap-draw PERMANENTS join that band
     FUNGUS_SPORE_POOL,        // MTG_FUNGUS_SPORE_POOL     spore sources are ONE pool: canonical (oldest) first, count is the only axis
     ETB_WATCHER_GATES,        // MTG_ETB_WATCHER_GATES     per-deck presence gates on the two ETB-cascade scans whose param test is INSIDE the walk (default ON)
-    LAZY_LEAF,                // MTG_LAZY_LEAF             probe each pass LEAFLESS first; an in-window win needs no leaf at all (default OFF)
+    LAZY_LEAF,                // MTG_LAZY_LEAF             probe each pass LEAFLESS first; an in-window win needs no leaf at all (default ON, unlimited budgets only)
     BP_HAND_ENTRY,            // MTG_BP_HAND_ENTRY         a card entering hand OUTSIDE a cast apply arms site 10 too (default OFF)
     BP_ACQ_CLAUSE,            // MTG_BP_ACQ_CLAUSE         site 3's ACQUISITION family (tutor-to-hand/-top, Soulfire, Garth) is fanned out (default ON)
     BP_DIG_AXIS_FANOUT,       // MTG_BP_DIG_AXIS_FANOUT    a searched-dig-axis plan (dig_choice==1) gets the site-4 fan-out (default ON)
