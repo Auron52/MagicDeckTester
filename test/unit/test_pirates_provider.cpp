@@ -137,6 +137,15 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // construction -- so this change of routing is a change of NAME and of future extension
         // point, not of play. See its declaration in DecisionProviders.h.
         {"SelesnyaLifegain", "SelesnyaLifegain"},
+        // KittyEquipmentV2 (admitted to the suite as `kittyv2` 2026-10-02): the Puresteel/Sram
+        // candidate list, carried as a SECOND kitty deck until it is adopted and v1 dropped. It
+        // routes to EquipmentProvider exactly as v1 does, and that is load-bearing in both
+        // directions: detection is by card PARAMS (DetectDecisionProvider), never by name or path,
+        // which is what made moving this list out of the archive-shaped
+        // decks/KittyEquipment/v2-puresteel-hammer/ play-neutral -- and it is also why a
+        // provider-level opt-in cannot be used to tune v2 without moving v1's ground truth. Per-deck
+        // levers for this list therefore go in its PROFILE (see bottom_eval_units).
+        {"KittyEquipmentV2", "Equipment"},
     };
 
     namespace fs = std::filesystem;

@@ -12573,7 +12573,13 @@ static bool MetalcraftEquipHoistEnabled()
 
 static bool FreeCastHoistEnabled()
 {
-    static const bool env_on = EnvOn("MTG_FREE_CAST_HOIST");           // DEFAULT OFF
+    // DEFAULT ON (adopted 2026-10-02). Replicated on 500 HELD-OUT games per deck at the gate cells:
+    // KittyEquipment v2 0.423x core-ms / 0.592x units at a pooled avg delta of EXACTLY +0.0000
+    // (6 cells better, 4 worse -- +-3-5 games of churn around the null, not a sign change), and the
+    // SUITE deck v1 reads units 1.000x on all ten cells with digests identical 10/10, i.e. provably
+    // inert rather than merely quiet. Sound dominance with its carve-outs enforced in code, so the
+    // collapse doctrine puts it on by default.
+    static const bool env_on = EnvOn("MTG_FREE_CAST_HOIST", true);
     return heurarm::Flag(heurarm::FREE_CAST_HOIST, env_on);
 }
 
