@@ -46805,6 +46805,52 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // the exact key — and identical TT/budget behaviour — they had before. Folded
         // order-insensitively (commutative sum of name hashes): two states differing
         // only in cast/discard order share a key, so this never adds spurious misses.
+        //
+        // THE WHOLE SCAN IS DECK-GATED (2026-10-01, key-identical). Both things this loop computes
+        // are folded only behind a DECK CONSTANT, so on a deck that holds neither reader every byte
+        // of it was discarded:
+        //   * gy_acc  is folded only under `gy_retraceable`, which needs a `retrace` card IN THE
+        //     GRAVEYARD -- impossible unless the DECK has one, i.e. unless GyR_RetraceNames is set.
+        //   * gy_lands is folded only under `fuel_reader`, which needs a `gy_land_exile_mana`
+        //     permanent/card of this player's -- impossible unless the deck has one, which implies
+        //     GyR_TypeCounts (DeckGraveyardReaders sets that bit for exactly that param, plus two
+        //     others; broader than needed, so the gate errs toward doing the work).
+        // The gate direction is what makes this safe: the bit being CLEAR is the proof the fold can
+        // never fire, so skipping cannot change the key. `deck_gy_readers` defaults to 0xFFFFFFFF
+        // and DeckGraveyardReaders returns 0xFFFFFFFF on an unknown card, so an unstamped state (the
+        // scenario harness, the viewer) and any deck with a card we cannot look up both do the FULL
+        // scan exactly as before -- byte-identical everywhere, GT unmoved.
+        // THE GATE IS DELIBERATELY RESTRICTED TO pi == 0, and that restriction is the whole safety
+        // argument. `deck_gy_readers` is stamped from the DECK UNDER TEST (GoldFishRunner), and the
+        // opponent is NOT a mirror of it -- core/OpponentDeck.h deals them a FIXED 60-card list
+        // ("FIXED, NOT A MIRROR", so deck-out depth is a constant across decks). That list holds 24
+        // lands, so players[1].graveyard genuinely can contain lands, and a mask built from our
+        // decklist says nothing whatever about it.
+        // As it happens neither fold CAN fire for the opponent today: nothing in that list has
+        // `retrace`, and `fuel_reader` needs a `gy_land_exile_mana` card the opponent controls or
+        // holds, which they have no way to obtain (they never cast anything). So gating both players
+        // would be behaviour-identical right now -- and that is exactly why it is the wrong thing to
+        // write. It would make a TT key hole contingent on the contents of an unrelated list that
+        // someone may extend for an unrelated reason, with no test tying the two together; adding a
+        // retrace card or a Deathrite to the opponent deck would silently start merging states that
+        // reach different futures. Keying the skip on the stamp, for the player the stamp describes,
+        // needs no such argument. The opponent keeps the full scan and that costs nothing measurable:
+        // their graveyard only grows if we mill or discard them, so it is empty or tiny in every deck
+        // that drove this change.
+        // (Dominance.h's twin loop DOES apply `gy_bits` to both players. That is a separate question
+        // and a much weaker one -- it is a pruning projection, where being too coarse drops reachable
+        // lines rather than corrupting a memo -- but it is worth a look; noted, not changed here.)
+        // What it removes is not the fold but the PER-CARD DATABASE WORK: a LookupCached for the
+        // retrace param plus a second one inside ZoneCard for the land test, on every graveyard card,
+        // of both players, on EVERY key build -- and BuildSimKey is ~15% of runtime on Fungus, whose
+        // sacrifice engine makes the graveyard the fastest-growing zone on the board. This is the
+        // `deck-inert check scanning the board` shape, which has already paid once on this deck.
+        const bool gy_stamped          = (pi == 0);   // the only player deck_gy_readers describes
+        const bool gy_retrace_possible = !gy_stamped
+                                      || (state.deck_gy_readers & GyR_RetraceNames) != 0;
+        const bool gy_fuel_possible    = !gy_stamped
+                                      || (state.deck_gy_readers & GyR_TypeCounts)   != 0;
+        if (gy_retrace_possible || gy_fuel_possible)
         {
             uint64_t gy_acc       = 0;
             bool     gy_retraceable = false;
@@ -46812,9 +46858,13 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             for (const Card& c : p.graveyard)
             {
                 gy_acc += c.m_name_hash;  // cached std::hash(m_name)
-                const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-                if (cdef && cdef->params.retrace) { gy_retraceable = true; }
-                if (ZoneCard(c).IsLand()) { ++gy_lands; }   // same test as GraveyardLandFuel
+                if (gy_retrace_possible)
+                {
+                    const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+                    if (cdef && cdef->params.retrace) { gy_retraceable = true; }
+                }
+                // same test as GraveyardLandFuel
+                if (gy_fuel_possible && ZoneCard(c).IsLand()) { ++gy_lands; }
             }
             if (gy_retraceable)
             {
