@@ -1,0 +1,56 @@
+# Snow at depth 8 / budget 0: where the time goes (2026-10-02)
+
+Status: **DEFERRED** -- measured, not yet worked on.
+
+## Context
+
+The d8 b0 recovery check (every game slower than ground truth must reach the GT turn at
+`--depth 8 --budget-ms 0`) has 5 Snow games. One (overnight d5 s7007 gi55) took 9.5 h and
+recovered (T6 = GT). The other four (overnight d3 s4004 gi56/gi104, s6006 gi134, s7007 gi16)
+were still running after 11 h, on 4 threads of an otherwise-busy box.
+
+## Finding 1 -- gi16 is not playing, it is BOTTOMING
+
+gi16 mulligans to 7 and bottoms 1 of 8. Snow has no exhaustive keep table and no
+`bottom_eval_depth` / `bottom_eval_budget_ms`, so `AIEngine::BottomCards` scores each
+bottom candidate with a full clairvoyant `RolloutWinTurnFrom` game **at the game's play
+settings** -- here d8 b0. Every sample (6 gdb snapshots over 2 min) had that thread in
+`HandleMulligan -> BottomCards -> RolloutWinTurnFrom -> ... -> FullSearchLine`. That is one
+full d8 b0 game per distinct candidate before turn 1 -- several times the cost of the game itself.
+
+This is an apparatus problem for the recovery check rather than a search cost: the GT game
+bottomed with d3 b10 rollouts. Re-run such games with the bottom eval pinned to the cell's
+settings (`MTG_BOTTOM_EVAL_DEPTH=<cell depth> MTG_BOTTOM_EVAL_BUDGET=<cell budget>`), which
+also makes the d8 b0 game start from the same kept hand as the GT game.
+
+## Finding 2 -- the other three: 75% in the post-breakpoint continuation derivation
+
+`perf record --call-graph dwarf` on the live batch (20 s, 7.7k samples, 4 threads), inclusive:
+
+| frame | incl. |
+|---|---|
+| `SimulateToEndImpl` (rollouts) | 99% |
+| `ApplyPlanDirect` | 87% |
+| `BpEnumEntryFor` | 78% |
+| `BpDeriveContinuationList` | 75% |
+| `EnumeratePlansWithLandUncached` | 73% |
+| `EnumeratePlans` | 63% |
+| `TapForCostSharedImpl` (payability) | 24% |
+| `SubsetPayableWithFilters` | 22% |
+| `TurnSolver::SolveUncached` | 8% |
+
+So nearly all d8 b0 Snow time is spent re-enumerating the continuation list at a breakpoint
+(a cantrip resolving mid-turn) while APPLYING plans inside rollouts. The thread-local
+`BpEnumEntryFor` memo (cap 8192) does not catch them: rollout breakpoint states are almost all
+distinct. The flat profile also shows ~15% in allocation and string handling (`operator new`/
+`free`, `std::string` append/assign, `unordered_map<string,...>` lookups) on this path.
+
+## Leads (unmeasured)
+
+1. Hit rate of the BP enum memo at d8 vs d3 (`MTG_BP_ENUM_PROBE=1`) -- if the miss rate is
+   ~100% inside rollouts, a cheaper derivation, not a bigger cache, is the lever.
+2. The subset-payability walk under the enumeration (see the Snow "greedy subset walk" cost
+   notes) is 22% inclusive by itself.
+3. Allocation/string churn in `EnumeratePlans` lambdas.
+
+Any change must stay sound (no truncation) and byte-identical at play settings.
