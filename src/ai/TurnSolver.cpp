@@ -41333,7 +41333,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
         // clean-set sort is rank-equal for auras (all rank 20) and stable, so it preserves this order. A
         // plan with no such action (every non-aura-deck plan) is order-unchanged (stable, all keys equal).
-        if (SeqAuraOrderingEnabled())
+        // `pre.aura_target` is the SAME precomputed bit that already guards this clause's two sibling
+        // FILTERS (SubsetHasUnenabledRestrictedAura / SubsetHasAuraOnUncastCreature, both above) -- it
+        // is true only if some candidate is a CastFromHand with enchant_target > 0. Both predicates
+        // below return false on their first line without one, so with the bit false every sort key is
+        // 0 and a STABLE sort over all-equal keys is the identity: skipping it is byte-identical, not
+        // an approximation. The bit existed and guarded the filters; it was simply never applied to
+        // the sorts, so EVERY no-aura deck paid two std::stable_sorts -- each with its own
+        // _Temporary_buffer allocation -- per EMITTED PLAN, to discover nothing. Measured at 3.8% of
+        // wall on KittyEquipment v2 at its suite cell (29.7M emitted plans over 640 games): the two
+        // __insertion_sort instantiations, their two __merge_adaptive halves and the buffer.
+        if (pre.aura_target && SeqAuraOrderingEnabled())
         {
             std::stable_sort(plan.actions.begin(), plan.actions.end(),
                 [&](const Action& x, const Action& y)
@@ -41343,7 +41353,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // plan-action order), so stable-sort such Auras to the end (key 1 vs 0). No-op unless the injector
         // added one -> byte-identical otherwise. Both this and the sort above key plain-vs-conditional
         // disjointly (an injected Aura is plain), so they compose.
-        if (AuraOnNewCreatureEnabled())
+        // Same argument as the sort above (see its note): no candidate with enchant_target > 0 means
+        // IsAuraOnNewCreature is false for every action, so the sort cannot reorder anything.
+        // `fill_action` is covered: it is always a copy of some cands[j] whose X / face damage
+        // FillScaledCastFace / FillScaledXTrick rescale -- neither writes `kind` or `enchant_target`.
+        if (pre.aura_target && AuraOnNewCreatureEnabled())
         {
             std::stable_sort(plan.actions.begin(), plan.actions.end(),
                 [&](const Action& x, const Action& y)

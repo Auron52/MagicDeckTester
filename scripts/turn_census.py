@@ -282,8 +282,15 @@ def cmd_summary(args):
     print(f"  the slowest 10% of decisions hold {ratio(tw,tot_w)*100:>5.1f}% of ALL discarded units")
     resc = sum(r.get("idwaste_rescuable", 0) for r in clean)
     psw = sum(r.get("idwaste_passes", 0) for r in clean)
-    print(f"  aborted passes={psw:,}  of which the discard threw away a PROVEN better win: {resc:,}"
-          + ("  <-- lossy truncation, not just slow" if resc else ""))
+    # `idwaste_rescuable` is bumped REGARDLESS of MTG_ID_ANYTIME, deliberately, so that the control
+    # arm can price what the unconditional discard throws away. With the anytime commit ON -- the
+    # shipped default since 2026-09-09 -- those passes are KEPT, so this number is the rescue
+    # working, not a loss. Printing it as a loss read as a quality defect on a healthy run.
+    print(f"  aborted passes={psw:,}  of which the pass held a PROVEN better win: {resc:,}")
+    if resc:
+        print("    ^ with MTG_ID_ANYTIME ON (shipped default) these are COMMITTED by the anytime")
+        print("      rescue, so this is work saved, not lost. It is the LOSS only on the")
+        print("      MTG_ID_ANYTIME=0 control arm -- the counter is ungated on purpose to price it.")
 
     print()
     print("CONDEMNATION -- consultations vs declines, over the whole census")

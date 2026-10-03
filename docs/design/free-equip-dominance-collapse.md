@@ -739,3 +739,155 @@ is **not** a verdict on the decklist. v1 ships an adopted exhaustive keep model 
 ships neither, and both of those improve play, not just cost. The two lists become comparable only
 once v2 has the same artefacts — which is exactly the next stage, and the reason suite membership had
 to come first.
+
+## 9. The on-policy census, and the 32% of wall that is not search (2026-10-03)
+
+§8 priced the deck at the gate's own settings for the first time. This section does the same for the
+question *where does the remaining cost go*, and the answer moved the investigation off branching
+entirely.
+
+### 9a. The census, re-run on-policy — bottoming is no longer the story
+
+`MTG_TURN_CENSUS`, HEAD, 640 held-out games (seeds 910000–910639) at the gate's worst searched cell
+(d5 / budget 20), 21,277 decision rows, **0 contended**:
+
+| | rows | units | share |
+|---|---|---|---|
+| `probe=0` — the game being played | 2,914 | 24,528,283 | **63.4%** |
+| `probe=1` — a bottoming TRIAL game | 18,363 | 14,187,543 | **36.6%** |
+
+Trial games were **82.4%** before `bottom_eval_units: 600` (§8b). They are now 36.6%, so the
+majority of v2's cost is at last the game it is actually playing. A keep table still removes that
+36.6% outright, but it is no longer the dominant term, and cost work no longer has to wait for it.
+
+Per-site: `rollout_step` 29.9%, `greedy_fallback` 27.9%, `la_cand` 24.1%, `la_bp_wave` 16.0%. The
+cost is a tail — the slowest 1% of decisions carry 20.4% of all units, max/median = **1177×** — and
+the heaviest decisions are all **turn 3 and turn 4**, the go-off turns, the worst scoring 147,295
+candidates in one decision.
+
+### 9b. The enumeration funnel, and why it is NOT the lever
+
+Summed over every `EnumeratePlans` call in the census:
+
+| stage | count | note |
+|---|---|---|
+| odometer positions | 622,735,558 | |
+| positions ENTERED | 138,668,654 | 22.3% — `MTG_EQUIP_COPY_SKIP`'s radix cut already skips 77.7% |
+| plans EMITTED | 29,670,695 | **21.4% — 109.0M entered positions rejected before emission** |
+| after dedup | 28,364,227 | 95.6% survive (dedup removes 4.4%) |
+| candidates SCORED | 9,342,483 | 32.9% of deduped |
+
+The 109.0M rejections are localised: the `sat` gate drops **0**, the `rules` gate drops 38,953
+(0.03%), and everything else dies between `enum_pass_rules` and `enum_emitted` — overwhelmingly the
+mana gate, i.e. subsets the board cannot pay for.
+
+**That is not a cost lever, and the reason is structural.** A rejected position never becomes a
+scored candidate, so it consumes **zero budget units** — only its own predicate walk. This deck has
+already run the experiment: `MTG_EQUIP_COPY_SKIP` converted a rejection into a true radix cut,
+removed ~58% of odometer positions, and measured **ms 1.0067 / 0.9982 — no wall at all** (§7f). A
+second position-level collapse would be the same bet. Note also `walk_enter` = 302,213,228 against
+`sub_passed` = 301,758,732: the greedy subset walk rejects **0.15%** of 302M visits, which is the
+same finding from the other side.
+
+So the funnel was not pursued. The wall was profiled instead.
+
+### 9c. Profiling on this box — two traps, both worth writing down
+
+`perf record` fails under this WSL2 kernel in two separate ways, and each looks like something else:
+
+* the default **`cycles`** event (no usable hardware PMU) fails at ring-buffer write time with
+  `failed to write perf data, error: Bad address` — which reads as a perf bug, not a missing
+  counter. Use **`-e cpu-clock`**.
+* writing `perf.data` **onto the workspace filesystem** fails the same way once the data exceeds a
+  page; a trivial `sleep` capture succeeds and a real one does not. Write to **`/tmp`**.
+* `--call-graph dwarf` fails regardless and the kernel has no LBR, so **self time only**. That is
+  enough to answer "which loop", which is the question.
+
+`logs/kittyv2_perf.sh` carries all three.
+
+### 9d. 32.4% of v2's wall is not search work
+
+Flat profile, `build/Profile`, seed 910207 (the census's heaviest game) at d5/b20, 52K samples:
+
+| class | share of wall |
+|---|---|
+| engine logic | 66.5% |
+| container / sort churn (`Action`, `Plan`, `vector`) | **16.7%** |
+| `std::string` machinery | **12.7%** |
+| allocation (`new` / `delete` / `free`) | **3.1%** |
+
+This is the per-node residual §7f predicted ("the residual is per-node … allocation/evaluation
+profiling is the right next move, and not before"), now priced. The single biggest engine symbol is
+`TurnSolver::SolveUncached` at 13.73% self.
+
+### 9e. ADOPTED: the aura-ordering sorts ran on every deck, including decks with no Auras
+
+`EnumeratePlans`' emit path ran **two `std::stable_sort`s per EMITTED PLAN**, each allocating its own
+`_Temporary_buffer`, to order Auras:
+
+```cpp
+if (SeqAuraOrderingEnabled())   { std::stable_sort(... IsConditionalRestrictedAura ...); }
+if (AuraOnNewCreatureEnabled()) { std::stable_sort(... IsAuraOnNewCreature ...); }
+```
+
+Both predicates return false on their first line unless the action is a `CastFromHand` with
+`enchant_target > 0`. With no such candidate every sort key is 0, and a **stable** sort over
+all-equal keys is the identity — so on a deck with no Auras both sorts were guaranteed to do nothing,
+29.7M times per 640 games.
+
+**The guard needed no new predicate.** `pre.aura_target` — true only if some candidate is a
+`CastFromHand` with `enchant_target > 0` — already existed and already gated this clause's two
+sibling aura *filters* a few lines above (`SubsetHasUnenabledRestrictedAura`,
+`SubsetHasAuraOnUncastCreature`). It was simply never applied to the sorts. `fill_action` is covered:
+it is always a copy of some `cands[j]` whose X / face damage `FillScaledCastFace` /
+`FillScaledXTrick` rescale, and neither writes `kind` or `enchant_target`.
+
+Measured:
+
+| | |
+|---|---|
+| smoke, whole fleet | **107 passed / 0 failed, configs changed: 0, `play-changed=0`** on searched AND d0 |
+| pooled 4-cell A/B | digests **IDENTICAL 4/4**, units **1.0000 on 4/4** |
+| kittyv2 instructions (callgrind, 6 games) | 29,625,638,036 → 29,093,256,311 = **0.9820** |
+| `auras` instructions — NEGATIVE CONTROL | 1,965,359,614 → 1,965,855,435 = **1.0003** |
+| profile attribution of the removed symbols | **4.42%** of wall samples |
+
+The control at 1.0003 is the added branch test itself and nothing more, which is exactly right on a
+deck that does set `pre.aura_target`; it is also the arming proof in the other direction — a lever
+reading 1.0000 on *both* decks would have meant "never armed", this document's most repeated false
+null (§3c, §7e, §8c).
+
+This is a fleet-wide collapse, not a kitty one: every deck in the repo that plays no Auras was paying
+it, in proportion to its emitted plans.
+
+### 9f. WALL COULD NOT BE MEASURED HERE, and the negative control is what proved it
+
+Both wall attempts failed, and the way they failed is the reusable part:
+
+* **4 cells in one pooled batch per arm** → reported a **7.9% speedup on `auras`**, a deck the guard
+  cannot touch. A 1.5M-ms kittyv2 job shared that pool with a 29k-ms auras job, so each small job's
+  `ms` measures its core share, not its cost. (memory `pooled-ab-needs-arms-innermost`.)
+* **one cell per batch, arms alternated, 3 reps, medians** → kittyv2 0.9925 with ±3% spread, and the
+  control still at **0.9677 with tight ±1% reps**. A systematic 3% shift on a deck the change cannot
+  affect is code **layout** — adding a branch moves alignment and inlining — and layout noise of that
+  size swamps a ~4% effect.
+
+So the adoption rests on instruction counts and byte-identity, per CLAUDE.md's collapse directive
+(*judge a collapse on work removed and soundness, never on whether wall fell*). **A wall A/B whose
+negative control moves cannot attribute anything to the lever, and quoting its headline number would
+have been reporting the instrument.** Run the control; the control is the finding.
+
+### 9g. What is next, in priority order
+
+1. **`std::string` machinery at 12.7% of wall has no business on a search hot path.** The top symbol
+   is `operator+(string&&, string&&)` at 1.68%, with `string::operator=` 1.07%,
+   `_Hashtable<string, CardDefinition>::find` 1.03%, `_Hash_bytes` 0.63% and `memcmp` 1.11% beside
+   it. `CardDatabase::LookupCached` (2.25% across three instantiations) is already heavily optimised
+   — per-object `m_def` memo, `NotInDb` sentinel, interned-pointer lookup — so the remaining
+   string-keyed `Lookup(name)` calls are coming from somewhere else and need a caller attribution
+   that this box's perf cannot give. Callgrind on one game would name them exactly.
+2. **Container churn at 16.7%**: `~vector<Action>` 2.97% + `push_back` 1.71% + `Action` copy 1.03%
+   is ~5.7% spent building and destroying the per-plan action vector 29.7M times. An arena or a
+   small-buffer-optimised action list is the shape, and it is a bigger change than anything here.
+3. **The keep table** still removes the 36.6% `probe=1` block outright, and it is the user's ruled
+   next stage (mulligan first, then the leaf).
