@@ -65,12 +65,17 @@ const args = process.argv.slice(2);
 const UPDATE = args.includes('--update-baseline');
 const FILTER = args.filter(a => a !== '--update-baseline');
 
+// `deck` is the dir relative to references/: "<Deck>" or "<Deck>/v<N>-<slug>". Only the FOLDER
+// carries a version -- the decklist inside it is still named for the deck -- so the filename stem is
+// always the first segment. (This is the fallback path; the primary source is the resolver in
+// viewer_protocol_check.py, which must agree with this. See the alignment comment below.)
 function resolveDeck(deck) {
   const dir = path.join(DECKS, deck);
+  const stem = deck.split('/')[0];
   for (const ext of ['cod', 'txt']) {
-    const f = path.join(dir, deck + '.' + ext);
+    const f = path.join(dir, stem + '.' + ext);
     if (fs.existsSync(f)) {
-      const prof = path.join(dir, deck + '.profile.json');
+      const prof = path.join(dir, stem + '.profile.json');
       return { deckPath: f, profilePath: fs.existsSync(prof) ? prof : null };
     }
   }
@@ -170,17 +175,32 @@ function resolveAlignment(files) {
   return out;
 }
 
+// Walk references/ to ANY depth, excluding the aspirational trees by NAME.
+//
+// This used to read exactly one level, which quietly excluded a VERSIONED list's references --
+// CLAUDE.md puts those at references/<Deck>/v<N>-<slug>/ (a reference belongs to the list it was
+// played on), so they were checked by nothing at all. Depth was never the right test for "is this
+// an aspirational known-slow game"; the folder NAME is. Recursing makes the enumeration
+// depth-proof, so a reference cannot silently leave the gate by being filed one level deeper.
+//
+// `deck` is the dir RELATIVE to references/ ("KittyEquipment", or
+// "KittyEquipment/v2-puresteel-hammer"), which is the key viewer_protocol_check.py's resolver uses.
 function collectRefs() {
   const out = [];
-  for (const deck of fs.readdirSync(REFROOT)) {
-    if (deck === 'suboptimal' || deck === 'optimal') continue;
-    const dir = path.join(REFROOT, deck);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    if (FILTER.length && !FILTER.includes(deck)) continue;
-    for (const f of fs.readdirSync(dir)) {
-      if (/^claude_s.*_gi.*\.json$/.test(f)) out.push({ deck, file: path.join(dir, f) });
+  const walk = (dir, rel) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) {
+        if (!rel && (e.name === 'suboptimal' || e.name === 'optimal')) continue;
+        walk(path.join(dir, e.name), rel ? `${rel}/${e.name}` : e.name);
+      } else if (rel && /^claude_s.*_gi.*\.json$/.test(e.name)) {
+        // FILTER matches either the deck segment or the full relative dir, so `--deck KittyEquipment`
+        // still selects that deck's versioned references too.
+        if (FILTER.length && !FILTER.includes(rel) && !FILTER.includes(rel.split('/')[0])) continue;
+        out.push({ deck: rel, file: path.join(dir, e.name) });
+      }
     }
-  }
+  };
+  walk(REFROOT, '');
   return out.sort((a, b) => a.file.localeCompare(b.file));
 }
 

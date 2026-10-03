@@ -138,14 +138,35 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _resolve_deck_dir(ref_dir):
-    """decks/<name>/<name>.{cod,txt} + .profile.json for a references/<dir>, or None."""
-    for cand in (ref_dir, ref_dir.replace("_", " ")):
-        base = os.path.join("decks", cand)
+    """decks/... for a references/<dir>, or None. `<dir>` is `<deck>` OR `<deck>/<version>`.
+
+    A VERSIONED list keeps its references one level deeper -- references/<Deck>/v<N>-<slug>/ --
+    because a reference belongs to the list it was PLAYED on (CLAUDE.md's archive convention;
+    server.js `refsOnArchivedList`). Its decklist lives at decks/<Deck>/v<N>-<slug>/<Deck>.cod,
+    where the FILE is named for the deck and only the FOLDER carries the version.
+
+    Both shapes resolve here (USER 2026-10-02: *"We should check all of the references for all
+    versions automatically... we want to leverage everything the user has created to ensure the
+    engine is solid."*). Before this, the versioned shape resolved to nothing and its references
+    were gated by NOTHING -- the same blind spot this file already records for 30 Goblins + 10
+    Creature Giving games, re-opened by a layout convention that arrived later.
+    """
+    parts = ref_dir.split("/")
+    cands = [ref_dir]
+    # The underscore->space fallback applies to the DECK segment only (references/Creature_Giving ->
+    # "decks/Creature Giving"). Rewriting the whole path would mangle a version slug that contains
+    # one; slugs use hyphens by convention, but guessing is what this is replacing.
+    if "_" in parts[0]:
+        cands.append("/".join([parts[0].replace("_", " ")] + parts[1:]))
+    for cand in cands:
+        cparts = cand.split("/")
+        base = "/".join(["decks"] + cparts)
         if not os.path.isdir(os.path.join(_REPO_ROOT, base)):
             continue
+        stem = cparts[0]          # the decklist is named for the DECK, never for the version folder
         for ext in (".cod", ".txt"):
-            deck = f"{base}/{cand}{ext}"
-            prof = f"{base}/{cand}.profile.json"
+            deck = f"{base}/{stem}{ext}"
+            prof = f"{base}/{stem}.profile.json"
             if (os.path.exists(os.path.join(_REPO_ROOT, deck))
                     and os.path.exists(os.path.join(_REPO_ROOT, prof))):
                 return (deck, prof)
@@ -820,15 +841,21 @@ def check_reference(path, collect=None):
                          the same decision frame), so the recorded game no longer occurs.
     """
     ref = json.load(open(path))
-    deck_dir = os.path.basename(os.path.dirname(path))
+    # The dir RELATIVE TO references/, not just its last segment: a versioned reference lives at
+    # references/<Deck>/<version>/, where the last segment is the version slug and resolves to no
+    # deck at all. basename() silently turned every such reference into an "unknown deck dir".
+    deck_dir = os.path.dirname(os.path.relpath(path, "references"))
     if deck_dir not in DECKS:
         # LOUD, not `ok`. This used to return ok/"skip", so a reference dir missing from DECKS was
         # counted as verified while never being replayed at all -- 30 Goblins + 10 Creature Giving
         # references sat in that blind spot, including the deck a 13-issue viewer batch was built
         # against. A reference we cannot resolve a deck for is UNVERIFIED, and must say so.
+        _stem = deck_dir.split("/")[0]
         return False, "play", (f"unknown deck dir {deck_dir!r} -- NOT replayed; expected "
-                               f"decks/{deck_dir}/{deck_dir}.cod|.txt + .profile.json "
-                               "(the per-deck folder layout this map is DERIVED from), "
+                               f"decks/{deck_dir}/{_stem}.cod|.txt + .profile.json "
+                               "(the per-deck folder layout this map is DERIVED from; for a "
+                               "VERSIONED reference dir <Deck>/v<N>-<slug> the decklist is named "
+                               "for the DECK and only the folder carries the version), "
                                "else add a row to _DECK_OVERRIDES "
                                f"in this file (note references/<dir> need not match decks/<dir>)")
     deck, prof = DECKS[deck_dir]
@@ -1302,11 +1329,22 @@ def main():
     if "--emit-resolved" in sys.argv[1:]:
         i = sys.argv.index("--emit-resolved")
         return emit_resolved([a for a in sys.argv[i + 1:] if not a.startswith("--")])
-    # The one-level glob deliberately covers only the VERIFIED set, references/<deck>/claude_*.json.
-    # Aspirational "known-slow" games live one level deeper (references/suboptimal/<deck>/…, see that
-    # folder's README) and are excluded here: their win turn is knowingly beatable, so gating on them
-    # would report permanent drift. Guard against a future deeper glob too.
-    refs = sorted(p for p in glob.glob("references/*/claude_s*_gi*.json")
+    # RECURSIVE, with the aspirational trees excluded BY NAME rather than by depth.
+    #
+    # This glob used to be deliberately ONE LEVEL, to keep the knowingly-beatable
+    # references/suboptimal/<deck>/… games out of a gate they would permanently drift against. But
+    # depth is the wrong instrument for that distinction, and it silently acquired a second meaning:
+    # CLAUDE.md's archive convention puts a VERSIONED list's references at
+    # references/<Deck>/v<N>-<slug>/ -- exactly the depth the one-level glob excluded -- so a
+    # reference played on a version list was gated by nothing. The KittyEquipment v2 T3 win was the
+    # first, found only because the user asked whether their references still matched.
+    #
+    # Excluding by NAME keeps the suboptimal/optimal carve-out exact while making the enumeration
+    # depth-proof: a reference cannot fall out of the gate by sitting one level deeper than someone
+    # remembered to glob. Anything we then cannot resolve a deck for is reported LOUDLY (see the
+    # "unknown deck dir" branch), never skipped -- which is the property that matters, because the
+    # whole point of this sweep is to leverage every game the user has hand-played.
+    refs = sorted(p for p in glob.glob("references/**/claude_s*_gi*.json", recursive=True)
                   if not p.startswith(("references/suboptimal/", "references/optimal/")))
     if not refs:
         print("no reference games found under references/")
@@ -1333,8 +1371,12 @@ def main():
         PINNED = set()   # e.g. {"Hinata2/claude_s1_gi0.json"}  -- grows as overnight surfaces gaps
         seen, sampled = set(), []
         for p in refs:
-            deck = p.split("/")[1]
+            # Key on the full reference DIR, not just the deck segment, so each VERSION of a deck
+            # gets its own sample. A version list is a different decklist played by the same name;
+            # sampling by deck alone would cover the shipping list and silently drop every
+            # archived-list reference from sample mode.
             rel = p[len("references/"):]
+            deck = os.path.dirname(rel) or rel
             if deck not in seen or rel in PINNED:
                 seen.add(deck); sampled.append(p)
         refs = sampled
