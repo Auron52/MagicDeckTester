@@ -82,7 +82,18 @@
   #planbar .freeeq { margin-left:auto; font-weight:600; color:#d9e6f2; background:#2f3a46;
                      border:1px solid #4a5a6a; }
   #planbar .freeeq:hover { background:#3a4654; border-color:#6a7f94; }
+  /* ARMED: the gesture is waiting for a board click, so the button has to read as a live mode and
+     not as a button you already pressed (the ⛏ Tap and Aether Vial modes have the same problem). */
+  #planbar .freeeq.armed { background:#5a4a24; border-color:#f0be78; color:#ffe9c4; }
   #planbar .freeeq + .combooff { margin-left:8px; }
+  /* "EQUIP ALL FREE TO X" board targeting: a legal host lights up amber (the Equipment colour, so
+     it is not confused with the blue .selectable of a decision prompt) and carries the count it
+     would receive, so the pick is made against the board. */
+  .thumb.feqhost { cursor:pointer; }
+  .thumb.feqhost img { box-shadow:0 0 0 3px #f0be78, 0 0 14px rgba(240,190,120,.65) !important; }
+  .thumb.feqhost:hover img { box-shadow:0 0 0 3px #ffd79a, 0 0 18px rgba(240,190,120,.9) !important; }
+  .thumb .feqbadge { position:absolute; top:2px; right:2px; background:rgba(240,190,120,.97); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:3; cursor:pointer; }
   #planbar .chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
   #planbar .chip { display:inline-flex; align-items:center; gap:5px; background:#2a313b; border:1px solid var(--line);
       border-radius:13px; padding:2px 6px 2px 4px; font-size:12px; }
@@ -940,12 +951,50 @@ function freeEquipAllHosts() {
                         count: h.pieces|0 }))
            .sort((a,b)=> b.count - a.count);
 }
-// Either route's hosts, in one shape, so the button and the picker never branch on which is live.
+// Either route's hosts, in one shape, so the button and the board targeting never branch on which
+// is live.
 function freeEquipOffers() {
   const one = freeEquipAllHosts();
   if (one.length) return one;
   return freeEquipHosts().map(h => ({ hostNum: h.hostNum, hostName: h.hostName,
                                       count: h.pieces.length }));
+}
+// How many free pieces `hostNum` would receive, or 0 if it is not a legal host for the gesture.
+// Used by bfThumb to light the board up while the gesture is armed, so it is called once per
+// battlefield entry per render -- freeEquipScan() is cached per decision, which is what keeps that
+// affordable on the wide boards this feature exists for.
+function freeEquipCountFor(hostNum) {
+  if (!(hostNum > 0)) return 0;
+  const h = freeEquipOffers().find(x => x.hostNum === hostNum);
+  return h ? (h.count|0) : 0;
+}
+// ---- BOARD TARGETING, not a dialog -----------------------------------------------------------
+// USER, 2026-10-03: *"When choosing which creature to equip all to, I don't want a dialog. I want
+// targeting on the board so I know what I am equipping."*
+//
+// The gesture used to open a modal listing host names and counts. A name is the wrong thing to
+// choose against here: the whole decision is about the BOARD -- which body is unblocked, which one
+// already carries a Jitte, which one is summoning-sick -- and a list of names hides exactly that.
+// So the button now ARMS a mode (the Aether Vial / ⛏ Tap pattern already in this file) and the
+// legal hosts light up in place, each carrying the count it would receive.
+//
+// It is a toggle, like the Vial: pressing it again cancels, and so does Escape. That matters more
+// here than for the other modes because arming it is one click away from a mis-click, and the
+// modal at least had a Cancel button -- an armed mode with no way out is the discard-menu trap
+// (5bde7bf1) in a new costume.
+function toggleFreeEquipMode() {
+  if (S.over || !S.decision || S.decision.type !== 'main_phase') return;
+  hideVerdict();
+  S.freeEquipPick = !S.freeEquipPick;
+  if (S.freeEquipPick) {
+    S.leMode = false; S.vialMode = null; S.blinkMode = null; S.tapMode = false;  // exclusive modes
+    const offers = freeEquipOffers();
+    const which = offers.map(h => `${h.hostName} (+${h.count})`).join(', ');
+    flashHint(`Equip all free — click the creature to equip: ${which}. `
+            + `Only LOOSE Equipment costing {0} right now is included; anything in hand needs a `
+            + `cast, so drag those. Press Escape or the button again to cancel.`);
+  }
+  renderBoard();
 }
 function queueAllFreeEquips(hostNum, hostName) {
   // ONE entry when the engine offers the bundle. It is not N queued equips that happen to commit
@@ -971,29 +1020,14 @@ function queueAllFreeEquips(hostNum, hostName) {
               : `No free loose Equipment to attach to ${hostName}.`);
   return n;
 }
-function freeEquipPickerHtml(){
-  const hosts = freeEquipOffers();
-  let h=`<h3>Equip all free Equipment — to which creature?</h3>`;
-  h+=`<div class="sub">Attaches every LOOSE Equipment whose equip cost is {0} <em>right now</em> `
-   +`(metalcraft makes these free) to one creature, as a single line. Equipment still in hand is not `
-   +`included — that needs a cast, so drag those. Anything left over can be attached on a later line.</div>`;
-  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
-  hosts.forEach(x=>{ h+=`<button class="primary" data-feh="${x.hostNum}">${esc(x.hostName)} — ${x.count} free</button>`; });
-  h+=`<button class="ghost" data-feh="0">Cancel</button></div>`;
-  return h;
-}
-function renderFreeEquipPicker(){
-  const panel=$('decpanel'), back=$('decback');
-  back.className='modal'; back.style.display='block';
-  panel.className='show modal'; panel.innerHTML=freeEquipPickerHtml();
-  panel.querySelectorAll('[data-feh]').forEach(el=>{
-    el.onclick=()=>{ const n=+el.dataset.feh; S.freeEquipPick=null;
-      if (n>0) {
-        const h=freeEquipOffers().find(x=>x.hostNum===n);
-        if (h) { queueAllFreeEquips(n, h.hostName); }
-      }
-      renderBoard(); };
-  });
+// The board click that lands the gesture. Disarms either way, so a click never leaves the mode on.
+function freeEquipAtHost(hostNum) {
+  if (!S.freeEquipPick) return;
+  const h = freeEquipOffers().find(x => x.hostNum === hostNum);
+  S.freeEquipPick = false;
+  if (h) { queueAllFreeEquips(hostNum, h.hostName); }
+  else   { flashHint('That creature cannot receive the free Equipment on this line.'); }
+  renderBoard();
 }
 
 // The attach targets for a QUEUED plan entry, whichever kind of attachment it is. One funnel so the
@@ -1979,7 +2013,12 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const tapAttr = o.taps ? ` data-taps="${esc(o.taps)}"` : '';
   const tapN = o.taps ? S.plan.filter(p=>p.kind==='pretap'&&p.num===o.num).length : 0;
   const tapCls = o.taps && S.tapMode ? ' pretap-src' : '';
-  return `<span class="thumb ${cls}${vcls}${tcls}${tapCls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}${tapAttr}>`+
+  // "EQUIP ALL FREE TO X" board targeting (USER 2026-10-03). While the gesture is armed every LEGAL
+  // host lights up and carries the count it would receive, so the player picks against the board
+  // they can see rather than against a list of names in a modal.
+  const feqN   = S.freeEquipPick ? freeEquipCountFor(o.num) : 0;
+  const feqCls = feqN ? ' feqhost' : '';
+  return `<span class="thumb ${cls}${vcls}${tcls}${tapCls}${feqCls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}${tapAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
@@ -1987,6 +2026,7 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     // The sacrifice half of a two-ability permanent, as its own click target (see .sacactbadge).
     (sacTag.split?`<span class="sacactbadge${sacTagN?' on':''}" data-sacact="${esc(o.name)}" title="${esc((sacTag.sac[0]||{}).actLabel || 'sacrifice a creature')} — a SEPARATE ability from clicking the card${sacTagN?' (click again to remove one)':''}">🩸${sacTagN?` ×${sacTagN}`:''}</span>`:'')+
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
+    (feqN?`<span class="feqbadge" title="click ${esc(o.name)} to attach all ${feqN} free Equipment to it">⚔ +${feqN} free</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     ((o.taps&&S.tapMode)?`<span class="pretapbadge" title="click to tap ${esc(o.name)} yourself for {${esc(String(o.taps).split('').join('} or {'))}}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
     // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
@@ -2125,9 +2165,17 @@ function freeEquipButtonHtml(){
   const hosts = freeEquipOffers();
   if (!hosts.length) return '';
   const n = hosts.reduce((m,h)=>Math.max(m,h.count),0);
+  // Armed state is rendered, not just hinted: the mode's whole point is that the next board click
+  // means something different, so the control that armed it must say so even after the hint fades.
+  if (S.freeEquipPick) {
+    return `<button id="freeeq" class="freeeq armed" title="Click the highlighted creature on the `
+         + `board to attach every free Equipment to it. Press Escape or this button to cancel.">`
+         + `⚔ Pick a creature on the board — Esc to cancel</button>`;
+  }
   return `<button id="freeeq" class="freeeq" title="Attach every loose Equipment that costs {0} to `
        + `equip right now (metalcraft makes these free) to one creature, as a single line — instead `
-       + `of dragging them one at a time. Equipment still in hand needs a cast, so drag those.">`
+       + `of dragging them one at a time. Click this, then click the creature on the board. `
+       + `Equipment still in hand needs a cast, so drag those.">`
        + `⚔ Equip all free (${n})</button>`;
 }
 function comboOffButtonHtml(){
@@ -2452,7 +2500,9 @@ function renderBoard() {
   else if (S.tapPick) renderTapPicker();          // queue-time "tap it for which mana?" (manual tap/pay)
   else if (S.repeatPick) renderRepeatPicker();    // queue-time "repeat the block how many times?" (line macros)
   else if (S.loopPick) renderLoopPicker();        // queue-time "loop the last K committed lines ×N?" (line macros)
-  else if (S.freeEquipPick) renderFreeEquipPicker();  // queue-time "equip all free Equipment to which creature?"
+  // NO panel for "equip all free": it targets ON THE BOARD (see toggleFreeEquipMode). A modal is
+  // exactly what the player does not want here -- the choice is about which body on the board
+  // receives the pieces, and a modal both hides the board and covers it.
   else hideDecPanel();
 }
 
@@ -2569,7 +2619,7 @@ function renderPlanbar() {
   if ($('clearp')) $('clearp').onclick = clearPlan;
   if ($('repeatp')) $('repeatp').onclick = ()=>{ S.repeatPick = true; renderBoard(); };
   if ($('loopp'))   $('loopp').onclick   = ()=>{ S.loopPick = { k:null }; renderBoard(); };
-  if ($('freeeq'))  $('freeeq').onclick  = ()=>{ S.freeEquipPick = true; renderBoard(); };
+  if ($('freeeq'))  $('freeeq').onclick  = ()=>{ toggleFreeEquipMode(); };
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
   // Aura chips: drag onto a creature in the field to (re)assign the enchant target (routes through
   // the #playfield drop handler via the stamped text/planidx; see retargetPlanAura).
@@ -2817,6 +2867,16 @@ function wireBoard() {
       if (!preTapHostOfAura(+t.dataset.num)) return;
       t.classList.add('selectable');
       t.onclick = e => { e.stopPropagation(); preTapAt(+t.dataset.num); };
+    });
+  }
+  // "EQUIP ALL FREE TO X" board targeting (USER 2026-10-03: *"I don't want a dialog. I want
+  // targeting on the board so I know what I am equipping."*). The armed mode OVERRIDES the plain
+  // board click on a legal host for the duration -- same discipline as the ⛏ Tap and armed-blink
+  // modes above -- and gives the permanent back untouched the moment the mode ends. bfThumb has
+  // already stamped .feqhost + the count badge, so this only has to route the click.
+  if (S.freeEquipPick) {
+    $('board').querySelectorAll('#playfield .thumb.feqhost[data-num]').forEach(t=>{
+      t.onclick = e => { e.stopPropagation(); freeEquipAtHost(+t.dataset.num); };
     });
   }
 }
@@ -5253,7 +5313,10 @@ function autoResolveDecision(dec){
   return true;
 }
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
-  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.boardSel=null; S._selFor=null;
+  // freeEquipPick joins the other armed modes here: it is per-DECISION (its hosts and counts come
+  // from this decision's offers), so carrying it across a new decision would leave the button
+  // reading "pick a creature" over a board where nothing is a legal host -- an armed dead control.
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.freeEquipPick=false; S.boardSel=null; S._selFor=null;
   // When THIS frame arrived, and a fresh pass-arm. Both belong to the frame: `frameAt` is what makes
   // "that click landed right after your line committed" answerable at all, and an arm raised on the
   // previous frame describes a pool that no longer exists (see passNeedsConfirm).
@@ -5673,6 +5736,20 @@ function placePop(e){ const w=252,h=352; let x=e.clientX+18,y=e.clientY+18;
 document.addEventListener('mouseover',e=>{ const c=e.target.closest('[data-name]'); if(!c)return; const n=c.getAttribute('data-name'); if(!n)return;
   if(n!==popName){ popName=n; popImg.src=scryImg(n,'normal'); } pop.style.display='block'; placePop(e); });
 document.addEventListener('mousemove',e=>{ if(pop.style.display==='block') placePop(e); });
+// Escape cancels an ARMED CLICK MODE. Scoped deliberately to the modes that override what a plain
+// board click means -- an armed mode the player cannot back out of is the same trap as the
+// unclickable Undo behind the discard menu (5bde7bf1), and "equip all free" gave up its modal's
+// Cancel button when it moved onto the board, so it owes the player this. It does NOT touch the
+// queue, a decision prompt, or anything the engine has been asked -- only the arming flags.
+document.addEventListener('keydown', e=>{
+  if (e.key !== 'Escape') return;
+  if (!(S.freeEquipPick || S.tapMode || S.leMode || S.vialMode != null || S.blinkMode != null)) return;
+  e.preventDefault();
+  S.freeEquipPick = false; S.tapMode = false; S.leMode = false;
+  S.vialMode = null; S.blinkMode = null;
+  flashHint('Cancelled.');
+  renderBoard();
+});
 document.addEventListener('mouseout',e=>{ if(e.target.closest('[data-name]')){ pop.style.display='none'; popName=null; } });
 
 loadDecks();

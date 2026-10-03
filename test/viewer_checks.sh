@@ -141,6 +141,14 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_select_check.js" ]
   fi
 fi
 
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_equip_target_check.js" ]; then
+  echo "--- equip-all-free board targeting (no dialog, and escapable) ---"
+  if node "$HERE/viewer_equip_target_check.js"; then :; else
+    echo "FAIL: 'equip all free' no longer targets on the board, or its armed mode has no exit."
+    rc=1
+  fi
+fi
+
 # 1) Frontend line-build check (node). Sub-second, no binary.
 if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then
   echo "--- viewer line-build check (frontend) ---"
