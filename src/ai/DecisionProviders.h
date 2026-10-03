@@ -1714,6 +1714,13 @@ public:
     // nothing and its {R} is demand for a spell that cannot matter. See the definition.
     int EtbChosenColor(const GameState& s, int controller,
                        const CardDefinition& def) const override;
+    // Skred is never cast (USER 2026-10-03). It is goldfish-inert: the opponent's creatures never
+    // block or attack, it has no face-damage rider, and it is not a permanent, so it does not raise
+    // the snow count either -- casting it only spends mana that Coldsteel Heart or an Astrolabe
+    // could use. s2002 gi56 lost a turn exactly that way: the T5 line spent {R} on Skred and the
+    // Treefolk swung for 10 into 11. Dropped at the enumeration choke point, so it is never searched.
+    bool NeverCast(const CardDefinition& def) const override
+    { return def.params.damage_equals_snow_permanents; }
 
     // "STUCK -- PASS THE TURN" CERTIFICATE. Admissible: proves no line wins THIS turn, so the
     // unbounded label / depth-matrix search can drop the node without enumerating its plan space.

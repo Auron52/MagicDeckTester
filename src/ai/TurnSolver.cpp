@@ -19097,6 +19097,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
+        // A spell the deck's provider proves can have no effect (Snow's Skred) is never offered.
+        if (ResolveProvider(state).NeverCast(def)) { continue; }
+
         // Skip spells that need a creature target when none exists. An own-creature pump
         // (Invigorate) needs one of OUR attackers; other creature-targeting spells need an
         // opponent creature.

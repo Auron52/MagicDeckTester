@@ -593,6 +593,13 @@ public:
     virtual bool TrickCastSensible(const GameState& /*s*/, int /*controller*/,
                                    const CardDefinition& /*def*/) const { return true; }
 
+    // NeverCast -- a spell that can have NO effect on this deck's goldfish game, so casting it is
+    // dominated by not casting it (it only spends mana). Asked at the CollectActions choke point,
+    // so the search, the breakpoint continuation lists and the rollouts never enumerate it. USER
+    // 2026-10-03: Skred "should never be cast via heuristic ... no reason to waste time enumerating
+    // it." Default false -> every deck without a provider rule is byte-identical.
+    virtual bool NeverCast(const CardDefinition& /*def*/) const { return false; }
+
     // TakeFreeCast -- the "you may cast it without paying its mana cost" call on a cascade hit /
     // Breaching Dragonstorm find / Creative Technique find. `found` is the card offered.
     // Default TRUE (take it): against the passive goldfish opponent a free nonland spell is
