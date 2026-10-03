@@ -1,0 +1,118 @@
+{
+  "_comment": "FAITHFUL copy of the USER's rejected T3 frame (seed 1 gi 0, main_ordinal 9) from logs/play/rejections/KittyEquipment_cod_v2-puresteel-hammer_s1_gi0_t3.json -- the hand is verbatim, INCLUDING the three Plains. The reduced sibling fixture drops them because the real frame has land_drops_left=0 so they generate no group; that is sound for the payment question but it SHIFTS HAND-SLOT ORDER, and under the pre-fix coarse covering key the single paid-cast slot was decided by that order -- the reduced board kept Colossus Hammer and dropped Shadowspear while the live frame did the opposite. Both boards are kept so the fix is shown to cover EVERY affordable cast rather than to have won a tie-break. Asserted by test/viewer_valve_cover_check.py against the valve's own ledger, NOT by validate_line: the --scenario path evaluates CheckLine with menu=nullptr, which re-enumerates and so stayed green through both bugs.",
+  "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+  "turn": 3,
+  "on_the_play": false,
+  "max_turns": 3,
+  "active_life": 20,
+  "opponent_life": 20,
+  "floating_mana": {
+    "W": 1
+  },
+  "battlefield": [
+    {
+      "name": "Puresteel Paladin",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Sram, Senior Edificer",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Accorder's Shield",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Accorder's Shield",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Accorder's Shield",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Bone Saw",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Bone Saw",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Bone Saw",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cathar's Shield",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Dragonfire Blade",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Golem-Skin Gauntlets",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Spidersilk Net",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Spidersilk Net",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Ancient Den",
+      "controller": 0,
+      "tapped": true
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": true
+    }
+  ],
+  "hand": [
+    "Cathar's Shield",
+    "Cathar's Shield",
+    "Cid, Freeflier Pilot",
+    "Colossus Hammer",
+    "Dwalin, Weaponmaster",
+    "Golem-Skin Gauntlets",
+    "Plains",
+    "Plains",
+    "Plains",
+    "Puresteel Paladin",
+    "Puresteel Paladin",
+    "Shadowspear",
+    "Shadowspear",
+    "Spidersilk Net",
+    "Sram, Senior Edificer"
+  ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 200,
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_UNPRUNED": "1"
+  },
+  "validate_line": "cast=Colossus Hammer",
+  "expect_verdict": "accept"
+}

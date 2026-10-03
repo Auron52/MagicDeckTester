@@ -26278,11 +26278,22 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         // each KIND of action, which is the granularity a player reasons at. Within a kind the
         // ranking still decides, and combinations are still narrowed; nothing here un-bounds
         // anything, because every candidate set is tested against the same two caps below.
+        // A GROUP'S CHEAPEST MEMBER, and whether the turn's pool could pay it. Used to split the
+        // covering key below, to prefer an AFFORDABLE representative of a class, and to order the
+        // final rank-fill. Declared out here because the rank-fill below needs both.
+        auto group_min_mv = [&](const std::vector<int>& g) -> int
+        {
+            int m = std::numeric_limits<int>::max();
+            for (int j : g) { m = std::min(m, cands[j].cost.ManaValue()); }
+            return m == std::numeric_limits<int>::max() ? 0 : m;
+        };
+        const int pool_total = static_cast<int>(pl.Total());
         std::vector<int> kept;
         std::pair<double, double> kept_est{ 0.0, 0.0 };
         {
             std::vector<int> seed;
-            std::vector<int> kinds;
+            // The covering key carries a CARD IDENTITY, so `kinds` is keyed on (class, def).
+            std::vector<std::pair<int, const CardDefinition*>> kinds;
             auto try_add = [&](int gi) -> bool
             {
                 seed.push_back(gi);
@@ -26293,15 +26304,6 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 kept_est = e;
                 return true;
             };
-            // A GROUP'S CHEAPEST MEMBER, and whether the turn's pool could pay it. Used to split
-            // the covering key below and to prefer an AFFORDABLE representative of a class.
-            auto group_min_mv = [&](const std::vector<int>& g) -> int
-            {
-                int m = std::numeric_limits<int>::max();
-                for (int j : g) { m = std::min(m, cands[j].cost.ManaValue()); }
-                return m == std::numeric_limits<int>::max() ? 0 : m;
-            };
-            const int pool_total = static_cast<int>(pl.Total());
             // THE COVERING KEY IS (kind, free-or-paid), NOT the kind alone.
             //
             // USER, 2026-10-02, hand-playing seed 1: a rejected `cast=Colossus Hammer` at T3 with
@@ -26322,8 +26324,39 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
             // class an AFFORDABLE group is preferred over a better-ranked unaffordable one -- with
             // {W}1 floating, Puresteel Paladin ({W}{W}) is not a play and Colossus Hammer ({1}) is,
             // so handing the slot to the higher-ranked Paladin would waste it.
-            auto cover_key = [&](const std::vector<int>& g) -> int
-            { return static_cast<int>(cands[g.front()].kind) * 2 + (group_min_mv(g) == 0 ? 1 : 0); };
+            //
+            // ...AND IT CARRIES THE CARD IDENTITY, because (kind, free-or-paid) was still too
+            // coarse and the user hit the SAME line again on the same frame.
+            //
+            // USER, 2026-10-02, after the split above shipped: *"Still hitting
+            // logs/play/rejections/KittyEquipment_cod_v2-puresteel-hammer_s1_gi0_t3.json."* The
+            // per-group ledger (MTG_VIEWER_VALVE_DIAG) showed the real shape: of 25 groups the valve
+            // kept 11 at 34,992 of its 65,536 positions -- all six canonical equip pieces (3^6), the
+            // bundle, and FOUR size-1 cast groups of which TWO were the two copies of Cathar's
+            // Shield. Colossus Hammer ({1}, affordable) and Golem-Skin Gauntlets ({1}, affordable)
+            // got no representative at all, and with 1.87x headroom left one more size-1 group
+            // (x2 -> 69,984) could not fit. So the budget was holding a SECOND COPY of an
+            // already-offered card while a different castable card was missing entirely.
+            //
+            // Keying on `def` makes a card's second copy an interchangeable duplicate rather than a
+            // new class -- EXACTLY the argument this function already makes for pooling fungible
+            // equip copies a few dozen lines above, which was simply never extended to hand casts.
+            // Dropping the duplicate costs only the ability to cast BOTH copies in the SAME line,
+            // which the next frame offers again, so it preserves the "every action reachable one
+            // click at a time" promise; dropping a card's only group breaks it.
+            //
+            // (Two retractions belong here, because both wasted a build. The rank-fill does NOT buy
+            // unplayable casts: Puresteel Paladin and Sram appear in the menu's `casts` array only
+            // because the BUNDLE's host names leak into it -- `cast_order_canonical` lists the four
+            // real casts. And `pool_total` is 1, not 0: the enumeration call site's pool excludes
+            // floating mana, but the valve adds it back, so the affordability read was already
+            // right. Measure the ledger before theorising about which pass leaked.)
+            auto cover_key = [&](const std::vector<int>& g) -> std::pair<int, const CardDefinition*>
+            {
+                return { static_cast<int>(cands[g.front()].kind) * 2
+                             + (group_min_mv(g) == 0 ? 1 : 0),
+                         cands[g.front()].def };
+            };
             // THE BUNDLE GOES FIRST, before anything competes for the budget.
             //
             // AttachAllFreeEquipment is one group of (1 + hosts) that makes EVERY free loose
@@ -26349,7 +26382,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                     const std::vector<int>& g = groups[r.second];
                     if (g.empty()) { continue; }
                     if (std::find(seed.begin(), seed.end(), r.second) != seed.end()) { continue; }
-                    const int ck = cover_key(g);
+                    const auto ck = cover_key(g);
                     if (std::find(kinds.begin(), kinds.end(), ck) != kinds.end()) { continue; }
                     // The pool bound is the same over-approximation the rest of the valve uses; it
                     // only decides WHICH representative of a class is preferred, never whether the
@@ -26399,7 +26432,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                     // Mark the (kind, FREE) class only -- never the paid one. Marking the bare kind
                     // here is what let a {0} shield's cast satisfy "CastFromHand is covered" and so
                     // cost the user their T3 Colossus Hammer; see the cover_key note above.
-                    const int ck = cover_key(g);
+                    const auto ck = cover_key(g);
                     if (std::find(kinds.begin(), kinds.end(), ck) == kinds.end())
                     { kinds.push_back(ck); }
                 }
@@ -26411,7 +26444,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 const std::vector<int>& g = groups[r.second];
                 if (g.empty()) { continue; }
                 if (std::find(seed.begin(), seed.end(), r.second) != seed.end()) { continue; }
-                const int k = cover_key(g);
+                const auto k = cover_key(g);
                 if (std::find(kinds.begin(), kinds.end(), k) != kinds.end()) { continue; }
                 // vranked is sorted by rank, so the first group of a kind IS its best-ranked one.
                 if (!try_add(r.second)) { continue; }   // this kind will not fit; later kinds may
@@ -26419,19 +26452,69 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
             }
             kept = std::move(seed);
         }
-        for (const std::pair<int, int>& r : vranked)
+        // THE RANK-FILL SPENDS ITS LAST SLOTS ON AFFORDABLE GROUPS FIRST.
+        //
+        // `vranked` is ordered by SituationalCardRank ALONE, which ranks a card by its role on the
+        // list and knows nothing about whether this turn's mana can pay for it. Every size-1 cast
+        // group costs the SAME factor of 2 whichever one the fill buys, so preferring a payable
+        // group over an unpayable one is free: it is the bound being spent on plays rather than on
+        // lines that die at payment. That is the repo's standing rule on collapsing wasted search,
+        // applied to the menu instead of to the search.
+        //
+        // HONEST SCOPE, measured: on the user's T3 frame this pass is INERT. The ledger shows the
+        // fill had no room left at all (34,992 x 2 = 69,984 against a 65,536 bound), and every
+        // group it would have reordered was already covered or already unaffordable. It is kept
+        // because it is sound and costs nothing, NOT because it fixed the report -- the cover_key
+        // card identity above is what fixed that. An earlier revision of this comment claimed the
+        // fill had bought Puresteel Paladin and Sram as casts; it had not, and that misreading came
+        // from the bundle's host names leaking into the menu's `casts` array.
+        //
+        // Pass 1 still runs: an unaffordable group is DEPRIORITISED, never excluded. The pool read
+        // is the same over-approximation the rest of the valve uses (it ignores same-turn ritual and
+        // cost-reduction effects, e.g. this deck's own Cid, Freeflier Pilot), so an optimistic or
+        // pessimistic read only reorders the fill and can never make a class unreachable.
+        for (int pass = 0; pass < 2; ++pass)      // pass 0 = affordable only, pass 1 = the rest
         {
-            if (std::find(kept.begin(), kept.end(), r.second) != kept.end()) { continue; }
-            kept.push_back(r.second);
-            const std::pair<double, double> e =
-                viewerplancap::Estimate(ViewerGroupCosts(cands, groups, kept), num_independent, mb);
-            // KEEP SCANNING rather than stopping at the first group that does not fit. The ranked
-            // order is by SituationalCardRank, not by width, so the group that overflows the bound
-            // is routinely followed by narrow ones that still fit -- and `break` threw those away
-            // too, costing the player actions for nothing. Skipping instead is free: every kept set
-            // is still tested against the same bound, so this can only ever ADD reachable actions.
-            if (kept.size() > 1 && (e.second > pcap || e.first > wcap)) { kept.pop_back(); continue; }
-            kept_est = e;
+            for (const std::pair<int, int>& r : vranked)
+            {
+                if (std::find(kept.begin(), kept.end(), r.second) != kept.end()) { continue; }
+                if (groups[r.second].empty()) { continue; }
+                if (pass == 0 && group_min_mv(groups[r.second]) > pool_total) { continue; }
+                kept.push_back(r.second);
+                const std::pair<double, double> e =
+                    viewerplancap::Estimate(ViewerGroupCosts(cands, groups, kept), num_independent, mb);
+                // KEEP SCANNING rather than stopping at the first group that does not fit. The
+                // ranked order is by SituationalCardRank, not by width, so the group that overflows
+                // the bound is routinely followed by narrow ones that still fit -- and `break` threw
+                // those away too, costing the player actions for nothing. Skipping instead is free:
+                // every kept set is still tested against the same bound, so this can only ever ADD
+                // reachable actions.
+                if (kept.size() > 1 && (e.second > pcap || e.first > wcap)) { kept.pop_back(); continue; }
+                kept_est = e;
+            }
+        }
+        // Per-group ledger: which groups survived, their width, their cheapest member, and whether
+        // the pool could pay it. The aggregate counters above cannot show WHY a specific card was
+        // dropped, which is what every round of this bug has actually needed.
+        if (s_valve_diag)
+        {
+            std::fprintf(stderr, "[valve] KEPT/DROPPED ledger  pool_total=%d kept_pos=%.6g\n",
+                         pool_total, kept_est.second);
+            for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+            {
+                if (groups[g].empty()) { continue; }
+                const bool in = std::find(kept.begin(), kept.end(), g) != kept.end();
+                // `cast=` is emitted from HERE, where the enum is in scope, so the checker that
+                // reads this ledger never has to hardcode an Action::Kind ordinal.
+                std::fprintf(stderr,
+                             "[valve]   %-5s %-26s kind=%d cast=%d width=%zu min_mv=%d afford=%d\n",
+                             in ? "KEEP" : "DROP",
+                             cands[groups[g].front()].card_name.str().c_str(),
+                             static_cast<int>(cands[groups[g].front()].kind),
+                             cands[groups[g].front()].kind == Action::Kind::CastFromHand ? 1 : 0,
+                             groups[g].size(), group_min_mv(groups[g]),
+                             group_min_mv(groups[g]) <= pool_total ? 1 : 0);
+            }
         }
         viewerplancap::Trunc& acc = viewerplancap::Acc();
         acc.full_positions = std::max(acc.full_positions, full.second);
