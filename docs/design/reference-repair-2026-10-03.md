@@ -11,8 +11,17 @@ MAY be re-recorded, provided both invariants are verified explicitly. CLAUDE.md'
 "never overwrite or delete one" wording should be updated to say this; the "only the user decides"
 clause is satisfied, because this is the user deciding.
 
-Status when this was written: diagnosed, **not yet repaired**. The engine half is blocked on the
-12 h mulligan generation owning `build/Release` (see "Working constraint" below).
+**STATUS 2026-10-03, after `ffdaaa96`: 4 of the 8 are REPAIRED** (both contract-fails, both Auras
+board-diverged), by resolving picks **by name** rather than by stored index — the direction the user
+approved: *"I'm okay with changing the references to use names more as it makes a bit more sense for
+this kind of thing, though we might still want indices when duplicates are involved."* No file under
+`references/` was written; the TOOL was repaired. Both invariants hold on every repaired game (win
+turn and intended line unchanged). The remaining 4 need a ruling or a re-play, not a tool fix.
+
+**QUEUED, at the user's request** (*"let's queue it up until after the generation I suppose then"*):
+the full 442-reference sweep. Validated so far: the 2 MDFC references and all 14 KittyEquipment v2
+references. The sweep is deferred because **the sweep itself is what competes for the box** — see
+"The checker's parent process is unbounded" below, which is the finding that forced the design.
 
 ## The tally
 
@@ -33,19 +42,23 @@ engine only buys permanence until the next engine change.
 
 ## Triage, by what the failure actually is
 
-| # | reference | class | repairable by re-record? |
+| # | reference | class | outcome |
 |---|---|---|---|
-| 1 | `KittyEquipment/v2-puresteel-hammer/claude_s2_gi1` | contract-fail | no — crashes before resolution |
-| 2 | `KittyEquipment/v2-puresteel-hammer/claude_s8_gi7` | contract-fail | no — same |
-| 3 | `Snow/claude_s4_gi3` | board-diverged (TAP STATE only) | no — line not enumerable; needs a ruling |
-| 4 | `Auras/claude_s3_gi2` | board-diverged (MDFC face) | no — same |
-| 5 | `Auras/claude_s12_gi11` | board-diverged (MDFC face) | no — same |
-| 6 | `Mirrorwing_Dragon/v2-instigator-entrance/claude_s51_gi50` | play-drift T4 → T5 | **no — breaks the win-turn invariant** |
-| 7 | `Mirrorwing_Dragon/v1-twinflame-anger/claude_s29_gi28` | shuffle-dead | no — harness: only re-playing restores it |
-| 8 | `Hinata2/claude_s1_gi0` | enum-gap | no — pre-existing, upstream hidden state |
+| 1 | `KittyEquipment/v2-puresteel-hammer/claude_s2_gi1` | contract-fail | **REPAIRED** `ffdaaa96` — win_turn 3 reproduces |
+| 2 | `KittyEquipment/v2-puresteel-hammer/claude_s8_gi7` | contract-fail | **REPAIRED** `ffdaaa96` — win_turn 4 reproduces |
+| 3 | `Snow/claude_s4_gi3` | board-diverged (TAP STATE only) | OPEN — needs a ruling |
+| 4 | `Auras/claude_s3_gi2` | board-diverged (MDFC face) | **REPAIRED** `ffdaaa96` — win_turn 4 reproduces |
+| 5 | `Auras/claude_s12_gi11` | board-diverged (MDFC face) | **REPAIRED** `ffdaaa96` — win_turn 7 reproduces |
+| 6 | `Mirrorwing_Dragon/v2-instigator-entrance/claude_s51_gi50` | play-drift T4 → T5 | OPEN — **re-record FORBIDDEN** (win turn moved) |
+| 7 | `Mirrorwing_Dragon/v1-twinflame-anger/claude_s29_gi28` | shuffle-dead | OPEN — only re-playing restores it |
+| 8 | `Hinata2/claude_s1_gi0` | enum-gap | OPEN — pre-existing, upstream hidden state |
 
-Only #1/#2 have a known mechanism. The rest need a per-case ruling on whether the engine change
-was intended.
+The four repaired ones were all the SAME defect wearing two faces: **a pick resolved by stored
+index where it should have been resolved by name.** #1/#2 needed the index to be in range (which
+cost 3.22 GB); #4/#5 needed the index as a tiebreaker that a summary change had silently retired.
+
+The four still open each need a per-case ruling on whether the engine change was intended; none is
+a tool defect.
 
 ## 1 & 2: the contract-fails are `std::bad_alloc`, and the index is the fragility
 
@@ -109,6 +122,76 @@ killed the user's session (`docs/design/claude-play-unprune-blowup.md`).
 **Recommended: 3 for the references, 1 for the engine.** They are complementary and 1 is worth
 having on its own merits. 2 is the one to leave alone.
 
+### What was actually done (`ffdaaa96`), and why it was neither 1 nor 3 as written
+
+Option 3 assumed the recorded CONTENT had to be added. It did not: **every plan in a reference
+already carries its full content**, and the writer re-emits a chosen plan that sits beyond the
+display cap, so the chosen line is always present (that is why `nplans` reads 201, not 200).
+`find_plan` was already content-first with the index as a duplicate tiebreaker. So the fragility was
+never the recording format — it was that **the checker needed the recorded INDEX to be in range**,
+and uncapped emission was how it arranged that.
+
+A replay does not read the menu; it reproduces one line the reference already names. So the fix is
+to stop enumerating a menu for a replay at all:
+
+* **a reduced plan-space bound for replays** (`MTG_VIEWER_PLAN_CAP_POSITIONS`, 8192 vs the viewer's
+  65,536, overridable as `MTG_REPLAY_VALVE_POSITIONS`). The recorded content still resolves —
+  `93305 -> 19595` — and peak child RSS falls from 3.22 GB to ~450 MB;
+* **a pinned retry** for a reference the bound alone cannot replay: the recorded line's own card
+  names into the valve's keep set via the existing `--full-enum` side channel.
+
+Cost: stored indices shift more often, so references report `repaired` rather than `ok`. Under the
+user's own rule that is cosmetic (the win turn and the line are what must hold), and 350 of 442 were
+already in that class.
+
+### The checker's parent process is unbounded — the finding that forced the design
+
+`MTG_REPLAY_AS_CAP_MB` wraps each replay CHILD in a `ulimit`. Nothing wraps the Python parent, and
+the parent is the bigger consumer: with emission uncapped it holds a wide frame's ~300 MB of
+decision JSON as a string and then as parsed objects, **per thread**. Measured 2026-10-03: at
+`--threads 4` the checker process reached **5.7 GB RSS and took this 23 GB box to 0 GB available**,
+with the 32-thread mulligan generation running on it. The generation survived only because the
+sweep was killed.
+
+**This is on the ordinary regression path, not a corner.** `test/regression.sh` sets `MODE=regression`
+as its DEFAULT (so even a `--deck=`-filtered run triggers the sweep, unfiltered, over the whole
+corpus) and runs it at `VPC_THREADS=$(nproc)` — 32 here. That is the same shape as
+`docs/design/claude-play-unprune-blowup.md`, which is why **raising the ulimit is forbidden** rather
+than merely unattractive.
+
+### Why the pin is held back rather than applied everywhere
+
+`--full-enum` is not a neutral pin. `ApplyFullEnum` (main.cpp) **re-enumerates the frame a second
+time** under `viewerplancap::PinScope` and emits a `search_gap` play event asserting the search
+failed to offer the line. On a genuine override both are honest. Applied to all 442 references it
+would double the sweep's enumeration work and write a false search-failure event into every frame.
+
+**The clean version is a neutral, replay-only pin channel in the engine** — the same `PinScope`
+applied to the PRIMARY enumeration, no second pass and no event. That is the one piece of this that
+wants an engine change, and it is held behind the generation (`build/Release`).
+
+### The retry fires on ENUM-GAP too, which makes the loud class stricter
+
+A tighter bound drops more groups, so it can take a recorded line out of the menu — reported as
+"a previously-offered plan is no longer enumerated". Pinning separates the causes exactly: a line
+the **valve** dropped comes back when named; a line the **enumerator** no longer produces does not.
+So a gap that survives a pin is now known to be the engine and not the bound. That is attribution,
+not masking, and it is what makes the reduced bound safe to apply by default.
+
+### The MDFC repair, because the cause is the reverse of the symptom
+
+`Auras/claude_s3_gi2` and `claude_s12_gi11` were reported as board-diverged, and **the engine's own
+fix created them.** Before `SummarizePlan` annotated the back face, a Pathway's two faces shared one
+summary, `find_plan`'s summary tier returned BOTH, and `recorded_index` picked the recorded face
+correctly. After the annotation the legacy un-annotated summary matches the FRONT plan *uniquely*,
+so the tiebreaker is never consulted and the replay silently committed the manabase to {G},
+starving every downstream {W}{W} cast — surfacing frames later as a board divergence.
+
+Resolved by name out of the reference's own record: a reference does not store the face it chose,
+but it stores the BOARD at every later frame, and a land that entered as its back face sits there
+**under the back face's name**. `mdfc_face_intent` is three-state — back name / front / **unknown** —
+because defaulting an unknown to "front" would rewrite a reference whose face cannot be read.
+
 ## 3, 4, 5: board-diverged — these need a RULING, not a repair
 
 Content resolution did not merely mis-index; the recorded plan is **not enumerable at all**, because
@@ -163,3 +246,39 @@ generation produced — a silent integrity break, which is the sharp end of
 * engine work goes in a **`git worktree` with its own build directory**, which is unaffected.
 
 Verify idleness by executable, not process name: `ls -l /proc/*/exe | grep -i mtg`.
+
+**AND THE REFERENCE SWEEP ITSELF IS HELD, not just builds** — which was not obvious until it was
+measured. The sweep is not CPU-polite work that happens to be slow: at `--threads 4` it took the
+box to 0 GB available (above). So while a generation holds ~14 GB, a corpus sweep is a threat to it,
+and this is the one tool whose *default* thread count is `$(nproc)`.
+
+## QUEUED WORK (after the generation finishes)
+
+1. **The full 442-reference sweep** under `ffdaaa96`, on an idle box. Compare against the recorded
+   baseline `84 ok, 350 repaired, 1 play-drift, 1 shuffle-dead, 3 board-diverged, 1 enum-gap,
+   0 mull-drift, 2 contract-fail`. Expect `0 contract-fail`, `1 board-diverged` (Snow only), and
+   `ok` to fall toward 0 as stored indices shift under the reduced bound — that last is the
+   expected cost, not a regression, but any NEW `play-drift` or `enum-gap` is a real finding.
+2. **`test/viewer_validate_check.js`** has not been run at all since the `valve` plumbing went in.
+3. **A neutral replay-only pin channel in the engine** (see above) so the pin stops riding
+   `--full-enum`'s re-enumeration and `search_gap` event.
+4. **Shrink `Action` / `Plan`** — option 1, still worth having on its own merits (`Action` is 416 B
+   with a nested `std::vector<Action>`; container churn is 16.7% of wall, §9d). The reduced bound
+   removes the crash, not the underlying cost.
+5. **Bound the checker's PARENT memory**, or stop uncapping emission now that resolution never
+   needs a beyond-cap index in range. `MTG_PLAY_PLANS_CAP=0` is the remaining reason one frame
+   costs the Python process hundreds of MB.
+6. **The four open references**, each needing the user's ruling:
+   * `Snow/claude_s4_gi3` — is the new tap choice (Scrying Sheets over Snow-Covered Island, first
+     diverging at the `dig` frame) an intended mana-ordering improvement? If so the reference wants
+     re-playing; if not it is a regression to chase. Note the recorded game still wins on T5 in the
+     reference, and the replay never gets there.
+   * `Mirrorwing_Dragon/v2-instigator-entrance/claude_s51_gi50` — T4 → T5. Re-recording is
+     FORBIDDEN by the user's rule (the win turn moved). But it is only 8 recorded decisions and the
+     harness answered **9 ref-predating frames** with engine defaults, so the lost turn may be the
+     substitutions rather than the engine. Resolve those 9 as the recorded line implies before
+     concluding anything.
+   * `Mirrorwing_Dragon/v1-twinflame-anger/claude_s29_gi28` — shuffle-dead, the documented accepted
+     class. Only the user re-playing it restores it.
+   * `Hinata2/claude_s1_gi0` — enum-gap at a Soulfire Eruption target; pre-existing and already
+     verified not-new once (rebuilt in a worktree, tally identical).
