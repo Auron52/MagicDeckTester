@@ -772,6 +772,32 @@ Gates: `test/scenarios.sh` **118 passed / 0 failed**; `test/regression.sh --smok
 A `static_assert` in `Dominance.h` fired on `sizeof(GameState)` 832 -> 840 and is logged there:
 DECK CONSTANT, stamped once and never rewritten, so there is nothing to fold into `Build()`.
 
+### CORRECTION to the commit message: which candidate-b numbers this actually invalidates
+
+`632fde7a`'s message says the "17.0x-vs-shipped **unit** decomposition" includes this defect. That
+is WRONG and is corrected here, because it matters for which figures to re-measure.
+
+**The enter cascade charges no units** -- there is no `Consume` / `ConsumeAt` / `gamework` site
+anywhere in it (verified by inspection over the whole function). The soulbond scan was therefore
+pure UNCHARGED wall, which is also why the full regression came back `configs changed 0`: units and
+digests could not move.
+
+So, of `candidate-b-cost-decomposed-and-refuted-levers`:
+
+* **17.0x in charged units: STANDS.** Unaffected, byte-identical.
+* **24x / 38x WALL, and the 11x battery figure (shipped 2 s vs candidate-b 22 s): INFLATED.** Both
+  arms paid the dead scan, but candidate-b paid far more because its boards are far wider, so the
+  RATIO is inflated, not just the absolutes.
+* **The "2.9x more wall per charged unit" factor is exactly where this lived** -- that factor IS the
+  measure of uncharged work per unit, so a large part of it was this one loop.
+
+**That is the sharpest lesson available here.** The decomposition already carried this bug's
+fingerprint, in a named factor, for two days: a deck spending 2.9x more wall per charged unit than
+its sibling is a direct statement that something expensive is running outside the budget. It was
+attributed to "the uncharged horizon leaf" and the search for the cause stopped there. When a
+wall/unit ratio is anomalous, the uncharged work is not necessarily where you last found uncharged
+work -- re-profile instead of re-using the previous answer.
+
 ### Where this leaves the ranking
 
 ~1.17x, and it does NOT change the strategic picture the conclusion above draws: the 5-20x class is
