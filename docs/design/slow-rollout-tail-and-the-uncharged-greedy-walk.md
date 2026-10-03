@@ -878,3 +878,51 @@ rollout **parks one of 24 worker threads for 12 hours**, so the degenerate cells
 wall than in core-hours. Removing them returns threads to the pool. This is the same shape as the
 `MTG_SAC_OUTLET_POOL` adoption, which moved CPU 1.07x against wall 1.32x. **On a pooled queue with a
 heavy-tailed work distribution, core-hours understate the value of killing the tail; measure wall.**
+
+## AMENDMENT 3b: after the fix, SIX instruments say nothing else is degenerate
+
+Asked "is there anything else degenerate with the profile generation?", I ran every census this repo
+has against the worst K=17 cell (the one that was 12.12 h and is now 28.8 s) and against the live
+run. **Nothing else is degenerate.** Recording the numbers so this is not re-litigated.
+
+| instrument | reading | verdict |
+|---|---|---|
+| `perf` on the phase that remains | flat: top symbol **3.48%**, biggest CATEGORY 17.3% (mana payment), 600 symbols | no hotspot |
+| odometer (`MTG_BRANCH_SHAPE`) | 112,284 enum calls / 8,361,695 positions = **74 avg**; worst turn avg 174 | **not wide** |
+| plan dedup | plans 2,371,928 -> deduped 2,293,928 = **3.3% duplicates** | no duplicate explosion |
+| re-enumeration (`MTG_REENUM_CENSUS`) | **1.27x repeat**, a perfect memo removes **<=21.2%** (explicit UPPER bound) | matches `enum-memo`'s 2.8% real hit rate |
+| board width | avg **15.1** permanents by turn 8 | not a token swarm |
+| memory | RSS 8.5 GB against a ~35 GB cap | no refusal-driven recompute |
+| worker scheduling | **24 of 24 worker threads in R**; only the 3 non-workers sleep | no wave-barrier starvation |
+
+The process shows 19.8/24 cores of CPU rather than 24 because `loadavg` is **30.9 on a 24-CPU box** --
+we share it with the WSL host. That is the environment, not the engine. (`cpu.max` = no quota.)
+
+### What IS left, sized honestly -- all ~1.15x, none degenerate
+
+* **Hoisting the shared-resource constraint into the enumeration.** The funnel prices it exactly:
+  `SolveUncached` visits 25,050,943 with **15.36%** rejected after generating (dupSacSrc 5.96%,
+  wasteSacMana 4.19%, overFodder 5.21%); `EnumeratePlans` visits 3,801,762 with **30.98%** rejected.
+  The census prints its own caveat and it is the right one: *"that is the fraction of the walk a
+  constraint-bounded enumeration could have skipped BEFORE generating, not the fraction of TIME it
+  would save."* Lossless, worth doing under the collapse directive, **~1.15x not 2x.**
+* **The residual heavy tail.** Live run worst 181 s against a ~0.5 s median. Section 6's
+  reachable-states bound stays the right structural answer; see that doc's 6a.
+* **`leaf-eval` ties 245,823 of 340,934 published = 72%** (life-equal 115,142; flips 6,825 = 2%). A
+  QUALITY observation, not a speed defect: the evaluator cannot separate most positions the search
+  distinguishes. Worth a look on its own merits, not as an optimization.
+
+### The mana-side and two-stage censuses, read correctly
+
+`MTG_ENUM_STATS` reports `mana-side combos raw 2,127,384` == `KEPT`, and "distinct mana only
+1,044,383 (collapse **2.04x**)". **Do not bank that 2.04x** -- it is reached by DROPPING the
+cards-spent identity, and two lines that spend different cards are different states
+(`dedup-signature-must-carry-every-spell-axis`). The sound key is `distinct exact`, which collapses
+**1.15x**.
+
+Likewise the "two-stage gating potential ... 1.33x fewer" line is a **ceiling measurement for a
+design that is already implemented** (the split materializes each side's lines; see the
+degenerate-width guard `MTG_ODO_FLAT_FALLBACK`, default 1,000,000 lines). It is not unexploited
+waste. And the guard is **not** tripping here: those counters are AGGREGATES over 634,308 calls, so
+per node the payoff side is ~17 lines, not 11 M. Reading an aggregate as a per-node width is the
+mistake to avoid.
