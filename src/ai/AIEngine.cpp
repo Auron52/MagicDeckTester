@@ -4187,8 +4187,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // reg d5 s2002 gi25: Soulfire -> [Spasm untap, Gamble] inline, then Expressive Iteration +
     // Ornithopter ate the T5 Spasm+Crackle mana; committed T5, realised T6). An inline draw-engine
     // class on the same card keeps its inline replay (the search arms that one at the cast).
+    //
+    // SEARCHED DECISIONS ONLY (m_lookahead_depth > 0). The deferral exists to keep the executor in
+    // lockstep with a SEARCH's recorded/scored line; the depth-0 runner has no line to match, and
+    // there the inline re-solve at the cast is the better policy -- it adapts the rest of the plan
+    // to what the acquisition fetched. Deferring at d0 (s_full_depth is true at every depth: it
+    // only means "not MTG_LEGACY_SEARCH") made 20 hinata_d0 tier games a turn or more slower.
     auto acq_deferred = [&](const std::string& name) -> bool
     {
+        if (m_lookahead_depth <= 0) { return false; }
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d == nullptr) { return false; }
         const bool deferred = (AcqResolveEnabled()
