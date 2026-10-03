@@ -310,6 +310,31 @@ if [ "$MODE" != line ]; then
   fi
 fi
 
+#   * plan-pin override (engine) -- viewer_plan_pin_check.py drives the user's own s15/gi14 frames
+#     and asserts the "play it anyway" override BOTH works and stays BOUNDED. The first cut of the
+#     override SUSPENDED the plan-space valve (enumerated the frame in full), and the user's very
+#     next frame was priced at 768,000,000 positions: the engine reached 17.78 GB and the RSS cap
+#     killed it mid-click. The replacement PINS the player's own cards into the valve's keep set, so
+#     the menu stays inside the ordinary bound. Nothing else can witness either half -- the valve
+#     arms only under HumanPlayActive(), and the failure was a MEMORY bound that no verdict or digest
+#     records. Carries its own NEGATIVE CONTROL (the same frame with the valve off must still die
+#     under a small cap), without which "the pinned run fits" would say nothing. Needs python3 + the
+#     binary; ~15 s. SKIPS itself (exit 0) when those frames are not reachable.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/viewer_plan_pin_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: plan-pin override check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- plan-pin override (the player's line is playable AND the menu stays bounded) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/viewer_plan_pin_check.py"; then :; else
+        echo "FAIL: the 'play it anyway' override either stopped working or can again un-bound the enumeration."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
 #   * cast-order truth (engine) -- cast_order_truth_check.py drives the user's seed-8 turn-3 frame,
 #     where two enumerated orderings of {Sol Ring, Shroofus Sproutsire} differ by a SACRIFICED Peat
 #     Bog, and asserts (a) they advertise different cast_order_canonical values, (b) each label

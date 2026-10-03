@@ -1409,24 +1409,39 @@ inline bool On()
     return v;
 }
 
-// ---- RUNTIME SUSPEND: ONE frame enumerated IN FULL, on the PLAYER's explicit request ----------
+// ---- RUNTIME PIN: ONE frame's menu forced to CARRY THE PLAYER'S LINE --------------------------
 //
 // USER, 2026-10-03: *"If possible I would like to change things in a way that allows these lines to
 // be played, but to record that the search failed rather than preventing me from proceeding. It is
 // quite the nuisance otherwise."*
 //
-// WHY A SUSPEND AND NOT A BIGGER BOUND. The valve must drop something whenever a frame exceeds the
+// WHY AN OVERRIDE AND NOT A BIGGER BOUND. The valve must drop something whenever a frame exceeds the
 // bound, and WHATEVER it drops blocks some rules-legal line. Measured on the user's own s15/gi14/t5
 // frame: 393,216 payable positions against a 65,536 bound, and the group it dropped was the SECOND
 // hand copy of Golem-Skin Gauntlets -- so "cast two Gauntlets this turn" became unreachable while
 // every distinct card stayed castable. That is not a bug in the choice of victim; the cover rule
 // (78ff03aa) deliberately guarantees one group per distinct CARD, and a second copy of one card is
 // outside that guarantee by construction. Raising the bound only moves which line is unreachable,
-// which is why it has been refuted twice on this deck.
+// which is why it has been refuted three times on this deck.
 //
-// So the bound stays, and the PLAYER gets an override for the one frame they care about. The cost
-// of full enumeration is paid only on a frame where the player actually hit the gap, and it shows
-// up as a slow click rather than as a refusal -- which is the trade the user asked for.
+// WHY A PIN AND NOT A SUSPEND, which is what shipped first and which the user's VERY NEXT frame
+// broke. Suspending the valve enumerates the frame IN FULL, and "in full" is not a bounded
+// quantity: the same seed-15 game reached a T5 frame the valve priced at 768,000,000 positions,
+// and materialising that took the process to 17.78 GB, where the RSS cap aborted it. The cap did
+// its job and the box survived, but the player's click did not -- and an override that can take
+// the process down is not an override, it is a second failure mode. A bound a button can switch
+// off is not a bound.
+//
+// So the valve STAYS ON at its ordinary 65,536 and the override changes WHICH groups it keeps: the
+// cards the player's line names are offered the budget FIRST, before the bundle, the per-class
+// cover or the rank-fill can spend any of it, and every other pass is bounded exactly as before.
+// Memory and time are therefore bounded by the same cap as an ordinary frame, while the one line
+// the player asked for is in the menu.
+//
+// IT ALSO ADDRESSES THE ORIGINAL FRAME MORE DIRECTLY THAN THE SUSPEND DID, which is the part worth
+// keeping in mind: the group dropped there was a card's SECOND hand copy, exactly the class the
+// cover rule cannot protect (it guarantees one group per distinct CARD). A pin is per GROUP and
+// matches by card NAME, so every group carrying a named card survives -- second copies included.
 //
 // SCOPED, NOT A FLAG, because determinism is load-bearing: the viewer shows a menu in one process
 // and commits an INDEX into it, so both must enumerate the same list. The chooser re-enumerates
@@ -1434,18 +1449,28 @@ inline bool On()
 // frame and every later replay of the recorded ordinal produce the same list. (The index-drift bug
 // this protects against was reported as "it put the Trace of Abundance on the Conservatory when I
 // specifically put it on the Aether Hub".)
-inline int& SuspendDepth() { static thread_local int d = 0; return d; }
-inline bool Suspended()    { return SuspendDepth() > 0; }
-struct SuspendScope
+inline std::vector<std::string>& PinnedNames()
 {
-    SuspendScope()  { ++SuspendDepth(); }
-    ~SuspendScope() { --SuspendDepth(); }
-    SuspendScope(const SuspendScope&)            = delete;
-    SuspendScope& operator=(const SuspendScope&) = delete;
+    static thread_local std::vector<std::string> v;
+    return v;
+}
+inline bool AnyPinned() { return !PinnedNames().empty(); }
+inline bool IsPinned(const std::string& name)
+{
+    for (const std::string& n : PinnedNames()) { if (n == name) { return true; } }
+    return false;
+}
+struct PinScope
+{
+    explicit PinScope(const std::vector<std::string>& names) : m_prev(PinnedNames())
+    { PinnedNames() = names; }
+    ~PinScope() { PinnedNames() = m_prev; }
+    PinScope(const PinScope&)            = delete;
+    PinScope& operator=(const PinScope&) = delete;
+
+  private:
+    std::vector<std::string> m_prev;
 };
-// The arming condition reads THIS, never On() -- On() is the env read and is a `static const bool`,
-// so it cannot express a per-frame override.
-inline bool Active() { return On() && !Suspended(); }
 
 // Positions the odometer may walk per enumeration. <= 0 means UNBOUNDED, the same convention
 // MTG_PLAN_SPACE_CAP uses -- so either flag alone turns the valve off and neither can surprise
@@ -1473,6 +1498,10 @@ struct Trunc
     // equipment"); pooling a class removes only the redundant Nth copy of an action whose 1st copy
     // is still offered, so every action remains reachable. The history line says which happened.
     int    pooled_groups  = 0;
+    // Groups the PLAYER's "play it anyway" override kept by name (see PinnedNames). Counted
+    // separately from the two narrowings above because it is the opposite operation -- it is
+    // reported so a played-anyway line carries the fact that the ordinary menu did NOT contain it.
+    int    pinned_groups  = 0;
     double full_positions = 0;   // odometer product before the shrink
     double kept_positions = 0;   //   ... and after
     // The card names of the groups that were DROPPED (comma-joined, capped). A COUNT alone is not

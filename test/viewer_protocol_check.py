@@ -331,15 +331,17 @@ def side_channel_args(decisions):
             sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
         if t == "main_phase" and d.get("cast_order"):
             co.append(f'{dec.get("main_ordinal")}:' + "|".join(d["cast_order"]))
-        # FULL-ENUM: this frame was enumerated with the viewer plan-space valve SUSPENDED (the
-        # player's "play it anyway" override for a rules-legal line the valve had dropped). It MUST
-        # be reconstructed: `chosen` is a positional index, and the suspended frame's menu differs
-        # from the valved one, so replaying without this applies a different line -- the play-drift
-        # class. Keyed by main ordinal like --cast-order, so passing the whole set is safe.
+        # FULL-ENUM: this frame was re-enumerated with the named cards PINNED into the viewer
+        # plan-space valve's keep set (the player's "play it anyway" override for a rules-legal line
+        # the valve had dropped). It MUST be reconstructed, NAMES AND ALL: `chosen` is a positional
+        # index and the pinned frame's menu differs from the ordinarily-valved one, so replaying
+        # without it applies a different line -- the play-drift class. Keyed by main ordinal like
+        # --cast-order, so passing the whole set is safe.
         if t == "main_phase" and d.get("full_enum"):
             o = dec.get("main_ordinal")
-            if isinstance(o, int) and o >= 0:
-                fe.append(str(o))
+            names = d["full_enum"]
+            if isinstance(o, int) and o >= 0 and isinstance(names, list) and names:
+                fe.append(f"{o}:" + "|".join(str(n) for n in names))
     fa = recorded_attackers(decisions)
     tp = recorded_tap_prefs(decisions)
     extra = []
@@ -350,7 +352,7 @@ def side_channel_args(decisions):
     if co:
         extra += ["--cast-order", ";".join(co)]
     if fe:
-        extra += ["--full-enum", ",".join(fe)]
+        extra += ["--full-enum", ";".join(fe)]
     if fa:
         extra += ["--force-attackers",
                   ";".join(f"{t}:" + "|".join(ns) for t, ns in sorted(fa.items()))]

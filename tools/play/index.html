@@ -702,7 +702,7 @@ function cfg(extra) {
     jitte:S.jitte||{},               // Umezawa's Jitte counter-spend, turn-keyed like firebreathe
     storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
     castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
-    fullEnum:S.fullEnum||[],         // main ordinals to enumerate UNVALVED (the "play it anyway" override)
+    fullEnum:S.fullEnum||[],         // [{ord,names}] cards PINNED into the valve (the "play it anyway" override)
   }, extra || {});
 }
 async function post(path, body) {
@@ -3603,45 +3603,67 @@ function handleVerdict(v, line) {
 // enumerator never produced it, so there is no plan index to commit. `illegal` and `unsupported` are
 // the engine saying the line cannot be played, and this must never offer to override those.
 //
-// The mechanism is the `fullEnum` side channel: adding this frame's main ordinal makes the server
-// respawn the engine with --full-enum, which suspends the plan-space valve for that frame only, so
-// the line is enumerated and gets a real index. Measured on the reported frame (s15 gi14 t5): the
-// valve had 393,216 payable positions against a 65,536 bound and dropped the SECOND hand copy of
-// Golem-Skin Gauntlets, so "cast two Gauntlets" was unreachable; with the override the same line
-// validates as `accept` at plan index 135.
+// The mechanism is the `fullEnum` side channel: this frame's main ordinal plus THE CARD NAMES OF
+// THE QUEUED LINE makes the server respawn the engine with --full-enum, which pins those cards'
+// groups into the plan-space valve's keep set for that frame only, so the line is enumerated and
+// gets a real index. Measured on the reported frame (s15 gi14 t5): the valve had 393,216 payable
+// positions against a 65,536 bound and dropped the SECOND hand copy of Golem-Skin Gauntlets, so
+// "cast two Gauntlets" was unreachable; with the override the same line validates as `accept`.
 //
-// IT COSTS A PREFIX REPLAY (the respawn) and the full enumeration itself, so it is a button rather
-// than a default -- and that is the trade the user asked for: a slow click instead of a refusal.
+// IT PINS RATHER THAN SUSPENDING, and the reason is the user's very next frame. The first cut
+// suspended the valve, i.e. enumerated the frame IN FULL -- and the same seed-15 game reached a T5
+// frame priced at 768,000,000 positions, where the engine hit 17.78 GB and the RSS cap aborted it
+// mid-click. Pinning keeps the menu inside the ordinary 65,536-position bound while still
+// containing the player's line, so the override cannot take the process down. See EngineFlags.h.
+//
+// IT COSTS A PREFIX REPLAY (the respawn) and one extra enumeration, so it is a button rather than a
+// default -- and that is the trade the user asked for: a slow click instead of a refusal.
 function playAnywayOrdinal(v) {
   const d = (v && v.decision) || S.decision || {};
   const o = d.main_ordinal;
   return Number.isFinite(o) && o >= 0 ? o : null;
 }
+// The cards to pin: the names of the QUEUED entries, straight off S.plan. Taken from the structured
+// queue rather than re-parsed out of the encoded line string, because `cast=Cid, Freeflier Pilot`
+// cannot be split on punctuation (the name holds a comma) and a mis-parse here pins nothing and
+// looks exactly like the valve refusing again.
+function playAnywayNames() {
+  const out = [];
+  for (const e of (S.plan || [])) {
+    if (e && typeof e.name === 'string' && e.name && out.indexOf(e.name) < 0) out.push(e.name);
+  }
+  return out;
+}
 function playAnywayHtml(v) {
   if (!v || v.verdict !== 'legal_not_enumerated') return '';
   const o = playAnywayOrdinal(v);
   if (o == null) return '';                       // a frame carrying no pin cannot be keyed
-  if ((S.fullEnum || []).indexOf(o) >= 0) return '';   // already overridden and still rejected
+  if (!playAnywayNames().length) return '';       // nothing to pin (an empty queue cannot be a line)
+  if ((S.fullEnum || []).some(e => e && e.ord === o)) return '';  // already overridden, still rejected
   return `<button id="anywaybtn" class="primary" title="Your line is rules-legal — the engine said so `
        + `itself. It was refused only because the plan-space valve had to drop a group on this wide `
-       + `board, and the dropped group carried your line. This re-enumerates THIS frame in full so `
-       + `the line can be played, and records the enumeration gap in the history.">`
+       + `board, and the dropped group carried your line. This re-enumerates THIS frame with your own `
+       + `cards pinned into the menu so the line can be played, and records the enumeration gap in `
+       + `the history.">`
        + `▶ Play it anyway (record the search gap)</button>`;
 }
 async function playAnyway(v, line) {
   const o = playAnywayOrdinal(v);
   if (o == null) return;
-  S.fullEnum = (S.fullEnum || []).concat([o]);
+  const names = playAnywayNames();
+  if (!names.length) return;
+  S.fullEnum = (S.fullEnum || []).concat([{ ord:o, names }]);
   // Recorded in the history BEFORE the retry, so the gap is on the record even if the retry then
   // fails for some other reason. This is the "record that the search failed" half of the request --
   // the engine also emits its own `search_gap` play event when it re-enumerates.
   S.history.push({ turn:(S.decision||{}).turn, rej:true,
-                   label:`search gap (ordinal ${o}): re-enumerating in full to play ${line}` });
+                   label:`search gap (ordinal ${o}): re-enumerating with ${names.join(', ')} pinned `
+                        +`into the menu to play ${line}` });
   renderHistory();
   hideVerdict();
-  flashHint('Re-enumerating this frame in full — the engine is replaying the turn, so this click is slower than usual.');
+  flashHint('Re-enumerating this frame with your cards pinned — the engine is replaying the turn, so this click is slower than usual.');
   // Re-run the ordinary commit path: the queue is untouched, so it rebuilds and re-validates the
-  // SAME line, now against the unvalved menu. No separate commit path to drift from the normal one.
+  // SAME line, now against the pinned menu. No separate commit path to drift from the normal one.
   await commitLine();
 }
 async function storeArtifact(v, line) {

@@ -2782,7 +2782,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         + (t.dropped_names.empty() ? std::string()
                                                    : " (" + t.dropped_names + ")")
                         + ", so those actions are not offered this turn. "
-                          "(MTG_VIEWER_PLAN_CAP=0 enumerates in full; "
+                        // The "play it anyway" override, when it is in force on this frame: the
+                        // menu is still bounded (that is the point -- see PinScope), so the drop
+                        // line above is still true, and the player needs to know which half of it
+                        // their own request bought back.
+                        + (t.pinned_groups > 0
+                               ? std::to_string(t.pinned_groups)
+                                     + " group(s) you asked for were PINNED into this menu by your "
+                                       "\"play it anyway\" override. "
+                               : std::string())
+                        + "(MTG_VIEWER_PLAN_CAP=0 enumerates in full; "
                           "MTG_VIEWER_EXECUTOR_FALLBACK=1 shows the engine's own menu instead.)");
                 }
                 else

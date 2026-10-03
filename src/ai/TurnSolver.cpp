@@ -26157,10 +26157,11 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     // click stops coming back (measured 0.6 s -> 11.3 s over ten clicks of one turn, still
     // doubling). The valve re-arms the SAME ranked shrink for human play only, at its own (larger)
     // bound, and records what it dropped so the menu can say it was truncated.
-    // Active(), not On(): the player can SUSPEND the valve for one frame when their rules-legal
-    // line was not enumerated (viewerplancap::SuspendScope). On() is a static env read and cannot
-    // express that.
-    const bool valve = gate_off && R < 0 && HumanPlayActive() && viewerplancap::Active();
+    // The valve stays armed even when the player has overridden a frame: the override PINS the
+    // groups their line names (viewerplancap::PinScope) rather than switching the bound off, so the
+    // menu still fits the same cap. Suspending it instead -- which is what shipped first -- walked
+    // a 768,000,000-position frame and took the process to 17.78 GB; see EngineFlags.h.
+    const bool valve = gate_off && R < 0 && HumanPlayActive() && viewerplancap::On();
     if (gate_off && !valve) { return; }
     if (valve)
     {
@@ -26235,8 +26236,16 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
             {
                 const int c = vcc[g];
                 if (c < 0 || c >= kMaxFungibleClasses) { continue; }
-                if (seen[c]) { is_dup[g] = 1; ++pooled; }   // an interchangeable duplicate: pool it
-                else         { seen[c] = 1; }
+                // A PINNED copy is never pooled away. Pooling keeps one group per interchangeable
+                // class, which is sound for the ordinary menu (the Nth copy's action is still
+                // offered, just not alongside the 1st in ONE line) -- but "both copies in one line"
+                // is precisely what the override exists to make playable, so pooling would undo the
+                // pin before the keep passes below ever saw it. The class is still MARKED, so a
+                // non-pinned duplicate of the same class pools exactly as before.
+                const bool pin = viewerplancap::AnyPinned() && !groups[g].empty()
+                              && viewerplancap::IsPinned(cands[groups[g].front()].card_name.str());
+                if (seen[c] && !pin) { is_dup[g] = 1; ++pooled; }   // interchangeable dup: pool it
+                else                 { seen[c] = 1; }
             }
             if (pooled > 0)
             {
@@ -26316,6 +26325,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         const int pool_total = static_cast<int>(pl.Total());
         std::vector<int> kept;
         std::pair<double, double> kept_est{ 0.0, 0.0 };
+        int pinned_kept = 0;      // groups kept by the player's override (see the pin pass below)
         {
             std::vector<int> seed;
             // The covering key carries a CARD IDENTITY, so `kinds` is keyed on (class, def).
@@ -26383,7 +26393,34 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                              + (group_min_mv(g) == 0 ? 1 : 0),
                          cands[g.front()].def };
             };
-            // THE BUNDLE GOES FIRST, before anything competes for the budget.
+            // THE PLAYER'S PINNED GROUPS GO BEFORE EVEN THE BUNDLE.
+            //
+            // This is the "play it anyway" override (viewerplancap::PinScope, EngineFlags.h): the
+            // card names of the line the player asked for and the valve refused. They are offered
+            // the budget FIRST, while it is still completely empty, which is the whole mechanism --
+            // `try_add` never rejects the first group, and a line's own groups are narrow (two
+            // size-1 cast groups are 4 positions), so the pin lands inside the ordinary bound and
+            // every later pass is narrowed against the same cap it always was. Nothing here can
+            // un-bound the menu, which is exactly what the suspend route it replaces could not say.
+            //
+            // Matching is by card NAME, so a card's SECOND copy is pinned too -- the class the
+            // cover key below deliberately treats as an interchangeable duplicate, and the class
+            // the user's s15/gi14/t5 frame was blocked on.
+            if (viewerplancap::AnyPinned())
+            {
+                for (const std::pair<int, int>& r : vranked)
+                {
+                    const std::vector<int>& g = groups[r.second];
+                    if (g.empty()) { continue; }
+                    if (!viewerplancap::IsPinned(cands[g.front()].card_name.str())) { continue; }
+                    if (!try_add(r.second)) { continue; }
+                    const auto ck = cover_key(g);
+                    if (std::find(kinds.begin(), kinds.end(), ck) == kinds.end())
+                    { kinds.push_back(ck); }
+                    ++pinned_kept;
+                }
+            }
+            // THE BUNDLE GOES NEXT, before anything else competes for the budget.
             //
             // AttachAllFreeEquipment is one group of (1 + hosts) that makes EVERY free loose
             // Equipment reachable, where the individual equip groups cost (1 + hosts) EACH and
@@ -26524,8 +26561,9 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         // dropped, which is what every round of this bug has actually needed.
         if (s_valve_diag)
         {
-            std::fprintf(stderr, "[valve] KEPT/DROPPED ledger  pool_total=%d kept_pos=%.6g\n",
-                         pool_total, kept_est.second);
+            std::fprintf(stderr,
+                         "[valve] KEPT/DROPPED ledger  pool_total=%d kept_pos=%.6g pinned=%d\n",
+                         pool_total, kept_est.second, pinned_kept);
             for (int g = 0; g < static_cast<int>(groups.size()); ++g)
             {
                 if (groups[g].empty()) { continue; }
@@ -26547,6 +26585,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         acc.kept_positions = std::max(acc.kept_positions, kept_est.second);
         acc.dropped_groups = std::max(acc.dropped_groups,
                                       static_cast<int>(groups.size() - kept.size()));
+        acc.pinned_groups  = std::max(acc.pinned_groups, pinned_kept);
         // ...AND NAME THEM (see Trunc::dropped_names). Capped at 6 so a very wide board cannot push
         // a wall of text into the history; the count already carries the magnitude.
         {

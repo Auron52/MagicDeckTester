@@ -183,12 +183,12 @@ public:
     // external player drives the main phases while combat/discard stay on the engine
     // heuristics. Inert when unset (normal AI path). See TurnSolver::EnumerateMainPlans.
     // `plans` is handed over by NON-CONST reference so the chooser may REPLACE the menu before it
-    // answers. The one caller that does is the play viewer's "my line was not enumerated -- show me
-    // the full list" override (viewerplancap::SuspendScope): the valve must drop something on a
-    // frame over its bound, and whatever it drops blocks some rules-legal line, so the player can
-    // ask for the frame to be re-enumerated in full. Replacing IN PLACE is what keeps the index
-    // honest -- TakeTurn applies `plans[idx]` from this same vector, so there is no second list for
-    // the index to mean something different in.
+    // answers. The one caller that does is the play viewer's "my line was not enumerated -- play it
+    // anyway" override (viewerplancap::PinScope): the valve must drop something on a frame over its
+    // bound, and whatever it drops blocks some rules-legal line, so the player can ask for the frame
+    // to be re-enumerated with their own cards pinned into the keep set. Replacing IN PLACE is what
+    // keeps the index honest -- TakeTurn applies `plans[idx]` from this same vector, so there is no
+    // second list for the index to mean something different in.
     using ExternalChooser =
         std::function<int(const GameState&, std::vector<TurnSolver::Plan>&, bool)>;
     void SetExternalChooser(ExternalChooser chooser) { m_external_chooser = std::move(chooser); }

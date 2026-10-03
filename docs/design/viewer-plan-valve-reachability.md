@@ -380,23 +380,24 @@ either despite the verdict naming a same-turn cost reducer.
 
 ### The design
 
-`viewerplancap::SuspendScope` + a `--full-enum <ordinals>` side channel. Listed main ordinals are
-enumerated with the valve suspended, so the line is there to be indexed. Verified on the frame:
-`accept`, plan index 135.
+`viewerplancap::PinScope` + a `--full-enum "<ord>:<name>|<name>;…"` side channel. On a listed main
+ordinal the valve keeps the named cards' groups **before any other pass can spend the budget**, so
+the line is there to be indexed. Verified on the reported frame: `accept`, plan index 135.
 
 **Three decisions worth keeping:**
 
 1. **A SIDE CHANNEL, not a stdin directive.** An in-place `@full-enum` was built and then removed.
    The index is positional, so the parked frame's menu, the next `/api/step`'s menu and the saved
-   reference's menu must all agree; a directive would have let them diverge. Putting the ordinal in
+   reference's menu must all agree; a directive would have let them diverge. Putting the pins in
    the side channel changes the server's session key, so the existing respawn machinery re-runs the
    prefix with the flag set and every process sees one menu. It costs a prefix replay — a slow click
    instead of a refusal, which is the trade the user asked for.
 2. **It must be RECORDED, and that is not cosmetic.** The same index resolves to a different line:
-   replaying `…,135` with `--full-enum 10` reaches a 13-permanent board, without it a
-   12-permanent one. So the trace writes `"full_enum": true` on the frame, and
+   the pinned frame B below grades `accept` at 83263 where the ordinarily-valved one grades `accept`
+   at 110495. So the trace writes `"full_enum": [<names>]` on the frame, and
    `viewer_protocol_check.py`, `viewer_validate_check.js` and `logs/replay_ref.py` all reconstruct
    `--full-enum` from it. Omitting that would have manufactured the play-drift class on purpose.
+   **The NAMES are part of the key**, not just the ordinal: the pin is what shapes the menu.
 3. **Offered ONLY for `legal_not_enumerated`.** That verdict is the engine's own statement that it
    simulated the line and it is rules-legal; only the enumerator never produced it. `illegal` and
    `unsupported` are the engine saying the line cannot be played, and the override must never
@@ -406,4 +407,62 @@ The engine emits a `search_gap` play event when it fires, carrying both menu siz
 writes a history line before retrying — so a played-anyway line is on the record as an enumeration
 gap rather than as a clean play. That is the half of the request that is not "let me proceed".
 
-Inert when unused: smoke 107 passed / 0 failed, `configs changed: 0`, `play-changed=0`.
+### The first mechanism was a SUSPEND, and the user's very next frame killed the process
+
+USER, 2026-10-03, minutes after the override shipped:
+
+> *"Hit an error when using the new feature to run the line anyway … `[rss-cap] mtg: rss=17.78G
+> EXCEEDS the cap 17.60G (MTG_RSS_CAP_GB) -- aborting this process so the box survives`"*
+
+The first cut **suspended** the valve for the overridden frame, i.e. enumerated it in full. The
+history they pasted shows why that cannot work: the same seed-15 game, one frame later, reads
+
+```
+⚠ This board's plan space is too large to enumerate in full (768000000 -> 40960 positions);
+  … 6 group(s) of choices were DROPPED (Colossus Hammer, Golem-Skin Gauntlets, Bone Saw,
+  Accorder's Shield, Colossus Hammer, Colossus Hammer)
+```
+
+**"In full" is not a bounded quantity.** 7.68e8 positions is three orders of magnitude past the
+65,536-position bound, and materialising that many plans is the unbounded-plan-materialisation
+problem already on the books (420k plans / 3.22 GB / 23 s on one earlier v2 frame). The RSS cap did
+its job and the box survived; the player's click did not. **A bound a button can switch off is not
+a bound** — the override had become a second failure mode rather than an escape from the first.
+
+**The replacement keeps the valve armed and changes WHICH groups it keeps.** The player's own card
+names are offered the budget first, while it is still empty, so `try_add` cannot reject them (it
+never rejects the first group) and a line's own groups are narrow — two size-1 cast groups is 4
+positions. Everything after them is narrowed against exactly the cap it always was.
+
+**It also fixes the original frame more directly than the suspend did.** The dropped group there was
+a card's **second hand copy**, which the cover rule cannot protect because it guarantees one group
+per distinct *card* (§4). A pin is per **group** and matches by **name**, so every group carrying a
+named card survives, second copies included — precisely the class the cover rule leaves out. The
+same reasoning applies to the fungible-equip pooling a few dozen lines earlier in the valve, which
+now exempts pinned copies: pooling is sound for the ordinary menu (the Nth copy's action is still
+offered, just not alongside the 1st in ONE line) but "both copies in one line" is exactly what the
+override exists to make playable, so pooling would undo the pin before the keep passes saw it.
+
+### Measured, with the suspend route as the negative control
+
+`test/viewer_plan_pin_check.py`, on the user's own frames (s15 / gi14). Frame B is the frame that
+broke, reached by playing frame A's pinned line:
+
+| frame | arm | verdict | peak RSS | wall |
+|---|---|---|---|---|
+| A (ord 13, 393,216 → 65,536 positions) | no pin | `legal_not_enumerated` | 371 MB | 1.11 s |
+| A | **pinned** | **`accept` @ 135** | 401 MB | 1.22 s |
+| A | valve off (= suspend) | `accept` @ 135 | 130 MB | 0.42 s |
+| B (ord 14, **1.5e9** → 32,000 positions) | no pin | `accept` @ 110495 | 573 MB | 2.52 s |
+| B | **pinned** | **`accept` @ 83263** | **846 MB** | 3.33 s |
+| B | valve off (= suspend), cap 2 GB | **KILLED** (`[rss-cap]`, rc 137) | >2 GB | 4.32 s |
+
+Two things that reading only the frame-A rows would get wrong. **Frame A is too narrow to be the
+test**: there, suspending the valve is *cheaper* than pinning (one enumeration instead of two, and
+no valve estimates), which is why the first mechanism looked fine when it shipped. And **the
+negative control is the finding** — without the frame-B valve-off row, "the pinned run fits in 2 GB"
+would not establish that anything ever did not. The check therefore asserts that row, and skips
+itself if the frame ever stops blowing the cap.
+
+Inert when unused: the arming condition moved from `Active()` to `On()` (identical with nothing
+pinned), and both new branches are gated on `AnyPinned()`.

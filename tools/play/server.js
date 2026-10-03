@@ -154,6 +154,33 @@ function castOrderArg(map) {
   return entries.length ? ['--cast-order', entries.join(';')] : [];
 }
 
+// The "play it anyway" override as a flag: `--full-enum "<ord>:A|B;<ord>:X"`, the same
+// ordinal-keyed pipe-separated shape castOrderArg builds, because card names contain COMMAS
+// ("Cid, Freeflier Pilot") and a comma list would split them mid-name.
+//
+// `list` is [{ord, names}] (see index.html's S.fullEnum). SORTED BY ORDINAL and de-duplicated so
+// the flag string is a function of the SET, not of the order the player happened to click: the
+// string is part of the session key, so an unstable rendering would respawn the child for no reason
+// and -- worse -- let two processes that hold the same overrides disagree about the menu.
+function fullEnumArg(list) {
+  if (!Array.isArray(list) || !list.length) return [];
+  const byOrd = new Map();
+  for (const e of list) {
+    const o = parseInt(e && e.ord, 10);
+    if (!Number.isFinite(o) || o < 0) continue;
+    const names = (Array.isArray(e.names) ? e.names : [])
+      .filter(n => typeof n === 'string' && n && !n.includes('|') && !n.includes(';'));
+    if (!names.length) continue;
+    const seen = byOrd.get(o) || [];
+    for (const n of names) if (!seen.includes(n)) seen.push(n);
+    byOrd.set(o, seen);
+  }
+  if (!byOrd.size) return [];
+  const entries = [...byOrd.keys()].sort((a, b) => a - b)
+    .map(o => `${o}:${byOrd.get(o).join('|')}`);
+  return ['--full-enum', entries.join(';')];
+}
+
 // validateLine (optional): an encoded human-assembled line ("land=X;cast=Y;...") to reconcile
 // against the model at the first un-chosen main phase instead of dumping the plan menu.
 // exhaustiveKeep (optional): pass --exhaustive-keep so the engine loads the deck's mulligan-table
@@ -200,19 +227,20 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
   args.push('--firebreathe-prompt');
   args.push(...castOrderArg(p.castOrder));
   // FULL-ENUM side channel (USER 2026-10-03: *"allows these lines to be played, but ... record that
-  // the search failed rather than preventing me from proceeding"*). Main ordinals the player asked
-  // to have enumerated with the plan-space valve SUSPENDED, because the valve must drop a group on
-  // any frame over its bound and whatever it drops makes some rules-legal line unreachable.
+  // the search failed rather than preventing me from proceeding"*). Per main ordinal, the CARD NAMES
+  // the player asked the plan-space valve to keep, because the valve must drop a group on any frame
+  // over its bound and whatever it drops makes some rules-legal line unreachable.
   //
-  // Deliberately NOT carved out of argsAndChoices' `stable` key, unlike --cast-order: a NEW ordinal
+  // NAMES, not bare ordinals: the first cut of this suspended the valve for the frame, and a 768M-
+  // position T5 frame on the user's own seed-15 game took the engine to 17.78 GB before the RSS cap
+  // aborted it. Pinning keeps the re-enumeration inside the ordinary bound.
+  //
+  // Deliberately NOT carved out of argsAndChoices' `stable` key, unlike --cast-order: a NEW entry
   // MUST respawn the interactive child. The frame has to be re-enumerated from the start for its
   // plan INDEX to mean the same thing in this validation, in the /api/step that follows it, and in
   // the reference the game saves. An in-place directive would have let those three disagree, which
   // is the index-drift bug CheckLine's `menu` parameter exists to prevent.
-  if (Array.isArray(p.fullEnum) && p.fullEnum.length) {
-    const ords = p.fullEnum.map(n => parseInt(n, 10)).filter(n => Number.isFinite(n) && n >= 0);
-    if (ords.length) args.push('--full-enum', [...new Set(ords)].sort((a, b) => a - b).join(','));
-  }
+  args.push(...fullEnumArg(p.fullEnum));
   // #6 storage tap-vs-charge side-channel: p.storageHold is a { "turn:num": 0|1 } map of the human's
   // per-(turn, land) hold answers (1 = hold/charge, 0 = allow tap). Passed as "turn:num:val,..." keyed by
   // (turn, land number) — NEVER a --choices slot, so existing references (no --storage-hold) replay as the
@@ -1410,10 +1438,10 @@ const server = http.createServer(async (req, res) => {
         sideChannels: {
           castOrder: p.castOrder || {}, firebreathe: p.firebreathe || {},
           jitte: p.jitte || {}, storageHold: p.storageHold || {},
-          // The full-enum ordinals already in force when this line was refused. Recorded for the
-          // same reason as castOrder: without it the reproduce command replays frames the player had
-          // overridden as VALVED frames, so the prior choices index a different menu and the
-          // recorded verdict is not reachable.
+          // The full-enum PINS already in force when this line was refused. Recorded for the same
+          // reason as castOrder: without them the reproduce command replays frames the player had
+          // overridden as ordinarily-valved frames, so the prior choices index a different menu and
+          // the recorded verdict is not reachable.
           fullEnum: Array.isArray(p.fullEnum) ? p.fullEnum : [],
         },
         note: 'Reproduce: --claude-play --seed <seed> --game-index <gi> --choices "' +
