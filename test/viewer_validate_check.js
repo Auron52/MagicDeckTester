@@ -132,7 +132,7 @@ function sideChannelArgs(decisions) {
   return extra;
 }
 
-function runValidate(dk, seed, gi, maxTurns, choices, line, extra, force) {
+function runValidate(dk, seed, gi, maxTurns, choices, line, extra, force, valve) {
   const args = [dk.deckPath];
   if (dk.profilePath) args.push('--profile', dk.profilePath);
   args.push('--cards-json', CARDS, '--claude-play', '--seed', String(seed),
@@ -141,7 +141,17 @@ function runValidate(dk, seed, gi, maxTurns, choices, line, extra, force) {
   if (force !== null && force !== undefined) args.push('--force-mulligan', force);
   if (extra && extra.length) args.push(...extra);
   let out;
-  try { out = execFileSync(BIN, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
+  // `valve` MUST MATCH the bound the resolver replayed this reference under (al.valve), and that
+  // is a correctness coupling rather than a tidiness one: `choices` is the content-RESOLVED pick
+  // stream viewer_protocol_check.py produced against ITS menu, and a plan reply is a positional
+  // index into the menu the engine enumerates. Replay the same stream under a different bound and
+  // every index addresses a different plan. Null (the normal case) = the viewer's own default, so
+  // this is inert for every reference that did not need the reduced-bound retry.
+  let env = process.env;
+  if (valve) {
+    env = Object.assign({}, process.env, { MTG_VIEWER_PLAN_CAP_POSITIONS: String(valve) });
+  }
+  try { out = execFileSync(BIN, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env }); }
   catch (e) { out = (e.stdout || '') + (e.stderr || ''); }   // exit 71 is expected (validation)
   const m = /<<<CLAUDE_VALIDATION>>>([\s\S]*?)<<<END_VALIDATION>>>/.exec(out);
   if (!m) return { verdict: 'NO_VALIDATION_BLOCK' };
@@ -311,7 +321,8 @@ function main() {
       const line = LB.encodeLine(built);
       // The resolver's prefix: replaying it leaves the engine offering exactly THIS frame.
       const choices = al.resolved.slice(0, fr.prefix_len);
-      const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line, extra, force);
+      const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line, extra, force,
+                            al && al.valve);
       const verdict = v.verdict;
       // THE MATCHED-PLAN VIEW MUST COVER EVERY PLAN THE VERDICT CAN COMMIT — the accept's own plan,
       // and each `choose` variant's (CheckLine sets plan_index = -1 for a choose, so the variants

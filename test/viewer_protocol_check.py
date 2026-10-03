@@ -88,6 +88,30 @@ PAY_SAC_NAMES = {"Treasure Token"}
 # ulimit` rather than subprocess's preexec_fn, which is not safe under a ThreadPoolExecutor.
 AS_CAP_MB = int(os.environ.get("MTG_REPLAY_AS_CAP_MB", "4096"))
 
+# Plan-space bound for a REPLAY, in odometer POSITIONS (passed as MTG_VIEWER_PLAN_CAP_POSITIONS;
+# see replay()). Deliberately well under the viewer's own 65,536, and the reason is that AT THE
+# VIEWER'S BOUND THIS CHECKER CANNOT RUN SAFELY. Two measurements, 2026-10-03:
+#
+#   * the ENGINE side: one position yields several plans, so a KittyEquipment v2 T3 frame
+#     materialises ~420k plans = 3.22 GB, over the 4 GB MTG_REPLAY_AS_CAP_MB ulimit. That is the
+#     `std::bad_alloc` behind two permanently un-replayed references (claude_s2_gi1, claude_s8_gi7);
+#   * the far bigger PYTHON side, which is the one that was never priced: this checker runs
+#     emission UNCAPPED (MTG_PLAY_PLANS_CAP=0, below), so it holds that frame's ~300 MB of decision
+#     JSON as a string and then as parsed objects, PER THREAD. At --threads 4 the checker process
+#     itself reached 5.7 GB RSS and took a 23 GB box to 0 available, with a 32-thread generation
+#     running on it. The ulimit bounds the children; nothing bounded the parent.
+#
+# WHY A SMALLER BOUND IS THE RIGHT ANSWER rather than a bigger cap. A replay is not browsing a
+# menu: it reproduces ONE line that the reference already names, and the walk resolves it by
+# CONTENT (find_plan). Everything the bound removes is menu the replay never reads. What it costs
+# is that stored indices shift more often, so references report `repaired` instead of `ok` -- a
+# cosmetic class under the user's own rule for references (the win turn and the intended line are
+# what must hold, not the encoding), and 350 of 442 were already in that class.
+#
+# DO NOT instead RAISE THE ULIMIT. That cap exists because the unbounded version killed the user's
+# session (docs/design/claude-play-unprune-blowup.md).
+VALVE_POSITIONS = os.environ.get("MTG_REPLAY_VALVE_POSITIONS", "8192")
+
 
 def capped(args):
     """`args`, wrapped so the child runs under the address-space cap (unwrapped when disabled)."""
@@ -313,7 +337,7 @@ def recorded_tap_prefs(decisions):
     return prefs
 
 
-def side_channel_args(decisions):
+def side_channel_args(decisions, pin_lines=False):
     """Reconstruct the keyed side-channel args a reference used, so a saved reordered/held game replays
     faithfully: --firebreathe "turn:count", --storage-hold "turn:num:val", --cast-order "ord:A|B" (the
     applied cast order recorded on the main-phase entry), --force-attackers "turn:A|B" (the recorded
@@ -337,7 +361,50 @@ def side_channel_args(decisions):
         # index and the pinned frame's menu differs from the ordinarily-valved one, so replaying
         # without it applies a different line -- the play-drift class. Keyed by main ordinal like
         # --cast-order, so passing the whole set is safe.
-        if t == "main_phase" and d.get("full_enum"):
+        # ...and under `pin_lines` (the RETRY path only), additionally pin THE RECORDED LINE'S OWN
+        # CARD NAMES at every main-phase frame, whether or not the player ever used the override.
+        # USER 2026-10-03, approving this direction: *"I'm okay with changing the references to use
+        # names more as it makes a bit more sense for this kind of thing, though we might still want
+        # indices when duplicates are involved."*
+        #
+        # WHAT IT BUYS, and why the retry needs it. The valve must drop something whenever a frame
+        # exceeds its bound, so a recorded line can fall out of the menu for no reason but its own
+        # width -- and the retry runs at a DEEPER cut than the viewer's, which makes that likelier,
+        # not less. Naming the line puts its groups at the front of the budget (`try_add` never
+        # rejects the first group) and its own groups are narrow, so the line survives any bound
+        # that fits the line itself. The bound then governs only the rest of the menu, which a
+        # replay never reads. Without this the retry would trade a crash for an enumeration gap.
+        #
+        # OFF BY DEFAULT, and that is not timidity -- `--full-enum` is not a neutral pin. It
+        # RE-ENUMERATES the frame a second time (main.cpp ApplyFullEnum) and emits a `search_gap`
+        # play event saying the search failed to offer the line. On the retry both are honest and
+        # the cost is paid once; applied to every frame of every reference it would double the
+        # sweep's enumeration work and write a false search-failure event into every frame. The
+        # clean version is a neutral replay-only pin channel in the engine -- see
+        # docs/design/reference-repair-2026-10-03.md.
+        if pin_lines and t == "main_phase":
+            o = dec.get("main_ordinal")
+            names = list(d.get("full_enum") or [])
+            rec = d.get("chosen")
+            rec = rec[0] if isinstance(rec, list) and rec else rec
+            if isinstance(rec, int) and rec >= 0:
+                # The recorded plan's own content, found by its "index" FIELD exactly as the walk
+                # finds it (the writer re-emits a chosen plan that sits beyond the display cap, so
+                # this is present even when the saved list is a truncated slice).
+                for pp in (dec.get("plans") or []):
+                    if pp.get("index") == rec:
+                        names += [c for c in (pp.get("casts") or []) if c]
+                        break
+            # Dedup, preserving order: the spec is a '|'-joined name list per ordinal and a repeated
+            # name pins nothing extra. Pipes, not commas -- card names hold commas ("Sram, Senior
+            # Edificer"), which is why the side channel was specified this way in the first place.
+            seen_n, uniq = set(), []
+            for n in names:
+                if n not in seen_n:
+                    seen_n.add(n); uniq.append(str(n))
+            if isinstance(o, int) and o >= 0 and uniq:
+                fe.append(f"{o}:" + "|".join(uniq))
+        elif t == "main_phase" and d.get("full_enum"):
             o = dec.get("main_ordinal")
             names = d["full_enum"]
             if isinstance(o, int) and o >= 0 and isinstance(names, list) and names:
@@ -377,7 +444,7 @@ def force_arg(ref):
     return f'{m.get("count", 0)}:' + ",".join(str(n) for n in m.get("bottom", []))
 
 
-def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8):
+def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, valve=None):
     """One stateless --claude-play invocation with the GUI's params (depth 0,
     no --reveal). `extra` carries reconstructed keyed side-channel args (--firebreathe /
     --storage-hold / --cast-order); safe for every prefix (keyed, applied only when reached).
@@ -395,6 +462,19 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8):
     # cap (MTG_PLAY_PLANS_CAP, default 200; ENOBUFS fix) would make any recorded pick beyond the
     # cap look unrepairable and read as play-drift (FiveColour s8 gi7 records index 304).
     env = dict(os.environ, MTG_PLAY_PLANS_CAP="0")
+    # `valve` (retry only): a SMALLER plan-space bound than the viewer's own 65,536 POSITIONS.
+    # Uncapped EMISSION of a valve-sized frame is what used to take this checker down -- one
+    # position yields several plans, so a KittyEquipment v2 T3 frame materialises ~420k plans,
+    # measured 3.22 GB against the 4 GB MTG_REPLAY_AS_CAP_MB ulimit. That surfaced as
+    # `std::bad_alloc` and TWO permanently un-replayed references (claude_s2_gi1, claude_s8_gi7).
+    #
+    # DO NOT "FIX" THAT BY RAISING THE ULIMIT. The cap is there because the unbounded version killed
+    # the user's session (docs/design/claude-play-unprune-blowup.md).
+    #
+    # None on the first attempt, so a reference that already replays sees the viewer's own bound and
+    # cannot change class because of this knob.
+    if valve:
+        env["MTG_VIEWER_PLAN_CAP_POSITIONS"] = str(valve)
     p = subprocess.run(capped(args), capture_output=True, text=True, env=env)
     return p.returncode, p.stdout + p.stderr
 
@@ -467,7 +547,72 @@ def board_key(state):
                   for pp in state.get("me", {}).get("battlefield", []))
 
 
-def find_plan(recorded, plans, recorded_index=None, prefer=None):
+# ---- MDFC LAND FACE, RESOLVED BY NAME --------------------------------------------------------
+#
+# A modal double-faced land is ONE card with two faces that produce different colours (Auras plays
+# 'Branchloft Pathway // Boulderloft Pathway': {G} front, {W} back). In every zone but the
+# battlefield a DFC *is* its front face (CR 712.2), so `land_to_play` holds the FRONT name for both
+# and the two plans used to serialise byte-identically -- the defect SummarizePlan now annotates
+# ("land=Branchloft Pathway -> Boulderloft Pathway (back face)", main.cpp, found by seven
+# independent claude-play agents each reporting the faces as indistinguishable menu entries).
+#
+# THAT FIX IS WHAT BROKE THE TWO AURAS REFERENCES, and the mechanism is worth stating because it is
+# counter-intuitive: before it, both faces shared one summary, so `find_plan`'s summary tier
+# returned BOTH and `recorded_index` -- the duplicate tiebreaker -- picked the recorded face. After
+# it, the recorded (un-annotated) summary matches the FRONT plan *uniquely*, so the tiebreaker is
+# never consulted and the replay silently commits the manabase to the wrong COLOUR: 'Boulderloft
+# Pathway' became 'Branchloft Pathway' and every downstream {W}{W} cast starved. Reported as
+# board-diverged several frames later, which names the symptom and not the cause.
+#
+# So resolve the face the way the USER asked references to be resolved (2026-10-03: *"changing the
+# references to use names ... though we might still want indices when duplicates are involved"*):
+# by NAME, out of the reference's own record. The reference does not store the face it chose -- but
+# it stores the BOARD at every later frame, and a land that entered as its back face is sitting
+# there UNDER THE BACK FACE'S NAME. That is the intent, index-free and immune to enumeration drift.
+_BACK_FACE_RE = re.compile(r" -> ([^;]*?) \(back face\)")
+
+
+def summary_sans_face(s):
+    """A plan summary with the back-face annotation removed -- i.e. in the form a reference saved
+    before the annotation existed. Lets a legacy recording match BOTH of today's faces, so the face
+    itself is chosen by intent (below) rather than by which summary happens to still match."""
+    return _BACK_FACE_RE.sub("", s or "")
+
+
+def plan_back_face(p):
+    """The back-face land name a plan plays, or None when it plays a front face / no MDFC land."""
+    m = _BACK_FACE_RE.search((p.get("summary") or "").split(";")[0])
+    return m.group(1) if m else None
+
+
+def mdfc_face_intent(kept, ri, land_name):
+    """Which FACE of `land_name` the reference's recorded line actually played, read off the
+    reference's own later boards. Returns the BACK-face card name, "" for the front face, or None
+    when it is not recoverable -- and the three-way answer is deliberate: None must leave the
+    existing index-tiebreak behaviour alone, because defaulting an unknown to "front" would rewrite
+    a reference whose face we simply could not read (the last frame of a game has no successor)."""
+    rd = kept[ri].get("decision") or {}
+    backs = set(n for n in (rd.get("mdfc_backs") or ()) if n)
+    if not backs or not land_name:
+        return None                      # no MDFC land / no land in the plan: nothing to resolve
+    before = {pp.get("name") for pp in rd.get("me", {}).get("battlefield", [])}
+    for rec in kept[ri + 1:]:
+        nd = rec.get("decision") or {}
+        bf = nd.get("me", {}).get("battlefield")
+        if not bf:
+            continue                     # an auxiliary frame that carries no board
+        added = {pp.get("name") for pp in bf} - before
+        hit = sorted(added & backs)
+        if hit:
+            return hit[0]                # entered under its BACK name => the back face was played
+        # The FRONT name having entered is positive evidence for the front face. Anything else
+        # (only the turn's creatures entered, or the board is unchanged) is NOT: say so with None
+        # and let the recorded index keep deciding, exactly as it did before this tier existed.
+        return "" if land_name in added else None
+    return None
+
+
+def find_plan(recorded, plans, recorded_index=None, prefer=None, mdfc_face=None):
     """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
     variants distinct), then land+casts (tolerates a summary-format change or a dropped order
     variant). This is how a recorded pick survives an enumeration change: the reference stores WHAT
@@ -497,6 +642,20 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
     if recorded is None:
         return None
     hits = [i for i, p in enumerate(plans) if p.get("summary") == recorded.get("summary")]
+    # MDFC FACE TIER (see mdfc_face_intent). Runs BEFORE everything else, and it has to: the
+    # back-face annotation makes a legacy recording match the FRONT plan uniquely, so by the time
+    # any tiebreaker runs there is nothing left to break. Widen to both faces by comparing summaries
+    # with the annotation stripped, then let the recorded intent choose the face by NAME. Inert
+    # unless the widening actually finds two faces AND the intent is known -- a deck with no MDFC
+    # land, or a reference whose face is unreadable, resolves exactly as before.
+    if mdfc_face is not None:
+        want_s = summary_sans_face(recorded.get("summary"))
+        same = [i for i, p in enumerate(plans)
+                if summary_sans_face(p.get("summary")) == want_s]
+        if len(same) > 1 and len({plan_back_face(plans[i]) for i in same}) > 1:
+            by_face = [i for i in same if (plan_back_face(plans[i]) or "") == mdfc_face]
+            if by_face:
+                hits = by_face
     if not hits:
         want = plan_key(recorded)
         hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
@@ -815,6 +974,55 @@ def target_intent(dec, kept, ri):
 
 
 def check_reference(path, collect=None):
+    """walk_reference at the replay plan-space bound, with ONE retry that additionally PINS the
+    recorded line by name if the first attempt died inside the engine rather than reaching a
+    verdict.
+
+    TWO LAYERS, because they answer two different failures and the cheap one answers almost
+    everything. The bound (VALVE_POSITIONS) is what keeps a wide frame's plan list inside this
+    harness's memory, and it applies to every reference. The PIN is what guarantees a specific
+    recorded line is enumerated at all -- it buys reachability, not memory -- so it is held back for
+    a reference the bound alone cannot replay. Keeping it off the common path is not timidity:
+    `--full-enum` is not a neutral pin (it re-enumerates the frame a second time and emits a
+    `search_gap` event asserting the search failed to offer the line), so applying it to all 442
+    references would double the sweep's enumeration work and write a false search-failure event
+    into every frame of it. The clean version is a neutral replay-only pin channel in the engine --
+    see docs/design/reference-repair-2026-10-03.md.
+
+    THE RETRY ALSO FIRES ON ENUM-GAP, and that is what makes the bound above safe to apply at all.
+    A tighter bound means the valve drops MORE groups, so it can take a recorded line out of the
+    menu -- which the walk would report as "a previously-offered plan is no longer enumerated", the
+    loud class. Pinning separates the two causes exactly: a line the VALVE dropped comes back when
+    it is named, and a line the ENUMERATOR no longer produces does not. So this is attribution
+    rather than masking -- the enum-gap class gets STRICTER, because a gap that survives a pin is
+    now known to be the engine and not the bound. The report says which happened.
+
+    USER 2026-10-03: *"there should not be failing references. We should repair them."*
+    """
+    RETRYABLE = ("engine",        # the engine fell over (bad_alloc on a wide frame)
+                 "unresolvable")  # enum-gap: possibly only the valve's doing -- see above
+    ok, kind, detail = walk_reference(path, collect=collect, valve=VALVE_POSITIONS)
+    if ok and kind != "unresolvable":
+        return ok, kind, detail
+    if kind not in RETRYABLE:
+        return ok, kind, detail
+    c2 = {} if collect is not None else None
+    ok2, kind2, detail2 = walk_reference(path, collect=c2, valve=VALVE_POSITIONS, pin_lines=True)
+    if not ok2 or kind2 == "unresolvable":
+        # Still failing: report the FIRST verdict, which describes the reference as it is actually
+        # configured, and say the fallback was tried so the next reader does not repeat it. For an
+        # enum-gap this is now a STRONGER claim than before -- the plan is gone from the
+        # enumeration itself, not merely from a bounded menu.
+        return ok, kind, (f"{detail} (also absent with the recorded line PINNED by name, so this is "
+                          f"the enumeration and not the plan-space bound)" if kind == "unresolvable"
+                          else f"{detail} (retry with the recorded line pinned by name also failed)")
+    if collect is not None and c2:
+        collect.clear(); collect.update(c2)
+    return ok2, kind2, (f"{detail2}; recovered by PINNING the recorded line by name -- the "
+                        f"plan-space valve had dropped it, the enumerator still offers it")
+
+
+def walk_reference(path, collect=None, valve=None, pin_lines=False):
     """Replay one reference by INTENT, validating the contract at every step.
 
     collect: optional dict; on return it holds the replay ingredients ('deck', 'prof', 'seed',
@@ -873,7 +1081,9 @@ def check_reference(path, collect=None):
                                f"in this file (note references/<dir> need not match decks/<dir>)")
     deck, prof = DECKS[deck_dir]
     seed, gi = ref["seed"], ref["game_index"]
-    side = side_channel_args(ref["decisions"])   # --firebreathe / --storage-hold / --cast-order the ref used
+    # --firebreathe / --storage-hold / --cast-order the ref used (+ the recorded lines pinned by
+    # name on the retry path; see side_channel_args).
+    side = side_channel_args(ref["decisions"], pin_lines=pin_lines)
     force = force_arg(ref)   # reconstruct the recorded opening hand when the reference carries it
     # The reference's own decisions, in the order the positional stream used to address them. Under
     # --force-mulligan the engine resolves keep/bottom internally, so those carry no answer here.
@@ -894,6 +1104,7 @@ def check_reference(path, collect=None):
     frames = []
     if collect is not None:
         collect.update(deck=deck, prof=prof, seed=seed, gi=gi, force=force, side=side, mt=mt,
+                       valve=valve,         # the plan-space bound `resolved`'s indices address
                        resolved=resolved,   # 'resolved' is THIS list; it fills in as the walk runs
                        frames=frames)
     ri = 0               # how many of the reference's own decisions have been consumed
@@ -939,9 +1150,13 @@ def check_reference(path, collect=None):
     # One invocation per decision; bounded well above any real game so a protocol change that
     # loops cannot hang the suite (that is why these checks live outside smoke/regression).
     for _ in range(400):
-        rc, out = replay(deck, prof, seed, gi, resolved, force, side, mt)
+        rc, out = replay(deck, prof, seed, gi, resolved, force, side, mt, valve=valve)
         if "Error:" in out or rc not in (0, 70):
-            return False, "play", f"engine error after {len(resolved)} picks (rc={rc}): {out.strip()[-160:]}"
+            # Kind "engine" (still a contract-fail: the `False` is what the report reads) so the
+            # retry in check_reference can tell "the engine fell over" apart from every other
+            # contract failure. Retrying a malformed reference or an unresolvable deck dir at a
+            # different plan-space bound cannot help, and a blanket retry would hide that.
+            return False, "engine", f"engine error after {len(resolved)} picks (rc={rc}): {out.strip()[-160:]}"
         if rc == 0:  # clean terminal
             m = RES_RE.search(out)
             if not m:
@@ -1147,13 +1362,17 @@ def check_reference(path, collect=None):
                             elif a["replicate_count"] != _max_rep_for(cur_plans, nm):
                                 return False
                         return True
-                q = find_plan(recorded, cur_plans, recorded_index=p, prefer=rep_prefer)
+                # Which MDFC land FACE the recorded line played, by name, out of the reference's
+                # own later boards (see mdfc_face_intent). None on every deck without one.
+                face_want = mdfc_face_intent(kept, ri, recorded.get("land"))
+                q = find_plan(recorded, cur_plans, recorded_index=p, prefer=rep_prefer,
+                              mdfc_face=face_want)
                 if q is None and rep_prefer is not None:
                     # The intended count is not affordable in the current enumeration (the payment
                     # path moved, so a count the old greedy reached may no longer be reserved).
                     # Fall back to the content match rather than declaring the plan gone -- and let
                     # the ordinary drift reporting speak if the line then plays out differently.
-                    q = find_plan(recorded, cur_plans, recorded_index=p)
+                    q = find_plan(recorded, cur_plans, recorded_index=p, mdfc_face=face_want)
                     if q is not None:
                         shifted.append(f"{frame_ident(dec)} replicate-count not reproducible")
                 if q is None:
@@ -1324,8 +1543,14 @@ def emit_resolved(paths):
 
     Consumed by test/viewer_validate_check.js so that check replays the same content-resolved
     stream this one does rather than the recording's raw positional indices. Fields: the replay
-    invariants (deck/prof/seed/gi/force/side/mt), `resolved` (the full pick stream), and `frames`
-    (each aligned main_phase frame's turn/phase and its prefix_len into `resolved`).
+    invariants (deck/prof/seed/gi/force/side/mt/valve), `resolved` (the full pick stream), and
+    `frames` (each aligned main_phase frame's turn/phase and its prefix_len into `resolved`).
+
+    `valve` IS A REPLAY INVARIANT, not a diagnostic, and shipping it is what keeps the two checks
+    honest: `resolved` holds positional indices into the menu the engine enumerated, so a consumer
+    that replays the same stream under a different plan-space bound addresses DIFFERENT plans. It is
+    null for every reference that replayed at the viewer's own bound (nearly all of them) and set
+    only for one that needed the reduced-bound retry.
     """
     for path in paths:
         c = {}
@@ -1333,7 +1558,8 @@ def emit_resolved(paths):
         print(json.dumps({"path": path, "ok": ok, "kind": kind, "detail": detail,
                           "deck": c.get("deck"), "prof": c.get("prof"), "seed": c.get("seed"),
                           "gi": c.get("gi"), "force": c.get("force"), "side": c.get("side", []),
-                          "mt": c.get("mt"), "resolved": c.get("resolved", []),
+                          "mt": c.get("mt"), "valve": c.get("valve"),
+                          "resolved": c.get("resolved", []),
                           "frames": c.get("frames", [])}))
     return 0
 
@@ -1368,9 +1594,15 @@ def main():
     # THIS ref still drifting?) too expensive to do, so it does not get done. Read-only and purely
     # a selection: it cannot touch references/, and the full sweep is unchanged when absent.
     if "--only" in sys.argv[1:]:
-        pat = sys.argv[sys.argv.index("--only") + 1]
-        refs = [p for p in refs if pat in p]
-        print(f"[only: {len(refs)} ref(s) matching {pat!r}]")
+        # COMMA-SEPARATED alternatives, so investigating several decks at once is ONE pooled run
+        # over all their references rather than a run per deck. A loop of per-deck invocations
+        # strands cores on each one's own tail (CLAUDE.md: pool into one queue, one tail) -- here
+        # that was 4 decks' 77 references, where the per-deck split idles --threads on the 3-ref
+        # deck while the 38-ref deck is still going. Commas, not pipes: these are PATH fragments,
+        # which cannot contain a comma, unlike the card names the --full-enum spec carries.
+        pats = [s for s in sys.argv[sys.argv.index("--only") + 1].split(",") if s]
+        refs = [p for p in refs if any(s in p for s in pats)]
+        print(f"[only: {len(refs)} ref(s) matching {', '.join(repr(s) for s in pats)}]")
         if not refs:
             return 0
     # SAMPLE mode (--sample / VIEWER_PROTOCOL_SAMPLE): one reference per deck dir. Historical: the
