@@ -219,3 +219,21 @@ overnight 8 / 3, d0 byte-identical. The five slower games all recover at d8 b0 (
 s2002 gi25 / gi73, hinata2hg ov d5 s6006 gi10, hinata ov d5 s4004 gi154 / gi199. Per deck: hinata -7,
 hinata2hg **+2** -- a churn cell, added to the mitigation list above. Open from the checkpoint-4 table: the
 7 pre-existing games and gi61.
+
+## Checkpoint 5 (2026-10-03, 3de66a1f, rebased onto origin 2a57f057) -- tiers ACCEPTED
+
+Per deck vs origin GT (searched): net **-514 turns** (528 faster-turns, 14 slower-turns). Every searched
+slower game re-run at `--depth 8 --budget-ms 0` on 3de66a1f: **291/291 recover**; the 292nd, snow ov d3
+s4004 gi104 (GT T8), is a T8-only win whose T1 decision must walk the whole 8-turn tree -- still running,
+never finished on any binary (see `snow-d8-continuation-derivation-cost.md` Finding 5).
+
+Decks above GT, each with a verdict:
+* antilife +4, antilife2hg +5, dragonstorm2hg +1, mirrorwing +1, slivers2hg +1 -- unchanged since
+  checkpoint 4: budget churn, every slower game recovers at d8 b0; tracked for the mitigation phase.
+* snow +1 -- churn, all recover at d8 b0. regression d3 s2002 gi56 (T5 -> T6): the committed T4 line is
+  a VERIFIED T5 kill, the executor now replays every breakpoint exactly as scored (traced), yet the
+  realised T5 deals 10 into 11. Lead: the realised payment taps Boreal Druid (and filters through Arcum's
+  Astrolabe), so the Druid does not attack; if the scored apply paid without it, this is a mana-payment
+  executor/rollout divergence. Open.
+* kittyv2 +1 -- new upstream deck (8 cells without GT before this accept); its slower game recovers.
+* fungus_d0 +6 upstream; slivers_d0 +135 the deferred d0 runner.
