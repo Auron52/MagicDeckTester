@@ -508,3 +508,105 @@ stalling near 25,052,142 — would mean something really is wedged rather than b
 Refinement, R=2 → cap 30, which is the larger half. Size it from §7: **57.5M–67.2M total rollouts**
 (36–42% of `2,636,581 x 2 x 30`), mean final R ≈ 10. `fed` is a throughput counter, **not** progress
 — see fix 4.
+
+---
+
+# Defect 3 — the SUB-REFINE WAVE barrier (2026-10-03, Fungus candidate-b K=17)
+
+**USER, on being told the generation was waiting on one rollout:**
+
+> *"Wait, that's an issue in our design, then. There should be no blockages."*
+
+Correct, and **this document already contained the principle that condemns it** (§3, "Why it is
+invisible"): *"Barrier-free" was defined as "no core idles". The real requirement is "no core idles
+AND the state machine keeps advancing."* Defect 1 was that sentence applied to the speculation
+filler. Defect 3 is the same sentence applied one layer down.
+
+## Measured
+
+| | |
+|---|---|
+| keepgen elapsed | 63,006 s (17.5 h) |
+| **stalled** | **24,099 s = 6.7 h — 38% of the run** |
+| `roll7` / `rollsub` | frozen at 1,096,457 / 1,562,732 |
+| `frozen` | **0 / 343,538 (0.0%)** |
+| `subwave` | `2x40934` — 2 waves dispatched, last wave 40,934 cells |
+| `pre` | 2,121,859 and climbing, `hit=0` |
+| cores | 21.8, **all 24 workers in `R`** |
+
+## The chain — one cell gates 343,538 cell-sides
+
+1. One cell of sub-refine **wave 2** is still in flight after 6.7 h.
+2. `sub_refine_step()` (`:4415`) returns immediately:
+   `if (sub_converged || sub_wave_pending.load() != 0 || sub_remaining.load() != 0) { return; }`
+   — so **wave 3 is never dispatched** while any cell of wave 2 is outstanding.
+3. `sub_converged` therefore stays false.
+4. `floor_incomplete` (`:4501`) = `any_below_floor || sub_remaining > 0 || !sub_converged` stays true.
+5. Refs cannot fix, so **no size-7 cell may freeze** — `frozen` is pinned at 0/343,538.
+6. The precompute filler (`:4542`) keeps all 24 workers busy, so **every health metric reads green.**
+
+Utilisation is 100%. Nothing is advancing. That is Defect 1's lesson recurring at the wave level.
+
+## Why this is FIXABLE — the barrier is a RACE GUARD, not a value dependency
+
+The justification is in the code's own comment at `:4404-4409`:
+
+> *"Only steps when the current wave has fully committed (`sub_wave_pending==0`), so
+> `recompute_sub`/`compute_sub_wave_tasks` never race a kind-2 worker; size-7 workers never touch the
+> sub-tables it reads."*
+
+So the whole-wave join exists to stop a serial recompute racing a worker that is writing sub-table
+samples. **That is a locking discipline, not an algorithmic requirement** — and it is a much more
+tractable thing to fix than a true data dependency. The real dependency is PER CELL: a cell that
+finished wave 2 and is still ambiguous could be re-marked and re-fed immediately without consulting
+the straggler at all. **The barrier is strictly stronger than the dependency requires**, which is the
+precise shape CLAUDE.md forbids ("a barrier is only allowed where a genuine data dependency requires
+it").
+
+## Why it did not bite before, and why it bites now
+
+The same comment states the mitigation: *"the size-7 floor fills cores during each wave's serial
+recompute/mark instead of the barrier stranding them."* That holds while size-7 floor work exists.
+**It is exhausted here**: cumulative K=17 `roll7` is 1,056,484 (previous run) + 1,096,457 (this run)
+= **2,152,941**, against the ~2,061,228 the K=22 precedent predicts for refs-fixed — i.e. 104%, which
+is why `roll7` reads `0/s`. With no real work left to overlap, the barrier's cost stops being "a brief
+serial recompute hidden behind floor work" and becomes **the full tail of the slowest cell in the
+wave, with only speculative precompute to hide it.**
+
+**The scale rule in §3 generalises:** a barrier justified by "other work fills the cores" is only
+justified *while that other work exists*. Late in a run it does not. Check the justification against
+the END of the run, not the middle.
+
+## Fixes, cheapest first
+
+1. **Bound the rollout** — `fungus-doubling-season-rollout-tail.md` §6, now user-required per
+   `mulligan-rollout-performance-floor.md`. This does not remove any barrier; it caps **every**
+   barrier's worst case, which is why it is first. A wave join costing ~seconds is a non-issue; one
+   costing 6.7 h is this document.
+2. **§5 Fix 4, still outstanding, and this run is the second time it would have paid.** The monitor
+   now prints journal age (`journal=... (24099s ago)`) and `subwave`, but **not** the warning §5 asked
+   for, and **not which of the three conditions holds `floor_incomplete`**. I could not tell from the
+   monitor whether the blocker was `any_below_floor`, `sub_remaining` or `!sub_converged` — I had to
+   read the source. Add:
+   * `pending=<sub_wave_pending> remaining=<sub_remaining> below_floor=<0|1> converged=<0|1>`
+   * a LOUD warning when work is being fed while `frozen` has not moved and the journal is stale
+     beyond ~N minutes. "Busy but not progressing" is the exact condition and it should name itself.
+3. **Per-cell continuous sub-refinement instead of per-wave waves.** The principled fix: protect the
+   per-cell fold with a lock and let any committed, still-ambiguous cell be re-marked and re-fed
+   without waiting for its wave's slowest sibling. Post-refs size-7 refinement **already works this
+   way** ("thereafter each cell freezes INDEPENDENTLY off the fixed refs ... cores stay full to the
+   last live cell"), so this is bringing sub-refine into line with an existing, proven pattern rather
+   than inventing one. Scheduling-only, so byte-identity is testable: `run_one` is pure in
+   `(seed_base, r, w, pd)` and the fold is deterministic.
+
+Note that **refs genuinely do depend on final sub values** (`:3872`, "`sub_remaining`/`sub_converged`
+holds Dopt back until they are final"), so fix 3 does not let refs fix early — it lets the sub-refine
+*converge* without serialising on one cell, which is where the 6.7 h went.
+
+## Test to add (extends §6's list)
+
+**Progress-liveness, at the END of a run.** §6 item 2 asserts the journal advances while work is fed.
+Strengthen it: assert `frozen` advances, and run the assertion in a regime where the size-7 floor is
+EXHAUSTED — that is the regime this defect lives in and the existing three regimes do not name it. A
+deliberately slowed cell (one injected long rollout) in the last sub-refine wave reproduces it on
+Slivers in minutes.
