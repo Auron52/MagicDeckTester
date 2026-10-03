@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 63d199a6  date 2026-10-02
+# Regression ground truth -- commit 6c5d9a7d  date 2026-10-03
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Overnight: 24 configs move; searched net +7.00 turns over 8350 games (+0.00084/game) of which selesnya is EXACTLY 0.00 over 6000 games and critter/melira 0.00 -- all of it snow, whose searched sign flips across tiers (+2/-3/+7), i.e. the metric quantum not an effect; held-out paired A/B over 31k games settles searched depth as neutral-or-better on every deck (selesnya 111/78 p=0.020, snow 90/91 null, melira+stompy zero divergence); d0 +94.00 over 9000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -59,6 +59,9 @@ minotaur_smoke_d5_s1001=4.9067/59295dd62e2ef27e
 kitty_smoke_d0_s1001=4.9880/4fa788caf73e61b3
 kitty_smoke_d3_s1001=4.4480/7e526b2f5f90e1cb
 kitty_smoke_d5_s1001=4.4667/511137c36cbe309c
+kittyv2_smoke_d0_s1001=5.8170/4d83286f68ca90c1
+kittyv2_smoke_d3_s1001=5.0000/17382a9a56805739
+kittyv2_smoke_d5_s1001=4.8400/d311f04b37538724
 dragons_smoke_d0_s1001=6.0420/6de46be962d7ca58
 dragons_smoke_d3_s1001=5.7000/378d99d38033be9a
 dragons_smoke_d5_s1001=5.5867/0f3977a4a7b22a16
@@ -107,8 +110,8 @@ pirates_smoke_d0_s1001=4.7520/e64028eacdff55df
 pirates_smoke_d3_s1001=4.3533/eb48c7624e15bba2
 pirates_smoke_d5_s1001=4.3467/b2d566fa3f324dd3
 selesnya_smoke_d0_s1001=6.2790/d22af24133b72d9e
-selesnya_smoke_d3_s1001=5.4600/9c9a98b4457d9033
-selesnya_smoke_d5_s1001=5.3733/6033391b05fe36cf
+selesnya_smoke_d3_s1001=5.4467/7b7d9cfae5c5d0ec
+selesnya_smoke_d5_s1001=5.3467/450cc02991913c47
 snow_smoke_d0_s1001=6.6590/5ad044b773e23f9b
 snow_smoke_d3_s1001=6.1300/d1b94d6d93bf3d02
 snow_smoke_d5_s1001=6.2400/352027dece3833e8
@@ -204,6 +207,11 @@ kitty_regression_d3_s2002=4.3100/27cab81c4372d56a
 kitty_regression_d3_s3003=4.3767/c96227169848e3c9
 kitty_regression_d5_s2002=4.2960/101840f8879ba319
 kitty_regression_d5_s3003=4.3240/f03b9995170db090
+kittyv2_regression_d0_s2002=5.7570/31b97d5975b8ca35
+kittyv2_regression_d3_s2002=4.9500/fb7d70ca38219ff2
+kittyv2_regression_d3_s3003=4.5000/05df50820c82a41f
+kittyv2_regression_d5_s2002=5.0000/6ca33fe8fddc2e01
+kittyv2_regression_d5_s3003=4.5200/e0e158ce129c1631
 dragons_regression_d0_s2002=6.0190/9795d09dd7f6ca12
 dragons_regression_d3_s2002=5.5267/c97c1b175b83b82f
 dragons_regression_d3_s3003=5.6167/a96dabb5a7afc66c
@@ -255,10 +263,10 @@ pirates_regression_d3_s3003=4.4267/236b766bea444e3f
 pirates_regression_d5_s2002=4.4000/2da8841acf81be19
 pirates_regression_d5_s3003=4.4133/665caa69b31754dc
 selesnya_regression_d0_s2002=6.2470/2b8c3e964cbbbd0a
-selesnya_regression_d3_s2002=5.1867/219f9c4699b0efde
-selesnya_regression_d3_s3003=5.4200/74848d9402658e99
-selesnya_regression_d5_s2002=5.0533/9938ce594cdc9419
-selesnya_regression_d5_s3003=5.4267/761ad45580487236
+selesnya_regression_d3_s2002=5.1800/59fade39e17b791b
+selesnya_regression_d3_s3003=5.4133/f7438f90f70f62e4
+selesnya_regression_d5_s2002=5.0533/e92cba51cc5af027
+selesnya_regression_d5_s3003=5.4133/2a227b6b22c989cc
 snow_regression_d0_s2002=6.6670/93adbb600cbceef0
 snow_regression_d3_s2002=6.1167/6f22ddbea71db2b0
 snow_regression_d3_s3003=5.9833/85e8d5e45ff557c1
