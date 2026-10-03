@@ -1016,3 +1016,29 @@ fusion can only help a deck whose stamp is TRUE (otherwise the gate has already 
 so kitty v1 — the gate's big winner — is the fusion's negative control, and it reads 1.0001. Between
 them the two changes cover both cases: no reducer in the list → no walk at all; a reducer in the list
 → one walk instead of three.
+### 9j. ADOPTED: `BuildSimKey`'s canon buffer was reallocated on every key built
+
+Found by **line-level** callgrind on the `./build.sh profile` config (Release codegen plus symbols —
+the Release build has no line info, and "BuildSimKey is 7.44%" is not an answer for a 500-line
+function). Per source line, inside `BuildSimKey`:
+
+| Ir | share of BuildSimKey | line |
+|---|---|---|
+| 233,415,026 | **34.7%** | `canon_items.emplace_back(ck.h1, ck.h2)` (battlefield loop) |
+| 66,300,561 | 9.9% | the hand section's `canon_flush()` |
+| 26,316,306 | 3.9% | the `shuffle_keys` library fold |
+| 17,995,732 + 17,415,196 | 5.4% | the live-library ordered digest loop |
+
+`canon_items` is a `std::vector<std::pair<uint64_t,uint64_t>>` **constructed fresh on every call**,
+and both sections `clear()` it when done — so it starts at capacity 0 every time and a 15-permanent
+board re-grows it 1→2→4→8→16, copying at each step, per key built. `vector.tcc`'s realloc path shows
+up separately at 0.24% of the whole program, which is the same fact from the other side.
+
+Making it a `static thread_local` with retained capacity is one allocation per **thread** instead of
+one per key. Contents, order and every `Fold` are untouched — an identity, not a narrowing. Safe
+because `BuildSimKey` does not recurse (it folds scalars and calls `LookupCached`); the comment at
+the declaration says so, and says what a future recursive fold would have to do instead.
+
+**No deck is a negative control for this one** — every deck builds sim keys — so the soundness
+control is digest equality plus the smoke suite rather than an unaffected deck. Saying that is better
+than nominating a deck and pretending it is unaffected.

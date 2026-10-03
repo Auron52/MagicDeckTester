@@ -47782,7 +47782,24 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // Order-insensitive fold of a section: sub-hash each item into its own Key, sort the
     // (h1,h2) pairs, fold them in sorted order. Sorting (not a commutative sum) keeps the
     // multiset exact -- no weaker-than-128-bit collision class is introduced.
-    std::vector<std::pair<uint64_t, uint64_t>> canon_items;
+    //
+    // REUSED ACROSS CALLS, not constructed per call. This buffer's whole job is to hold one
+    // section's sub-hashes long enough to sort them, and both sections clear it when done -- but a
+    // fresh vector starts at capacity 0, so a 15-permanent board re-grew it 1->2->4->8->16 on EVERY
+    // key built, copying at each step. Measured (callgrind, LINE-level on the Profile build,
+    // KittyEquipment v2, 2026-10-03): the `emplace_back` at the bottom of the battlefield loop was
+    // **34.7% of BuildSimKey's own instructions** (233M Ir), the hand section's flush another 9.9%,
+    // and `vector.tcc`'s realloc path 0.24% of the whole program. Retaining capacity makes that one
+    // allocation per THREAD instead of one per key. The contents, their order and every Fold are
+    // untouched, so this is an identity, not a narrowing.
+    //
+    // THREAD-LOCAL, and safe because BuildSimKey DOES NOT RECURSE -- it folds scalar fields and
+    // calls LookupCached, neither of which re-enters it. A shared buffer under recursion would
+    // clobber the outer call's items, so if a future fold ever calls back into this function it must
+    // take its own vector. Cleared on entry rather than trusting the flushes, so a future early
+    // return cannot leak one call's items into the next.
+    static thread_local std::vector<std::pair<uint64_t, uint64_t>> canon_items;
+    canon_items.clear();
     auto canon_flush = [&]()
     {
         std::sort(canon_items.begin(), canon_items.end());
