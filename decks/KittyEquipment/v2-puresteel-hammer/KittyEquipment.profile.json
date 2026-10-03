@@ -1,4 +1,5 @@
 {
+  "value_play": { "mull_gen_depth": 1, "mull_gen_budget_ms": 3 },
   "card_scores": {
     "Accorder's Shield": [
       -0.10545921578459971,
