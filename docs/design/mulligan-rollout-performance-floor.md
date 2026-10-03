@@ -132,3 +132,75 @@ Related: `fungus-doubling-season-rollout-tail.md` (section 6, 6a),
 `slow-rollout-tail-and-the-uncharged-greedy-walk.md` (AMENDMENT 3, 3b),
 `fungus-token-search-cost.md` (rounds 7-10, the collapses already harvested),
 `per-decision-work-census.md`.
+
+---
+
+## Tested: do the 84 incoming commits fix this? NO — they are ~5% MORE work
+
+2026-10-03. A concurrent agent pushed 84 commits touching 28 `src/` files, including several
+explicit perf commits (five frozen-board/compacted-walk enum collapses, a `BuildSimKey` buffer
+realloc fix, `EffectiveSpellCost` walking the battlefield three times, the no-Aura plan sort,
+`MTG_FREE_CAST_HOIST` default ON) and one that looked directly relevant to this defect --
+`2e85e9fa feat(search): finish a game the search has proven unwinnable`.
+
+**Tested in a separate worktree** (`git worktree add /tmp/mdt-origin origin/<branch>`, built with
+`taskset -c 0-7 ./build.sh profile` so the live generation kept the rest of the box). Each arm used
+its OWN binary **and its own `cards.json`** -- that file is in the change set, though the diff is
+`301 insertions, 0 deletions`, purely the new Kitty cards, so Fungus's card data is untouched and
+this is a clean engine-only comparison.
+
+### Method, and why the obvious version of it fails
+
+The first attempt -- 100 goldfish games at `d1/b3`, interleaved, 3 reps -- was **inconclusive and had
+to be thrown away**: OLD 39.9/28.5/47.7 s against NEW 35.4/37.2/62.4 s. Within-arm spread (28.5 ->
+47.7) exceeded anything between arms, because the box was shared with a live generation. It also
+contained **zero slow games**, so it never touched the tail. Naturally-drawn hands do not reproduce
+the degenerate cells; keep rollouts start from a FORCED hand.
+
+What worked: hunt degenerate games at mulligan settings first
+(`--games 1500 --depth 1 --budget-ms 3 --ignore-play-profile MTG_SLOW_GAME_MS=8000`), then replay the
+worst individually, single-threaded, interleaved, two reps -- and judge on **`units`, which is
+deterministic and thread-invariant and therefore immune to load**, with wall only as corroboration.
+
+### Result (seed base 424200, `--game-index gi`, d1/b3)
+
+| game | OLD units | NEW units | delta | OLD wall | NEW wall | wall |
+|---|---|---|---|---|---|---|
+| gi=25 | 154,313 | 185,496 | **+20.2%** | 11.2 s | 12.7 s | 1.13x |
+| gi=8  | 255,619 | 262,113 | +2.5% | 9.0 s | 10.4 s | 1.15x |
+| gi=19 | 156,922 | 155,736 | -0.8% | 8.1 s | 9.0 s | 1.11x |
+| gi=60 | 228,858 | 233,943 | +2.2% | 6.9 s | 7.3 s | 1.07x |
+| | | | **mean +5.2%, median +2.5%** | 8.8 s | 9.8 s | **1.12x, NEW slower 4/4** |
+
+**`wt` (win turn) is IDENTICAL on every game and every rep** -- 6,6,6,6,6,6,5,5. No quality change
+here; the search explores differently and arrives at the same answer.
+
+### Reading it
+
+* **Origin's engine does not fix this defect. On this deck's degenerate games it is ~5% more work
+  units and ~1.12x more wall.** The units figure is the trustworthy one; the wall deltas are
+  individually inside the noise but agree in SIGN on 4 of 4 game-means, which is the only reason to
+  quote them.
+* The +5.2% mean is carried by gi=25 alone; the other three are within +-2.5%. Call it
+  "a wash to slightly worse", not "a 5% regression".
+* **A coherent mechanism:** `d1832b52 refactor(search): no greedy or heuristic substitute inside the
+  search window` REMOVES heuristic shortcuts, so the search does more real work -- more units is the
+  expected sign. The perf collapses offset part of it. Their measured wins were on kittyv2, hinata
+  and antilife; **a perf gain is scoped to the deck it was measured on**
+  (`perf-ratios-are-scoped-to-deck-artifacts`), and Fungus is not in that set.
+* **The play digest moved**, measured directly: keepgen's 64-game battery gives
+  `86004bde6b4b45ae` on origin against `5672dd070faaa160` on this branch. So a rebase would
+  invalidate the banked journal, and the discovery gencache misses too -- full discovery is 8,800
+  rollouts at ~2/s, about **73 minutes**, which is why the exact keep-cell replays were not run on
+  the origin arm.
+
+### Consequence for the decision
+
+Rebasing mid-generation would have cost the 503,409 banked cell-sides AND produced a **slightly
+slower** run. Letting the in-flight generation finish on this branch is both the cheaper and the
+faster choice. **This defect has to be fixed on its own; no incoming work does it.**
+
+**Caveat on scope:** these four games are the 7-31 s class at `d1/b3`, not the multi-hour class. They
+are the right proxy available without paying 73 minutes of discovery per measurement, but they do not
+prove anything about cases 2-5 above. If origin's engine is ever the baseline, re-run cases 2-5
+against it before concluding.
