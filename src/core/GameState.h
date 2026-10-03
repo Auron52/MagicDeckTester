@@ -392,6 +392,29 @@ struct GameState
     // partially built GameState) keeps the scan and stays correct, it just does not skip work.
     // Erring the other way would silently drop mana the board really has.
     bool                     deck_has_mana_grant        = true;   // granted_tap_mana_subtypes in the list
+    // Same shape once more, for the SPELL-COST REDUCERS: Ruby Medallion (reduces_spell_color),
+    // Goblin Warchief / Dragonspeaker Shaman / Stinkdrinker Daredevil / Cid (reduces_spell_subtype),
+    // Urza's Incubator (chooses_creature_type) and Ragemonger (reduces_subtype_colored_*).
+    //
+    // EffectiveSpellCost (ai/ManaPayment.cpp) walks the WHOLE battlefield THREE separate times for
+    // these -- a LookupCached per permanent each time -- and two of the three are gated only on the
+    // SPELL having any subtype at all, which every creature and every Equipment does. Measured
+    // (callgrind, KittyEquipment v2, 2026-10-03): EffectiveSpellCost is 2.16% of the program's
+    // instructions in its own right and the single largest caller of LookupCached (33M of 130M
+    // calls), on a deck whose only reducer-shaped card is Cid -- and `cards.json` holds all 486
+    // cards for every run, so CardDatabase's DB-wide presence bits (HasQuestAnthem and friends)
+    // cannot express "this DECK has none". A per-GAME stamp can.
+    //
+    // THE SET SCANNED is mainboard + sideboard (a wish reaches the sideboard) + the passive
+    // opponent's fixed 60 (core/OpponentDeck.h). The opponent never casts, so EffectiveSpellCost is
+    // only ever asked about OUR spells -- but scanning their list anyway makes the gate sound by
+    // construction rather than by that argument, and it costs 60 lookups once per game. Garth
+    // One-Eye holds it open, like every other gate here. Tokens have no definition, so they cannot
+    // be a reducer.
+    //
+    // Defaults TRUE for the same reason as the two above: an unstamped state keeps the walks and
+    // stays correct. Erring the other way would UNDERCHARGE a spell, which changes play.
+    bool                     deck_has_cost_reducer      = true;   // see EffectiveSpellCost
     // Brightcap Badger again, for its OTHER half. PerformEndStepLifegainTokens opens with a hoisted
     // `if (life_gained_this_turn <= 0) return;`, added 2026-09-19 and justified in its own comment
     // as byte-identical because "EVERY one of these triggers is worded 'if you gained life this

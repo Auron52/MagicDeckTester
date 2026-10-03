@@ -315,6 +315,18 @@ static_assert(sizeof(Player) == 200,
 // every pair of states Build() could compare -- nothing to fold, exactly like deck_reads_mv_cast
 // and deck_reads_lifegain_in_play. The STATE it gates needs no fold either: it gates only whether
 // a scan that provably finds nothing is skipped, so the set of reachable states is unchanged.
+// 840 (2026-10-03, same slot): GameState gained `deck_has_cost_reducer`, the presence gate for
+// EffectiveSpellCost's three battlefield walks (Medallion / Warchief / Incubator / Ragemonger). The
+// tripwire fired when this landed on 832, which is the 824 entry's point restated: whether it
+// fires is a property of padding, not of whether the field matters. On the REBASE onto
+// deck_has_soulbond above it shares the 8-byte slot that field opened, so the size does not move
+// again -- the two notes describe one growth step, not two.
+// Classification: DECK CONSTANT, stamped once in StampDeckTraits and never written again, so it is
+// identical across every pair of states Build() could ever compare -- nothing to fold, exactly like
+// deck_reads_mv_cast and the five earlier deck_has_* gates. The STATE it gates needs no new fold
+// either: it gates only how a cost is COMPUTED, and the computed cost is already reflected in
+// whatever the line went on to pay (floating mana, tapped sources, board), all of which Build()
+// already folds.
 static_assert(sizeof(GameState) == 840,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

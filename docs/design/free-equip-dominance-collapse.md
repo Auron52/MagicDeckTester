@@ -956,3 +956,63 @@ battlefield walk too, but `EquipGatePowerOf` is shared with the executor (`Spell
 `SpellEffects.h`), so it is an executor-lockstep change and needs its own argument about whether
 `bs.lords` is exactly the set `process_lord` can act on. The memo above removed ~96% of the traffic
 first, which is the cheap half.
+
+### 9i. ADOPTED: the cost-reducer walks — a 1.6% win on the deck I was NOT optimising
+
+`EffectiveSpellCost` (`ai/ManaPayment.cpp`) walks the **whole battlefield three separate times** with
+a `LookupCached` per permanent, for the four spell-cost reducers in `cards.json`: Ruby Medallion
+(`reduces_spell_color`), Goblin Warchief / Dragonspeaker Shaman / Stinkdrinker Daredevil / Cid
+(`reduces_spell_subtype`), Urza's Incubator (`chooses_creature_type`) and Ragemonger
+(`reduces_subtype_colored_*`). Two of the three walks are gated only on
+`!def.card.m_subtypes.empty()` — true of **every creature and every Equipment** — so on a deck
+holding none of those cards they are three provable no-ops per cost computation. It was the single
+largest caller of `LookupCached` (33M of the run's 130M calls) plus 2.16% of all instructions in its
+own right.
+
+**A `CardDatabase` presence bit cannot express this, and that is the reusable part.** The header
+already has four such derived constants (`HasQuestAnthem`, `HasTokenDoubler`, `MaxHandSizeAnthemMax`,
+`HasSubtypeRestrictedMana`), and reaching for a fifth was the obvious move. It does not work:
+**`cards.json` is ONE 486-card pool loaded in full on every run**, so "is any reducer loaded?" is
+TRUE for every deck and gates nothing. (`MaxHandSizeAnthemMax` works only because it is a *bound*
+compared against live hand size, not a presence test.) The gate has to be a **per-game deck stamp** —
+`GameState::deck_has_cost_reducer`, stamped in `GoldFishRunner::StampDeckTraits` beside the five
+existing `deck_has_*` gates, defaulting TRUE so an unstamped state keeps the walks.
+
+| deck | base Ir | gated Ir | ×Ir |
+|---|---|---|---|
+| kittyv2 | 25,990,262,381 | 25,975,453,415 | **0.99943** |
+| kitty v1 (holds suite GT) | 6,544,038,359 | 6,436,769,762 | **0.98361** |
+| goblins (control, Goblin Warchief) | 351,234,868 | 350,963,890 | 0.99923 |
+
+**THE DECK I WAS OPTIMISING IS THE ONE DECK THIS CANNOT HELP, and the control is what showed it.**
+kittyv2 reads 0.99943 — indistinguishable from the negative control's 0.99923, i.e. noise. The cause
+is that **KittyEquipment v2 plays Cid, Freeflier Pilot**, which carries `reduces_spell_subtype`, so
+the stamp is TRUE and all three walks keep running. The earlier survey of "which shipped decks carry
+a reducer" missed it because it globbed `decks/*/` and v2 lives in `decks/KittyEquipment/
+v2-puresteel-hammer/`. `flag-default-is-not-the-arming-condition`, again: the gate's default was
+right, its *arming condition* on this deck was false.
+
+Kept anyway, per CLAUDE.md's collapse directive (a collapse need not buy wall, or even buy anything
+on one deck, to be worth keeping): it is a sound identity worth **1.6%** on every reducer-less list,
+which is most of the suite — and v1 is the list that holds ground truth.
+
+**ALSO ADOPTED, and it is the half that reaches kittyv2: the three walks are now ONE walk**, with
+one `LookupCached` per permanent instead of three. The two generic-only reductions sum under a single
+floor (`max(0, max(0, g−a) − b) == max(0, g−a−b)` for non-negative a, b); Ragemonger's
+coloured-pip reduction touches only the colour fields and the hybrid list while both generic
+reductions read only `cost.generic` and the *printed* cost, so the two halves are disjoint and moving
+the coloured one inside the walk cannot be observed; and Ragemonger still applies in battlefield
+order, which matters because `ApplyColoredPipReduction` is not commutative with itself on a hybrid
+cost. An exact identity, measured separately:
+
+| deck | stamp | base Ir | fused Ir | ×Ir |
+|---|---|---|---|---|
+| kittyv2 | TRUE (Cid) | 25,801,330,993 | 25,458,582,363 | **0.9867** |
+| goblins | TRUE (Warchief) | 350,046,264 | 348,455,777 | **0.9955** |
+| kitty v1 | FALSE | 6,398,986,843 | 6,399,431,254 | **1.0001** ← control |
+
+**The deck roles are the exact reverse of the gate's, which is what makes the pair legible.** The
+fusion can only help a deck whose stamp is TRUE (otherwise the gate has already skipped the block),
+so kitty v1 — the gate's big winner — is the fusion's negative control, and it reads 1.0001. Between
+them the two changes cover both cases: no reducer in the list → no walk at all; a reducer in the list
+→ one walk instead of three.

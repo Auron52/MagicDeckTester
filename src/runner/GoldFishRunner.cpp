@@ -1281,6 +1281,49 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         static const bool s_own_death_all = EnvOn("MTG_OWN_DEATH_ALL");   // DEFAULT OFF; measurement only
         state.own_death_live = state.dmg_events_armed || s_own_death_all;
     }
+    // SPELL-COST REDUCERS (see GameState::deck_has_cost_reducer): can anything that ever reaches a
+    // battlefield in this game reduce the cost of a spell we cast? EffectiveSpellCost walks the
+    // whole battlefield three times for these, two of those walks gated only on the spell having
+    // ANY subtype -- true of every creature and every Equipment -- so on a deck with no reducer the
+    // walks are provably no-ops that cost 33M of the run's 130M LookupCached calls.
+    //
+    // THE PREDICATE MIRRORS THE CONSUMER'S exactly, clause for clause, because a stamp that is
+    // narrower than the walk it gates silently drops a real discount (which UNDERCHARGES a spell and
+    // changes play). Widen both together or neither.
+    //
+    // Mainboard + sideboard (a wish reaches the sideboard) + the passive opponent's fixed list: the
+    // opponent never casts, so this function's answer can only ever be about our own spells, but
+    // scanning their 60 makes the gate true by construction instead of by that argument. Garth
+    // One-Eye materialises cards from outside every decklist, so he holds the gate open.
+    {
+        auto reduces = [](const CardParams& p)
+        {
+            return !p.reduces_spell_color.empty()
+                || !p.reduces_spell_subtype.empty()
+                || p.chooses_creature_type
+                || (!p.reduces_subtype_colored_subtype.empty()
+                    && p.reduces_subtype_colored_cost.has_value());
+        };
+        bool any = false;
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && (reduces(d->params) || d->params.garth_copy_ability)) { any = true; break; }
+            }
+            if (any) { break; }
+        }
+        if (!any)
+        {
+            for (const std::pair<const char*, int>& e : opponentdeck::List())
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(e.first);
+                if (d && reduces(d->params)) { any = true; break; }
+            }
+        }
+        state.deck_has_cost_reducer = any;
+    }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
     // that stamp traits without running SetupGame (the scenario harness) must otherwise get the

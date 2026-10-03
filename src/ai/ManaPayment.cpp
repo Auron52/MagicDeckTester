@@ -1579,80 +1579,109 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         }
         cost.generic = std::max(0, cost.generic - reduction);
     }
-    // Ruby Medallion-style colour cost reduction: each permanent you control whose
-    // reduces_spell_color matches a colour in THIS spell's printed cost reduces its GENERIC by 1
-    // (floored at 0, stacks per copy). Gated on a reducer being in play, so decks without one are
-    // byte-identical. Without this on the EXECUTOR side it over-paid red spells relative to the
-    // planner/rollout, so a committed Medallion-funded combo line (T3 Dragonstorm) was unpayable
-    // at execution -> fd-diverge. (Same-turn-cast Medallions are handled by ManaPruneBound's bail.)
+    // THE THREE REDUCER WALKS BELOW RUN ONLY IF THE DECK CAN CONTAIN A REDUCER AT ALL.
+    //
+    // Each of them walks the whole battlefield with a LookupCached per permanent, and two are gated
+    // only on `!def.card.m_subtypes.empty()` -- true of every creature and every Equipment -- so on
+    // a deck with no Medallion / Warchief / Incubator / Ragemonger they are three provable no-ops
+    // per cost computation. Measured (callgrind, KittyEquipment v2, 2026-10-03): this function was
+    // the single largest caller of LookupCached, 33M of the run's 130M calls, plus 2.16% of all
+    // instructions in its own right.
+    //
+    // The gate is a per-GAME deck stamp, not a CardDatabase presence bit: `cards.json` holds all 486
+    // cards on every run, so a DB-wide "is any reducer loaded?" is TRUE for every deck and says
+    // nothing. See GameState::deck_has_cost_reducer for the scanned set and
+    // GoldFishRunner::StampDeckTraits for the predicate, which mirrors the three `continue` tests
+    // below clause for clause. It defaults TRUE, so an unstamped state keeps all three walks.
+    //
+    // NOT the affinity walk above: that one is already gated on the CASTING card's own
+    // `affinity_for_subtype`, which is the right gate and is unaffected by what else is in the deck.
+    // ...AND THE THREE THAT REMAIN ARE ONE WALK, with ONE LookupCached per permanent.
+    //
+    // They were three separate `for (const Permanent& p : state.battlefield)` loops, each
+    // re-deriving the same `pd` for the same permanent -- so a deck that DOES hold a reducer (and
+    // KittyEquipment v2 does: Cid, Freeflier Pilot carries reduces_spell_subtype, which is why the
+    // stamp above is inert there) paid 3N lookups per cost computation where N suffice.
+    //
+    // WHY FUSING IS EXACT, clause by clause, because this is a cost computation and a wrong answer
+    // changes play rather than merely timing:
+    //   * The two GENERIC reductions were applied as two floored subtractions. Summing them under
+    //     ONE floor is identical: for a, b >= 0, max(0, max(0, g - a) - b) == max(0, g - a - b).
+    //   * Ragemonger's reduction touches ONLY the coloured pips and the hybrid list, never
+    //     `generic`; the two generic reductions read only `def.card.m_mana_cost` (the PRINTED cost)
+    //     and `cost.generic`, never a colour field. The two halves are disjoint, so moving the
+    //     coloured one from after the generic subtractions to inside the walk cannot be observed.
+    //   * Ragemonger still applies in BATTLEFIELD ORDER, which is what it did before -- two copies
+    //     take pips off in sequence and ApplyColoredPipReduction is not commutative with itself on
+    //     a hybrid cost.
+    if (state.deck_has_cost_reducer)
     {
-        int color_reduction = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-            if (!pd || pd->params.reduces_spell_color.empty()) { continue; }
-            const std::string& rc = pd->params.reduces_spell_color;
-            const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
-            const bool spell_has_color =
-                  (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
-                || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
-                || (rc == "G" && mc.green > 0);
-            if (spell_has_color) { ++color_reduction; }
-        }
-        cost.generic = std::max(0, cost.generic - color_reduction);
-    }
-    // Goblin Warchief-style SUBTYPE cost reduction: each permanent you control whose
-    // reduces_spell_subtype matches a SUBTYPE of THIS spell reduces its GENERIC by 1 (floored at 0,
-    // stacks per copy). The subtype twin of reduces_spell_color above; gated on a reducer in play so
-    // decks without one are byte-identical. (Same-turn-cast Warchief handled by the in-order walk.)
-    if (!def.card.m_subtypes.empty())
-    {
-        int subtype_reduction = 0;
+        // Walk 1 (Medallion) was unconditional; walks 2 and 3 were gated on the SPELL having any
+        // subtype. Keeping that distinction is why this is a per-clause test rather than one.
+        const bool subtyped = !def.card.m_subtypes.empty();
+        int generic_reduction = 0;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd) { continue; }
-            if (pd->params.reduces_spell_subtype.empty() && !pd->params.chooses_creature_type)
-            { continue; }
+            const CardParams& pp = pd->params;
+            // (1) Ruby Medallion-style COLOUR cost reduction: each permanent you control whose
+            // reduces_spell_color matches a colour in THIS spell's printed cost reduces its GENERIC
+            // by 1 (floored at 0, stacks per copy). Without this on the EXECUTOR side it over-paid
+            // red spells relative to the planner/rollout, so a committed Medallion-funded combo line
+            // (T3 Dragonstorm) was unpayable at execution -> fd-diverge. (Same-turn-cast Medallions
+            // are handled by ManaPruneBound's bail.)
+            if (!pp.reduces_spell_color.empty())
+            {
+                const std::string& rc = pp.reduces_spell_color;
+                const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
+                const bool spell_has_color =
+                      (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
+                    || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
+                    || (rc == "G" && mc.green > 0);
+                if (spell_has_color) { ++generic_reduction; }
+            }
+            // (2) Goblin Warchief-style SUBTYPE cost reduction: each permanent you control whose
+            // reduces_spell_subtype matches a SUBTYPE of THIS spell reduces its GENERIC by 1
+            // (floored at 0, stacks per copy). The subtype twin of (1). (Same-turn-cast Warchief is
+            // handled by the in-order walk.)
+            //
             // Urza's Incubator discounts only CREATURE spells of the chosen type; Goblin Warchief
             // and Dragonspeaker Shaman discount any spell carrying the subtype.
-            if (pd->params.reduces_spell_subtype_creature_only && !def.card.IsCreature()) { continue; }
-            // The chosen type (Incubator) or the printed one (Warchief/Dragonspeaker).
-            const uint16_t rs = ReducerSubtypeId(*pd, p);
-            // Per-reducer step: Warchief 1, Dragonspeaker/Incubator 2 ("cost {2} less").
-            if (def.card.m_subtypes.HasId(rs))
-            { subtype_reduction += std::max(1, pd->params.reduces_spell_subtype_amount); }
+            if (subtyped && (!pp.reduces_spell_subtype.empty() || pp.chooses_creature_type)
+                && !(pp.reduces_spell_subtype_creature_only && !def.card.IsCreature()))
+            {
+                // The chosen type (Incubator) or the printed one (Warchief/Dragonspeaker).
+                const uint16_t rs = ReducerSubtypeId(*pd, p);
+                // Per-reducer step: Warchief 1, Dragonspeaker/Incubator 2 ("cost {2} less").
+                if (def.card.m_subtypes.HasId(rs))
+                { generic_reduction += std::max(1, pp.reduces_spell_subtype_amount); }
+            }
+            // (3) Ragemonger-style SUBTYPE COLOURED cost reduction: "Minotaur spells you cast cost
+            // {B}{R} less to cast. This effect reduces only the amount of COLORED mana you pay."
+            // The coloured twin of (2) -- same subtype match, but it subtracts the reducer's
+            // coloured pips instead of 1 generic, and never touches the generic. Stacks per copy
+            // (two Ragemongers take {B}{B}{R}{R} off a Minotaur spell with that much colour to give).
+            //
+            // HYBRID handling: a colour's flat int already includes hybrid pips baked into their
+            // first colour (see ManaCost), so a naive `--cost.red` on Boros Reckoner's
+            // {R/W}{R/W}{R/W} would leave red=2 with hybrid_count=3 -- an inconsistent cost that
+            // ExpandHybrids would mis-expand. ApplyColoredPipReduction therefore consumes a PLAIN
+            // pip first and only falls back to retiring a hybrid entry, which is also the strictly
+            // better choice for the player: {R}{R/W} minus one red should leave the FLEXIBLE {R/W},
+            // not the rigid {R}.
+            if (subtyped && !pp.reduces_subtype_colored_subtype.empty()
+                && pp.reduces_subtype_colored_cost.has_value())
+            {
+                bool subtype_match = false;
+                for (const std::string& cs : def.card.m_subtypes)
+                { if (cs == pp.reduces_subtype_colored_subtype) { subtype_match = true; break; } }
+                if (subtype_match)
+                { ApplyColoredPipReduction(cost, pp.reduces_subtype_colored_cost.value()); }
+            }
         }
-        cost.generic = std::max(0, cost.generic - subtype_reduction);
-    }
-    // Ragemonger-style SUBTYPE COLOURED cost reduction: "Minotaur spells you cast cost {B}{R} less
-    // to cast. This effect reduces only the amount of COLORED mana you pay." The coloured twin of
-    // reduces_spell_subtype above -- same subtype match, but it subtracts the reducer's coloured
-    // pips instead of 1 generic, and never touches the generic. Stacks per copy (two Ragemongers
-    // take {B}{B}{R}{R} off a Minotaur spell that has that much colour to give).
-    //
-    // HYBRID handling: a colour's flat int already includes hybrid pips baked into their first
-    // colour (see ManaCost), so a naive `--cost.red` on Boros Reckoner's {R/W}{R/W}{R/W} would
-    // leave red=2 with hybrid_count=3 -- an inconsistent cost that ExpandHybrids would mis-expand.
-    // ReduceColoredPip therefore consumes a PLAIN pip first and only falls back to retiring a
-    // hybrid entry, which is also the strictly better choice for the player: {R}{R/W} minus one
-    // red should leave the FLEXIBLE {R/W}, not the rigid {R}.
-    if (!def.card.m_subtypes.empty())
-    {
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-            if (!pd || pd->params.reduces_subtype_colored_subtype.empty()
-                    || !pd->params.reduces_subtype_colored_cost.has_value()) { continue; }
-            bool subtype_match = false;
-            for (const std::string& cs : def.card.m_subtypes)
-            { if (cs == pd->params.reduces_subtype_colored_subtype) { subtype_match = true; break; } }
-            if (!subtype_match) { continue; }
-            ApplyColoredPipReduction(cost, pd->params.reduces_subtype_colored_cost.value());
-        }
+        cost.generic = std::max(0, cost.generic - generic_reduction);
     }
     // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
     // turn." Scaled by a PER-TURN counter rather than by a board state, which makes it the only
