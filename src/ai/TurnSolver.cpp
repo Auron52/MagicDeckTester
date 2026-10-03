@@ -14225,6 +14225,7 @@ static bool PaidPowerlessEquipWithheld(const GameState& state, const CardDefinit
 //     collapse disarms frame-wide, reached by a different route.
 //   * equip_sacrifices_prior_host (Grafted Wargear) and any negative bonus.
 //   * {X} in the cost -- an {X} spell is only nominally {0}.
+//   * A DRAW WATCHER STILL IN HAND -- frame-level, see HoldsEquipmentDrawWatcher below.
 static bool FreeEquipmentCastIsDominant(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand)              { return false; }
@@ -14238,6 +14239,100 @@ static bool FreeEquipmentCastIsDominant(const Action& a)
     if (p.equip_scale_power_per_equipment < 0)             { return false; }
     if (p.equip_scale_tough_per_equipment < 0)             { return false; }
     return true;
+}
+
+// THE CARVE-OUT THE DOMINANCE ARGUMENT ABOVE WAS MISSING (2026-10-03). Frame-level, because the
+// defect is a property of the BOARD, not of any one Equipment.
+//
+// The argument lists "it triggers the equipment-cast draw (Sram) and the equipment-ETB draw
+// (Puresteel)" among the monotone-upward axes. That is true only of a watcher that is live NOW.
+// With a watcher still in HAND, casting the Equipment this turn draws nothing and casting it after
+// the watcher lands draws one or two cards -- so "don't cast it" is strictly better, and dominance
+// fails. Hoisting the cast out of `groups` does not merely mis-rank that line, it DELETES it: a
+// forced cast is in every subset, so "hold this Equipment" becomes unenumerable and the search
+// cannot find it at any depth or budget. That is the invariance signature the kittyv2 shortfalls
+// showed -- unreachable, not unaffordable.
+//
+// MEASURED, on this deck's 14 user references (`scripts/ref_bench.py`, forced mulligans so only
+// play varies). claude_s1_gi0: the human held Bone Saw and Dragonfire Blade on T1 with Puresteel
+// and two Srams in hand, cast them on T3 behind both watchers, and killed on T3. The shipped search
+// cast both on T1 for no cards and killed on T4 -- and stayed on T4 across depth 5/6/8 and a 200x
+// budget range, because the holding line was not in the space.
+//
+// AND IT IS NARROW ON PURPOSE -- TWICE OVER, because the first cut was not narrow enough and the
+// corpus said so. `MTG_FREE_CAST_HOIST=0` outright measures WORSE (4/14 short against the shipped
+// 3/14 -- it loses claude_s11_gi10), so the frames where no watcher is in hand genuinely want the
+// collapse. But re-opening the choice on the mere PRESENCE of a watcher in hand measured worse too
+// (3/14, avg 3.786 against route-alone's 2/14 / 3.643): it fixed claude_s1_gi0 as intended and then
+// lost claude_s11_gi10 AND claude_s2_gi1. Those two are not reachability failures -- the route cut
+// had already fixed s2_gi1 -- they are BUDGET failures. Returning k free Equipment casts to `groups`
+// multiplies the odometer by 2^k in every frame of the game, and at a 20 ms budget that bought the
+// holding line by starving the search that has to use it.
+//
+// SO THE GATE IS CASTABILITY, NOT PRESENCE: disarm the hoist only while the cheapest watcher in hand
+// CANNOT be cast in this frame. That is exactly where the dominance claim fails, and the reason is
+// the turn's own cast order. When the watcher IS affordable now, a plan may cast it and the
+// Equipment in the same turn, watcher first, and the draws happen anyway -- so holding buys nothing
+// and the fold stays sound. When it is NOT affordable (claude_s1_gi0's T1: one Ancient Den, Puresteel
+// and two Srams stranded at two mana), casting the Equipment this turn draws nothing and can never
+// draw anything, and "hold it" is the line the human played. Those frames are also the CHEAP ones --
+// little mana means little else to enumerate -- so the widening lands where it costs almost nothing
+// and is absent from the mid-game frames whose budget the first cut was spending.
+//
+// Total() is colour-blind on purpose: it errs toward "affordable", i.e. toward KEEPING the collapse,
+// which is the safe direction for a fold this well measured.
+// `avail` is the caller's ALREADY-BUILT AvailableManaPool -- both hosts build one at entry, and
+// rebuilding it per frame on this path would be a real cost for a predicate this cheap otherwise.
+static bool UncastableDrawWatcherInHand(const GameState& state, const ManaPool& avail)
+{
+    int cheapest = -1;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (!d->params.draw_on_equipment_etb && d->params.draw_on_cast_subtypes.empty()) { continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        if (cheapest < 0 || mv < cheapest) { cheapest = mv; }
+    }
+    if (cheapest < 0) { return false; }                      // no watcher in hand -> the fold is sound
+    return avail.Total() < cheapest;                         // castable now -> in-turn order draws anyway
+}
+
+// THE FULL CARVE-OUT: return the free-Equipment casts to `groups` so take/skip is searched again.
+// DEFAULT OFF, and it is going to STAY off -- it is kept only as the A/B control that explains why
+// the hold-line below is written the way it is.
+//
+// MEASURED, both gatings, on the 14 user references with the equip route on. Presence-gated (any
+// watcher in hand): 3/14 short, avg 3.786. Castability-gated (this predicate): 3/14, avg 3.643. Both
+// fix claude_s1_gi0 as designed and both then LOSE claude_s11_gi10 and claude_s2_gi1, which the
+// route cut alone had at 3. The reason is cost, not ranking: returning k casts to `groups` multiplies
+// the odometer by 2^k in EVERY frame that holds a watcher, and on this deck the frames that hold one
+// include turn 3 -- the 36,854- to 419,900-plan go-off frames where the kill actually has to be
+// found. At a 20 ms budget the widening bought the holding line by starving the search that uses it.
+static bool HoldsEquipmentDrawWatcher(const GameState& state)
+{
+    static const bool s_carve = EnvOn("MTG_FREE_CAST_WATCHER_CARVE");
+    return s_carve && UncastableDrawWatcherInHand(state, AvailableManaPool(state));
+}
+
+// THE HOLD LINE -- the same repair at ONE PLAN instead of 2^k, which is what the measurement above
+// forced. Keep the hoist exactly as it is, and separately push the single line it deletes.
+//
+// The four kittyv2 shortfalls all turned out to be the SAME human decision, and it is the narrowest
+// one imaginable: `land=Remote Farm; cast: (nothing)` on turn 1, in claude_s1_gi0, claude_s2_gi1,
+// claude_s5_gi4 and claude_s11_gi10 alike -- a tapped land, a watcher stranded at two mana, and the
+// free Equipment deliberately kept for the turn the watcher is on the battlefield. The hoist forces
+// those casts into every subset, so "cast nothing" is the one line in the frame that becomes
+// unenumerable. Re-adding it costs one evaluated plan per frame; re-opening take/skip over k casts
+// costs 2^k, and all 2^k - 2 of the interior mixtures are lines no reference ever played.
+//
+// `sel` = auto_sel minus the held casts, so the frame's OTHER forced members (the free-equip
+// activations the auto-equip collapse hoists, whose dominance is not in question) are untouched. At
+// the frame this exists for that leaves the empty selection, i.e. play the land and pass.
+static bool HoldLineEnabled()
+{
+    static const bool v = EnvOn("MTG_FREE_CAST_HOLD_LINE");   // DEFAULT OFF -- measuring
+    return v;
 }
 
 // ---- FOLD PREFIX: hoist the canonical-prefix rejection into the odometer -----------------------
@@ -27245,6 +27340,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // THE MECHANICAL EQUIP-CHAIN GO-OFF (2026-10-03; EquipRouteTrial / EquipRouteApply in
+        // DecisionProviders.cpp). The EDF route's sibling, and read the same way everywhere: ONE
+        // standalone action, emitted only when playing the turn out on a copy of THIS board is
+        // lethal. Provider-gated first so every other deck never scans, and EquipRouteTrial
+        // additionally refuses while a playout is in progress -- the playout drives
+        // EnumerateMainPlans, so this very site is reached recursively without that guard.
+        {
+            const DecisionProvider& eprov = ResolveProvider(state);
+            const bool eroute = eprov.EquipRouteEnabled()
+                                && EquipRoutePiecesInPlace(state, state.active_player_index)
+                                && EquipRouteTrial(state, state.active_player_index) == 1;
+            if (eroute)
+            {
+                Action a;
+                a.kind           = Action::Kind::ComboRoute;
+                a.card_name      = InternedName("Combo Off");
+                a.def            = nullptr;
+                a.hand_index     = -1;
+                // Reuses ComboRoute's kind deliberately: every reader that already understands a
+                // verified go-off -- the go-off fold's `chosen_x > 3`, the viewer menu, the plan
+                // printer, the executor's apply branch -- then needs no change, and the two routes
+                // are mutually exclusive per deck so the apply can dispatch on the provider.
+                a.chosen_x       = 999;
+                a.eval           = 999;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+                if (EquipRouteTraceOn())
+                {
+                    std::fprintf(stderr, "[equip-route] EMIT t%d cand#%d\n",
+                                 state.turn_number, (int)actions.size() - 1);
+                }
+            }
+        }
+
         // Scavenging Ooze ("{G}: Exile target card from a graveyard. If it was a creature card,
         // put a +1/+1 counter on this creature and you gain 1 life."): REPEATABLE (no {T}), so
         // actions are independent (no option group) and a plan may take several -- each pays
@@ -33287,6 +33416,77 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // fall through; `best` is merely pre-seeded (harmless move-ordering).
     }
 
+    // ---- EQUIP-CHAIN GO-OFF SHORT-CIRCUIT (lockstep twin of the EnumeratePlans host) ---------------
+    // Fourth member of the family above, and the reason it must exist HERE TOO is the user's: *"It needs
+    // to play it out so that the projection is accurate."* This host is the rollout/greedy one, so
+    // without the twin a playout that is one equip-chain away from lethal scores the turn as ordinary
+    // board development, and every frame ABOVE it then ranks the line that reaches the chain no higher
+    // than the line that misses it. The root host alone matches the win turn; the twin is what makes the
+    // search's own projection agree with what the executor will do.
+    //
+    // Why the route needs its own cut rather than an odometer bit: the action lands in `independent`, but
+    // every enumerated `sel` is seeded with `auto_sel` (this deck's metalcraft equip {0} puts several
+    // there), and `SubsetHasComboRouteWithOthers` rejects any ComboRoute subset of size >= 2. MEASURED
+    // before the fix: 7,423 emissions in one reference game, 0 applies. Passing the index ALONE sidesteps
+    // auto_sel without touching that shared filter (EDF reads it too). Lands are not candidates here
+    // (CollectActions skips them), so the route-alone subset is a complete main-phase line.
+    //
+    // Snapshot/restore exactly like the storm and blink cuts, so a non-verified outcome leaves the
+    // fall-through byte-identical to the full search. Two differences from those siblings:
+    //   * `consider()` may DECLINE this subset (infeasible, or simply not better than an already
+    //     pre-seeded `best`), and then `materialize_best()` would hand us an unrelated plan to simulate.
+    //     So require `best_sel` to BE the route before trusting the apply -- the equivalent of the host's
+    //     `plans.size() > before` test.
+    //   * the kill is COMBAT damage, so OpponentHasLost is still false at end of main. Test the realised
+    //     board's own PendingAttackDamage, which the board-lethal sibling directly above already relies
+    //     on as real, cast-independent damage rather than a projection.
+    // ADOPTED 2026-10-03, DEFAULT ON -- and it is the half that actually MOVED the win turns, which
+    // was not what I expected going in. Isolated on the references with the root cut already in:
+    // claude_s1_gi0 goes 4 -> 3 on this cut alone (digest 51124837 -> 826baa75), and neither the
+    // 2^k carve-out nor the hold line changes that game's play at all. Across all 14 it is 2/14
+    // short -> 1/14 and avg 3.643 -> 3.500. The mechanism is the one the user named: a rollout that
+    // cannot see the chain scores the turn as ordinary development, so every frame above it ranks
+    // the line that REACHES the chain no higher than the line that misses it. Root-only matching is
+    // not enough -- the projection has to agree with what the executor will do.
+    static const bool s_route_solve_cut = EnvOn("MTG_EQUIP_ROUTE_SOLVE", true);
+    if (s_route_solve_cut && ResolveProvider(state).EquipRouteEnabled()
+        && !DecisionUnpruned(UnprunedGate::ComboLine) && !HumanPlayActive())
+    {
+        int eroute_idx = -1;
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        { if (cands[j].kind == Action::Kind::ComboRoute && cands[j].chosen_x > 3)
+          { eroute_idx = j; break; } }
+        if (eroute_idx >= 0)
+        {
+            const Plan saved_best = best;                 // actions deliberately unmaterialized -> cheap copy
+            const int  saved_mask = best_mask;
+            const std::vector<int> saved_sel = best_sel;
+            const int    saved_fj = best_fill_j;
+            const Action saved_fa = best_fill_action;
+            { std::vector<int> route_sel{ eroute_idx }; consider(route_sel); }
+            if (best_sel.size() == 1 && best_sel[0] == eroute_idx)
+            {
+                GameState copy = state;
+                ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
+                if (OpponentHasLost(copy)
+                    || (is_pre_combat && PendingAttackDamage(copy) >= copy.Opponent().life))
+                {
+                    best.wins_this_turn = true;
+                    if (EquipRouteTraceOn())
+                    {
+                        std::fprintf(stderr, "[equip-route] CUT(solve) t%d verified\n", state.turn_number);
+                    }
+                    return best;                          // verified lethal (materialized above)
+                }
+            }
+            best      = saved_best;
+            best_mask = saved_mask;
+            best_sel  = saved_sel;
+            best_fill_j = saved_fj;
+            best_fill_action = saved_fa;
+        }
+    }
+
     // The default enumeration replaces the 2^m action powerset with the PRODUCT of per-hand-card
     // choices {skip, cast, deploy-via-Vial} (same-charge Vial deploys collapse to one
     // representative, bounded by an aggregate per-charge capacity) crossed with the 2^independent
@@ -33444,6 +33644,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // path is untouched), and skipped alongside the two-stage mana driver (any_ritual/any_rock:
     // rare early-game nodes; the hot late boards have no rock in hand). MTG_NO_AUTO_EQUIP=1 = off.
     std::vector<int> auto_sel;   // cand indices force-included in every enumerated subset
+    std::vector<int> held_free_casts;   // HoldLineEnabled: the free-Equipment casts the hold line drops
+    const bool hold_line = HoldLineEnabled() && UncastableDrawWatcherInHand(state, pool);
     {
         static const bool s_no_auto_equip = EnvOn("MTG_NO_AUTO_EQUIP");
         static const bool s_all_hosts_ae  = EnvOn("MTG_EQUIP_ALL_HOSTS");
@@ -33523,7 +33725,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // FreeEquipmentCastIsDominant for the dominance argument and its carve-outs. Runs in
             // the same block as the auto-equip collapse so auto_sel is sorted once, and BEFORE
             // CapGroupsBySituationalRank for the same reason that one does.
-            if (FreeCastHoistEnabled())
+            // Disarmed frame-wide while a draw watcher is still in hand -- the cast is not
+            // dominant there and must stay a searched take/skip (HoldsEquipmentDrawWatcher).
+            if (FreeCastHoistEnabled() && !HoldsEquipmentDrawWatcher(state))
             {
                 for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
                 {
@@ -33535,6 +33739,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     groups.erase(groups.begin() + g);
                     group_hand_index.erase(group_hand_index.begin() + g);
                     FreeEquipDiagNoteFreeCast();
+                    if (hold_line) { held_free_casts.push_back(auto_sel.back()); }
                 }
             }
             std::sort(auto_sel.begin(), auto_sel.end());
@@ -33806,6 +34011,24 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps, vial_ok, consider);
+    }
+
+    // THE HOLD LINE (HoldLineEnabled -- see that helper for the measurement that chose ONE plan over
+    // the 2^k carve-out). The odometer seeds every position with auto_sel, so the frame's free
+    // Equipment casts ride all of them and "keep them for the turn the draw watcher is on the
+    // battlefield" is the one line here that no position can express. Add it, once: the forced
+    // members MINUS those casts, which at the frame this exists for is the empty selection.
+    // Lockstep twin in EnumeratePlans. consider() owns all the feasibility it ever did.
+    if (hold_line && !held_free_casts.empty())
+    {
+        std::vector<int> hold_sel;
+        hold_sel.reserve(auto_sel.size());
+        for (int j : auto_sel)
+        {
+            if (std::find(held_free_casts.begin(), held_free_casts.end(), j) == held_free_casts.end())
+            { hold_sel.push_back(j); }
+        }
+        consider(hold_sel);
     }
 
     return materialize_best();
@@ -40016,7 +40239,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (a.kind == Action::Kind::ComboRoute)
         {
             // THE MECHANICAL COMBO OFF ROUTE: all-or-nothing on a copy (see EdfComboRouteApply).
-            EdfComboRouteApply(state, state.active_player_index);
+            // Provider-dispatched between the two routes sharing this kind, identically to the
+            // executor's branch -- the rollout and the executor applying different routes for the
+            // same action is precisely the lockstep break that makes a scored win unreproducible.
+            if (ResolveProvider(state).EquipRouteEnabled())
+            { EquipRouteApply(state, state.active_player_index); }
+            else
+            { EdfComboRouteApply(state, state.active_player_index); }
         }
         else if (a.kind == Action::Kind::ActivateBlink)
         {
@@ -43328,6 +43557,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // CapGroupsBySituationalRank so the group-wave tranche machinery never sees (and never
     // re-defers) the collapsed families.
     std::vector<int> auto_sel;   // cand indices force-included in every enumerated subset
+    std::vector<int> held_free_casts;   // HoldLineEnabled: the free-Equipment casts the hold line drops
+    const bool hold_line = HoldLineEnabled() && UncastableDrawWatcherInHand(state, pool);
     {
         static const bool s_no_auto_equip = EnvOn("MTG_NO_AUTO_EQUIP");
         static const bool s_all_hosts_ae  = EnvOn("MTG_EQUIP_ALL_HOSTS");
@@ -43403,7 +43634,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // FreeEquipmentCastIsDominant for the dominance argument and its carve-outs. Runs in
             // the same block as the auto-equip collapse so auto_sel is sorted once, and BEFORE
             // CapGroupsBySituationalRank for the same reason that one does.
-            if (FreeCastHoistEnabled())
+            // Disarmed frame-wide while a draw watcher is still in hand -- the cast is not
+            // dominant there and must stay a searched take/skip (HoldsEquipmentDrawWatcher).
+            if (FreeCastHoistEnabled() && !HoldsEquipmentDrawWatcher(state))
             {
                 for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
                 {
@@ -43415,6 +43648,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     groups.erase(groups.begin() + g);
                     group_hand_index.erase(group_hand_index.begin() + g);
                     FreeEquipDiagNoteFreeCast();
+                    if (hold_line) { held_free_casts.push_back(auto_sel.back()); }
                 }
             }
             std::sort(auto_sel.begin(), auto_sel.end());
@@ -45140,6 +45374,86 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             return { std::move(plans.back()) };             // board already lethal -> skip powerset + Plan-B
         }
         if (plans.size() > before) { plans.pop_back(); }    // not a confirmed win -> enumerate normally (no dup)
+    }
+
+    // EQUIP-CHAIN GO-OFF SHORT-CIRCUIT (lockstep twin in SolveUncached). Third member of the family
+    // directly above, and built as one for a reason: a verified kill this turn DOMINATES under
+    // turn-to-win, so the frame owes no other plan and the odometer is pure waste from here.
+    //
+    // THIS IS THE HALF THE ROUTE WAS MISSING, and the mechanism is worth naming because it is not
+    // obvious. The action is emitted by CollectActions and lands in `independent`, so it ought to
+    // be enumerable as a one-bit odometer position -- but `sel` is seeded with `auto_sel`, the
+    // forced free equips that "ride EVERY subset by construction", and this deck's metalcraft
+    // equip {0} puts several there. `SubsetHasComboRouteWithOthers` then rejects every subset that
+    // holds the route, because with auto_sel present there is no subset of size 1. MEASURED: 7,423
+    // emissions in one reference game, 0 plans carrying the action, 0 applies. Passing the route
+    // index ALONE sidesteps auto_sel without touching that shared filter (EDF reads it too).
+    //
+    // VERIFIED BY A REAL APPLY, and the predicate is the one difference from the EDF go-off cut:
+    // this kill is COMBAT damage, so OpponentHasLost is still false when the main phase ends. The
+    // test is therefore the realised board's own PendingAttackDamage, which the sibling above
+    // already relies on as "REAL combat damage ... not an optimistic projection". A route whose
+    // apply no-ops (the live board diverged from the trial's) fails it and the frame enumerates
+    // normally -- no plan can carry a win turn its replay does not reproduce.
+    // HUMAN PLAY AND UNPRUNED STAY FULLY OPEN, exactly as the three sibling cuts do it. The cut
+    // returns the route as the frame's ONLY plan, which is correct for the search (a verified kill
+    // dominates under turn-to-win) and WRONG for a menu: it deletes every other affordable cast from
+    // the human's options. Caught by test/scenarios/kittyv2_valve_covers_every_affordable_cast.json
+    // and its floating-mana sibling, which assert the viewer can still cast Colossus Hammer on the
+    // user's own rejected T3 frame -- both went legal_not_enumerated until these two guards were
+    // added. The EMISSION site is deliberately NOT gated, so the human menu keeps COMBO OFF as an
+    // option; it is only the collapse-to-one-plan that a menu must never see.
+    if (ResolveProvider(state).EquipRouteEnabled()
+        && !DecisionUnpruned(UnprunedGate::ComboLine) && !HumanPlayActive())
+    {
+        int eroute_idx = -1;
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        { if (cands[j].kind == Action::Kind::ComboRoute && cands[j].chosen_x > 3)
+          { eroute_idx = j; break; } }
+        if (eroute_idx >= 0)
+        {
+            const size_t before = plans.size();
+            sat_bypass = true;                       // a constructed line, not an odometer position
+            eval_and_push(std::vector<int>{ eroute_idx });
+            sat_bypass = false;
+            if (plans.size() > before)
+            {
+                GameState copy = state;
+                ApplyPlanDirect(copy, plans.back(), is_pre_combat);
+                if (OpponentHasLost(copy)
+                    || (is_pre_combat && PendingAttackDamage(copy) >= copy.Opponent().life))
+                {
+                    plans.back().wins_this_turn = true;
+                    if (EquipRouteTraceOn())
+                    {
+                        std::fprintf(stderr, "[equip-route] CUT t%d verified\n", state.turn_number);
+                    }
+                    return { std::move(plans.back()) };
+                }
+                plans.pop_back();                    // refuted -> enumerate normally (no dup)
+            }
+        }
+    }
+
+    // THE HOLD LINE (HoldLineEnabled -- see that helper for the measurement that chose ONE plan over
+    // the 2^k carve-out). The odometer seeds every position with auto_sel, so the frame's free
+    // Equipment casts ride all of them and "keep them for the turn the draw watcher is on the
+    // battlefield" is the one line here that no position can express. Add it, once: the forced
+    // members MINUS those casts, which at the frame this exists for is the empty selection.
+    // Lockstep twin in SolveUncached. sat_bypass because this is a constructed line, not an odometer
+    // position, exactly as the go-off cuts above pass theirs.
+    if (hold_line && !held_free_casts.empty())
+    {
+        std::vector<int> hold_sel;
+        hold_sel.reserve(auto_sel.size());
+        for (int j : auto_sel)
+        {
+            if (std::find(held_free_casts.begin(), held_free_casts.end(), j) == held_free_casts.end())
+            { hold_sel.push_back(j); }
+        }
+        sat_bypass = true;
+        eval_and_push(hold_sel);
+        sat_bypass = false;
     }
 
     if (enumstats::Enabled())
@@ -54951,6 +55265,7 @@ inline int GoffCount(const TurnSolver::Plan& p)
     }
     return k;
 }
+
 }   // namespace edfco
 
 // Returns the index of a candidate the COMBO OFF rule says wins this turn, or -1.

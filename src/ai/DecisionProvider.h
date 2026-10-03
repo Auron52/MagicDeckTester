@@ -710,6 +710,38 @@ public:
     // site in CollectActions consults this first, so a deck without it never scans. Generic = false.
     virtual bool ComboRouteEnabled() const { return false; }
 
+    // EquipRouteEnabled -- does this deck get the MECHANICAL EQUIP-CHAIN GO-OFF as a searched plan
+    // action (EquipRouteTrial / EquipRouteApply)? The sibling of ComboRouteEnabled, same contract
+    // and same emission site, for the free-Equipment draw engine instead of the blink loop.
+    //
+    // WHY A SECOND ROUTE AND NOT A WIDER FIRST ONE. The two share only their discipline (play the
+    // turn out on a copy; emit one standalone action iff that copy wins). Their PROCEDURES have
+    // nothing in common -- EDF banks mana through ETB untaps to pay a drain finisher, this one
+    // spends no mana at all and converts cards into board presence -- and the EDF route's own note
+    // is explicit that its stages are the user's procedure for that deck. One function trying to be
+    // both would be a dispatch table wearing a loop.
+    //
+    // WHAT IT IS FOR, measured: on KittyEquipment v2 the search wins a turn LATER than the user's
+    // hand-played reference on 3 of 14 games (ref_bench 2026-10-03, s1_gi0 / s2_gi1 / s5_gi4, all
+    // T3 -> T4), and the shortfall is INVARIANT across depth 5/6/8, budget 100 -> 20,000 ms (200x),
+    // MTG_BP_DEPTH=24 and MTG_BP_MAXBASE=256. Invariance across every width and depth knob is the
+    // signature of a line the search cannot reach rather than one it cannot afford: the chain is
+    // "cast a {0} Equipment -> Sram draws on the CAST and Puresteel draws on the ETB -> cast what
+    // was drawn", about eleven deep, and each link needs the previous link's draws to exist. The
+    // odometer enumerates over the hand it HAS, so the eleventh cast is not in any subset it can
+    // form. USER 2026-10-03: *"It is a search hole if we don't find this line"*, and on the shape
+    // of the fix: *"The idea of the heuristic is to find a win and otherwise it can just not use
+    // it. It needs to play it out so that the projection is accurate."*
+    //
+    // SOUND, NOT A PROJECTION -- which is why it needs no quality A/B, only a cost one. The action
+    // is emitted only when the playout on a copy is LETHAL this turn, and winning this turn is
+    // maximal under the metric every reader here optimises (turn-to-win), so an emitted action
+    // cannot be the wrong choice. The failure mode is confined to cost: a playout that does not win
+    // is work thrown away. That puts it on the dominance side of the projection-vs-dominance rule,
+    // like MTG_FUNGUS_DEVOUR_LETHAL (a proven kill makes its choice dominant) rather than on the
+    // MTG_FUNGUS_DEVOUR_LANDMARKS side. Generic = false.
+    virtual bool EquipRouteEnabled() const { return false; }
+
     // ProvenWinlessThisTurn -- an ADMISSIBLE PRUNING CERTIFICATE, and the only hook on this
     // interface whose contract is a PROOF rather than a judgement.
     //

@@ -1449,6 +1449,12 @@ public:
     // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
     // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
     int BpChainSlotOptIn() const override { return 0; }
+    // THE EQUIP-CHAIN GO-OFF is emitted for this deck only (EquipRouteTrial). This deck is where
+    // the engine lives -- Sram, Senior Edificer draws on an Equipment CAST, Puresteel Paladin draws
+    // on an Equipment ETB and grants metalcraft equip {0} -- so a free Equipment is two cards and a
+    // free attachment, and the chain is self-feeding. The gate is the provider rather than a card
+    // check so the scan cost is zero on every other deck, exactly as ComboRouteEnabled does it.
+    bool EquipRouteEnabled() const override { return true; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Equipment"; }
@@ -2787,3 +2793,16 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller);
 bool EdfComboRoutePiecesInPlace(const GameState& s, int controller);
 int  EdfComboRouteTrial(const GameState& s, int controller);   // 0 no, 1 WIN (kills), 2 DEVELOP (bank + cast)
 int  EdfComboRouteApply(GameState& s, int controller);        // same codes; live run on `s`
+
+// THE MECHANICAL EQUIP-CHAIN GO-OFF (DecisionProvider::EquipRouteEnabled; the free-Equipment draw
+// engine). Same three-part shape as the EDF route above and the same all-or-nothing discipline:
+//   PiecesInPlace -- the cheap board gate, so a deck/frame without the engine never plays anything
+//                    out. Consulted BEFORE the trial at the emission site.
+//   Trial         -- play the turn out on a COPY; 1 iff that copy is lethal this turn, else 0.
+//   Apply         -- the identical procedure on the live state, so the realised line IS the scored
+//                    line (the lockstep law: a trial and an apply that can disagree is a win turn
+//                    the replay does not reproduce).
+bool EquipRoutePiecesInPlace(const GameState& s, int controller);
+int  EquipRouteTrial(const GameState& s, int controller);     // 0 no, 1 WIN (lethal this turn)
+int  EquipRouteApply(GameState& s, int controller);           // same codes; live run on `s`
+bool EquipRouteTraceOn();                                     // MTG_EQUIP_ROUTE_TRACE (diagnostic)
