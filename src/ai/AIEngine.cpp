@@ -2982,6 +2982,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
     TurnSolver::Plan plan;  // empty plan == do nothing this phase
     bool fd_plan_committed = false;  // full-depth: plan came from the committed line
+    // ...and that line reached a VERIFIED win (the search finished). A one-turn estimate commit is
+    // committed but NOT verified: its breakpoints may re-solve on information the search never saw.
+    bool fd_plan_verified = false;
                                      // (carries a recorded breakpoint script to replay)
 
     // Karoo play-at-end timing -- mirror of ApplyPlanDirect's karoo_deferred. A planned Karoo
@@ -3370,8 +3373,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         line.phases.resize(keep);
                     }
 
-                    for (const TurnSolver::PhasePlan& pp : line.phases)
+                    for (TurnSolver::PhasePlan pp : line.phases)
                     {
+                        pp.verified = verified_win;
                         m_committed_line.push_back(pp);
                     }
                 }
@@ -3380,6 +3384,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     && m_committed_line.front().is_pre_combat == is_pre_combat_main)
                 {
                     plan = m_committed_line.front().plan;
+                    fd_plan_verified = m_committed_line.front().verified;
                     m_committed_line.pop_front();
                     fd_plan_committed = true;
                     if (s_fd_trace)
@@ -4473,23 +4478,41 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
-        // COMMITTED SITE-8 MIRROR (USER 2026-10-03: "We should not search again"). A committed line was
-        // scored by ApplyPlanDirect, whose site-8 occurrence that the plan does not target takes the
-        // NARROW branch: inside the search window it plays nothing (Site8NarrowIsWindowBase), else only
-        // a found land. Re-solving here instead ran SolveWithLookahead at deck depth -- a depth-nested
-        // recursion that held Snow d8 b0 games for hours on a line already VERIFIED -- and realised a
-        // turn the search never scored. Mirror the scored continuation exactly; the cast sites already
-        // replay their recorded segment on a committed line (replay_segment).
-        if (!bp_searched_here && !site8_committed_found.empty())
+        // COMMITTED-LINE MIRROR (USER 2026-10-03: "We should not search again"). On a VERIFIED committed
+        // line every breakpoint the plan does not target plays exactly what ApplyPlanDirect scored there:
+        //  * site 8 (Scrying Sheets / Frost Augur trailing look) -- the apply's NARROW branch: nothing
+        //    inside the search window (Site8NarrowIsWindowBase), else a found land;
+        //  * every other class, INCLUDING a breakpoint NESTED inside a continuation (bp_depth > 0) --
+        //    bp_searched_plan's canon default or EMPTY (TurnSolver::BpUnbranchedCanon, shared). Snow
+        //    reaches the nested case: Arcum's Astrolabe cast inside a Sheets continuation draws, and
+        //    re-solving there cast Skred where the scored line cast Coldsteel Heart -- one snow permanent
+        //    short of the verified T5 kill (regression s2002 gi56, T5 -> T6).
+        // Re-solving instead ran a deck-depth SolveWithLookahead -- a depth-nested recursion that held Snow
+        // d8 b0 games for hours on a line already verified -- and realised a turn the search never scored.
+        // A one-turn ESTIMATE commit (not verified) still re-solves below: the search never saw past the
+        // find (mirroring those cost Snow +7 at d3/d5 b10 -- smoke gi82, T7 vs T8).
+        if (!bp_searched_here && fd_plan_committed && fd_plan_verified)
         {
             extra              = TurnSolver::Plan{};
             extra.land_decided = true;
-            const CardDefinition* f8 = CardDatabase::Instance().Lookup(site8_committed_found);
-            if (f8 != nullptr && f8->card.IsLand() && !TurnSolver::Site8NarrowIsWindowBase())
+            if (!site8_committed_found.empty())
             {
-                extra.land_to_play = site8_committed_found;
-                TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face);
+                const CardDefinition* f8 = CardDatabase::Instance().Lookup(site8_committed_found);
+                if (f8 != nullptr && f8->card.IsLand() && !TurnSolver::Site8NarrowIsWindowBase())
+                { extra.land_to_play = site8_committed_found; }
             }
+            else if (!TurnSolver::BpUnbranchedCanon(state, is_pre_combat_main, plan, bp_idx,
+                                                    /*class_on=*/true, extra))
+            {
+                extra              = TurnSolver::Plan{};
+                extra.land_decided = true;
+            }
+            static const bool s_karoo_lockstep3 = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
+            if (extra.land_decided && !extra.land_to_play.empty()
+                && !(s_karoo_lockstep3 && karoo_deferred))
+            { std::optional<ScriptedTopChoice> _cstc;
+              if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+              TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             bp_searched_here = true;
         }
         if (!bp_searched_here)
@@ -5501,7 +5524,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // an untargeted occurrence with bp_searched_plan's canon default or EMPTY
                     // (TurnSolver::BpUnbranchedCanon, shared); re-solving here instead ran a deck-depth
                     // SolveWithLookahead on a line already scored, and realised a different turn.
-                    if (!pod_bp_searched && fd_plan_committed)
+                    if (!pod_bp_searched && fd_plan_committed && fd_plan_verified)
                     {
                         if (!TurnSolver::BpUnbranchedCanon(state, is_pre_combat_main, plan, pod_bp_idx,
                                                            /*class_on=*/true, extra))

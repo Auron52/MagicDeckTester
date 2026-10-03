@@ -2149,6 +2149,10 @@ public:
     {
         bool is_pre_combat = true;
         Plan plan;
+        // Set by AIEngine when it commits the phase: true only when the WHOLE line reaches a win
+        // verified inside the searched horizon (the search FINISHED). A one-turn ESTIMATE commit
+        // leaves it false. The executor's committed-line mirrors key on it.
+        bool verified = false;
     };
 
     // The optimal line found by a full-depth search: the win turn it achieves and
