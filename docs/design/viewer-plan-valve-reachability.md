@@ -338,3 +338,72 @@ all three of these by reading it.
   slightly faster on it (worst frame 0.58s vs 0.66s, walk 15.7s vs 19.4s CPU). The frame-count and
   per-frame CPU assertions pass on both. Do not read this gate as green, and do not read it as a
   regression from here.
+
+## The player's override: `--full-enum` (2026-10-03)
+
+**USER:** *"Getting more unnecessary rejections … If possible I would like to change things in a way
+that allows these lines to be played, but to record that the search failed rather than preventing me
+from proceeding. It is quite the nuisance otherwise."*
+
+### Why no choice of drop victim can fix this
+
+The valve must drop a group on any frame over its bound, and **whatever it drops makes some
+rules-legal line unreachable.** Measured on the reported frame
+(`logs/play/rejections/KittyEquipment_cod_v2-puresteel-hammer_s15_gi14_t5.json`, seed 15 / gi 14 /
+turn 5), with `MTG_VIEWER_VALVE_DIAG=1`:
+
+```
+groups=12 ind=0 equip_groups=6 classes=0 fold=1 raw_pay=393216 folded_pay=393216 pcap=65536
+KEEP  Golem-Skin Gauntlets  kind=0 cast=1 width=1 min_mv=1 afford=1
+DROP  Golem-Skin Gauntlets  kind=0 cast=1 width=1 min_mv=1 afford=1
+```
+
+393,216 payable positions against a 65,536 bound, nothing pooled (`classes=0 fold=1`), and the group
+it dropped was the **second hand copy** of Golem-Skin Gauntlets — so "cast two Gauntlets this turn"
+was unreachable while every distinct card stayed castable. That is not a bad choice of victim: the
+cover rule (`78ff03aa`) deliberately guarantees one group per distinct **card**, and a second copy of
+one card is outside that guarantee by construction. Raising the bound only moves which line is
+unreachable, which is why it has now been refuted three times on this deck.
+
+Bisected to be sure, rather than assumed — the previous two diagnoses of this frame were both wrong:
+
+| line | verdict |
+|---|---|
+| the user's full line | `legal_not_enumerated` |
+| same, one Gauntlets | **`accept`** (idx 88434) |
+| both Gauntlets only | `legal_not_enumerated` |
+| `MTG_FREE_CAST_HOIST=0` / `EQUIP_COPY_SKIP=0` / `EQUIP_COPY_COLLAPSE=0` / `FOLD_SEARCH_ODO=0` | all still `legal_not_enumerated` |
+| `MTG_VIEWER_PLAN_CAP=0` | **`accept`** |
+
+So none of the adopted search collapses is responsible, and `MTG_COST_REFRAME=1` does not help
+either despite the verdict naming a same-turn cost reducer.
+
+### The design
+
+`viewerplancap::SuspendScope` + a `--full-enum <ordinals>` side channel. Listed main ordinals are
+enumerated with the valve suspended, so the line is there to be indexed. Verified on the frame:
+`accept`, plan index 135.
+
+**Three decisions worth keeping:**
+
+1. **A SIDE CHANNEL, not a stdin directive.** An in-place `@full-enum` was built and then removed.
+   The index is positional, so the parked frame's menu, the next `/api/step`'s menu and the saved
+   reference's menu must all agree; a directive would have let them diverge. Putting the ordinal in
+   the side channel changes the server's session key, so the existing respawn machinery re-runs the
+   prefix with the flag set and every process sees one menu. It costs a prefix replay — a slow click
+   instead of a refusal, which is the trade the user asked for.
+2. **It must be RECORDED, and that is not cosmetic.** The same index resolves to a different line:
+   replaying `…,135` with `--full-enum 10` reaches a 13-permanent board, without it a
+   12-permanent one. So the trace writes `"full_enum": true` on the frame, and
+   `viewer_protocol_check.py`, `viewer_validate_check.js` and `logs/replay_ref.py` all reconstruct
+   `--full-enum` from it. Omitting that would have manufactured the play-drift class on purpose.
+3. **Offered ONLY for `legal_not_enumerated`.** That verdict is the engine's own statement that it
+   simulated the line and it is rules-legal; only the enumerator never produced it. `illegal` and
+   `unsupported` are the engine saying the line cannot be played, and the override must never
+   reach them.
+
+The engine emits a `search_gap` play event when it fires, carrying both menu sizes, and the viewer
+writes a history line before retrying — so a played-anyway line is on the record as an enumeration
+gap rather than as a clean play. That is the half of the request that is not "let me proceed".
+
+Inert when unused: smoke 107 passed / 0 failed, `configs changed: 0`, `play-changed=0`.

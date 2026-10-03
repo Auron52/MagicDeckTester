@@ -321,7 +321,7 @@ def side_channel_args(decisions):
     the human actually saw). All keyed (turn / land# / main-ordinal), so passing the full set for
     every prefix is safe -- the engine applies each only when it reaches that turn/ordinal. Empty
     (a reference recording none of these) => no extra args => identical to before."""
-    fb, sh, co = [], [], []
+    fb, sh, co, fe = [], [], [], []
     for d in decisions:
         dec = d.get("decision", {})
         t = dec.get("type")
@@ -329,8 +329,17 @@ def side_channel_args(decisions):
             fb.append(f'{dec.get("turn")}:{int(d["chosen"])}')
         elif t == "storage_hold":
             sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
-        elif t == "main_phase" and d.get("cast_order"):
+        if t == "main_phase" and d.get("cast_order"):
             co.append(f'{dec.get("main_ordinal")}:' + "|".join(d["cast_order"]))
+        # FULL-ENUM: this frame was enumerated with the viewer plan-space valve SUSPENDED (the
+        # player's "play it anyway" override for a rules-legal line the valve had dropped). It MUST
+        # be reconstructed: `chosen` is a positional index, and the suspended frame's menu differs
+        # from the valved one, so replaying without this applies a different line -- the play-drift
+        # class. Keyed by main ordinal like --cast-order, so passing the whole set is safe.
+        if t == "main_phase" and d.get("full_enum"):
+            o = dec.get("main_ordinal")
+            if isinstance(o, int) and o >= 0:
+                fe.append(str(o))
     fa = recorded_attackers(decisions)
     tp = recorded_tap_prefs(decisions)
     extra = []
@@ -340,6 +349,8 @@ def side_channel_args(decisions):
         extra += ["--storage-hold", ",".join(sh)]
     if co:
         extra += ["--cast-order", ";".join(co)]
+    if fe:
+        extra += ["--full-enum", ",".join(fe)]
     if fa:
         extra += ["--force-attackers",
                   ";".join(f"{t}:" + "|".join(ns) for t, ns in sorted(fa.items()))]

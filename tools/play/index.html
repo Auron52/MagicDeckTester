@@ -674,7 +674,7 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
           // ({at, turn, entries}); `loopPick` is the open two-step dialog ({k:null} = "how many
           // lines?", {k:N} = "how many times?"); `macroRun` describes an expansion currently
           // committing, so a mid-chain rejection can say WHICH iteration stopped it.
-          committed:[], loopPick:null, macroRun:null, freeEquipPick:null };
+          committed:[], loopPick:null, macroRun:null, freeEquipPick:null, fullEnum:[] };
 
 // The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
 // archived list, the version folder it lives in. Both travel on every request.
@@ -702,6 +702,7 @@ function cfg(extra) {
     jitte:S.jitte||{},               // Umezawa's Jitte counter-spend, turn-keyed like firebreathe
     storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
     castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
+    fullEnum:S.fullEnum||[],         // main ordinals to enumerate UNVALVED (the "play it anyway" override)
   }, extra || {});
 }
 async function post(path, body) {
@@ -3578,10 +3579,11 @@ function handleVerdict(v, line) {
   ve.innerHTML=`<span class="vtag">${tag}</span>${macroNote}<h4>${head}</h4>`+
     `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
     `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
-    `<div class="actions"><button id="artbtn" class="primary">Store as artifact</button>`+
+    `<div class="actions">${playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
   ve.style.display='block';
   $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
+  if ($('anywaybtn')) { $('anywaybtn').onclick=()=>playAnyway(v, line); }
   // Wire each model-plan button to submit its index. Clear S.plan first so the rejected hand-built
   // queue doesn't seed a false dropped-cast check against the (different) model plan's actual casts.
   ve.querySelectorAll('.vplan').forEach(btn=>btn.onclick=()=>{
@@ -3590,6 +3592,57 @@ function handleVerdict(v, line) {
     S.plan=[]; S.leMode=false; S.vialMode=null; S.blinkMode=null;
     applyAccepted(idx, 'chose model plan: '+btn.textContent);
   });
+}
+// ---- "PLAY IT ANYWAY", for a line the SEARCH missed but the RULES allow ----------------------
+// USER, 2026-10-03: *"If possible I would like to change things in a way that allows these lines to
+// be played, but to record that the search failed rather than preventing me from proceeding. It is
+// quite the nuisance otherwise."*
+//
+// Offered ONLY for `legal_not_enumerated`, and that distinction is the whole safety argument: that
+// verdict is the engine's own statement that it SIMULATED the line and it is rules-legal -- only the
+// enumerator never produced it, so there is no plan index to commit. `illegal` and `unsupported` are
+// the engine saying the line cannot be played, and this must never offer to override those.
+//
+// The mechanism is the `fullEnum` side channel: adding this frame's main ordinal makes the server
+// respawn the engine with --full-enum, which suspends the plan-space valve for that frame only, so
+// the line is enumerated and gets a real index. Measured on the reported frame (s15 gi14 t5): the
+// valve had 393,216 payable positions against a 65,536 bound and dropped the SECOND hand copy of
+// Golem-Skin Gauntlets, so "cast two Gauntlets" was unreachable; with the override the same line
+// validates as `accept` at plan index 135.
+//
+// IT COSTS A PREFIX REPLAY (the respawn) and the full enumeration itself, so it is a button rather
+// than a default -- and that is the trade the user asked for: a slow click instead of a refusal.
+function playAnywayOrdinal(v) {
+  const d = (v && v.decision) || S.decision || {};
+  const o = d.main_ordinal;
+  return Number.isFinite(o) && o >= 0 ? o : null;
+}
+function playAnywayHtml(v) {
+  if (!v || v.verdict !== 'legal_not_enumerated') return '';
+  const o = playAnywayOrdinal(v);
+  if (o == null) return '';                       // a frame carrying no pin cannot be keyed
+  if ((S.fullEnum || []).indexOf(o) >= 0) return '';   // already overridden and still rejected
+  return `<button id="anywaybtn" class="primary" title="Your line is rules-legal — the engine said so `
+       + `itself. It was refused only because the plan-space valve had to drop a group on this wide `
+       + `board, and the dropped group carried your line. This re-enumerates THIS frame in full so `
+       + `the line can be played, and records the enumeration gap in the history.">`
+       + `▶ Play it anyway (record the search gap)</button>`;
+}
+async function playAnyway(v, line) {
+  const o = playAnywayOrdinal(v);
+  if (o == null) return;
+  S.fullEnum = (S.fullEnum || []).concat([o]);
+  // Recorded in the history BEFORE the retry, so the gap is on the record even if the retry then
+  // fails for some other reason. This is the "record that the search failed" half of the request --
+  // the engine also emits its own `search_gap` play event when it re-enumerates.
+  S.history.push({ turn:(S.decision||{}).turn, rej:true,
+                   label:`search gap (ordinal ${o}): re-enumerating in full to play ${line}` });
+  renderHistory();
+  hideVerdict();
+  flashHint('Re-enumerating this frame in full — the engine is replaying the turn, so this click is slower than usual.');
+  // Re-run the ordinary commit path: the queue is untouched, so it rebuilds and re-validates the
+  // SAME line, now against the unvalved menu. No separate commit path to drift from the normal one.
+  await commitLine();
 }
 async function storeArtifact(v, line) {
   S.hadReject=true; $('artinfo').textContent='saving…';
@@ -5469,7 +5522,7 @@ async function newGame() {
       // The committed-segment log the LOOP macro reads, and its dialog/run state. A new game has
       // no committed lines, so all three reset with everything else -- carrying `committed` across
       // would offer to loop a block from the previous game.
-      committed:[], loopPick:null, macroRun:null, freeEquipPick:null };
+      committed:[], loopPick:null, macroRun:null, freeEquipPick:null, fullEnum:[] };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;

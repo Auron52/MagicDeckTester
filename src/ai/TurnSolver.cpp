@@ -26157,7 +26157,10 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     // click stops coming back (measured 0.6 s -> 11.3 s over ten clicks of one turn, still
     // doubling). The valve re-arms the SAME ranked shrink for human play only, at its own (larger)
     // bound, and records what it dropped so the menu can say it was truncated.
-    const bool valve = gate_off && R < 0 && HumanPlayActive() && viewerplancap::On();
+    // Active(), not On(): the player can SUSPEND the valve for one frame when their rules-legal
+    // line was not enumerated (viewerplancap::SuspendScope). On() is a static env read and cannot
+    // express that.
+    const bool valve = gate_off && R < 0 && HumanPlayActive() && viewerplancap::Active();
     if (gate_off && !valve) { return; }
     if (valve)
     {

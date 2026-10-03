@@ -199,6 +199,20 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
   }
   args.push('--firebreathe-prompt');
   args.push(...castOrderArg(p.castOrder));
+  // FULL-ENUM side channel (USER 2026-10-03: *"allows these lines to be played, but ... record that
+  // the search failed rather than preventing me from proceeding"*). Main ordinals the player asked
+  // to have enumerated with the plan-space valve SUSPENDED, because the valve must drop a group on
+  // any frame over its bound and whatever it drops makes some rules-legal line unreachable.
+  //
+  // Deliberately NOT carved out of argsAndChoices' `stable` key, unlike --cast-order: a NEW ordinal
+  // MUST respawn the interactive child. The frame has to be re-enumerated from the start for its
+  // plan INDEX to mean the same thing in this validation, in the /api/step that follows it, and in
+  // the reference the game saves. An in-place directive would have let those three disagree, which
+  // is the index-drift bug CheckLine's `menu` parameter exists to prevent.
+  if (Array.isArray(p.fullEnum) && p.fullEnum.length) {
+    const ords = p.fullEnum.map(n => parseInt(n, 10)).filter(n => Number.isFinite(n) && n >= 0);
+    if (ords.length) args.push('--full-enum', [...new Set(ords)].sort((a, b) => a - b).join(','));
+  }
   // #6 storage tap-vs-charge side-channel: p.storageHold is a { "turn:num": 0|1 } map of the human's
   // per-(turn, land) hold answers (1 = hold/charge, 0 = allow tap). Passed as "turn:num:val,..." keyed by
   // (turn, land number) — NEVER a --choices slot, so existing references (no --storage-hold) replay as the
@@ -1396,6 +1410,11 @@ const server = http.createServer(async (req, res) => {
         sideChannels: {
           castOrder: p.castOrder || {}, firebreathe: p.firebreathe || {},
           jitte: p.jitte || {}, storageHold: p.storageHold || {},
+          // The full-enum ordinals already in force when this line was refused. Recorded for the
+          // same reason as castOrder: without it the reproduce command replays frames the player had
+          // overridden as VALVED frames, so the prior choices index a different menu and the
+          // recorded verdict is not reachable.
+          fullEnum: Array.isArray(p.fullEnum) ? p.fullEnum : [],
         },
         note: 'Reproduce: --claude-play --seed <seed> --game-index <gi> --choices "' +
               (Array.isArray(p.choices) ? p.choices.join(',') : '') +

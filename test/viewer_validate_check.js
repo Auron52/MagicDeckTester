@@ -108,17 +108,25 @@ function forceArg(ref) {
 }
 
 function sideChannelArgs(decisions) {
-  const fb = [], sh = [], co = [];
+  const fb = [], sh = [], co = [], fe = [];
   for (const de of decisions) {
     const d = de.decision || {}, t = d.type;
     if (t === 'firebreathe') fb.push(`${d.turn}:${de.chosen}`);
     else if (t === 'storage_hold') sh.push(`${d.turn}:${d.land_idx}:${de.chosen}`);
     else if (t === 'main_phase' && Array.isArray(de.cast_order) && de.cast_order.length) co.push(`${d.main_ordinal}:${de.cast_order.join('|')}`);
+    // FULL-ENUM frames: the plan-space valve was SUSPENDED there (the player's "play it anyway"
+    // override for a rules-legal line the valve had dropped), so that frame's menu -- and hence the
+    // recorded positional index -- differs from the valved one. Not reconstructing it replays a
+    // different line. Checked independently of cast_order: a frame can carry either or both.
+    if (t === 'main_phase' && de.full_enum && Number.isInteger(d.main_ordinal) && d.main_ordinal >= 0) {
+      fe.push(String(d.main_ordinal));
+    }
   }
   const extra = [];
   if (fb.length) extra.push('--firebreathe', fb.join(','));
   if (sh.length) extra.push('--storage-hold', sh.join(','));
   if (co.length) extra.push('--cast-order', co.join(';'));
+  if (fe.length) extra.push('--full-enum', fe.join(','));
   return extra;
 }
 

@@ -1409,6 +1409,44 @@ inline bool On()
     return v;
 }
 
+// ---- RUNTIME SUSPEND: ONE frame enumerated IN FULL, on the PLAYER's explicit request ----------
+//
+// USER, 2026-10-03: *"If possible I would like to change things in a way that allows these lines to
+// be played, but to record that the search failed rather than preventing me from proceeding. It is
+// quite the nuisance otherwise."*
+//
+// WHY A SUSPEND AND NOT A BIGGER BOUND. The valve must drop something whenever a frame exceeds the
+// bound, and WHATEVER it drops blocks some rules-legal line. Measured on the user's own s15/gi14/t5
+// frame: 393,216 payable positions against a 65,536 bound, and the group it dropped was the SECOND
+// hand copy of Golem-Skin Gauntlets -- so "cast two Gauntlets this turn" became unreachable while
+// every distinct card stayed castable. That is not a bug in the choice of victim; the cover rule
+// (78ff03aa) deliberately guarantees one group per distinct CARD, and a second copy of one card is
+// outside that guarantee by construction. Raising the bound only moves which line is unreachable,
+// which is why it has been refuted twice on this deck.
+//
+// So the bound stays, and the PLAYER gets an override for the one frame they care about. The cost
+// of full enumeration is paid only on a frame where the player actually hit the gap, and it shows
+// up as a slow click rather than as a refusal -- which is the trade the user asked for.
+//
+// SCOPED, NOT A FLAG, because determinism is load-bearing: the viewer shows a menu in one process
+// and commits an INDEX into it, so both must enumerate the same list. The chooser re-enumerates
+// under this scope and REPLACES the menu it was handed, keyed on the main ordinal, so the live
+// frame and every later replay of the recorded ordinal produce the same list. (The index-drift bug
+// this protects against was reported as "it put the Trace of Abundance on the Conservatory when I
+// specifically put it on the Aether Hub".)
+inline int& SuspendDepth() { static thread_local int d = 0; return d; }
+inline bool Suspended()    { return SuspendDepth() > 0; }
+struct SuspendScope
+{
+    SuspendScope()  { ++SuspendDepth(); }
+    ~SuspendScope() { --SuspendDepth(); }
+    SuspendScope(const SuspendScope&)            = delete;
+    SuspendScope& operator=(const SuspendScope&) = delete;
+};
+// The arming condition reads THIS, never On() -- On() is the env read and is a `static const bool`,
+// so it cannot express a per-frame override.
+inline bool Active() { return On() && !Suspended(); }
+
 // Positions the odometer may walk per enumeration. <= 0 means UNBOUNDED, the same convention
 // MTG_PLAN_SPACE_CAP uses -- so either flag alone turns the valve off and neither can surprise
 // someone who reached for the one they remembered.

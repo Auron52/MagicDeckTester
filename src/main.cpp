@@ -4233,6 +4233,13 @@ struct ClaudePlayHarness
                     pending_validate_line = payload;
                     return Await::Validate;
                 }
+                // NO `@full-enum` DIRECTIVE, deliberately. The full-enum override arrives as the
+                // `--full-enum` SIDE CHANNEL instead, which changes the session key and so makes the
+                // server respawn this child with the ordinal already set. That costs a replay of the
+                // prefix, and buys the property that matters: step, validate, save and reference
+                // replay all carry the same ordinals, so the menu -- and therefore every plan INDEX
+                // -- is identical in every process that touches the game. An in-place directive
+                // would have made the parked frame's menu disagree with the next /api/step's.
                 return Await::Give_up;   // unknown directive -> stateless fallback
             }
             const std::size_t before = choices.size();
@@ -4299,6 +4306,35 @@ struct ClaudePlayHarness
     // Unknown directive -> Give_up -> exit 70 -> the server's stateless fallback, which is the
     // same "anything unusual is the fallback's job" rule the rest of --interactive follows.
     std::string pending_validate_line;
+    // Main ordinals whose menu must be the UNVALVED enumeration -- the player's "my line is legal,
+    // let me play it" override. Populated live by the `@full-enum` directive and on replay by
+    // `--full-enum <csv>`, so a saved reference reproduces the same menu and the same index.
+    std::set<int> full_enum_ordinals;
+    // Re-enumerate one frame with the viewer valve suspended and REPLACE the menu, recording that
+    // the search failed to offer the player's line. See the call site for why it is in-place.
+    void ApplyFullEnum(const GameState& s, std::vector<TurnSolver::Plan>& plans, bool is_pre,
+                       int ordinal)
+    {
+        const std::size_t before = plans.size();
+        std::vector<TurnSolver::Plan> full;
+        {
+            viewerplancap::SuspendScope scope;
+            full = TurnSolver::EnumerateMainPlans(s, is_pre);
+        }
+        // An EMPTY full enumeration is not an improvement -- keep the valved menu rather than hand
+        // the player a dead board. Same rule as the executor fallback in AIEngine.cpp.
+        if (full.empty()) { return; }
+        plans.swap(full);
+        // RECORD THE SEARCH FAILURE. This is the half of the user's request that is not "let me
+        // proceed": the line being playable must not make the enumeration gap invisible. One event
+        // per frame, carrying both sizes so the gap is quantified rather than merely named.
+        EmitPlayEvent(s.turn_number, "search_gap",
+            "⚠ The search did not enumerate your line, so this frame (main ordinal "
+            + std::to_string(ordinal) + ") was RE-ENUMERATED IN FULL: "
+            + std::to_string(before) + " plans -> " + std::to_string(plans.size())
+            + ". The line is rules-legal and is being played; the plan-space valve had dropped the "
+              "group that carried it. This is recorded as an enumeration gap, not a clean play.");
+    }
 
   private:
     // Install() in five parts, grouped by how a chooser gets its answer. Member functions, so
@@ -4458,7 +4494,7 @@ void ClaudePlayHarness::Install(AIEngine& ai)
 void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
 {
     ai.SetExternalChooser(
-        [this](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
+        [this](const GameState& s, std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
             int di = static_cast<int>(cursor);
             // #10: this decision's main-phase ordinal -- SKIPPED for a frame the engine is showing
@@ -4467,6 +4503,26 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             // every later decision and misfile the cast-order pins a saved reference replays by
             // ordinal. -1 => WriteDecisionJson omits the field, which is what "carries no pin" means.
             const int this_main_ordinal = g_play_frame_no_ordinal ? -1 : main_ordinal++;
+            // ---- FULL-ENUM OVERRIDE (USER 2026-10-03) ------------------------------------------
+            // *"I would like to change things in a way that allows these lines to be played, but to
+            // record that the search failed rather than preventing me from proceeding."*
+            //
+            // The viewer valve must drop a group on any frame over its bound, and whatever it drops
+            // makes some rules-legal line unreachable -- on the reported frame it dropped the SECOND
+            // hand copy of Golem-Skin Gauntlets, so "cast two this turn" could not be played at all.
+            // This replaces THIS frame's menu with the unvalved enumeration, so the line is there to
+            // be indexed.
+            //
+            // REPLACED IN PLACE, and keyed on the MAIN ORDINAL, because the index has to survive a
+            // replay: AIEngine applies `plans[idx]` from this very vector, and a saved reference
+            // re-runs with `--full-enum <ordinals>` so the same ordinal is re-enumerated the same
+            // way before its recorded pick is consumed. Anything else re-opens the index-drift bug
+            // CheckLine's `menu` parameter exists to close.
+            //
+            // It runs BEFORE the pick is consumed, which is what makes the live frame and the replay
+            // agree -- the live path reaches it again through the directive below.
+            if (this_main_ordinal >= 0 && full_enum_ordinals.count(this_main_ordinal))
+            { ApplyFullEnum(s, plans, is_pre, this_main_ordinal); }
         claude_retry_1:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
@@ -4492,6 +4548,16 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                             ss << "]";
                         }
                     }
+                    // FULL-ENUM round-trip, for exactly the reason cast_order has one: `chosen` is
+                    // a POSITIONAL index, so a replay that does not reproduce THIS frame's menu
+                    // applies a different line. A frame enumerated with the valve suspended has a
+                    // different menu from the same frame enumerated normally, so a reference that
+                    // used the override and did not say so would silently drift -- which is the
+                    // play-drift class, not a cosmetic omission. The reference checks reconstruct
+                    // `--full-enum <ordinals>` from these flags. Omitted (the overwhelming majority)
+                    // => the frame was never overridden => replays unchanged.
+                    if (this_main_ordinal >= 0 && full_enum_ordinals.count(this_main_ordinal))
+                    { ss << ", \"full_enum\": true"; }
                     ss << ", \"decision\": ";
                     WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log, chosen);
                     ss << "}";
@@ -6142,7 +6208,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& force_attackers_spec = "",
                          const std::string& tap_pref_spec = "",
                          bool interactive = false,
-                         bool then_auto = false)
+                         bool then_auto = false,
+                         const std::string& full_enum_spec = "")
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
@@ -6184,6 +6251,20 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.reveal_count         = reveal_count;
     h.firebreathe_by_turn  = ParseFirebreatheSpec(firebreathe_spec);
     h.cast_order_by_main   = ParseCastOrderSpec(cast_order_spec);
+    // FULL-ENUM ordinals (USER 2026-10-03). A plain int list: these frames are enumerated with the
+    // viewer valve suspended, because the valve had dropped the group carrying the human's
+    // rules-legal line. Parsed permissively and silently -- a malformed entry is skipped, the same
+    // rule every other side-channel parser above follows, so a hand-edited reference cannot abort a
+    // replay. Unset => empty => every frame behaves exactly as before.
+    {
+        std::stringstream fs(full_enum_spec);
+        std::string tok;
+        while (std::getline(fs, tok, ','))
+        {
+            try { h.full_enum_ordinals.insert(std::stoi(tok)); }
+            catch (...) { /* skip a malformed ordinal */ }
+        }
+    }
     h.storage_hold_by_land = ParseStorageHoldSpec(storage_hold_spec);
     h.firebreathe_prompt   = firebreathe_prompt;
     h.storage_hold_prompt  = storage_hold_prompt;
@@ -7599,6 +7680,7 @@ int main(int argc, char* argv[])
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
     bool jitte_prompt = false;        // --jitte-prompt -> exit-70 to ask when a turn is unanswered
     std::string cast_order_str;       // #10: "<ord>:A|B|C;..." cast-order side-channel (main-ordinal-keyed)
+    std::string full_enum_str;        // FULL-ENUM: "<ord>,..." ordinals to enumerate UNVALVED (USER 2026-10-03)
     std::string force_attackers_str;  // ref replay: "<turn>:A|B;..." forced-attackers side-channel (turn-keyed)
     std::string tap_pref_str;         // ref replay: "<turn>:<pre|post>:<idx>,..." payment-tap preference
     std::string storage_hold_str;     // #6: "turn:num:val,..." storage tap-vs-charge side-channel
@@ -7698,6 +7780,15 @@ int main(int argc, char* argv[])
                     // pinned non-sac hand-cast order, pipe-separated names). Keyed by main-phase ordinal, so
                     // it never touches the positional --choices stream -> existing references replay unchanged.
                     cast_order_str = argv[++i];
+                }
+                else if (flag == "--full-enum")
+                {
+                    // FULL-ENUM side-channel: "<ord>,<ord>,..." -- main-phase ordinals whose menu
+                    // must be the UNVALVED enumeration, because the valve had dropped the group
+                    // carrying the human's rules-legal line there (USER 2026-10-03). Keyed by
+                    // ordinal exactly like --cast-order, so it never touches the positional
+                    // --choices stream and every existing reference replays unchanged.
+                    full_enum_str = argv[++i];
                 }
                 else if (flag == "--storage-hold")
                 {
@@ -7913,7 +8004,7 @@ int main(int argc, char* argv[])
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
                                  cast_order_str, storage_hold_str, storage_hold_prompt,
                                  jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
-                                 play_interactive, choices_then_auto);
+                                 play_interactive, choices_then_auto, full_enum_str);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded
