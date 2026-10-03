@@ -86,3 +86,19 @@ does is added.
 
 Remaining Snow cost after the fix is the search itself: gi104 (GT T8) spends its time in the T1
 `FullSearchLine` (FSLineWin six deep), which must cover the whole 8-turn window to see a T8 win.
+
+## Finding 5 -- after the fix, the worst unbudgeted games are pure tree size (2026-10-03)
+
+Value-leaf phase C H5 cells (d5 b0, condemnation) -- the 8 slowest games from the Sept matrix's
+slow-game log, re-run on 5f71c295: 2 won (T7, 15 / 27 min), **6 still abandoned at the 40M-unit cap**
+(20-41 min each). The executor re-solve (Finding 4) is therefore NOT what drives Snow's phase-C
+abandon rate (41% in Sept, the reason phase C could not converge).
+
+gi104 (d8 b0, GT T8): >3 h in its T1 decision. gdb samples: no rollout frames at all (lazy leaf), every
+sample ~7 `FSLineWin` deep in plain tree work -- `EnumeratePlans`, `ApplyPlanDirect`, `BuildSimKey`,
+payability, `BpDeriveContinuationList`. A T8-only win forces the whole 8-turn tree. The lever is the
+tree's branching (64% post-apply duplicate candidates, see the candidate-duplication notes), not a
+leaf or an executor path.
+
+Next: one pooled batch = gi104 + a RANDOM (not worst-first) H5 sample on the fixed binary, for a real
+post-fix abandon rate; then node-count instrumentation per turn depth on an abandoned game.
