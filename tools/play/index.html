@@ -14,8 +14,21 @@
      scroll left the New game / Next game buttons off-screen (user-reported 2026-09-03). */
   body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink);
          display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  /* The header MUST out-stack the modal backdrop, or Undo becomes unreachable the moment any
+     sub-decision opens. USER 2026-10-02: *"A major viewer headache is that I cannot undo through the
+     discard menu. I accidentally pressed the wrong thing and I'm stuck once I hit that menu. The
+     button is unclickable with the discard menu up."* The backdrop used to clear the header with a
+     hardcoded `inset:51px`, i.e. the header's height on ONE row -- but this is flex-wrap with eleven
+     children (title, deck, version, seed, 3 buttons, 2 badges, hint), so at ordinary window widths
+     it wraps and Undo sits BELOW 51px, under a z-index:24 backdrop. The header is statically
+     positioned, so it has no stacking context of its own and the fixed backdrop paints over it: the
+     button renders enabled and silently eats the click. A trapped sub-decision has no other exit --
+     it cannot be dismissed, only answered -- so this stranded the whole game.
+     z-index 27 keeps it above #decback (24) AND #decpanel (26); #optmenu (30) is deliberately
+     higher, since the gear menu is anchored under the header and must overlay it. */
   header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
-           display:flex; gap:14px; align-items:center; flex-wrap:wrap; flex:none; }
+           display:flex; gap:14px; align-items:center; flex-wrap:wrap; flex:none;
+           position:relative; z-index:27; }
   header h1 { font-size:15px; margin:0; font-weight:600; color:var(--acc); }
   header label { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:4px; }
   header input, header select { background:#2e323a; color:var(--ink); border:1px solid var(--line);
@@ -408,7 +421,12 @@
      blanks the board. Two flavours: a centered MODAL for look-at-top (no board interaction) and
      a bottom-anchored PROMPT for board-click decisions (target/bounce/vial) that leaves the board
      fully clickable. */
-  #decback { position:fixed; inset:51px 0 0 0; z-index:24; display:none; }
+  /* inset:0, NOT inset:51px. The old offset existed to spare the header from the dim, but it
+     encoded the header's one-row height as a magic number and so broke the instant the header
+     wrapped (see the header rule above). The header now out-stacks this and paints its own
+     background over it, so full-viewport coverage looks identical and nothing can be stranded
+     underneath. */
+  #decback { position:fixed; inset:0; z-index:24; display:none; }
   #decback.modal { display:block; background:rgba(10,12,16,.55); }
   #decpanel { position:fixed; z-index:26; display:none; background:var(--panel);
       border:1px solid var(--acc); border-radius:12px; box-shadow:0 14px 44px rgba(0,0,0,.6);
@@ -5278,6 +5296,13 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // Options-menu "let AI decide": auto-reply the heuristic default without surfacing the modal
   // (default for the repetitive shock/reveal land-entry choice). Short-circuits before rendering.
   if (autoResolveDecision(dec)) return;
+  // Refresh Undo on EVERY decision we actually display. It used to be set only in step(), but
+  // commitLine() reaches the next decision via advanceTo() and never goes through step() -- so the
+  // button's state was whatever the last step() left, and a decision arrived at by committing a line
+  // (which is most of them, and every sub-decision a line triggers) inherited a stale value. Keyed
+  // on S.steps, like showResult, because "is there a step to pop" is what undo() actually requires;
+  // step()'s S.choices test is the same question only while no side-channel-only steps exist.
+  $('undo').disabled = !(S.steps && S.steps.length);
   $('endcontrols').style.display='none'; renderBoard();
   // Game already decided: the lethal spell/combat dropped the opponent to <=0 life, but the engine
   // still offers another main-phase decision (a post-combat Main 2, or a post-lethal draw-breakpoint
