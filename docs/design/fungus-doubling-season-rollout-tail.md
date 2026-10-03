@@ -111,3 +111,19 @@ shape can reopen the same hole with no tripwire. Build the reachable-states boun
 just do not price it as the difference between a feasible and an infeasible run any more.
 
 Full measurement: `slow-rollout-tail-and-the-uncharged-greedy-walk.md`, AMENDMENT 3.
+
+## 6b. USER RULING (2026-10-03): the bound is REQUIRED, not optional
+
+Section 6a downgraded this from a feasibility blocker to something to "build on its merits". **The
+user has since ruled that the performance itself is unacceptable**, after a single in-flight keep
+rollout blocked the candidate-b K=17 floor barrier for 4.7 hours:
+
+> *"this level of performance is not acceptable, especially under mulligan settings. I'll want to fix
+> it anyway."*
+
+Keep rollouts run at `mull_gen_depth=1`, `mull_gen_budget_ms=3`, horizon 8. Hours against that
+configuration means the cost is bounded by nothing the configuration states.
+
+The repro set, the censuses already run (so they are not re-derived), why no existing mitigation
+bounds it, and proposed acceptance criteria are in **`mulligan-rollout-performance-floor.md`**.
+Section 6's reachable-states shape is unchanged and is still the right one.
