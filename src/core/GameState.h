@@ -451,6 +451,23 @@ struct GameState
     // old behaviour, so an unstamped GameState (the scenario harness) keeps every trigger. Only
     // ever err true. Stamped false only when no card in the decklist carries the param at all.
     bool                     deck_has_self_bounce_etb        = true;  // Breaching Dragonstorm cl. 2
+    // AND A FIFTH, found 2026-10-03 -- and it is the LARGEST of the family by a wide margin, which
+    // is why the two inventories above both missed it: it DOES have an entrant gate, so it reads as
+    // one of the "already cheap" ones. The gate is `newcomer.card.IsCreature() || is_animated`, and
+    // on a Saproling deck EVERY entrant is a creature, so the gate never fires and the scan runs in
+    // full on every token. Worse, the scan IS the soulbond presence test -- it walks the whole
+    // battlefield looking for a soulbond permanent, so with no soulbond card in the deck it never
+    // takes its early `break` and always pays the complete O(board) walk.
+    //
+    // MEASURED on the candidate-b floor pass (perf, 24 threads, Profile build, 150 s):
+    // FireEtbWatchers is 15.07% of ALL runtime -- 7.4x the next symbol -- and `perf annotate` puts
+    // 50.39%+24.15%+12.26% of it on the two field reads of this one loop, striding 0x128 (296 B =
+    // sizeof(Permanent)) so every permanent costs a fresh cache line to read one byte.
+    //
+    // Same safety rule as the four above: DEFAULT TRUE == do the scan == the old behaviour. A CLEAR
+    // bit is what proves the fold sound -- no soulbond card in the deck means the loop provably
+    // cannot find one, so skipping it is byte-identical rather than an approximation.
+    bool                     deck_has_soulbond               = true;  // Silverblade Paladin & co.
     // AND A FOURTH, same day, same shape -- but this one is a DEAD GUARD rather than a missing one.
     // DoublerShift (Doubling Season) already opens with
     //     if (for_tokens ? !db.HasTokenDoubler() : !db.HasCounterDoubler()) { return 0; }

@@ -6043,11 +6043,27 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     // the battlefield -- an Aether Vial activation, which this deck does constantly -- not just a
     // cast one, CR 603.6a).
     //
-    // Gated on a soulbond permanent actually being in play, so every other deck pays one bool read.
+    // DECK PRESENCE GATE (GameState::deck_has_soulbond), added 2026-10-03.
+    //
+    // The sentence that stood here -- "Gated on a soulbond permanent actually being in play, so
+    // every other deck pays one bool read" -- described an intent, not the code. There was no such
+    // gate: the loop below IS the presence test, so a deck with no soulbond card never takes the
+    // early `break` and pays the COMPLETE board walk, with a LookupCached per permanent, on every
+    // creature that enters. The entrant gate (`IsCreature || is_animated`) is what made this read
+    // as one of the family's cheap members -- and it is exactly the gate that never fires on a
+    // token deck, where every entrant is a creature. Measured at 15.07% of all runtime on the
+    // candidate-b floor pass, the hottest symbol in the profile by 7.4x; see GameState.h.
+    //
+    // RESTRICTED TO nctrl == 0 for the same reason the BuildSimKey graveyard gate is: the stamp is
+    // computed from the deck under test, and core/OpponentDeck.h deals players[1] a FIXED,
+    // non-mirror list the stamp does not describe. An opponent entrant therefore keeps the full
+    // scan. (That list carries no soulbond today, so this costs nothing measurable; it is written
+    // this way so a later edit to OpponentDeck.h cannot silently drop a trigger.)
     {
         Permanent& newcomer = state.battlefield[entered_index];
         const int  nctrl    = newcomer.controller_index;
-        if (newcomer.card.IsCreature() || newcomer.is_animated)
+        const bool soulbond_possible = (nctrl != 0) || state.deck_has_soulbond;
+        if (soulbond_possible && (newcomer.card.IsCreature() || newcomer.is_animated))
         {
             bool any_soulbond = false;
             for (const Permanent& w : state.battlefield)

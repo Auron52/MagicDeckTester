@@ -293,7 +293,16 @@ static_assert(sizeof(Player) == 200,
 // deck_endstep_lifegain_max_threshold. The STATE it gates needs no new fold either:
 // `life_gained_this_turn` is ALREADY folded unconditionally in Build() below (it is only the
 // TurnSolver MID-TURN sim key that gates it), which is why this stamp is a sim-key concern only.
-static_assert(sizeof(GameState) == 832,
+// 832 -> 840 (2026-10-03, Fungus candidate-b): GameState gained `deck_has_soulbond`, the presence
+// gate for the soulbond scan in FireEtbWatchers (measured at 15.07% of all runtime on the
+// candidate-b floor pass -- its own loop was the presence test, so a deck with no soulbond card
+// paid a full board walk per creature entering). Unlike the three entries above this one did NOT
+// land in existing padding, so the tripwire fired as designed. Classification: DECK CONSTANT,
+// stamped once in the GoldFishRunner deck scan and never written again, so it is identical across
+// every pair of states Build() could compare -- nothing to fold, exactly like deck_reads_mv_cast
+// and deck_reads_lifegain_in_play. The STATE it gates needs no fold either: it gates only whether
+// a scan that provably finds nothing is skipped, so the set of reachable states is unchanged.
+static_assert(sizeof(GameState) == 840,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

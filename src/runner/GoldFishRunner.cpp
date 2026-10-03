@@ -1181,6 +1181,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // the loop's per-permanent `enter_watcher` byte is computed from, which is what makes the
         // skip byte-identical by construction rather than by measurement.
         bool creature_enter_watcher = false;
+        // The soulbond presence scan in FireEtbWatchers (see GameState::deck_has_soulbond): its own
+        // loop is the presence test, so with no soulbond card it never breaks early and pays a full
+        // board walk per creature entering.
+        bool soulbond = false;
         // Brightcap Badger's unconditional end-step trigger -- gates the hoisted lifegain
         // early-out in PerformEndStepLifegainTokens (see GameState::deck_has_unconditional_endstep_tokens).
         bool uncond_endstep = false;
@@ -1208,6 +1212,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.doubles_tokens)   { token_doubler = true; }
                 if (d->params.doubles_counters) { counter_doubler = true; }
                 if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
+                if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.endstep_tokens_unconditional && d->params.endstep_lifegain_tokens > 0)
                 { uncond_endstep = true; }
             }
@@ -1221,6 +1226,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_mana_grant        = garth || mana_grant;
         // Garth can COPY a card, so he holds every gate open -- same treatment as the five above.
         state.deck_has_unconditional_endstep_tokens = garth || uncond_endstep;
+        // NO LEVER, deliberately -- same call as the BuildSimKey graveyard gate (94667fa1). A clear
+        // bit PROVES the scan cannot find anything, so this is a dead-code elimination rather than a
+        // narrowing, and CLAUDE.md's "collapse wasted search unconditionally" applies. The two
+        // levers below exist because their families were measured as a group; this one is a single
+        // provable fold and an extra MTG_* flag would only move the binary's flag registry.
+        state.deck_has_soulbond          = garth || soulbond;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

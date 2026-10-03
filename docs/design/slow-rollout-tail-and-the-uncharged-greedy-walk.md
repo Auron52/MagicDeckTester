@@ -702,3 +702,79 @@ not move. So the trade is: ~3x on the expensive rollouts, against restarting the
 3. **Closed, do not re-open:** enumeration-side exact dedup (1.0007x after the fingerprint fix);
    cache layout (0.65%, landed); the budget ceiling (1.33x, landed); `SweepDeadFadeTokens` batching
    (refuted — `OnCreatureDies` runs between erases).
+
+---
+
+## 2026-10-03 — a 1.17x WAS still in the per-rollout axis: the soulbond scan was never gated
+
+**This section amends the "the per-rollout axis is nearly exhausted" conclusion above.** That
+conclusion is still right about the thing it measured — the BUDGET direction really is closed, and
+the ranked table above stands. But it generalised from "the budget ceiling is out of room" and from
+a FLAT aggregate profile to "the axis is out of room", and that was wrong. Re-profiling the same
+floor pass on today's binary found a single symbol at **15.07% of all runtime, 7.4x the next one**.
+
+### What the stale profile hid
+
+The 2026-09-25 table in the cache-layout section is no longer the profile. Those board-mechanics
+symbols have since been fixed and have fallen off (`CreateTokens` 6.46% -> <0.5%, `OnCreatureDies`
+3.30% -> <0.5%, `GatherBoardSources` 2.22% -> <0.5%, `__memmove` 7.56% -> 0.95%). What the fixes
+uncovered was `FireEtbWatchers`, which that table listed at a harmless 1.42%.
+
+Method note, because it is the transferable part: **a conclusion of "flat profile, no hotspot" has a
+shelf life.** It is a statement about one binary. Four board-width fixes later the distribution was
+not flat at all, and nobody re-looked because the doc said not to.
+
+### The defect
+
+`SpellEffects.h`, the soulbond block of the enter cascade. Its comment read *"Gated on a soulbond
+permanent actually being in play, so every other deck pays one bool read."* There was no such gate:
+**the scan IS the presence test.** It walks the whole battlefield with a `LookupCached` per
+permanent looking for `params.soulbond`, so a deck holding no soulbond card never takes the early
+`break` and always pays the complete O(board) walk -- once per creature entering.
+
+It survived two previous inventories of this exact family (`GameState.h` records them: the
+`deck_has_subtype_enter_counters` pass, then the "AND A THIRD/FOURTH of the same shape" pass)
+because it DOES have an entrant gate, `IsCreature() || is_animated`, which makes it read as one of
+the cheap members. **That gate is vacuous on a token deck**, where every entrant is a creature. The
+general lesson: an entrant gate is only a gate if the entrants are actually heterogeneous, and the
+decks where these scans hurt are precisely the ones where they are not.
+
+`perf annotate` on the loop, which is the same cache signature this document already recorded for
+`GatherBoardSources`:
+
+```
+50.39%  cmpb $0x0,0x89(%r14)      <- def_absent, ONE BYTE at offset 137
+24.15%  jne
+ 4.33%  add  $0x128,%r14          <- 296-byte stride = sizeof(Permanent)
+```
+
+### The fix and what it measured
+
+`GameState::deck_has_soulbond`, stamped from the decklist in the GoldFishRunner deck scan,
+default TRUE so an unstamped state (the scenario harness) keeps the full scan. **No lever** -- a
+clear bit proves the loop cannot find anything, so this is dead-code elimination, not a narrowing,
+and CLAUDE.md's "collapse wasted search unconditionally" applies. Restricted to `nctrl == 0`
+because `core/OpponentDeck.h` is a fixed non-mirror list the stamp does not describe (the same
+restriction, for the same reason, as the BuildSimKey graveyard gate `94667fa1`).
+
+| | before | after |
+|---|---|---|
+| `FireEtbWatchers` | **15.07%** | **0.40%** |
+| every other symbol | — | x1.18 renormalised |
+
+**The renormalisation is the proof the work was DELETED rather than displaced**: removing 14.7% of
+total time inflates every surviving share by 1/(1-0.147) = 1.172, and the measured spread was
+1.16-1.22x with no symbol growing disproportionately. Had the cost merely moved, one would have.
+
+Gates: `test/scenarios.sh` **118 passed / 0 failed**; `test/regression.sh --smoke` **107 passed /
+0 failed, configs changed 0, play-changed 0** -- byte-identical, as the construction requires.
+
+A `static_assert` in `Dominance.h` fired on `sizeof(GameState)` 832 -> 840 and is logged there:
+DECK CONSTANT, stamped once and never rewritten, so there is nothing to fold into `Build()`.
+
+### Where this leaves the ranking
+
+~1.17x, and it does NOT change the strategic picture the conclusion above draws: the 5-20x class is
+still only in the cell count and in pooling interchangeable tokens. What it changes is the advice
+"do not re-open" -- that applies to the BUDGET lever specifically, not to re-profiling. **Re-profile
+after any batch of fixes lands; a flat profile is a fact about a binary, not about a deck.**
