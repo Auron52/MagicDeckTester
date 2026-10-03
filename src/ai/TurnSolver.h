@@ -1428,6 +1428,11 @@ public:
     // land) when this is true -- see ApplyPlanDirect's narrow branch. SHARED with the executor,
     // which mirrors that branch on a committed line instead of re-solving (lockstep).
     static bool Site8NarrowIsWindowBase();
+    // The apply's canon default at an untargeted breakpoint (see the .cpp); false = EMPTY. SHARED by
+    // ApplyPlanDirect and the executor's committed-line mirror. seen_before = the class-on breakpoint
+    // ordinal for a plan carrying a choice, else -1 (bp_searched_plan's numbering).
+    static bool BpUnbranchedCanon(const GameState& state, bool is_pre_combat, const Plan& plan,
+                                  int seen_before, bool class_on, Plan& out);
 
     // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
     // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds

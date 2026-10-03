@@ -75,9 +75,14 @@ rollout re-deciding every simulated turn at depth-1, five-plus levels deep -- wh
 scored the narrow branch (nothing inside the window). The executor now mirrors the scored branch
 (`TurnSolver::Site8NarrowIsWindowBase`, shared). gi55 9.5 h -> 70 s, gi134 >11 h -> 39 s, both GT.
 
-Open: the POD trailing twin (`AIEngine.cpp`, `kSitePodBp`) has the same shape -- it re-solves an
-untargeted pod breakpoint with `SolveWithLookahead` even on a committed line. Check what
-ApplyPlanDirect scores there (site 7) and mirror it the same way; Melira is the deck that reaches it.
+The POD trailing twin (site 7, Melira) had the same shape and is mirrored the same way: the apply's
+canon-or-EMPTY default now lives in `TurnSolver::BpUnbranchedCanon`, called by both ApplyPlanDirect and
+the executor's committed-line pod branch.
+
+Still open (no current deck reaches it): `resolve_draw_breakpoint(bp_depth + 1)` -- a draw engine cast
+INSIDE a site-7/8 continuation on a committed line -- still re-solves, because that call does not know
+its site number (class_on). Snow and Melira play no such card. Pass the site through before a deck that
+does is added.
 
 Remaining Snow cost after the fix is the search itself: gi104 (GT T8) spends its time in the T1
 `FullSearchLine` (FSLineWin six deep), which must cover the whole 8-turn window to see a T8 win.

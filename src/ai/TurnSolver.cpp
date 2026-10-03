@@ -34188,15 +34188,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // MTG_BP_NESTED_CANON (see the flag): the un-branched nested slot's default is the value-best
         // entry. seen_before >= 0 only for a class-on plan that carries a choice; != bp_at is "not
         // the index this variant targets".
-        if (!resolved && BpNestedCanon() && g_bp_enum_depth == 0 && class_on
-            && (g_rollout_nest == 0 || BpNestedCanonPlayout())
-            && plan.bp_choice >= 0 && !plan.bp_all && seen_before >= 0 && seen_before != plan.bp_at)
-        {
-            // By reference: read immediately, one Plan copied out, no re-entry between.
-            const std::vector<TurnSolver::Plan>& ncands =
-                TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-            if (!ncands.empty()) { out = ncands.front(); resolved = true; canon_used = true; }
-        }
         // MTG_BP_ENUM_CANON / MTG_BP_BASE_CANON (levers; see the flags): two further un-branched
         // slot kinds take the value-best entry rather than EMPTY. Never inside a playout.
         //
@@ -34210,22 +34201,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // no clause, no node -- and its unchallengeable cands.front() cost auras gi428 a turn
         // (T4 -> T5, invariant in every effort knob, recovered by suppressing the canon at site 10
         // alone). A class in BpSiteMask MUST have a route into the variant machinery.
-        if (!resolved && class_on && g_rollout_nest == 0)
-        {
-            const int  bc        = BpBaseCanon();
-            const bool enum_slot = BpEnumCanon() && g_bp_enum_depth == 1;
-            const bool base_slot = bc > 0 && g_bp_enum_depth == 0 && plan.bp_choice < 0
-                                && (bc == 1
-                                    || (g_condemn_root_turn >= 0
-                                        && state.turn_number > g_condemn_root_turn + 1));
-            if (enum_slot || base_slot)
-            {
-                // By reference: read immediately, one Plan copied out, no re-entry between.
-                const std::vector<TurnSolver::Plan>& ncands =
-                    TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-                if (!ncands.empty()) { out = ncands.front(); resolved = true; canon_used = true; }
-            }
-        }
+        // Both branches live in TurnSolver::BpUnbranchedCanon, SHARED with the executor's committed-line
+        // mirror (AIEngine resolve_draw_breakpoint / the pod twin): the two worlds must resolve an
+        // untargeted breakpoint identically or played != scored.
+        if (!resolved && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
+        { resolved = true; canon_used = true; }
         // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is
         // only legitimate while the ALTERNATIVES are reachable.
         //
@@ -65143,4 +65123,37 @@ void TurnSolver::PlanDumpAt(const GameState& state, bool is_pre_combat, int dept
     }
     std::fprintf(stderr, "================================================================================\n");
     busy = false;
+}
+
+// The apply's canon default at a breakpoint the plan does not branch on (nested canon, enum/base canon),
+// moved verbatim out of ApplyPlanDirect's bp_searched_plan so the executor can mirror it on a committed
+// line instead of re-solving (USER 2026-10-03: "We should not search again"). False = EMPTY.
+bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, const Plan& plan,
+                                   int seen_before, bool class_on, Plan& out)
+{
+    if (BpNestedCanon() && g_bp_enum_depth == 0 && class_on
+        && (g_rollout_nest == 0 || BpNestedCanonPlayout())
+        && plan.bp_choice >= 0 && !plan.bp_all && seen_before >= 0 && seen_before != plan.bp_at)
+    {
+        // By reference: read immediately, one Plan copied out, no re-entry between.
+        const std::vector<TurnSolver::Plan>& ncands =
+            TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
+        if (!ncands.empty()) { out = ncands.front(); return true; }
+    }
+    if (class_on && g_rollout_nest == 0)
+    {
+        const int  bc        = BpBaseCanon();
+        const bool enum_slot = BpEnumCanon() && g_bp_enum_depth == 1;
+        const bool base_slot = bc > 0 && g_bp_enum_depth == 0 && plan.bp_choice < 0
+                            && (bc == 1
+                                || (g_condemn_root_turn >= 0
+                                    && state.turn_number > g_condemn_root_turn + 1));
+        if (enum_slot || base_slot)
+        {
+            const std::vector<TurnSolver::Plan>& ncands =
+                TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
+            if (!ncands.empty()) { out = ncands.front(); return true; }
+        }
+    }
+    return false;
 }

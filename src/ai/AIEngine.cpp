@@ -5496,6 +5496,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
                         }
                     }
+                    // COMMITTED POD MIRROR (USER 2026-10-03: "We should not search again") -- the pod
+                    // twin of resolve_draw_breakpoint's COMMITTED SITE-8 MIRROR. ApplyPlanDirect scored
+                    // an untargeted occurrence with bp_searched_plan's canon default or EMPTY
+                    // (TurnSolver::BpUnbranchedCanon, shared); re-solving here instead ran a deck-depth
+                    // SolveWithLookahead on a line already scored, and realised a different turn.
+                    if (!pod_bp_searched && fd_plan_committed)
+                    {
+                        if (!TurnSolver::BpUnbranchedCanon(state, is_pre_combat_main, plan, pod_bp_idx,
+                                                           /*class_on=*/true, extra))
+                        { extra = TurnSolver::Plan{}; extra.land_decided = true; }
+                        pod_bp_searched = true;
+                        if (extra.land_decided && !extra.land_to_play.empty())
+                        { std::optional<ScriptedTopChoice> _cstc;
+                          if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                          TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                    }
                     if (!pod_bp_searched)
                     {
                         // Same searched re-solve as the main breakpoint site above (the pod
