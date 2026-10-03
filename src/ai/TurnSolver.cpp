@@ -38435,9 +38435,10 @@ static void SimulateCombat(GameState& state)
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
     ApplyAttackDrawTriggers(state, active, atk_idx);
 
-    // Jorn, God of Winter: untap each snow permanent we control (attack_untap_snow_permanents).
-    // The mana is spendable in the post-combat main. Mirrors GameEngine::CombatPhase -- ONE shared helper.
-    ApplyAttackUntapSnow(state, active, atk_idx);
+    // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
+    // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
+    // Mirrors GameEngine::CombatPhase (same two shared helpers, same two points).
+    const bool jorn_untap = AttackUntapSnowFires(state, active, atk_idx);
 
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens entering attacking are pumped, and BEFORE the damage loop reads power.
@@ -38484,6 +38485,7 @@ static void SimulateCombat(GameState& state)
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // executor (ResolveCombatDamage, Combat.cpp). The rollout wants no play-viewer descriptions.
     ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/false);
+    if (jorn_untap) { UntapSnowPermanents(state, active); }   // Jorn, see above
 
     // Combat is over for this simulated turn: everything until SimulateEndAndStartNextTurn is the
     // post-combat main. The rollout historically never maintained GameState::phase (the executor
@@ -49273,7 +49275,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // goldfish combat creates no new resources, so everything was castable in
         // the first main, and modelling a second main the real game skips would let
         // the search optimise against plays that never happen. See AIEngine::TakeTurn.
-        if (second_main)
+        if (second_main || UntapSecondMainLive(state))   // per-turn: Jorn
         {
             TurnSolver::Plan post_plan;
             if (g_honest_teacher && depth > 0)
@@ -51611,7 +51613,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
-    if (second_main)
+    if (second_main || UntapSecondMainLive(state))   // per-turn: Jorn
     {
         // "STUCK -- PASS THE TURN", the second-main half. At `turn == cutoff` the post-combat main
         // is the last thing in the horizon: every plan here either kills now or hands to FSLineWin
@@ -53387,7 +53389,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // was always going to be told. `min(cutoff, best.win_turn) <= cutoff` keeps the argument
     // intact for the B&B-tightened cutoff the calls actually pass. Answer- and budget-identical:
     // the elided path consumes no work units before returning. See winlesscert::EdgeTailElideOn.
-    const bool edge_tail_elide = !second_main && g_unbounded_label_search > 0
+    const bool edge_tail_elide = !(second_main || UntapSecondMainLive(state)) && g_unbounded_label_search > 0
                                  && state.turn_number >= cutoff
                                  && winlesscert::EdgeTailElideOn();
     // GO-OFF DOMINANCE WIDTH (see winlesscert::GoffDomOn). A residual node scores its first W
@@ -57876,7 +57878,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                     // This turn's SECOND main (only when evaluating the pre-combat plan of a
                     // second-main deck): search it honestly (reshuffled) so the pre-combat plan's
                     // value ACCOUNTS for the finisher it enables, instead of skipping it. Not greedy.
-                    if (is_pre_combat && second_main)
+                    if (is_pre_combat && (second_main || UntapSecondMainLive(s)))
                     {
                         TurnSolver::Plan post = TurnSolver::SolveWithLookahead(
                             s, false, depth > 0 ? depth : 1, max_turns, nullptr, false,
@@ -58977,7 +58979,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // the decisive site for "cast now vs hold for after combat" -- the candidate being
                 // scored here IS the pre-combat choice, and its second main is what pays for
                 // passing. See SolveSecondMainInSearch.
-                if (second_main)
+                if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
                 {
                     if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                 second_main, tt, /*in_rollout=*/false))
@@ -59315,7 +59317,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                         SimulateCombat(copy);
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
-                        if (second_main)
+                        if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
                         {
                             // Searched, exactly as in the main candidate loop above -- a deferred
                             // wave's variants must be scored on the same footing as wave 0's.
@@ -59423,7 +59425,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                     SimulateCombat(copy);
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
-                    if (second_main)
+                    if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
                     {
                         if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                     second_main, tt, /*in_rollout=*/false))
@@ -59554,7 +59556,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, plan, true);
                     SimulateCombat(copy);
                     if (OpponentHasLost(copy)) { return state.turn_number; }
-                    if (second_main)
+                    if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
                     {
                         if (ApplySecondMainInSearch(copy, committed_sub_depth, max_turns,
                                                     budget, second_main, &esc_tt,

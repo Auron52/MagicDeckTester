@@ -84,9 +84,10 @@ struct CardParams
     int attack_draw_cards = 0;
 
     // Jorn, God of Winter: "Whenever Jorn attacks, untap each snow permanent you control." Self-only
-    // attack trigger, applied at declare-attackers by ApplyAttackUntapSnow in BOTH executor and
-    // rollout, right after ApplyAttackDrawTriggers. The untapped mana is only spendable after
-    // attackers are declared, i.e. in the post-combat main, so it FLIPS DeckUsesSecondMain.
+    // attack trigger, in BOTH executor and rollout: AttackUntapSnowFires at declare-attackers, and
+    // UntapSnowPermanents right after ResolveCombatDamage (where this engine taps attackers). The untapped mana is only spendable after
+    // attackers are declared, i.e. in the post-combat main -- which is played on exactly the turns
+    // the untap fired (UntapSecondMainLive), NOT deck-wide via DeckUsesSecondMain.
     bool attack_untap_snow_permanents = false;
 
     // Blossoming Bogbeast: "Whenever this creature attacks, you gain 2 life. Then creatures you

@@ -14116,28 +14116,36 @@ inline int SnowPermanentCount(const GameState& state, int controller_index)
 }
 
 // ---- Jorn, God of Winter: "Whenever Jorn attacks, untap each snow permanent you control." --------
-// Self-only attack trigger (CardParams::attack_untap_snow_permanents), applied at declare-attackers
-// in BOTH worlds (GameEngine::CombatPhase executor + TurnSolver::SimulateCombat rollout) from this
-// one helper, right after ApplyAttackDrawTriggers. "Snow permanent" is the same test
-// SnowPermanentCount uses (printed supertype, or an ice counter while ice grants snow). Attacking
-// creatures untap too and stay attacking (CR 506.4). One untap per attacking Jorn; Jorn is
-// legendary, so in practice exactly one. Gated: no attacker with the param -> untouched, so every
-// other deck is byte-identical.
-inline void ApplyAttackUntapSnow(GameState& state, int controller,
+// Self-only attack trigger (CardParams::attack_untap_snow_permanents), in BOTH worlds
+// (GameEngine::CombatPhase executor + TurnSolver::SimulateCombat rollout), in TWO steps:
+//   * AttackUntapSnowFires, at declare-attackers -- did one of OUR attackers carry the trigger?
+//   * UntapSnowPermanents, right AFTER ResolveCombatDamage.
+// The split is forced by where this engine taps attackers: inside ResolveCombatDamage (Combat.cpp),
+// i.e. after every declare-attackers hook. Untapping at declare-attackers left Jorn and every other
+// attacking snow creature TAPPED after combat -- the opposite of the rules (CR 508.1f taps them on
+// declaration, then the CR 508.2 trigger untaps them; they stay attacking, CR 506.4) -- and it also
+// switched off UntapSecondMainLive, which reads an untapped Jorn. Untapping after damage reaches the
+// same post-combat state: damage reads no tapped status, and the engine opens no priority window in
+// combat, so the mana could not be spent before then anyway. "Snow permanent" is the same test
+// SnowPermanentCount uses. Gated: no attacker with the param -> untouched, every other deck
+// byte-identical.
+inline bool AttackUntapSnowFires(const GameState& state, int controller,
                                  const std::vector<int>& attacker_indices)
 {
-    if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
-    bool fire = false;
     for (int idx : attacker_indices)
     {
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
-        if (d && d->params.attack_untap_snow_permanents) { fire = true; break; }
+        if (d && d->params.attack_untap_snow_permanents) { return true; }
     }
-    if (!fire) { return; }
+    return false;
+}
+
+inline void UntapSnowPermanents(GameState& state, int controller)
+{
     const bool ice_grants = AnyIceCounters(state) && IceGrantsSnow(state);
     for (Permanent& p : state.battlefield)
     {
@@ -14145,6 +14153,31 @@ inline void ApplyAttackUntapSnow(GameState& state, int controller,
         if (p.card.HasSupertype(Supertype::Snow) || (ice_grants && p.ice_counters > 0))
         { p.tapped = false; }
     }
+}
+
+// Is THIS turn's post-combat main live because Jorn's untap fired? USER 2026-10-03: "We should not
+// do the second main if Jorn did not fire. That is the vast majority of turns." The untapped mana is
+// the deck's only combat-generated resource, so a turn where Jorn did not attack has nothing for a
+// second main to spend -- everything was castable in main 1, the same reason a goldfish skips main 2
+// at all (see TurnSolver's rollout post-combat site).
+//
+// Read from the POST-COMBAT board, so it is a pure function of state: the executor and every
+// simulated turn of the search compute it identically (lockstep by construction), and it needs no
+// field of its own (nothing to fold into a dominance / transposition key -- the board already is).
+// "Fired" == a Jorn we control that could attack this turn: the goldfish always attacks with it (it is
+// no mana source, so no provider holds it back), and attacking untaps it, so it is untapped here
+// either way. A Jorn cast this turn is summoning-sick, did not attack, and does not open main 2.
+inline bool UntapSecondMainLive(const GameState& state)
+{
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.attack_untap_snow_permanents && CanAttackFull(p, state.battlefield, me))
+        { return true; }
+    }
+    return false;
 }
 
 // ---- Creature Giving upkeep triggers (Varchild's War-Riders / Defense of the Heart) -----------

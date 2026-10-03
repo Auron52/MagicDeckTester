@@ -684,9 +684,10 @@ void GameEngine::CombatPhase(GameState& state)
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
     ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx);
 
-    // Jorn, God of Winter: untap each snow permanent we control (attack_untap_snow_permanents).
-    // The mana is spendable in the post-combat main. Mirrors TurnSolver::SimulateCombat -- ONE shared helper.
-    ApplyAttackUntapSnow(state, state.active_player_index, atk_idx);
+    // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
+    // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
+    // Mirrors TurnSolver::SimulateCombat (same two shared helpers, same two points).
+    const bool jorn_untap = AttackUntapSnowFires(state, state.active_player_index, atk_idx);
 
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens put onto the battlefield attacking receive the pump (CR 603.3b lets the
@@ -730,6 +731,7 @@ void GameEngine::CombatPhase(GameState& state)
     // does. Only the real game collects the per-attacker descriptions for the play viewer.
     const CombatDamageResult combat =
         ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr);
+    if (jorn_untap) { UntapSnowPermanents(state, state.active_player_index); }   // Jorn, see above
     const int total_combat_dmg = combat.total_damage;
     const int trigger_life_loss = combat.trigger_life_loss;
 

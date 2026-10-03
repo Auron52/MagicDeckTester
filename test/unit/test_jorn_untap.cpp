@@ -1,6 +1,6 @@
 // Unit tests for Jorn, God of Winter: "Whenever Jorn attacks, untap each snow permanent you control."
-// (attack_untap_snow_permanents, ApplyAttackUntapSnow -- shared by GameEngine::CombatPhase and
-// TurnSolver::SimulateCombat). Added 2026-10-03 when Snow switched from the Kaldring back face to
+// (attack_untap_snow_permanents: AttackUntapSnowFires at declare-attackers + UntapSnowPermanents after
+// ResolveCombatDamage -- shared by GameEngine::CombatPhase and TurnSolver::SimulateCombat). Added 2026-10-03 when Snow switched from the Kaldring back face to
 // the Jorn front face.
 //
 //  1. It FIRES AT ALL, and untaps every snow permanent we control: lands, a mana dork, an artifact,
@@ -86,7 +86,8 @@ TEST_CASE("Jorn attacking untaps each snow permanent we control, and nothing els
     PutTapped(s, "Forest",                0, 6);   // ours, NOT snow
     PutTapped(s, "Snow-Covered Island",   1, 7);   // snow, NOT ours
 
-    ApplyAttackUntapSnow(s, 0, { jorn, treef });
+    REQUIRE(AttackUntapSnowFires(s, 0, { jorn, treef }));
+    UntapSnowPermanents(s, 0);
 
     CHECK_FALSE(TappedByNumber(s, 1));   // Jorn itself
     CHECK_FALSE(TappedByNumber(s, 2));   // the other attacker
@@ -105,8 +106,35 @@ TEST_CASE("Jorn must itself be attacking")
     const int treef = PutTapped(s, "Abominable Treefolk", 0, 2);
     PutTapped(s, "Snow-Covered Forest", 0, 3);
 
-    ApplyAttackUntapSnow(s, 0, { treef });
+    CHECK_FALSE(AttackUntapSnowFires(s, 0, { treef }));
 
     CHECK(TappedByNumber(s, 2));
     CHECK(TappedByNumber(s, 3));
+}
+
+// UntapSecondMainLive: main 2 is played on exactly the turns Jorn's untap fired (USER 2026-10-03,
+// "We should not do the second main if Jorn did not fire"). Read from the post-combat board by the
+// executor and every simulated turn alike, so these four cases pin the whole contract.
+TEST_CASE("Second main is live only when our Jorn could attack this turn")
+{
+    EnsureCardsLoaded();
+    {
+        GameState s = Fresh();
+        PutTapped(s, "Snow-Covered Forest", 0, 3);
+        CHECK_FALSE(UntapSecondMainLive(s));                      // no Jorn
+    }
+    {
+        GameState s = Fresh();
+        const int j = PutTapped(s, "Jorn, God of Winter", 0, 1);
+        s.battlefield[j].tapped = false;                          // it untapped itself attacking
+        CHECK(UntapSecondMainLive(s));                            // attacked -> fired
+        s.battlefield[j].entered_this_turn = true;
+        CHECK_FALSE(UntapSecondMainLive(s));                      // cast this turn -> sick, no attack
+    }
+    {
+        GameState s = Fresh();
+        const int j = PutTapped(s, "Jorn, God of Winter", 1, 1);  // the OPPONENT's Jorn
+        s.battlefield[j].tapped = false;
+        CHECK_FALSE(UntapSecondMainLive(s));
+    }
 }

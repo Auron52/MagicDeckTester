@@ -157,10 +157,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     engine silently wastes the trigger every turn.
         if (def->params.attack_draw_cards > 0) { return true; }
 
-        //   * JORN, GOD OF WINTER (attack-trigger untap): "Whenever Jorn attacks, untap each snow
-        //     permanent you control" -- the untapped mana is a resource GENERATED DURING COMBAT
-        //     (2c-bis), spendable only in a post-combat main. Same shape as attack_draw_cards.
-        if (def->params.attack_untap_snow_permanents) { return true; }
+        //   * NOT JORN, GOD OF WINTER (attack-trigger untap), deliberately. Its untapped mana IS a
+        //     combat-generated resource, but only on a turn Jorn attacks -- the minority. A deck-wide
+        //     second main cost Snow 1.96x search units for every turn (USER 2026-10-03: "We should
+        //     not do the second main if Jorn did not fire"). That deck plays main 2 per TURN instead,
+        //     gated on UntapSecondMainLive at every post-combat site, executor and search alike.
 
         //   * TECTONIC GIANT (modal attack trigger, impulse mode): "exile the top two cards of
         //     your library ... until the end of your next turn you may play that card" -- the
