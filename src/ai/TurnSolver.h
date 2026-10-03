@@ -1424,6 +1424,10 @@ public:
     // the two worlds cannot disagree about whether the occurrence is counted -- a disagreement
     // shifts every later bp_at index. `fd` is the card the tap-draw just found (hand.back()).
     static bool SnowLookFoundPlayable(const GameState& state, const CardDefinition& fd);
+    // Site 8's UNSEARCHED continuation inside the search window plays nothing (not even a found
+    // land) when this is true -- see ApplyPlanDirect's narrow branch. SHARED with the executor,
+    // which mirrors that branch on a committed line instead of re-solving (lockstep).
+    static bool Site8NarrowIsWindowBase();
 
     // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
     // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds

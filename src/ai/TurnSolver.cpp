@@ -14888,6 +14888,7 @@ static int BpSiteMask()
 // cannot read the file-static BpSiteMask, and counting a class the search does not count (or vice
 // versa) shifts every later bp_at index and silently changes play (the bp_searched_plan lesson).
 bool TurnSolver::PodBreakpointClassOn() { return ((BpSiteMask() >> 7) & 1) != 0; }
+bool TurnSolver::Site8NarrowIsWindowBase() { return BpBaseCanon() > 0 && ((BpSiteMask() >> 8) & 1) != 0; }
 
 // The shared structural gate for site 7: a SECOND untapped Pod-style source stands by, so the
 // just-resolved fetch created a genuinely new decision (its victim list now holds the fetch).
@@ -37469,8 +37470,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             // MTG_ARMNEW_VERIFY: Snow's base plan and its overrun rank variants
                             // played the found Island while the EMPTY arm, the same line, did not.
                             const bool window_base = g_rollout_nest == 0 && g_bp_enum_depth == 0
-                                                  && BpBaseCanon() > 0
-                                                  && ((BpSiteMask() >> 8) & 1) != 0;
+                                                  && TurnSolver::Site8NarrowIsWindowBase();
                             const Player& lap2 = state.players[state.active_player_index];
                             const CardDefinition* fd2 =
                                 CardDatabase::Instance().LookupCached(lap2.hand.back());

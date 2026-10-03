@@ -24,8 +24,11 @@ remaining depth); the label path (`EnumerateEarliestWins`) always clamped, play 
 
 All of:
 * the decision budget is **unlimited**;
-* `TurnSolver::TruncEvents()` did not move during the decision (thread-local);
-* the line is not `truncated` (no order-free memo end);
+* NOT gated on `TurnSolver::TruncEvents()` or the order-free memo end (USER 2026-10-03: "No win found
+  by search in d8 b0 means we should be done ... We should not search again"). At an unlimited budget
+  the only remaining events are the search's own design prunes (condemnation, group-wave drops) -- the
+  same search whose wins are committed and played, so its no-win is equally final. The first version
+  gated on them and left Snow d8 b0 games in a depth-8 nested FALLBACK lookahead for hours;
 * `turn + searched_depth - 1 >= max_turns` (the rung that deep never reaches a leaf, so no rollout or
   value estimate enters the proof);
 * (no beam can be involved: the escalation beam lives only in `FullSearchLineHybrid`'s escalation,
@@ -48,7 +51,7 @@ bump (or route it through `g_fs_trunc_events`), add a unit test that a budget-st
 sets `proven_no_win`, then drop the `budget.Unlimited()` term and A/B the tiers (the finish changes
 digests of lost games and frees nothing in won ones).
 
-## Open: structural truncation events at an unlimited budget
+## Historical: structural truncation events at an unlimited budget (no longer gate the finish)
 
 Hinata2 smoke s1001 gi5 at d3 b0: T1-T3 decisions record 54 / 72 / 132 `g_fs_trunc_events` with the
 budget unlimited -- some non-budget drop in the search bumps the watermark. Those decisions were not

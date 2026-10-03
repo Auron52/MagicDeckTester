@@ -3316,22 +3316,26 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     //    group-wave tranche bound, the m2-fix continuation skip), so under a budget "no
                     //    truncation event" is NOT completeness. Extending this to budgeted play first needs
                     //    every such site to report itself: docs/design/proven-no-win-finish.md;
-                    //  * no truncation event anywhere beneath it, and no order-free memo end;
+                    //  * NOT gated on the truncation counter / order-free memo end (USER 2026-10-03: "No
+                    //    win found by search in d8 b0 means we should be done"). At an unlimited budget the
+                    //    only events left are the search's own design prunes (condemnation, group-wave
+                    //    drops) -- the same search whose WINS we commit, so its no-win is equally final;
                     //  * every turn through max_turns inside the searched horizon. A rung that deep never
                     //    reaches a leaf (FSLineWin refuses turn > max_turns first), so neither a rollout nor
                     //    a value estimate enters it -- and the hybrid never ESCALATES it (TurnSolver EXHAUSTIVE
                     //    COMMIT), so the lossy escalation beam cannot touch it either.
                     // Not under a human / claude chooser: those sessions play on.
                     {
-                        if (budget.Unlimited() && !m_external_chooser && !line.truncated
-                            && TurnSolver::TruncEvents() == proof_trunc0
+                        if (budget.Unlimited() && !m_external_chooser
                             && line.win_turn > m_max_turns
                             && state.turn_number + searched_depth - 1 >= m_max_turns)
                         {
                             state.proven_no_win = true;
                             if (s_fd_trace)
-                            { std::fprintf(stderr, "[fd] T%d PROVEN NO-WIN through T%d -- finishing\n",
-                                           state.turn_number, m_max_turns); }
+                            { std::fprintf(stderr, "[fd] T%d PROVEN NO-WIN through T%d -- finishing "
+                                           "(truncated=%d trunc_events=%llu)\n",
+                                           state.turn_number, m_max_turns, line.truncated ? 1 : 0,
+                                           TurnSolver::TruncEvents() - proof_trunc0); }
                         }
                         else if (s_fd_trace && line.win_turn > m_max_turns)
                         {
@@ -4373,8 +4377,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // turn. Order-aware condemnation has to place the site in the cast order and the card alone
     // cannot say which route opened it, so the route is recorded here (see BpSlotIsAfterSite).
     bool rdb_site_activated = false;
+    // Site 8 on a COMMITTED line: the found card, or empty when this call is not site 8 / the plan is
+    // not committed. See the COMMITTED SITE-8 MIRROR in resolve_draw_breakpoint.
+    std::string rdb_site8_committed_found;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
+        // Consumed on entry: a nested breakpoint inside this continuation re-enters here and is NOT
+        // the committed site-8 occurrence (see COMMITTED SITE-8 MIRROR below).
+        const std::string site8_committed_found = std::move(rdb_site8_committed_found);
+        rdb_site8_committed_found.clear();
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
         exec_section_reset();   // a breakpoint decision point (twin of bp_searched_plan's reset)
         // karoo_deferred: the executor reserves a Karoo drop for after the main cast loop exactly as
@@ -4461,6 +4472,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
+        }
+        // COMMITTED SITE-8 MIRROR (USER 2026-10-03: "We should not search again"). A committed line was
+        // scored by ApplyPlanDirect, whose site-8 occurrence that the plan does not target takes the
+        // NARROW branch: inside the search window it plays nothing (Site8NarrowIsWindowBase), else only
+        // a found land. Re-solving here instead ran SolveWithLookahead at deck depth -- a depth-nested
+        // recursion that held Snow d8 b0 games for hours on a line already VERIFIED -- and realised a
+        // turn the search never scored. Mirror the scored continuation exactly; the cast sites already
+        // replay their recorded segment on a committed line (replay_segment).
+        if (!bp_searched_here && !site8_committed_found.empty())
+        {
+            extra              = TurnSolver::Plan{};
+            extra.land_decided = true;
+            const CardDefinition* f8 = CardDatabase::Instance().Lookup(site8_committed_found);
+            if (f8 != nullptr && f8->card.IsLand() && !TurnSolver::Site8NarrowIsWindowBase())
+            {
+                extra.land_to_play = site8_committed_found;
+                TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face);
+            }
+            bp_searched_here = true;
         }
         if (!bp_searched_here)
         {
@@ -5742,6 +5772,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                 rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
                             }
                         }
+                        if (fd_plan_committed)
+                        { rdb_site8_committed_found = state.players[state.active_player_index].hand.back().m_name.str(); }
                         resolve_draw_breakpoint(0);
                     }
                 }
