@@ -22667,6 +22667,259 @@ int EdfComboRouteApply(GameState& s, int me)
     return r;
 }
 
+// =================================================================================================
+// THE MECHANICAL EQUIP-CHAIN GO-OFF (MTG_EQUIP_ROUTE, default OFF -- measuring)
+// =================================================================================================
+//
+// USER, 2026-10-03, on the shape this must take: *"The idea of the heuristic is to find a win and
+// otherwise it can just not use it. It needs to play it out so that the projection is accurate."*
+// And on why it belongs in the search at all: *"It is a search hole if we don't find this line."*
+//
+// WHAT IT CLOSES. On KittyEquipment v2 the engine is self-feeding: Sram, Senior Edificer draws on
+// an Equipment CAST, Puresteel Paladin draws on an Equipment ETB *and* grants metalcraft equip {0}.
+// So one {0} Equipment is two cards and a free attachment, and the real line is "cast a free
+// Equipment -> draw two -> cast what arrived -> ...", about eleven links deep, finishing with every
+// loose Equipment attached to one host (Golem-Skin Gauntlets counts them all) and one swing.
+//
+// THE ODOMETER CANNOT FORM THAT LINE, and the measurement is what says so rather than the argument.
+// Enumeration powersets the hand it HAS; link eleven is a card that only exists because links one
+// through ten resolved, so no subset of the starting hand contains it. Against the user's own
+// hand-played references the search loses exactly one turn on 3 of 14 games (s1_gi0, s2_gi1,
+// s5_gi4: T3 -> T4), and that shortfall is INVARIANT across depth 5/6/8, budget 100 -> 20,000 ms
+// (200x), MTG_BP_DEPTH=24 and MTG_BP_MAXBASE=256, with MTG_BP_CANON_AUDIT clean (0 unchallengeable
+// of 2,904 and 1,757). Invariance across every width, depth and budget knob at once is the
+// signature of unreachable, not unaffordable.
+//
+// WHY IT IS SOUND AND NEEDS NO QUALITY A/B. The action is emitted only when the playout's own
+// realised board reports a lethal attack, and winning this turn is maximal under the metric every
+// reader optimises. An emitted action therefore cannot be the wrong choice; a playout that fails to
+// win emits nothing and has cost only time. That is the dominance side of the
+// projection-vs-dominance rule (cf. MTG_FUNGUS_DEVOUR_LETHAL), so what has to be measured is COST.
+//
+// WHY IT REUSES THE PLAN MACHINERY INSTEAD OF CASTING BY HAND. The EDF route hand-rolls its casts
+// because it must seize mana allocation away from the payment ladder. This route spends no mana on
+// the chain at all -- the links are {0} and the equips are metalcraft-free -- so there is nothing to
+// seize, and hand-rolling would mean re-implementing cast legality, triggers and ETB draws that
+// ApplyPlan already gets right. It drives `EnumerateMainPlans` + `ApplyPlan` repeatedly instead:
+// the same two calls the executor uses, so the realised line is reachable by construction and the
+// trial/apply lockstep is structural rather than maintained.
+//
+// RE-ENTRY IS THE ONE REAL HAZARD, and it is why this needs a scope the EDF route does not. The
+// emission site lives INSIDE EnumerateMainPlans, and this playout calls EnumerateMainPlans -- so
+// without a guard the trial would emit a route action that runs a trial that emits a route action.
+// InRoute() suppresses the emission site for the whole playout, which also makes every nested
+// enumeration plain (and therefore cheap).
+namespace equiproute
+{
+// ADOPTED 2026-10-03, DEFAULT ON. On the 14 user references (scripts/ref_bench.py, forced mulligans
+// so only play varies) the route plus its SolveUncached cut takes the deck from 3/14 short of the
+// human's win turn to 1/14, and the pooled average from 3.714 to 3.500 with four games now FASTER
+// than the human. `MTG_EQUIP_ROUTE=0` restores the pre-adoption search exactly (the emission site is
+// the only producer), which is how the cost A/B survives adoption.
+inline bool On() { static const bool v = EnvOn("MTG_EQUIP_ROUTE", true); return v; }
+inline bool Trace() { static const bool v = EnvOn("MTG_EQUIP_ROUTE_TRACE"); return v; }
+
+// Cost bounds. Both bound a SOUND detector, so neither can produce a wrong answer -- only a missed
+// win, which costs exactly the turn it would have saved and nothing else. That asymmetry is what
+// makes them safe to tune downward for cost.
+inline int MaxIter()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_MAX_ITER");
+        const int n = (e && *e) ? std::atoi(e) : 24;
+        return n > 0 ? n : 24;
+    }();
+    return v;
+}
+// How many of each iteration's ranked plans get a trial apply. The chain's own links are {0} casts
+// that FREE_CAST_HOIST already forces into every subset, so the advancing plan sits near the top of
+// the ranking; trialling the whole list would pay an apply per plan per link for the tail.
+inline int MaxProbe()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_PROBE");
+        const int n = (e && *e) ? std::atoi(e) : 12;
+        return n > 0 ? n : 12;
+    }();
+    return v;
+}
+
+// Suppresses the emission site for the duration of a playout (see RE-ENTRY above).
+inline bool& InRouteFlag() { static thread_local bool v = false; return v; }
+struct Scope
+{
+    Scope()  { InRouteFlag() = true;  }
+    ~Scope() { InRouteFlag() = false; }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+
+static int CastCount(const TurnSolver::Plan& p)
+{
+    int n = 0;
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand) { ++n; } }
+    return n;
+}
+
+// Play the turn out. Returns 1 iff the realised board is lethal this turn, else 0. `s` is mutated,
+// so the caller decides whether it is a copy (trial) or the live state (apply) -- the two paths run
+// THIS function and nothing else, which is the lockstep guarantee.
+static int Run(GameState& s, int me)
+{
+    Scope _guard;                       // no nested route emission for the whole playout
+    int iters = 0, links = 0;
+    for (; iters < MaxIter(); ++iters)
+    {
+        std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        if (plans.empty()) { break; }
+        // LETHAL FIRST. `wins_this_turn` on a board this playout has already realised is a
+        // statement about the attack that board can make now -- not about casts still to come --
+        // which is exactly the projection the user asked to be made accurate by playing it out.
+        const TurnSolver::Plan* win = nullptr;
+        for (const TurnSolver::Plan& p : plans)
+        { if (p.wins_this_turn) { win = &p; break; } }
+        if (win != nullptr)
+        {
+            TurnSolver::ApplyPlan(s, *win, /*is_pre_combat=*/true);
+            if (Trace())
+            {
+                std::fprintf(stderr, "[equip-route] t%d LETHAL after %d link(s), %d iter(s)\n",
+                             s.turn_number, links, iters + 1);
+            }
+            return 1;
+        }
+        // Otherwise ADVANCE THE CHAIN: the plan that casts the most, because on this engine a cast
+        // is what produces the next link (two draws and an artifact toward metalcraft). Ties go to
+        // the engine's own `value` so the choice is never arbitrary.
+        const TurnSolver::Plan* best = nullptr;
+        int best_casts = 0, best_value = -1;
+        const int probe = std::min<int>(MaxProbe(), static_cast<int>(plans.size()));
+        for (int i = 0; i < probe; ++i)
+        {
+            const int c = CastCount(plans[i]);
+            if (c <= 0) { continue; }
+            if (c > best_casts || (c == best_casts && plans[i].value > best_value))
+            { best = &plans[i]; best_casts = c; best_value = plans[i].value; }
+        }
+        if (best == nullptr)
+        {
+            if (Trace())
+            {
+                std::fprintf(stderr,
+                    "[equip-route]   it%d SPENT: nplans=%d probe=%d hand=%d bf=%d\n",
+                    iters, (int)plans.size(), probe, (int)s.players[me].hand.size(),
+                    (int)s.battlefield.size());
+            }
+            break;                               // nothing left to cast: the chain is spent
+        }
+        const int hand_before = static_cast<int>(s.players[me].hand.size());
+        TurnSolver::ApplyPlan(s, *best, /*is_pre_combat=*/true);
+        if (Trace())
+        {
+            std::fprintf(stderr,
+                "[equip-route]   it%d casts=%d nplans=%d hand %d->%d bf=%d life=%d\n",
+                iters, best_casts, (int)plans.size(), hand_before,
+                (int)s.players[me].hand.size(), (int)s.battlefield.size(),
+                s.players[1 - me].life);
+        }
+        links += best_casts;
+    }
+    if (Trace())
+    {
+        std::fprintf(stderr, "[equip-route] t%d no win: %d link(s), %d iter(s)\n",
+                     s.turn_number, links, iters);
+    }
+    return 0;
+}
+}   // namespace equiproute
+
+bool EquipRouteInProgress() { return equiproute::InRouteFlag(); }
+bool EquipRouteTraceOn()    { return equiproute::Trace(); }
+
+bool EquipRoutePiecesInPlace(const GameState& s, int me)
+{
+    if (!equiproute::On() || equiproute::InRouteFlag()) { return false; }
+    if (s.players[1 - me].life <= 0) { return false; }
+    // THE CHEAP GATE, and it is deliberately a board-inventory conjunction rather than a score --
+    // the same discipline ComboOffPossible is held to. Three things have to be true for the chain
+    // to exist at all: a DRAW watcher so a cast refills the hand, a creature to carry the pile, and
+    // at least one free Equipment to start it. Without all three there is nothing to play out, so
+    // the frame pays only this scan.
+    bool draw_watcher = false, host = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = comboroute::DefOf(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.draw_on_equipment_etb || !d->params.draw_on_cast_subtypes.empty())
+        { draw_watcher = true; }
+        if (p.card.IsCreature()) { host = true; }
+    }
+    bool free_art = false;
+    if ((draw_watcher && host) || equiproute::Trace())   // short-circuit kept off the trace path
+    {
+        for (const Card& c : s.players[me].hand)
+        {
+            const CardDefinition* d = comboroute::DefOf(c);
+            if (d != nullptr && d->card.HasType(CardType::Artifact)
+                && d->card.m_mana_cost.ManaValue() == 0)
+            { free_art = true; break; }
+        }
+    }
+    // GATE CENSUS (diagnostic). Bounded, because this site is reached once per frame per rollout:
+    // without it a missing turn in the playout trace is unattributable -- gate false, or reached
+    // and memo-hit. Counts per turn and prints only when a turn's verdict pattern CHANGES.
+    if (equiproute::Trace())
+    {
+        static thread_local int last_turn = -1, last_code = -1;
+        const int code = (draw_watcher ? 4 : 0) | (host ? 2 : 0) | (free_art ? 1 : 0);
+        if (s.turn_number != last_turn || code != last_code)
+        {
+            std::fprintf(stderr, "[equip-route] gate t%d watcher=%d host=%d free_art=%d\n",
+                         s.turn_number, draw_watcher ? 1 : 0, host ? 1 : 0, free_art ? 1 : 0);
+            last_turn = s.turn_number;
+            last_code = code;
+        }
+    }
+    return draw_watcher && host && free_art;
+}
+
+int EquipRouteTrial(const GameState& s, int me)
+{
+    if (!equiproute::On() || equiproute::InRouteFlag()) { return 0; }
+    // Memoised per board, exactly as the EDF trial is: the enumerator reaches this site many times
+    // for one frame (every rollout, every interior node), and the playout is the expensive half.
+    static thread_local std::unordered_map<std::uint64_t, int> memo;
+    const std::uint64_t key = comboroute::BoardKey(s, me);
+    const std::unordered_map<std::uint64_t, int>::const_iterator it = memo.find(key);
+    if (it != memo.end()) { return it->second; }
+    int r = 0;
+    {
+        RevealLogPause _rlp;            // a trial must leak no reveal/draw events into the game log
+        GameState probe = s;
+        r = equiproute::Run(probe, me);
+    }
+    memo[key] = r;
+    return r;
+}
+
+int EquipRouteApply(GameState& s, int me)
+{
+    if (!equiproute::On()) { return 0; }
+    // ALL-OR-NOTHING, like the EDF apply: the silent trial on a copy decides, and only a verified
+    // kill is played on the live state. Without this an emitted-then-unwound route would leave the
+    // real board mid-chain, which is the one outcome worse than not finding the line.
+    const int verdict = EquipRouteTrial(s, me);
+    if (equiproute::Trace())
+    {
+        std::fprintf(stderr, "[equip-route] APPLY real=%d t%d trial=%d\n",
+                     g_real_resolution ? 1 : 0, s.turn_number, verdict);
+    }
+    if (verdict != 1) { return 0; }
+    return equiproute::Run(s, me);
+}
+
 
 // SAME-MAIN GO-OFF (USER directive, 2026-09-08: "There should be no need to use multiple mains"
 // ... "The more important thing is that we don't have extra mains to search").
