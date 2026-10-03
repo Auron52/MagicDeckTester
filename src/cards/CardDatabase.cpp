@@ -730,6 +730,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.multicolor_cast_damage_per_color = params.value("multicolor_cast_damage_per_color", false);
     p.colored_cast_lifegain = params.value("colored_cast_lifegain", false);
     p.attack_draw_cards = params.value("attack_draw_cards", 0);
+    p.attack_untap_snow_permanents = params.value("attack_untap_snow_permanents", false);
     p.attack_trigger_lifegain = params.value("attack_trigger_lifegain", 0);
     p.attack_team_pump_per_life_gained =
         params.value("attack_team_pump_per_life_gained", false);

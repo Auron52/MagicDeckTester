@@ -7976,6 +7976,28 @@
    }
   },
   {
+   "name": "Jorn, God of Winter",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary",
+    "Snow"
+   ],
+   "subtypes": [
+    "God"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Whenever Jorn attacks, untap each snow permanent you control. [MDFC FRONT FACE of Jorn, God of Winter // Kaldring, the Rimestaff -- the face the deck CASTS (USER 2026-10-03: \"We need to support the other side as it is the useful one\"; USER 2026-09-15 already called it the face you want in a goldfish). The card is listed under its front-face name, as it is named in every zone but the battlefield (CR 712.8). The Kaldring back face is never cast: a 3/3 snow attacker that untaps the whole snow board is strictly the better goldfish play than a graveyard replay that enters tapped. Attack trigger = attack_untap_snow_permanents, applied at declare-attackers in BOTH worlds by the shared ApplyAttackUntapSnow; attackers untap and stay attacking (CR 506.4). The untapped mana is spendable in the post-combat main, so the param flips DeckUsesSecondMain. Snow supertype is load-bearing (Treefolk / Owl / Slumber counts). Legendary: EnforceLegendRule.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_untap_snow_permanents": true
+   }
+  },
+  {
    "name": "Kaldring, the Rimestaff",
    "mana_cost": "{1}{U}{B}",
    "types": [
@@ -7987,7 +8009,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}: You may play target snow permanent card from your graveyard this turn. If you do, it enters tapped. [MDFC BACK FACE of Jorn, God of Winter // Kaldring, the Rimestaff. The Jorn face ({2}{G} 3/3 Legendary Snow Creature - God, \"Whenever Jorn attacks, untap each snow permanent you control\") is NOT modelled -- the decklist names Kaldring explicitly; PROVISIONAL deferral pending user sign-off (full nonland-MDFC face choice is the follow-up if wanted; Jorn would also flip the deck second-main-relevant). The ability is Action::Kind::GraveyardPlayAbility: {T} only (repeatable each turn), one plan variant per distinct legal graveyard NAME (GYP# signature, gyplay= verb -- the Haven convention). A NONLAND target is cast for its own mana cost; a LAND consumes the turn's land drop. \"This turn\" is collapsed into one atomic action (single main phase; activating without playing is strictly dominated). \"If you do, it enters tapped\" is applied inside the shared resolver. Graveyard predicates route ZoneCard (placeholder masks are empty). EnforceLegendRule fires on the play path (4x Marit Lage's Slumber is Legendary). NOTE: a land played this way does not route through LandPlay, so land-only etb params would not fire -- none of this deck's lands carry one.]",
+   "oracle_text": "{T}: You may play target snow permanent card from your graveyard this turn. If you do, it enters tapped. [MDFC BACK FACE of Jorn, God of Winter // Kaldring, the Rimestaff. NEVER CAST (USER 2026-10-03): the deck plays this card as its FRONT face, Jorn, God of Winter (see that entry), and lists it under that name. This entry is kept so the back face stays defined; no shipping list names it. The ability is Action::Kind::GraveyardPlayAbility: {T} only (repeatable each turn), one plan variant per distinct legal graveyard NAME (GYP# signature, gyplay= verb -- the Haven convention). A NONLAND target is cast for its own mana cost; a LAND consumes the turn's land drop. \"This turn\" is collapsed into one atomic action (single main phase; activating without playing is strictly dominated). \"If you do, it enters tapped\" is applied inside the shared resolver. Graveyard predicates route ZoneCard (placeholder masks are empty). EnforceLegendRule fires on the play path (4x Marit Lage's Slumber is Legendary). NOTE: a land played this way does not route through LandPlay, so land-only etb params would not fire -- none of this deck's lands carry one.]",
    "template": "custom",
    "parameters": {
     "gy_play_cost": "{0}",

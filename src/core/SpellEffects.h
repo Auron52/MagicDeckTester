@@ -14115,6 +14115,38 @@ inline int SnowPermanentCount(const GameState& state, int controller_index)
     return count;
 }
 
+// ---- Jorn, God of Winter: "Whenever Jorn attacks, untap each snow permanent you control." --------
+// Self-only attack trigger (CardParams::attack_untap_snow_permanents), applied at declare-attackers
+// in BOTH worlds (GameEngine::CombatPhase executor + TurnSolver::SimulateCombat rollout) from this
+// one helper, right after ApplyAttackDrawTriggers. "Snow permanent" is the same test
+// SnowPermanentCount uses (printed supertype, or an ice counter while ice grants snow). Attacking
+// creatures untap too and stay attacking (CR 506.4). One untap per attacking Jorn; Jorn is
+// legendary, so in practice exactly one. Gated: no attacker with the param -> untouched, so every
+// other deck is byte-identical.
+inline void ApplyAttackUntapSnow(GameState& state, int controller,
+                                 const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    bool fire = false;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& self = state.battlefield[idx];
+        if (self.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
+        if (d && d->params.attack_untap_snow_permanents) { fire = true; break; }
+    }
+    if (!fire) { return; }
+    const bool ice_grants = AnyIceCounters(state) && IceGrantsSnow(state);
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.tapped) { continue; }
+        if (p.card.HasSupertype(Supertype::Snow) || (ice_grants && p.ice_counters > 0))
+        { p.tapped = false; }
+    }
+}
+
 // ---- Creature Giving upkeep triggers (Varchild's War-Riders / Defense of the Heart) -----------
 // Both are UPKEEP effects of the active player, applied IDENTICALLY at the executor's upkeep
 // (GameEngine::RestOfUpkeep) and the rollout's simulated turn-start (TurnSolver::

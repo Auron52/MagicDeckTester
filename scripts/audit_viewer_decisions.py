@@ -1027,6 +1027,7 @@ INERT_PARAMS = {
     # decisions -- Archangel banking, Unite mode collapse, Deathrite fungible-fuel picks, the
     # planeswalker/Garth heuristic sub-picks -- were user-approved 2026-08-06, disclosed in 6a.)
     "attack_draw_cards": "automatic attack trigger (Two-Headed Hellkite: draw on attack), no choice",
+    "attack_untap_snow_permanents": "automatic attack trigger (Jorn: untap each snow permanent), no choice",
     "colored_cast_lifegain": "automatic on-cast lifegain (Ancient Cornucopia, once per turn), no choice",
     "multicolor_cast_damage_per_color": "automatic on-cast trigger (Mana Cannons); 'any target' -> face in goldfish (disclosed)",
     "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",

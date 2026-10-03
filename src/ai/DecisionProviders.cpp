@@ -21671,9 +21671,9 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
 //   * a snow permanent replayed off Kaldring            -- pays its own cost; a LAND replayed off
 //                                                          it still consumes the one land drop
 // so `snow_gain <= land_drop + max_mana`, and `max_mana` needs no yield arithmetic: NOTHING in
-// this pool untaps a permanent or produces two mana from one tap (Jorn -- the MDFC front face
-// that untaps every snow permanent -- is deliberately NOT modelled; only the Kaldring back face
-// is in the deck), so each permanent we control can contribute at most one mana per turn.
+// this pool untaps a permanent BEFORE DAMAGE or produces two mana from one tap (Jorn's untap fires
+// at declare-attackers, after the last point any mana can feed this turn's damage -- see
+// SnowCertKnownDef), so each permanent we control can contribute at most one mana before damage.
 // Counting every untapped permanent as one mana is therefore an upper bound that cannot be beaten,
 // and it stays an upper bound as the board grows.
 namespace {
@@ -21895,7 +21895,7 @@ bool SnowCertKnownDef(const CardDefinition* d)
         "Skred", "Rimefeather Owl", "Scrying Sheets", "Snow-Covered Island",
         "Snow-Covered Forest", "Snow-Covered Mountain", "Coldsteel Heart", "Boreal Druid",
         "Abominable Treefolk", "Arcum's Astrolabe", "Frost Augur", "Ice-Fang Coatl",
-        "Kaldring, the Rimestaff", "Marit Lage's Slumber", "Rimewood Falls",
+        "Jorn, God of Winter", "Marit Lage's Slumber", "Rimewood Falls",
         "Rimescale Dragon", "Highland Weald",
         // sideboard. Unreachable today (the deck runs no wish), listed so that making one
         // reachable does not silently widen what the argument covers.
@@ -21920,9 +21920,19 @@ bool SnowCertKnownDef(const CardDefinition* d)
     //
     // A name-keyed pool cannot defend against it (whoever models Jorn adds the name and the gate
     // opens), so the untap test is applied to the DEFINITION, after the pool test and regardless of
-    // it. A NEW param for Jorn's attack trigger would still need adding to this list -- which is
-    // why the list is here, at the gate every reachable card passes through, rather than in a
-    // comment somewhere else.
+    // it. A NEW untap param would still need adding to this list -- which is why the list is here,
+    // at the gate every reachable card passes through, rather than in a comment somewhere else.
+    //
+    // JORN IS NOW MODELLED (USER 2026-10-03) AND ADMITTED, deliberately NOT through this list. Its
+    // untap (attack_untap_snow_permanents) fires at DECLARE-ATTACKERS, and nothing after that point
+    // can raise this turn's damage: the engine opens no priority window in combat (the disclosed
+    // Flash gap -- Ice-Fang Coatl), this pool has no firebreathing or other combat mana sink, and
+    // every attacker's power is read from a snow count that a main-2 cast cannot reach back into.
+    // So the untapped mana is main-2 mana only, and the bound below -- mana available BEFORE damage
+    // -- is still one per permanent. Jorn itself is an ordinary attacker (fixed_combat, 3 power)
+    // and, cast this turn, an ordinary snow permanent paid from that same bound. If the engine
+    // ever gains a combat priority window or this pool a combat mana sink, this argument fails
+    // and attack_untap_snow_permanents must join the list.
     if (ok)
     {
         const CardParams& p = d->params;

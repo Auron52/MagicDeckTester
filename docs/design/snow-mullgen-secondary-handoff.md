@@ -232,6 +232,25 @@ Note what the gate said. A profile that **failed** its A/B is quarantined by the
 `*.keepmodel.exhaustive.profile.DISABLED.json` — renaming is what actually deactivates it, because
 **presence is adoption** for these artifacts. Send it either way; a failure is a result.
 
+### 7a. Adopting it after the Jorn change (2026-10-03) — one rename, no regeneration
+
+This generation runs on the engine where Snow's MDFC was played as its **back** face, Kaldring, the
+Rimestaff. Since 2026-10-03 the deck plays its **front** face, **Jorn, God of Winter**, and lists it
+under that name (`decks/Snow/Snow.cod`, `Snow.profile.json`'s `card_scores`, `cards.json`). It is the
+same physical card, and it keeps the same card number (#26 — Jorn and Kaldring fall in the same
+alphabetical slot, so every shuffle is unchanged). The user's decision is to **adopt the table as
+generated, not regenerate it**: it was fitted to slightly different play, and that is accepted.
+
+* **On the secondary box: do NOT pull the Jorn commit mid-run.** It changes `deck_fp` (decklist +
+  `cards.json`) and `bucket_fp` (profile), so a resume on it refuses the journal. Finish on the frozen
+  commit the run started on.
+* **At adoption, rewrite the one name** in the returned
+  `Snow.keepmodel.exhaustive.profile.json` — its `exhaustive_keep.buckets` and its `card_scores` —
+  `"Kaldring, the Rimestaff"` → `"Jorn, God of Winter"`. Play matches a hand to buckets **by card
+  name** and the play loader runs no fingerprint check (`deck_fp`/`bucket_fp` are read only in
+  `src/analyzer/`), so nothing would refuse the stale name: Jorn in hand would match no bucket. Check afterwards: `zcat`/`grep -c Kaldring` on the table must be 0.
+* Leave the raw sidecar untouched: it is the record of what was generated, on its own commit.
+
 ---
 
 ## 8. If you would rather POOL than finish

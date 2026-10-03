@@ -38435,6 +38435,10 @@ static void SimulateCombat(GameState& state)
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
     ApplyAttackDrawTriggers(state, active, atk_idx);
 
+    // Jorn, God of Winter: untap each snow permanent we control (attack_untap_snow_permanents).
+    // The mana is spendable in the post-combat main. Mirrors GameEngine::CombatPhase -- ONE shared helper.
+    ApplyAttackUntapSnow(state, active, atk_idx);
+
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens entering attacking are pumped, and BEFORE the damage loop reads power.
     // Mirrors GameEngine::CombatPhase (executor) -- lockstep, ONE shared helper. Gated inert.

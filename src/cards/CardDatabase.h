@@ -83,6 +83,12 @@ struct CardParams
     // DeckUsesSecondMain (cards drawn in combat are a combat-generated resource, 2c-bis).
     int attack_draw_cards = 0;
 
+    // Jorn, God of Winter: "Whenever Jorn attacks, untap each snow permanent you control." Self-only
+    // attack trigger, applied at declare-attackers by ApplyAttackUntapSnow in BOTH executor and
+    // rollout, right after ApplyAttackDrawTriggers. The untapped mana is only spendable after
+    // attackers are declared, i.e. in the post-combat main, so it FLIPS DeckUsesSecondMain.
+    bool attack_untap_snow_permanents = false;
+
     // Blossoming Bogbeast: "Whenever this creature attacks, you gain 2 life. Then creatures you
     // control gain trample and get +X/+X until end of turn, where X is the amount of life you
     // gained this turn." ONE printed trigger, TWO params, so the read ORDER is structural rather

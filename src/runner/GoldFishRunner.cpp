@@ -157,6 +157,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     engine silently wastes the trigger every turn.
         if (def->params.attack_draw_cards > 0) { return true; }
 
+        //   * JORN, GOD OF WINTER (attack-trigger untap): "Whenever Jorn attacks, untap each snow
+        //     permanent you control" -- the untapped mana is a resource GENERATED DURING COMBAT
+        //     (2c-bis), spendable only in a post-combat main. Same shape as attack_draw_cards.
+        if (def->params.attack_untap_snow_permanents) { return true; }
+
         //   * TECTONIC GIANT (modal attack trigger, impulse mode): "exile the top two cards of
         //     your library ... until the end of your next turn you may play that card" -- the
         //     staged card is a resource GENERATED DURING COMBAT, exactly the attack_draw_cards

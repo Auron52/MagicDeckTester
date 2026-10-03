@@ -2212,6 +2212,15 @@
     "toughness": null,
     "type_line": "Land — Mountain Forest Plains"
   },
+  "Jorn, God of Winter": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever Jorn attacks, untap each snow permanent you control.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Snow Creature — God"
+  },
   "Kaldring, the Rimestaff": {
     "cmc": 3.0,
     "keywords": [],
