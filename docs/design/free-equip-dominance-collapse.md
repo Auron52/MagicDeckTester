@@ -891,3 +891,68 @@ have been reporting the instrument.** Run the control; the control is the findin
    small-buffer-optimised action list is the shape, and it is a bigger change than anything here.
 3. **The keep table** still removes the 36.6% `probe=1` block outright, and it is the user's ruled
    next stage (mulligan first, then the leaf).
+
+### 9h. ADOPTED: `host_stats` was recomputed once per (equipment, host) PAIR — the biggest single win so far
+
+The aura sort (§9e) was found by profiling wall. This one was found by profiling **instructions**, and
+the two profiles rank completely differently — which is itself the lesson. By instruction count on
+kittyv2 the top entries are `BuildSimKey` 8.15%, `CardDatabase::LookupCached` 6.90%, `CollectActions`
++ its lambdas 6.54%, `ComputeLordBonus` + its lambda 5.91%; by wall-clock samples `LookupCached` is
+2.25% and `BuildSimKey` 1.08%. A flat wall profile would never have surfaced this.
+
+perf on this box cannot produce a call graph at all, so `logs/ab/cg_callers.py` was written to read
+caller→callee pairs with call counts out of the callgrind out-file. It named the site immediately:
+
+```
+incl Ir          calls  caller
+2,125,281,043  1,759,845  CollectActions::{lambda(int)#1}      <- 7.3% of the WHOLE program
+1,125,369,208 28,395,167  ComputeLordBonus::{lambda(Permanent const&)}   <- ~16 permanents per call
+```
+
+The site is `host_stats(id)` in CollectActions' equip section, reached through
+`rider_delta(ed2, id)`. **`rider_delta` is called once per (equipment, host) pair while `host_stats`
+depends only on `id`** — so with E equipment and H hosts the loop asks for E×H stats over H distinct
+hosts. Each miss walks the battlefield to find the host, then pays `EquipGatePowerOf` →
+`ComputeLordBonus` **with no precomputed lord index**, which walks the battlefield a second time. On
+a mid-go-off equipment board that is ~16 permanents, twice, ~10× more often than necessary.
+
+Memoising it is an **identity, not an approximation**: `CollectActions` takes `const GameState&`,
+`ap` is a `const Player&`, and nothing in the function mutates either, so a given `id` has one answer
+for the whole call. A flat vector rather than a map — H is a handful of creatures, so a linear probe
+beats a hash and costs no per-lookup allocation.
+
+Measured, baseline = the previous commit (the aura guard), so this is the memo **alone**:
+
+| deck | baseline Ir | + memo Ir | ×Ir | |
+|---|---|---|---|---|
+| kittyv2 | 29,093,319,574 | 25,987,750,949 | **0.8933** | found here |
+| kitty v1 | 6,855,352,938 | 6,543,911,646 | **0.9546** | the other equipment deck, and the one holding suite GT |
+| auras | 1,965,858,604 | 1,967,105,503 | 1.0006 | negative control — no Equipment, never reaches the section |
+| smoke, whole fleet | — | — | **107 passed / 0 failed, configs changed: 0, `play-changed=0`** | |
+
+And the mechanism is confirmed to have fired rather than inferred from the total:
+
+| | before | after | |
+|---|---|---|---|
+| `ComputeLordBonus` total inclusive Ir | 3,351,588,485 | 241,514,373 | 13.9× less |
+| calls from the memoised site | 1,759,845 | 77,547 | 22.7× fewer |
+| inner `process_lord` permanent visits | 28,395,167 | 1,829,151 | 15.5× fewer |
+
+The 3.11e9 instructions that left `ComputeLordBonus` **are** the program's entire 3.106e9 delta, so
+this one memo is the whole 10.7%. The control's +0.06% is not zero and is not pretended to be: the
+lambda split changes inlining inside `CollectActions`, which every deck calls. It is 0.06% against
+4.5–10.7%, on a change that is byte-identical everywhere.
+
+**Why this was worth more than the funnel work in §9b.** 109M rejected odometer positions consume no
+budget units and were already shown free of wall on this deck; a value recomputed 10× over is
+realised work on every single pass. Count the loop you mean to change
+(memory `two-hosts-not-one-measure-where-the-applies-are`) — and when wall and instructions disagree
+about what is hot, the one that localises a cause is the one to follow.
+
+**Still open at this site, deliberately not taken:** `EquipGatePowerOf` calls `ComputeLordBonus`
+without the `controlled_lord_idx` / `controlled_anthem_idx` fast path that `GatherBoardSources`
+already builds and that three other call sites already pass. That would cut the remaining
+battlefield walk too, but `EquipGatePowerOf` is shared with the executor (`SpellEffects.cpp`,
+`SpellEffects.h`), so it is an executor-lockstep change and needs its own argument about whether
+`bs.lords` is exactly the set `process_lord` can act on. The memo above removed ~96% of the traffic
+first, which is the cheap half.

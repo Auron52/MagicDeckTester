@@ -21626,7 +21626,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // charges / creature-side conditional double strike). Looked up by host id across
             // battlefield-then-hand; a hand host reads its printed card (it has nothing attached).
             struct HostStats { int pw = 0; int n_att = 0; bool ds = false; const CardDefinition* def = nullptr; };
-            auto host_stats = [&](int id) -> HostStats {
+            auto host_stats_fresh = [&](int id) -> HostStats {
                 HostStats st;
                 for (const Permanent& q : state.battlefield)
                 {
@@ -21647,6 +21647,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     st.ds  = c.HasKeyword(Keyword::DoubleStrike);
                     return st;
                 }
+                return st;
+            };
+            // MEMO per host id, and it is an IDENTITY not an approximation: `host_stats` reads only
+            // `id`, `state.battlefield` and `ap.hand`, and CollectActions takes `const GameState&`
+            // and mutates nothing -- so the same id has the same answer for the whole call. What
+            // made the repeats expensive is `rider_delta(ed2, id)`, which the pair loop below asks
+            // once per (EQUIPMENT, HOST) pair while there are only H distinct hosts: each miss walks
+            // the battlefield to find the host and then pays EquipGatePowerOf -> ComputeLordBonus
+            // with NO precomputed lord index, which walks the battlefield a SECOND time.
+            //
+            // Measured on KittyEquipment v2 (callgrind, 6 games at the suite's d5/b20): this call
+            // site reaches ComputeLordBonus 1,759,845 times for 2.13e9 instructions = 7.3% of the
+            // whole program, and the inner process_lord lambda runs 28,395,167 times -- ~16
+            // permanents per call, which is what a mid-go-off equipment board looks like.
+            //
+            // A flat vector, not a map: H is a handful of creatures, so the linear probe beats a
+            // hash and costs no allocation per lookup. Keyed on id alone for the reason above.
+            std::vector<std::pair<int, HostStats>> host_cache;
+            auto host_stats = [&](int id) -> HostStats {
+                for (const std::pair<int, HostStats>& e : host_cache)
+                { if (e.first == id) { return e.second; } }
+                const HostStats st = host_stats_fresh(id);
+                host_cache.emplace_back(id, st);
                 return st;
             };
             // What attaching `ed` to host `id` is WORTH beyond haste: realized attack-damage
