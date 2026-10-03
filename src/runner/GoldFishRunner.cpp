@@ -1114,6 +1114,15 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner
     // uses to decide whether to play post-combat mains, so the two can never disagree.
     state.uses_second_main     = DeckUsesSecondMain(deck);
+    // Jorn's per-turn main 2 (UntapSecondMainLive) is only ever live in a deck that runs the card.
+    state.deck_has_attack_untap = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.attack_untap_snow_permanents) { return true; }
+        }
+        return false;
+    }();
     // Card-dependency-map pull closure (DeriveDependencyPulls above): which dependency classes
     // the classifier pulls to Main1 for this deck.
     const DependencyPulls dep_pulls = DeriveDependencyPulls(deck);

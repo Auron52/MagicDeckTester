@@ -14169,6 +14169,7 @@ inline void UntapSnowPermanents(GameState& state, int controller)
 // either way. A Jorn cast this turn is summoning-sick, did not attack, and does not open main 2.
 inline bool UntapSecondMainLive(const GameState& state)
 {
+    if (!state.deck_has_attack_untap) { return false; }   // deck constant: no scan for other decks
     const int me = state.active_player_index;
     for (const Permanent& p : state.battlefield)
     {

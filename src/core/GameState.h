@@ -619,6 +619,11 @@ struct GameState
     // classifier inactive for any state not built through SetupGame (conservative: a filter that
     // silently narrows nothing beats one that silently deletes casts).
     bool                     uses_second_main      = false;
+    // Does the deck run an attack-untap card (Jorn, God of Winter: attack_untap_snow_permanents)?
+    // DECK CONSTANT, stamped by StampDeckTraits. Short-circuits UntapSecondMainLive -- read at every
+    // post-combat site of every deck -- so a deck without one never pays its battlefield scan.
+    // Lives in the padding after the two bools above, so sizeof(GameState) does not move.
+    bool                     deck_has_attack_untap = false;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole

@@ -67,6 +67,7 @@ GameState Fresh()
     s.turn_number         = 5;
     s.players[0].life     = gamesetup::StartingLife();
     s.players[1].life     = gamesetup::StartingLife();
+    s.deck_has_attack_untap = true;   // StampDeckTraits sets it for a deck running Jorn
     return s;
 }
 
@@ -122,6 +123,13 @@ TEST_CASE("Second main is live only when our Jorn could attack this turn")
         GameState s = Fresh();
         PutTapped(s, "Snow-Covered Forest", 0, 3);
         CHECK_FALSE(UntapSecondMainLive(s));                      // no Jorn
+    }
+    {
+        GameState s = Fresh();
+        s.deck_has_attack_untap = false;                          // a deck without one never scans
+        const int j = PutTapped(s, "Jorn, God of Winter", 0, 1);
+        s.battlefield[j].tapped = false;
+        CHECK_FALSE(UntapSecondMainLive(s));
     }
     {
         GameState s = Fresh();

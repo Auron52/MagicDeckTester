@@ -334,6 +334,9 @@ static_assert(sizeof(Player) == 200,
 // written only on the REAL state by AIEngine::TakeTurn after a complete search through max_turns, and
 // read only by GameEngine::PlayOutFrom to end the game. Every state a dominance probe could compare
 // inside one search carries the same value (it is never written by the search), so nothing to fold.
+// +bool (2026-10-03, no size change -- it sits in the padding after uses_second_main): `deck_has_attack_untap`.
+// Classification: DECK CONSTANT, stamped once in StampDeckTraits; only short-circuits
+// UntapSecondMainLive, so it is identical across every pair of states Build() compares -- nothing to fold.
 static_assert(sizeof(GameState) == 864,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
