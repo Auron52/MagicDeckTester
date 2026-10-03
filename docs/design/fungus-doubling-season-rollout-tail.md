@@ -88,3 +88,26 @@ that -- it converts a bounded generation into an unbounded one and it is invisib
 line has been flat for an hour. Bound it by REACHABLE STATES rather than by a wall clock where
 possible (the labeller precedent), and record a truncation when it bites so the cell is not silently
 scored as converged.
+
+---
+
+## 6a. STATUS UPDATE (2026-10-03): still open, but no longer the feasibility blocker
+
+Section 6 asked for a per-rollout bound because *"a single degenerate cell should not be able to"*
+hold a core for hours. That is still the right ask and it is still unbuilt. What changed is the
+SIZE of the problem: `632fde7a` deck-gated an ungated full-board soulbond scan in `FireEtbWatchers`
+whose cost was `O(entrants x board_width)` -- i.e. quadratic in exactly the board these degenerate
+cells build. Measured with `MTG_KEEP_REPLAY` on the candidate-b K=17 journal's two worst cells:
+
+* worst cell **12.12 h -> 28.7 s (1,523x)**
+* second-worst **11.74 h -> still running at 13 min when stopped (>=54x, NOT closed)**
+
+Aggregate, matched on journal progress: **2.4x of wall** on the generation, slow-rollout density
+1-per-66 s -> 1-per-420 s, worst observed 151 s.
+
+**The second cell is why this section stays open.** A deck-constant fold removed the scan that made
+the tail catastrophic; it did not give the refine phase a bound, so a future card, list or board
+shape can reopen the same hole with no tripwire. Build the reachable-states bound on its merits --
+just do not price it as the difference between a feasible and an infeasible run any more.
+
+Full measurement: `slow-rollout-tail-and-the-uncharged-greedy-walk.md`, AMENDMENT 3.

@@ -804,3 +804,77 @@ work -- re-profile instead of re-using the previous answer.
 still only in the cell count and in pooling interchangeable tokens. What it changes is the advice
 "do not re-open" -- that applies to the BUDGET lever specifically, not to re-profiling. **Re-profile
 after any batch of fixes lands; a flat profile is a fact about a binary, not about a deck.**
+
+---
+
+# AMENDMENT 3 (2026-10-03): the 1.17x was an AVERAGE, and it understated the fix by ~2.5x
+
+The section above closes with *"~1.17x, and it does NOT change the strategic picture"*. **Measurement
+refutes that sentence.** On the workload that actually remained of the candidate-b K=17 generation,
+the soulbond gate (`632fde7a`) is worth **2.4x-3.0x of WALL**, not 1.17x -- and it removed the
+degenerate tail almost entirely.
+
+## Why an average was the wrong statistic
+
+The 15.07% -> 0.40% figure was a **profile share averaged over a floor pass**. But the defect's cost
+is `O(entrants x board_width)`: it ran a full battlefield walk, with a `LookupCached` per permanent,
+for every creature entering. On a Saproling/Doubling-Season board that is **quadratic in board
+width**, so its cost is not spread evenly over rollouts -- it is concentrated in precisely the
+rollouts whose boards get wide. Those are the degenerate cells that dominate the makespan.
+
+An average over a mixed population therefore understates the fix exactly where the fix matters.
+**When a defect's cost scales with a state dimension, the aggregate profile share is a lower bound on
+its worst-case cost. Price it on the tail, not on the mean.**
+
+## Measured, per-rollout (MTG_KEEP_REPLAY, byte-identical to the gen's own run_one)
+
+| cell (K=17 labels) | in the generation | on the fixed binary | factor |
+|---|---|---|---|
+| `Wild Growth x1; Utopia Mycon x1; Peat Bog (+1) x1; Doubling Season x4` (size7 draw r=0) | **43,647,925 ms = 12.12 h** | **28,669 ms** | **1,523x** |
+| `Vitaspore Thallid (+1) x1; Sol Ring x1; Doubling Season x3; Brightcap Badger (+2) x2` (size7 play r=1) | 42,249,670 ms = 11.74 h | >13 min, stopped unfinished | **>=54x, NOT closed** |
+
+The second row is the honest half: **the tail is massively reduced but not uniformly eliminated.**
+One cell went to 28.7 s; another is still minutes-to-unknown. `fungus-doubling-season-rollout-tail.md`
+section 6 (a per-rollout bound by REACHABLE STATES, recording a truncation when it bites) is
+therefore still OPEN and still worth building -- it is simply no longer the difference between a
+feasible and an infeasible generation.
+
+## Measured, aggregate -- matched on PROGRESS, which is the only fair comparison
+
+A resume starts from the same journal, so "the original run's last N seconds" and "the resumed run's
+first N seconds" are the same work at the same point. Same box, 24 threads, 20.8 cores busy on both.
+
+| window | rollouts | rate |
+|---|---|---|
+| original run, final 2,100 s (62,408 -> 64,508 s) | 103,520 | 49.3/s |
+| resumed run on the fixed binary, first 2,100 s | 252,928 | **120.4/s** |
+| original run, final 1,500 s | 65,280 | 43.5/s |
+| resumed run, first 1,500 s | 195,764 | **130.5/s** |
+
+**2.4x on the 2,100 s window, 3.0x on the 1,500 s window.** The marginal rate decays inside a wave
+in both runs (easy cells finish first), so the shorter window flatters the fix; 2.4x is the number to
+plan with. Slow-rollout DENSITY is the corroborating signal and it is unambiguous: **1 per 66 s in
+the original phase, 1 per 420 s on the fix, worst 151 s instead of 12.12 h.**
+
+## A correction to this document's own tail accounting
+
+An earlier reading of `Fungus.keepmodel.exhaustive.raw.json.slow.log` put the degenerate tail at
+~73% of all compute. **That was wrong: the slow log is APPEND-MODE across runs**, so it mixed the
+K=22 run's 3,450 slow rollouts (216.0 core-h, worst 7.14 h) with the K=17 run's. Split at the first
+`(+N)` merged label -- which only the K=17 bucketing can produce -- the K=17 figures are:
+
+* 424 slow keep-rollouts, **99.4 of the run's 430.1 core-h = 23.1%**
+* top 20 = 78.8 core-h = 79.3% of the slow total, i.e. **18.3% of the whole run**
+* worst 12.12 h, median slow rollout 41 s
+
+So the tail was 23%, not 73%. **Any accounting over that file must be split by era first** -- and the
+`(+N)` label is the discriminator that does it, because a merged bucket's label cannot exist before
+the merge.
+
+## Why the whole-run speedup exceeds the sum of its per-rollout parts
+
+23% of compute in the tail cannot by itself yield 2.4x. The rest is a MAKESPAN effect: a 12-hour
+rollout **parks one of 24 worker threads for 12 hours**, so the degenerate cells cost far more in
+wall than in core-hours. Removing them returns threads to the pool. This is the same shape as the
+`MTG_SAC_OUTLET_POOL` adoption, which moved CPU 1.07x against wall 1.32x. **On a pooled queue with a
+heavy-tailed work distribution, core-hours understate the value of killing the tail; measure wall.**
