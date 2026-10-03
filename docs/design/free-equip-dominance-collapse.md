@@ -1042,3 +1042,149 @@ the declaration says so, and says what a future recursive fold would have to do 
 **No deck is a negative control for this one** — every deck builds sim keys — so the soundness
 control is digest equality plus the smoke suite rather than an unaffected deck. Saying that is better
 than nominating a deck and pretending it is unaffected.
+
+## 10. The GENERATION shape is a different cost shape, and the 12 h mulligan target (2026-10-03)
+
+Everything in §9 was priced at the suite's worst *searched* cell, `--budget-ms 20 --max-turns 8`
+(d5/b20). That is the right shape for the regression tier and the wrong one for the question the
+user actually asked, which is **how long the exhaustive mulligan profile takes**. Mulligan
+generation runs at `value_play.mull_gen_depth` / `mull_gen_budget_ms` — for v2, **d1/b3**
+(commit `fa19e1ac`), derived rather than guessed.
+
+### 10a. The harness, and why it is the real one
+
+```
+MTG_SCORE_COMPS=1 MTG_SCORE_HANDS=N MTG_SCORE_R=R \
+MTG_EQUIV_DEPTH=1 MTG_SCORE_BUDGET_MS=3 MTG_SCORE_HAND_SEED=424242 \
+  taskset -c <cpu> valgrind --tool=callgrind build/Profile/mtg-analyze <deck> ...
+```
+
+`MTG_SCORE_COMPS` is what `scripts/derive_mullgen_setting.py` scores with, and its inner call is
+`AIEngine::RolloutKeepWinTurn(s, 0, max_turns)` at `(MTG_EQUIV_DEPTH, MTG_SCORE_BUDGET_MS)` — the
+same call the generator makes per cell per rollout. So this profiles the generation workload rather
+than a proxy for it. `taskset -c` pins ONE cpu so `concurrency_util::AffinityCpuCount()` reports 1
+and the scorer is single-threaded and attributable. Script: `logs/ab/genprof.sh`.
+
+### 10b. The two shapes rank differently
+
+| function | SUITE d5/b20 | GEN d1/b3 |
+|---|---|---|
+| `BuildSimKey` (+lambda) | 9.12% | **5.08%** |
+| `SolveUncached` (+lambda) | 6.84% | **8.42%** |
+| `EnumeratePlans` (+lambdas) | — | 5.24% |
+| `FungibleEquipCopyAdvance` | *absent from the top list* | **3.15%** |
+| `PrePlanAvailabilityKeys` | 3.06% | 2.01% |
+| `SubsetHasShroudBlockedEquip` | 2.34% | 2.24% |
+| `SubsetHasStrandedEquip` | 2.04% | 1.79% |
+| `EquipPieceDepViolated` | — | 1.39% |
+| `EffectiveSpellCost` | 2.16% | 0.78% (§9i's fusion landed) |
+
+So the §9g priority list does **not** transfer: `BuildSimKey`'s library-digest loops, ranked first
+there, are 0.06% + 0.10% here, and the equip-enumeration family — invisible or small at d5/b20 — is
+the top of the list. **Price a deck at the settings it will actually be run at.** This file already
+records that lesson once (§8's retraction of the "8x over the gate" figure); it applies in both
+directions.
+
+**One hypothesis died before any code, which is the cheap way for it to die.** Per-rollout SETUP
+looked like it must matter at generation scale: `GoldFishRunner::StampDeckTraits` makes ~7 full-deck
+passes with a `LookupCached` per card, once per `SetupGame`, i.e. once per rollout, and generation
+runs millions of rollouts. Measured: `SetupGame` is **17.68M Ir over 100 calls = 0.02%** against
+897M Ir *per rollout*. The rollout plays out a whole game; setup is 1/5000th of it.
+
+### 10c. ADOPTED: five frozen-board / compacted-walk collapses (`f0b3ae77`)
+
+All five are identities, not narrowings.
+
+1. **`FungibleEquipClasses::members`.** The two per-position copy predicates walked every group and
+   `continue`d past each non-member — 54% of their group visits, the loop control alone 1.21% and
+   the `c < 0` arm 0.54%. Now a compacted ascending member list, with `last[]` init bounded by the
+   real class count rather than `kMaxFungibleClasses = 16`.
+2. **`PrePlanAvailabilityKeys`.** `for (mode = 1..31) if (bits & (1 << mode))` paid 31 iterations to
+   find the one or two modes a permanent offers. Now `rest &= rest - 1` + `std::countr_zero` —
+   `<bit>`, because **MSVC has no `__builtin_ctz`** and this repo has a Windows determinism-parity
+   CI job.
+3. **`EnumeratePlans`' legacy-scalar mana sum.** Hoisted `cand_mv`, which Solve's twin walker has
+   had since "ManaValue was ~6% of a Melira game as a sum recomputed per position per digit". The
+   mirror never got it.
+4. **`SubsetHasStrandedEquip`'s `on_bf`.** A full battlefield scan per selected equip per SUBSET,
+   twice (source and victim), asking what the frozen board already answers. Precomputed per
+   candidate. The `cast_here` half genuinely depends on the subset and is untouched.
+5. **`SubsetHasShroudBlockedEquip`'s `shroud_src_of`.** A battlefield scan PLUS `CreatureHasShroud`
+   (itself an attachment walk) per selected equip per SUBSET, answering 0 on every deck with no
+   shroud-granting Equipment. Precomputed, plus an `any_shroud` bit that collapses the filter to one
+   early-out.
+
+4 and 5 are the move this file already made twice — `sac_src_def` (§ the sac-source table) and
+`FodderIndex` — one filter family over. 5's grantor pass is the shape `CreatureHasLifelink`'s
+`granter_idx` already documents in `SpellEffects.h`: **an empty grantor set is a PROOF the per-host
+scan would find nothing.**
+
+Cumulative ×Ir vs `954cab54`, measured directly rather than multiplied:
+
+| arm | ×Ir |
+|---|---|
+| GEN d1/b3 kittyv2 | **0.94507** |
+| GEN d1/b3 auras (control) | 0.98431 |
+| SUITE d5/b20 kittyv2 | **0.95310** |
+| SUITE d5/b20 kitty v1 | **0.98684** (net win: 1–3 gave −1.66%, 4–5 took back +0.35%) |
+| SUITE d5/b20 auras (control) | 0.99171 |
+| SUITE d5/b20 goblins | 0.99372 |
+
+`units_per_rollout` is **identical** on both generation arms (kittyv2 6302.78, auras 4684.78), which
+is a stronger soundness signal than the suite arms' digest column — that column is vacuous in this
+harness, every run printing `digest=none`. Smoke 107/107 with `configs changed: 0` and
+`play-changed=0`, re-run after every revision below.
+
+**ATTRIBUTION NEEDED TWO DIFFERENT INSTRUMENTS, and that is worth keeping.** Collapses 1–3 read
+0.98382 on kittyv2 at generation shape — and the negative control read **0.98401**, i.e. the same.
+That does not refute them; it refutes the *attribution*, because collapse 2 reaches every deck and
+`auras` carries many permanents. The per-FUNCTION shares settled it instead
+(`FungibleEquipCopyAdvance` 3.23% → 1.89%, `PrePlanAvailabilityKeys` 2.03% → 0.94%, both far outside
+the ±0.5pp sample drift). Collapses 4–5 then read 0.96067 with the control at **1.00032**, exact by
+construction: both filters are gated on `pre.equip`, and neither control deck holds an Equipment, so
+neither filter is ever called there. *Design the control so it can be exact when it can be.*
+
+**THREE CUTS OF 4–5 WERE MEASURED AND REJECTED** — recorded so they are not re-tried:
+
+| cut | kittyv2 GEN | kitty v1 SUITE |
+|---|---|---|
+| `CreatureHasShroud` per equip CANDIDATE, behind a battlefield scan | 0.96204 | 1.00389 |
+| `CreatureHasShroud` per controlled PERMANENT | 0.96402 | 1.00652 |
+| LAZY, built on first query | 0.96428 | 1.00393 |
+| **eager, grantors collected by walking ATTACHMENTS** | **0.96067** | 1.00347 |
+
+The first two are O(board²) however they are hoisted. The lazy variant is the interesting failure:
+it was written specifically to remove v1's regression, and it removed none of it while costing v2
+more — the per-subset "is it built yet?" check outweighs one eager build. The residual +0.35% on
+kitty v1 is **accepted on the user's ruling** (*"I'm less worried about V1, since it is going to be
+replaced if it is necessary to choose"*); v1 is a wide board with few equip candidates, so the
+per-enumeration index amortises over fewer subset queries there.
+
+### 10d. What the mulligan profile actually costs
+
+`--gen-mulligan recommend` on a box to itself (a wall-clock deliverable, so it cannot share cores):
+
+```
+=== GEN-TIME PROJECTION (from floor pass) ===
+  floor pass: 2325s @ 80 rollouts/s;  186476 cells (both pd)
+  projected COMPLETE (full bottom, R40): ~25.8 h
+  projected FAST     (adaptive,   R30): ~12.9 h
+  overnight target: ~12.0 h  ->  BOTH exceed overnight (~1.1x even for fast)
+```
+
+Discovery merged to **K=15** buckets — the five shields into one 16-card class, Ancient Den +1 —
+giving 93,238 distinct hands (size7 58,687) and 186,476 cells both-pd. The probe chunk (R=1, every
+cell) is written and a later `complete`/`fast` run reuses it as its r=0 slice, so the scout is not
+sunk cost.
+
+**THE SLOW TAIL IS NOT THE LEVER, and checking that is what pointed the work at the median rollout.**
+38 rollouts ≥30 s out of 60,068 is ~5% of the work, even though the log is alarming in isolation
+(worst single rollouts: 539 s on a size-6 cell, 223 s, 134 s). Amplified to R40 the 539 s cell is
+~4.5 core-hours against an ~825 core-hour run — 0.2%. So it is a diagnostic curiosity, not a cost
+driver, and the only way to the target was to make the *median* rollout cheaper.
+
+Insofar as instructions track wall, 0.94507 puts FAST at **~12.2 h**. The remaining knobs, in the
+order they should be considered, are all the user's call because each is a quality trade rather than
+a collapse: `bottom_eval_units` 600 → 300 (quality-identical on all 10 cells when it was chosen, but
+"at flat cost", so it may buy nothing); R30 → R20 (keep captures ~94% of the gap at R20, hard floor
+R≥10); and the documented multi-machine pooling route.
