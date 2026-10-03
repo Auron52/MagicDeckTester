@@ -64,3 +64,20 @@ regression cell with budget 0 is depth 0. The matrix's V arm is pinned `=0` expl
 3. Allocation/string churn in `EnumeratePlans` lambdas.
 
 Any change must stay sound (no truncation) and byte-identical at play settings.
+
+## Finding 4 -- the executor re-searched a committed line at Scrying Sheets (FIXED 2026-10-03)
+
+The long "playing" games were not searching at all for most of their wall time: the T1 decision had
+already committed a VERIFIED T6 line, and the executor replayed it until a Scrying Sheets activation
+(breakpoint site 8, trailing pass) the plan did not target. That site called `resolve_draw_breakpoint`
+with no `fd_plan_committed` guard, so it ran `SolveWithLookahead` at deck depth -- each candidate's
+rollout re-deciding every simulated turn at depth-1, five-plus levels deep -- where the apply had
+scored the narrow branch (nothing inside the window). The executor now mirrors the scored branch
+(`TurnSolver::Site8NarrowIsWindowBase`, shared). gi55 9.5 h -> 70 s, gi134 >11 h -> 39 s, both GT.
+
+Open: the POD trailing twin (`AIEngine.cpp`, `kSitePodBp`) has the same shape -- it re-solves an
+untargeted pod breakpoint with `SolveWithLookahead` even on a committed line. Check what
+ApplyPlanDirect scores there (site 7) and mirror it the same way; Melira is the deck that reaches it.
+
+Remaining Snow cost after the fix is the search itself: gi104 (GT T8) spends its time in the T1
+`FullSearchLine` (FSLineWin six deep), which must cover the whole 8-turn window to see a T8 win.
