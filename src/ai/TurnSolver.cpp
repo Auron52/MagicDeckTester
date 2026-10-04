@@ -32337,7 +32337,24 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         const bool etb_treasure_only = a.ritual_float == 0 && a.def != nullptr
                                     && a.def->params.etb_creates_treasures > 0
                                     && !a.def->params.mana_rock;
-        if ((a.ritual_float > 0 || a.rock_mana.Total() > 0) && !etb_treasure_only)
+        // A PURE COLOUR CONVERTER is not a producer. An any-colour filter with no free mode
+        // (Arcum's Astrolabe: "{1}, {T}: Add one mana of any color", `filter_no_free_colorless`)
+        // turns one mana into one mana -- it adds no AMOUNT (the ManaPool::wild_phantom rule), so it
+        // cannot break the fungibility this decline protects: every unit it could ever emit is a
+        // unit some other source of the SAME joint solve already supplies. Its cost is folded like
+        // any cast; its conversion is not credited, so a line that needs the converted colour reads
+        // combined-unpayable and declines to the per-cast payer exactly as before. What changes is
+        // the line that does NOT need it: it used to decline here too, and the per-cast greedy then
+        // stranded it by ORDER (Snow s3003 gi5 T2, {Astrolabe {S}, Boreal Druid {G}, Frost Augur
+        // {U}} off Forest + Island + an old Druid: the greedy paid the {S} with the Forest, the
+        // Druid's {G} through Island + the fresh Astrolabe, and the Augur's {U} was gone -- the
+        // jointly payable three-cast plan applied as two casts in the user's Snow order, so it was
+        // inexpressible at any budget). Producers that add mana (rituals, rocks, Treasure makers)
+        // are untouched.
+        const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const bool conversion_only = a.ritual_float == 0 && pd != nullptr
+                                  && pd->params.any_color_filter && pd->params.filter_no_free_colorless;
+        if ((a.ritual_float > 0 || a.rock_mana.Total() > 0) && !etb_treasure_only && !conversion_only)
         {
             if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
         }

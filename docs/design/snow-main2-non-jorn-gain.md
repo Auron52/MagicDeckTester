@@ -1,6 +1,6 @@
 # Snow: where did the every-turn second main's extra gain come from?
 
-Status: **RESOLVED (2026-10-04)** -- all four main-1 gaps closed; see "Resolved 2026-10-04" at the end.
+Status: **RESOLVED (2026-10-04)** -- all four main-1 gaps closed; see "Resolved 2026-10-04". The two games left open by 9380c934 (s3003 gi5, smoke gi69) are root-caused and fixed at the end.
 
 ## Background
 
@@ -133,3 +133,84 @@ Heart enters tapped, so neither funds the turn by going first; the fixer does. `
 CastOrderRank` now amends the generic order with Arcum's Astrolabe at 3 and the enter-watcher (Slumber,
 `snow_enter_scry`) at 4 -- `MTG_SNOW_ORDER_WATCHER`, default ON (the measured-off Snow order carries the
 same watcher slot). gi28 d8b0: 7 -> **6**.
+
+## OPEN after 9380c934: two Snow games that did not recover at d8b0 -- root-caused 2026-10-04
+
+9380c934 (the USER's Snow cast order, default ON) left two Snow games slower than GT at the d3 tier
+that did NOT recover at `--depth 8 --budget-ms 0`: regression s3003 gi5 (GT 5, d8b0 6) and smoke
+s1001 gi69 (GT 8, d8b0 loss). The isolation arms (`logs/m2q/iso.json`) put gi5 on the order (generic 5,
+nofix 5, nosplit 5) and gi69 off it (generic also 9) -- except that dropping the fixer slot recovered
+gi69 too. At d8b0 an order may only matter through rollouts past the horizon, condemnation, an
+executor/rollout divergence or a dedupe interaction -- or, as it turned out, through PAYMENT.
+
+### s3003 gi5: the cast order reached the search through the per-cast PAYER (fixed)
+
+Diffed against the 27f10ea7 baseline (`/tmp/base-wt`), turn by turn: the first differing decision is
+T2 main 1. Baseline: `Island; Astrolabe (draws Scrying Sheets), Frost Augur, Boreal Druid`, which the
+T1 root's d5 pass verifies as a T5 win. Current: `Island; Astrolabe, Druid` -- no Augur.
+
+The T2 plan `{Astrolabe, Augur, Druid}` IS enumerated in both binaries (it is jointly payable: Forest
+{G}, Island {U}, the T1 Druid's snow {C} for the Astrolabe's {S}). But applied in the user order
+(fixer 1, then cheapest-first with mana dorks ahead of other permanents: Astrolabe, Druid, Augur) it
+realises as two casts. `MTG_FSW_TRACE` node child: `p=Island;Frost Augur,Arcum's Astrolabe,Boreal
+Druid ... hand=[...,Frost Augur,...]` -- the Augur never left hand. A temporary per-cast print showed
+why:
+
+* `BatchPrepayMainCasts` -- the whole-turn joint payment that exists to stop exactly this -- DECLINED
+  with `PP_PRODUCER`, because the Astrolabe carries `rock_mana` 1 (its "{1}, {T}: add any colour").
+* The per-cast greedy then paid the Astrolabe's {S} with the FOREST (lands before the creature band),
+  the Druid's {G} through Island + the fresh Astrolabe's filter, and the Augur's {U} had no source left.
+* In the generic order the Augur came second and took the Island first, so the same greedy happened to
+  survive -- the order only decided whether the greedy's stranding bit.
+
+So it is (c)-adjacent: not a scoring or condemnation fault, an APPLY that realises a different line than
+the one enumerated, in both worlds alike (the executor calls the same prepay), so no `[fd-diverge]`.
+The jointly payable three-cast line was inexpressible at any budget in the user's order.
+
+**Root cause:** the `PP_PRODUCER` decline treated a pure colour CONVERTER as a producer. Arcum's
+Astrolabe's mana ability is 1-in/1-out (`filter_no_free_colorless`, the `ManaPool::wild_phantom` rule):
+it adds no AMOUNT, so it cannot break the fungibility the decline protects. **Fix:** such a cast is
+folded into the joint solve like any other (its conversion not credited -- a line that needs the
+converted colour still reads combined-unpayable and declines to the per-cast payer exactly as before).
+No flag: a bug fix. Only Arcum's Astrolabe carries the param, so every other deck is untouched by
+construction. gi5 d8b0: 6 -> **5** (GT). The user's order is unchanged.
+
+### smoke s1001 gi69: the SAME payer defect, on a different turn (fixed by the same change)
+
+* **The GT 8 was never an unbudgeted result.** The 27f10ea7 baseline at d8b0 also LOSES gi69 (T8 ends
+  with the opponent at 1). The d3/b10 GT win came from the T6 search's d1 pass, whose rollout leaf
+  estimated T8 for `Island; Astrolabe, Augur, Coatl` before the budget ran out -- the deeper passes never
+  ran. So the d3 regression was budget churn against a lucky GT; what needed explaining was why NO
+  binary's unlimited search could find the T8 the d3 game realised.
+* **Handoff at the T6 board** (`--claude-play --choices <T1-T5 of the game> --choices-then-auto
+  --depth 8 --budget-ms 0`; seed 1070, `--choices "1,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,3"`): baseline LOSES,
+  97dec4b3 + 9380c934 + the prepay fix WINS T8 (d3/b0 from the same board: also T8). The T7/T8 kill
+  lines are long Astrolabe chains (`Astrolabe -> draws Astrolabe -> Augur, Augur, Sheets look, Forest,
+  Astrolabe -> draws Slumber -> Augur`), so every one of them carries an Astrolabe cast -- the
+  `PP_PRODUCER` decline sent each to the per-cast greedy, which strands one of the {U} casts in some
+  orders (the baseline's T8 fell exactly one Augur short). That is also why dropping the fixer slot
+  "recovered" it in the isolation: Astrolabe LAST is an order in which the greedy happens not to strand.
+  97dec4b3's continuation activations are part of the winning line (the Augur/Sheets looks inside a
+  breakpoint continuation), which is why the baseline cannot reach it even from T6.
+* Full game, d8b0, prepay fix: **8** (GT), 5,335 s. Isolation arm results recorded above were all on the
+  pre-fix binary; the fix is the only change between `cur 9` and this `8`.
+
+### Verdict
+
+Neither game was a cast-order soundness problem (no condemnation, no rollout/executor divergence, no
+dedupe): both were the whole-turn prepay declining on a colour CONVERTER and leaving the line to an
+order-dependent per-cast payer. Fixed at the mechanism (`BatchPrepayMainCasts`, `conversion_only`); the
+user's Snow order is unchanged and no amendment is proposed. Unit cover: `test/unit/test_snow_prepay.cpp`
+(fails on the pre-fix code: the Augur is stranded in hand).
+
+### Measured (prepay fix on 9380c934)
+
+* d8b0 repro batch (`logs/m2q/rec2.json`, 12 jobs, one pooled batch): s3003 gi5 **5** at both d3 and d5
+  keys (units 1,299,101 -> 93,748 -- the joint payment also collapses the duplicate per-cast-payment
+  children), smoke gi69 **8**, every other prior repro unchanged (fungusb gi6/gi10/gi39 5, kittyv2 gi87 7,
+  melira gi14/gi46 4, snow gi8 5, gi40 6).
+* Smoke vs GT (game-turns, not accepted): snow searched -3 / d0 -8 (smoke snow d3 and d5 are
+  digest-identical to the pre-fix run -- the change moves Snow d0 and the s3003 gi5 game), kitty -24,
+  kittyv2 -24 / d0 -14, kitty2hg -5, goblins2hg -1, melira2hg -1; every other deck 0. Searched slower: 2
+  -- melira gi46 4->5 (recovers at d8b0, recorded churn) and snow gi69 8->loss (d3/b10; d8b0 8 above).
+  Only Arcum's Astrolabe carries `filter_no_free_colorless`, so no other deck's play can move.
