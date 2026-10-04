@@ -22861,11 +22861,13 @@ enum class Adv { MostCasts, PayloadFirst, ChainFirst, Search };
 // draws on -- and stops when that is exhausted; with no finite budget (`--budget-ms 0`) it runs to
 // the end of the tree, which the transposition fold keeps finite. The greedy rungs above it are the
 // cheap CERTIFICATE: a found kill is a proof, so trying the one-playout policy first can only save
-// work, never change the verdict, and ~90% of trials end there. The two places that still carry a
-// fixed cap are the two places that have NO decision budget to charge:
-//   * BEYOND THE HORIZON (TurnSolver::InRolloutPlayout) the doctrine permits a greedy policy, so the
-//     rollout trial runs the certificate and then a DFS capped at MTG_EQUIP_ROUTE_ROLLOUT_NODES links
-//     (default 128; =0 is certificate-only). Measured 2026-10-04 on the 14 references at the
+// work, never change the verdict, and ~90% of trials end there. The places that still carry a
+// fixed cap are the places that have NO decision budget to charge and are owed no completeness:
+//   * BEYOND THE HORIZON (TurnSolver::InRolloutPlayout) and in the DEPTH-0 RUNNER
+//     (TurnSolver::InD0Runner) -- the doctrine's two permitted greedy sites -- the trial runs the
+//     certificate and then a DFS capped at MTG_EQUIP_ROUTE_ROLLOUT_NODES links over WAVE 0 ONLY
+//     (no tranches: re-opening every dropped group per link took one smoke batch past the 17.6 GB
+//     RSS cap, and a depth-0 game to 263 s). Default 128; =0 is certificate-only. Measured 2026-10-04 on the 14 references at the
 //     committed policy, wall of the ONE pooled batch: 0 -> 1/14 short, 403 s; 32 -> 1/14, 136 s;
 //     64 -> 1/14, 185 s; 128 -> 0/14, 268 s; 256 -> 0/14, 448 s. A rollout that FINDS the kill ends
 //     there, which is why a small cap is CHEAPER than no DFS at all; claude_s5_gi4's turn-3 kill
@@ -23184,6 +23186,8 @@ struct DfsBounds
     bool          cut        = false;     // the walk STOPPED: budget exhausted or node cap reached
     bool          partial    = false;     // a tranche was skipped for its bound: the walk goes on over
                                           // the branches it has, but no winless verdict below is a proof
+    bool          tranches   = true;      // re-open the breadth cap's dropped groups per link (the
+                                          // complete regimes); false = wave 0 only (the capped ones)
     int           nodes_used = 0;
 };
 // Mana the plan spends on things other than casts (paid equips, activations). Inside a chain that
@@ -23203,13 +23207,15 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
     // EXHAUSTIVE: the breadth cap's dropped groups come back as tranches while the budget allows,
     // so a purchase the cap ranked out is a branch here, not a line that no budget could reach.
     bool trunc = false;
+    const auto te0 = std::chrono::steady_clock::now();
     std::vector<TurnSolver::Plan> plans =
-        TurnSolver::EnumerateMainPlansExhaustive(s, /*is_pre_combat=*/true, b.budget, &trunc);
+        TurnSolver::EnumerateMainPlansExhaustive(s, /*is_pre_combat=*/true, b.budget, &trunc, b.tranches);
+    const double enum_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
     if (trunc)
     {
-        // A tranche was withheld. If the budget is spent that is the cut; otherwise the tranche's
-        // own enumeration bound (its plan space exceeds the units left) kept it out, and the walk
-        // continues over wave 0 -- but nothing below here can be recorded as searched-and-winless.
+        // A tranche was withheld (or, in a capped regime, never requested). If the budget is spent
+        // that is the cut; otherwise the walk continues over wave 0 -- but nothing below here can be
+        // recorded as searched-and-winless.
         if (b.budget != nullptr && (b.budget->Exhausted() || b.budget->Overrun())) { b.cut = true; }
         else { b.partial = true; }
     }
@@ -23291,11 +23297,12 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
     const int width = static_cast<int>(order.size());
     if (Trace())
     {
-        std::fprintf(stderr, "[equip-route]   dfs d%d nplans=%d branches=%d links_so_far=%d budget_left=%s\n",
+        std::fprintf(stderr, "[equip-route]   dfs d%d nplans=%d branches=%d links_so_far=%d budget_left=%s hand=%d bf=%d lib=%d enum %.1f ms\n",
                      iters_left, (int)plans.size(), (int)order.size(), b.nodes_used,
                      b.budget != nullptr ? std::to_string(b.budget->Remaining()).c_str()
                                          : (b.nodes_left < std::numeric_limits<int>::max()
-                                                ? std::to_string(b.nodes_left).c_str() : "unlimited"));
+                                                ? std::to_string(b.nodes_left).c_str() : "unlimited"),
+                     (int)s.players[me].hand.size(), (int)s.battlefield.size(), (int)s.players[me].library.size(), enum_ms);
         // The two things a missing purchase could blame: the HAND (the card is not there) and the
         // enumerator (it is there and never offered). Print both so the next step is not a guess.
         std::string hand;
@@ -23464,42 +23471,95 @@ static int RunSearch(GameState& s, int me, RunMode mode)
     Scope _guard;                       // no nested route emission for the whole search
     DfsBounds   b;
     const char* regime = "apply";
+    // The regime is decided by WHERE the call sits, for both modes, because the apply must walk the
+    // same menu in the same order as the trial that proved the kill (lockstep): an apply that
+    // re-opened every tranche the capped trial never saw would walk a different, far wider tree
+    // before meeting the same kill. Apply differs from Trial only in having no cap and no budget cut.
+    const bool capped = !HumanPlayActive() && (TurnSolver::InRolloutPlayout() || TurnSolver::InD0Runner());
     if (mode == RunMode::Trial)
     {
-        if (TurnSolver::InRolloutPlayout())
+        if (HumanPlayActive())
         {
-            // BEYOND THE HORIZON: the certificate alone unless the rollout lever is armed.
+            // The viewer's menu (false in every rollout and autonomous game): a click must come back.
+            b.nodes_left = ViewerDfsNodes();
+            regime = "viewer";
+        }
+        else if (capped)
+        {
+            // The doctrine's two permitted greedy sites -- BEYOND THE HORIZON and the DEPTH-0
+            // RUNNER: a capped walk over wave 0 (no tranches), the light heuristic that pays for
+            // itself by ending a rollout at the kill it finds. =0 leaves the certificate alone.
             if (RolloutDfsNodes() <= 0)
             {
                 if (Trace()) { std::fprintf(stderr, "[equip-route] t%d SEARCH skipped (rollout)\n", s.turn_number); }
                 return 0;
             }
+            // ...and CHARGED to the decision's budget like every other unit of work under it (a
+            // rollout turn-step is one unit; a link is the same work). Uncharged, 2,600 rollout
+            // trials x 35 links took one budgeted (b10) smoke game to 243 s on 34k units -- and
+            // with NO budget to charge (`--budget-ms 0`, the depth-0 runner, every value-leaf
+            // matrix cell) the same walk is bounded by nothing but its cap: 4,000 rollout trials
+            // x 24 links x 2.3 ms = 200-300 s per DEPTH-1 game, against the old certificate-only
+            // rollouts' ~10 s. So the capped DFS exists only where it can be paid for: a finite
+            // decision budget. Without one the rollout trial is the certificate alone, exactly the
+            // rollout the pre-redesign engine ran, while the in-window search above the horizon
+            // stays complete at that same unlimited budget.
+            b.budget = TurnSolver::DecisionBudget();
+            if (b.budget == nullptr)
+            {
+                if (Trace()) { std::fprintf(stderr, "[equip-route] t%d SEARCH skipped (%s, no budget to charge)\n", s.turn_number, TurnSolver::InRolloutPlayout() ? "rollout" : "d0"); }
+                return 0;
+            }
             b.nodes_left = RolloutDfsNodes();
-            regime = "rollout";
-        }
-        else if (HumanPlayActive())
-        {
-            b.nodes_left = ViewerDfsNodes();
-            regime = "viewer";
+            b.tranches   = false;
+            regime       = TurnSolver::InRolloutPlayout() ? "rollout" : "d0";
         }
         else
         {
-            // IN THE WINDOW: the decision's own budget, and nothing else. nullptr = unlimited.
+            // IN THE WINDOW: the decision's own budget, and nothing else. nullptr = unlimited --
+            // "noroot" is the same unbounded walk from a frame with no decision scope open (the
+            // executor's committed apply re-solving a line), kept complete and labelled for the census.
             b.budget = TurnSolver::DecisionBudget();
-            regime   = b.budget != nullptr ? "budget" : "unlimited";
+            regime   = b.budget != nullptr ? "budget" : (TurnSolver::DecisionRootOpen() ? "unlimited" : "noroot");
         }
+    }
+    else if (capped)
+    {
+        b.tranches = false;             // the trial's menu; no cap, so the proven kill is reached
+        regime     = "apply-capped";
     }
     Seen& seen = SeenForThisDecision();
     const std::uint64_t hits0 = DSeen().hits;
-    const int r = RunSearchRec(s, me, kDfsMaxLinks, b, seen);
+    const auto t0 = std::chrono::steady_clock::now();
+    int r = 0;
+    if (mode == RunMode::Apply && !capped)
+    {
+        // THE EXECUTOR'S REAL APPLY sits outside every permit, so it cannot tell which regime proved
+        // the kill it is replaying. Walk the wave-0 menu first -- it is the menu every capped trial
+        // proved on, and the cheap one -- and only if that finds nothing re-open the tranches, which
+        // is the full menu a window trial had. A failed walk leaves `s` untouched (each branch
+        // applies on a copy), so the second walk starts from the same board. Before this, one
+        // depth-0 game spent 148.9 s of its 152 s in a 10-link replay whose every link re-enumerated
+        // every dropped group of a 30-card hand; the same walk over wave 0 took 54 ms.
+        DfsBounds b0;
+        b0.tranches = false;
+        r = RunSearchRec(s, me, kDfsMaxLinks, b0, seen);
+        if (r == 1) { b = b0; regime = "apply-wave0"; }
+        else        { r = RunSearchRec(s, me, kDfsMaxLinks, b, seen); b.nodes_used += b0.nodes_used; }
+    }
+    else
+    {
+        r = RunSearchRec(s, me, kDfsMaxLinks, b, seen);
+    }
     if (Trace())
     {
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         std::fprintf(stderr,
-                     "[equip-route] t%d SEARCH %s (%s%s; %d links applied, tt hits %llu, tt boards %zu)\n",
+                     "[equip-route] t%d SEARCH %s (%s%s; %d links applied, tt hits %llu, tt boards %zu, %.1f ms)\n",
                      s.turn_number, r == 1 ? "LETHAL" : (b.cut ? "CUT" : (b.partial ? "PARTIAL" : "no win")), regime,
                      b.budget != nullptr
                          ? (" " + std::to_string(b.budget->Remaining()) + " units left").c_str() : "",
-                     b.nodes_used, (unsigned long long)(DSeen().hits - hits0), seen.size());
+                     b.nodes_used, (unsigned long long)(DSeen().hits - hits0), seen.size(), ms);
     }
     if (mode == RunMode::Apply && r != 1)
     {
@@ -23520,7 +23580,9 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
     int iters = 0, links = 0;
     for (; iters < MaxIter(); ++iters)
     {
+        const auto te0 = std::chrono::steady_clock::now();
         std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        const double enum_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
         if (plans.empty()) { break; }
         // LETHAL FIRST. `wins_this_turn` on a board this playout has already realised is a
         // statement about the attack that board can make now -- not about casts still to come --
@@ -23610,14 +23672,16 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
                 bought += a.def->card.m_name;
             }
         }
+        const auto ta0 = std::chrono::steady_clock::now();
         TurnSolver::ApplyPlan(s, *best, /*is_pre_combat=*/true);
         if (Trace())
         {
+            const double apply_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ta0).count();
             std::fprintf(stderr,
-                "[equip-route]   it%d casts=%d nplans=%d hand %d->%d bf=%d life=%d :: %s\n",
+                "[equip-route]   it%d casts=%d nplans=%d hand %d->%d bf=%d life=%d lib=%d enum %.1f ms apply %.1f ms :: %s\n",
                 iters, best_casts, (int)plans.size(), hand_before,
                 (int)s.players[me].hand.size(), (int)s.battlefield.size(),
-                s.players[1 - me].life, bought.c_str());
+                s.players[1 - me].life, (int)s.players[me].library.size(), enum_ms, apply_ms, bought.c_str());
         }
         links += best_casts;
     }

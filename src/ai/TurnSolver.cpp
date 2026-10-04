@@ -3051,18 +3051,30 @@ static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahea
 // budget as everything else and by nothing else: the USER's bar (2026-10-04) is that "not enough
 // budget" is the ONLY excuse for a missed win, so a fixed node cap inside a search that still has
 // budget is forbidden, and so is any cap at all when the budget is unlimited.
-static thread_local SearchBudget* g_decision_budget = nullptr;
-SearchBudget* TurnSolver::DecisionBudget() { return g_decision_budget; }
+static thread_local SearchBudget* g_decision_budget   = nullptr;
+static thread_local bool          g_decision_root_open = false;   // a scope below is live
+static thread_local int           g_d0_permit_nest     = 0;       // live GreedyPermit(D0Runner)s
+SearchBudget* TurnSolver::DecisionBudget()   { return g_decision_budget; }
+bool          TurnSolver::DecisionRootOpen() { return g_decision_root_open; }
+bool          TurnSolver::InD0Runner()       { return g_d0_permit_nest > 0; }
 // Owned by the OUTERMOST frame of a real decision -- SolveWithLookahead's budgeted root and
 // FullSearchLineHybrid (the executor's commit-the-line path, which bypasses SolveWithLookahead
 // entirely) -- and restored on exit, so a nested or later solve never inherits another frame's
-// budget. `set` false => a pure no-op scope.
+// budget. `set` false => a pure no-op scope. While a set scope is open DecisionRootOpen() is true,
+// which is how an UNLIMITED root (budget nullptr) is told apart from no root at all.
 struct DecisionBudgetScope
 {
     SearchBudget* const prev;
-    DecisionBudgetScope(bool set, SearchBudget* b) : prev(g_decision_budget)
-    { if (set) { g_decision_budget = (b != nullptr && !b->Unlimited()) ? b : nullptr; } }
-    ~DecisionBudgetScope() { g_decision_budget = prev; }
+    const bool          prev_open;
+    DecisionBudgetScope(bool set, SearchBudget* b) : prev(g_decision_budget), prev_open(g_decision_root_open)
+    {
+        if (set)
+        {
+            g_decision_budget    = (b != nullptr && !b->Unlimited()) ? b : nullptr;
+            g_decision_root_open = true;
+        }
+    }
+    ~DecisionBudgetScope() { g_decision_budget = prev; g_decision_root_open = prev_open; }
 };
 // Charge `n` units of provider-side sub-search work to the decision's budget. Attributed to its own
 // census bucket so the u_* columns still sum to `units` (turn_census.py refuses a row otherwise).
@@ -31149,8 +31161,15 @@ namespace solvememo
     inline Dumper g_dumper;
 }
 
-TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
+TurnSolver::GreedyPermit::~GreedyPermit()
 {
+    if (m_d0) { --g_d0_permit_nest; }
+}
+
+TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
+    : m_d0(site == GreedySite::D0Runner)
+{
+    if (m_d0) { ++g_d0_permit_nest; }   // TurnSolver::InD0Runner() for the permit's extent
     // A permit is a CLAIM that the greedy pick sits outside every search window, and it is checked
     // two ways (greedywindow::InWindow): the claim itself (`remaining_depth`, which the call site
     // supplies) and the innermost open search frame (greedywindow::t_depth, which the HOSTS supply).
@@ -51501,6 +51520,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       && groupwave::g_state.tranche_rank < 0
                       && g_search_candidate_enum
                       && g_cantrip_order_site == nullptr
+                      // An equip-route playout enumerates the SAME board differently (its
+                      // continuations are empty by design, see the BpUnbranchedCanon gate), so its
+                      // results must never be served to -- or taken from -- an ordinary frame.
+                      && !EquipRouteInProgress()
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
     if (!memo_ok) { return EnumeratePlansWithLandUncached(state, is_pre_combat); }
 
@@ -63622,7 +63645,8 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const GameState& state,
                                                                        bool is_pre_combat,
                                                                        SearchBudget* budget,
-                                                                       bool* truncated)
+                                                                       bool* truncated,
+                                                                       bool tranches)
 {
     if (truncated != nullptr) { *truncated = false; }
     // max_dropped is an OUT accumulator (max over the per-land inner calls): reset, capture, restore.
@@ -63632,7 +63656,21 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const Gam
     const int dropped = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = saved_md;
     if (dropped <= 0 || !groupwave::Enabled()) { return plans; }
+    if (!tranches)
+    {
+        // A capped heuristic regime: wave 0 is the menu, and the caller learns that it was not the
+        // whole space (so nothing it concludes below here is a proof).
+        if (truncated != nullptr) { *truncated = true; }
+        return plans;
+    }
     const int cap_base = EffectiveGroupCap(state);
+    const bool trace_tr = EquipRouteTraceOn() && !HumanPlayActive();
+    if (trace_tr)
+    {
+        std::fprintf(stderr, "[equip-route]     tranches: wave0=%zu dropped=%d hand=%zu bf=%zu\n",
+                     plans.size(), dropped, state.players[state.active_player_index].hand.size(),
+                     state.battlefield.size());
+    }
     for (int R = cap_base; R < cap_base + dropped; ++R)
     {
         if (budget != nullptr && !budget->Unlimited() && (budget->Exhausted() || budget->Overrun()))
@@ -63644,7 +63682,14 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const Gam
         groupwave::g_state.bound_limit    = (budget != nullptr && !budget->Unlimited())
                                           ? static_cast<double>(budget->Remaining()) : 0.0;
         groupwave::g_state.bound_exceeded = false;
+        const auto tt0 = std::chrono::steady_clock::now();
         std::vector<Plan> tp = EnumeratePlansWithLand(state, is_pre_combat);
+        if (trace_tr)
+        {
+            std::fprintf(stderr, "[equip-route]       tranche R=%d plans=%zu %.1f ms%s\n", R, tp.size(),
+                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tt0).count(),
+                         groupwave::g_state.bound_exceeded ? " BOUND" : "");
+        }
         groupwave::g_state.tranche_rank   = -1;
         if (groupwave::g_state.bound_exceeded)
         {

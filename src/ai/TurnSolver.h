@@ -1347,6 +1347,13 @@ public:
         // `remaining_depth`: the search depth still available where the greedy pick is made
         // (HorizonLeaf: the playout's remaining depth; D0Runner: the engine's lookahead depth).
         GreedyPermit(GreedySite site, int remaining_depth);
+        // A D0Runner permit also marks its extent (TurnSolver::InD0Runner) so a provider's
+        // sub-search can tell the depth-0 executor -- a permitted greedy site -- from a search frame.
+        ~GreedyPermit();
+        GreedyPermit(const GreedyPermit&)            = delete;
+        GreedyPermit& operator=(const GreedyPermit&) = delete;
+    private:
+        const bool m_d0;
     };
     static_assert(static_cast<int>(GreedySite::kCount) == 2,
                   "USER HARD RULE 2026-09-30: no new greedy site inside the search window -- "
@@ -1645,13 +1652,24 @@ public:
     static void              ChargeDecisionUnits(SearchBudget* budget, int n);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
+    // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
+    // doctrine's other permitted greedy site, so likewise not owed completeness.
+    static bool              InD0Runner();
+    // True while a decision root's DecisionBudgetScope is open on this thread -- i.e. inside the
+    // search window of a real decision, whatever its budget. DecisionBudget() alone cannot tell an
+    // unlimited root (nullptr) from no root at all (also nullptr).
+    static bool              DecisionRootOpen();
     // EnumerateMainPlans plus every group-wave TRANCHE the breadth cap dropped (see groupwave in
     // TurnSolver.cpp), requested one at a time while `budget` (nullptr = unlimited) allows, so the
     // result equals the UNCAPPED enumeration at an unlimited budget and is cut only by the budget
     // at a finite one. `*truncated` (optional) reports a budget cut. For sub-searches that re-walk
     // the plan space themselves and so cannot rely on a host's wave phase to re-open dropped ranks.
+    // `tranches=false` returns wave 0 only and reports dropped groups through `*truncated` -- for a
+    // CAPPED heuristic regime (a horizon playout, the depth-0 runner) that is not owed completeness
+    // and must not pay a tranche's full plan space per link (it took one smoke batch to 17.6 GB).
     static std::vector<Plan> EnumerateMainPlansExhaustive(const GameState& state, bool is_pre_combat,
-                                                          SearchBudget* budget, bool* truncated);
+                                                          SearchBudget* budget, bool* truncated,
+                                                          bool tranches = true);
     // The thread's current decision epoch (see g_decision_epoch): bumped by every budgeted root
     // solve, so a memo keyed on it is scoped to one decision of one game, exactly as the
     // enumeration memo is.
