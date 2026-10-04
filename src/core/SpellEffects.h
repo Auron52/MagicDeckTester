@@ -11374,18 +11374,22 @@ inline void RefreshFadeTokens(GameState& state, int source_number, int counters)
 //       with, or received while still above 0, can. So the SIMULTANEOUS model is the correct one,
 //       which makes ApplyMassDeathBulk the rules-CORRECT path (and the one the EXECUTOR already uses) and this interleaved loop the buggy
 //       one -- the same CR 608.2 reasoning PerformDamageAllCreatures already documents for its
-//       two-pass sweep. Making bulk unconditional would be a play CHANGE and a rules FIX, owed an
-//       A/B and a GT re-accept, so it is recorded in
-//       docs/design/sba-precedes-triggers-in-mass-death.md rather than smuggled in behind a perf
-//       commit. Until then identity wins: a board that can reach GainLife takes the old path.
-//       Checking BoardSources::dwatch suffices: a `dies_trigger_self_gain` watcher with an empty
-//       dies_watch_subtype can never enter `reactions` in the first place, and a dying body cannot
-//       contribute its OWN self-watcher because (a) makes its definition lookup fail.
-//   (e) one controller, so (d) is a question about one side's watchers.
+//       two-pass sweep.
 //
-// Under (a)-(e) a doomed body is invisible to every observer, so folding the removals together is
-// identical BY CONSTRUCTION -- and the trigger order is preserved exactly (descending index, the
-// order the one-at-a-time loop used).
+//       *** SO (d) IS GONE, AND ITS REMOVAL IS THE FIX. *** Declining the bulk path when a watcher
+//       could reach GainLife routed exactly the divergent boards onto the buggy lazy path, under
+//       the name of safety. With (d) removed those boards take the simultaneous path, where the
+//       dying set is decided ONCE and no trigger can change who dies -- which is both the rule and
+//       what the executor already does. It also widens the fast path, so the perf case and the
+//       correctness case point the same way. See
+//       docs/design/sba-precedes-triggers-in-mass-death.md.
+//   (e) one controller. Retained: it keeps the (a)-(c) proof a question about one side.
+//
+// Under (a)-(c) and (e) a doomed body is invisible to every observer, so folding the removals
+// together is identical BY CONSTRUCTION for every body the fade sweeps can reach (they are vanilla
+// tokens). Trigger ORDER is left exactly as the one-at-a-time loop had it (descending index): the
+// controller of simultaneous triggers chooses their order (CR 603.3b), so this is a free choice and
+// changing it would move play for no reason.
 inline bool MassDeathBodiesAreUnobservable(const GameState&        state,
                                            const std::vector<int>& dying_desc,
                                            const BoardSources*     watchers,
@@ -11401,14 +11405,15 @@ inline bool MassDeathBodiesAreUnobservable(const GameState&        state,
         if (mc.white || mc.blue || mc.black || mc.red || mc.green || mc.hybrid_count)
         { return false; }
     }
-    for (int wi : watchers->dwatch)                                     // (d)
-    {
-        const CardDefinition* wd = CardDatabase::Instance().LookupCached(
-            state.battlefield[static_cast<std::size_t>(wi)].card);
-        if (!wd) { continue; }
-        if (wd->params.own_creature_dies_lifegain > 0) { return false; }
-        if (wd->params.dies_trigger_self_gain > 0)     { return false; }
-    }
+    // (d) IS DELIBERATELY ABSENT -- see the header note. It used to decline here when a watcher
+    // could reach GainLife, on the grounds that a `lifegain_each_own_creature_counters` trigger
+    // would save a 0/0 the lazy sweep had not reached. That is precisely the RULES BUG (CR 704.3:
+    // SBAs are performed before triggered abilities are even put on the stack, so a triggered
+    // counter is always too late), so declining was routing exactly the divergent boards onto the
+    // buggy path and calling it safety. Removing the test fixes the divergence AND widens the fast
+    // path, because the simultaneous model cannot let a trigger change who dies.
+    // `watchers` is retained for the non-null test above (and to leave room for a future
+    // condition); it is deliberately no longer inspected.
     return true;
 }
 
