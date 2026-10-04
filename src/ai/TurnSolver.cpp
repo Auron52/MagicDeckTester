@@ -10836,6 +10836,12 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
                 && FadeActivationLiveBodies(state, a, *d,
                                             fade_anthem(d->params.fade_token_subtypes)) > 0)
             { return true; }
+            // A co-selected PAY-TOKEN activation (Slimefoot's {4} Saproling; MTG_SAC_FODDER_ACT_MAKER)
+            // genuinely raises the supply -- keyed on the ACTION, not the card, so casting Slimefoot
+            // (whose ability cannot be activated in the same plan) credits nothing.
+            if (SacFodderActMakerEnabled() && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::PayToken
+                && matches(d->params.pay_token_subtypes)) { return true; }
             // Any token the action creates that carries the filter subtype.
             if (matches(d->params.spore_token_subtypes)
                 || matches(d->params.upkeep_token_subtypes)
@@ -10913,6 +10919,13 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
                                                        fade_anthem(d->params.fade_token_subtypes));
                     continue;
                 }
+                // A PAY-TOKEN activation (MTG_SAC_FODDER_ACT_MAKER): its yield is K x count, doubled
+                // by any Doubling Season -- not named exactly here, so UNBOUNDED (cannot judge ->
+                // allow), the direction that never deletes a playable line.
+                if (SacFodderActMakerEnabled() && a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::PayToken
+                    && matches(d->params.pay_token_subtypes))
+                { unbounded = true; return 0; }
                 // ZERO, AND DELIBERATELY NOT UNBOUNDED -- the two credits that are certainly not
                 // available to a sac in THIS main phase:
                 //   * upkeep_token_subtypes: those tokens arrive at the beginning of the NEXT
@@ -11217,6 +11230,11 @@ static void BuildFodderIndex(const GameState& state, const std::vector<Action>& 
                                                         fade_anthem(d->params.fade_token_subtypes));
                 continue;
             }
+            // Lockstep twin of plan_fodder_credit's PAY-TOKEN clause (unbounded).
+            if (SacFodderActMakerEnabled() && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::PayToken
+                && matches(d->params.pay_token_subtypes))
+            { t.unb |= (1u << f); continue; }
             if (matches(d->params.dies_token_subtypes)
                 || matches(d->params.sac_outlet_token_subtypes)
                 || matches(d->params.etb_created_token_subtypes)
@@ -15170,6 +15188,28 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         }
         if (ok) { out.push_back(ActKey(num, kActSacOutlet)); }
     }
+}
+
+// MTG_SAC_FODDER_ACT_MAKER: does a permanent we control carry a MANA-COSTED token ability
+// (pay_token_cost -- Slimefoot, the Stowaway; King Darien XLVIII) whose token matches `need_sub`
+// ("" = any creature) and whose cost is affordable right now? Priced exactly as the site-9 key
+// (ActAffordable: total mana incl. floating, the mode's effective cost), so the emitter never offers
+// a sac that no maker in the plan could feed -- a superset test, the apply re-checks for real.
+bool ActivatedSacFodderMakerAffordable(const GameState& state, int ctrl, const std::string& need_sub)
+{
+    int total_cache = -1;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != ctrl || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.pay_token_cost.has_value()) { continue; }
+        const std::vector<std::string>& subs = d->params.pay_token_subtypes;
+        bool yields = need_sub.empty();
+        for (const std::string& t : subs) { if (t == need_sub) { yields = true; break; } }
+        if (!yields) { continue; }
+        if (ActAffordable(state, ctrl, p.card, d->params.pay_token_cost, total_cache)) { return true; }
+    }
+    return false;
 }
 
 }   // namespace
@@ -24537,7 +24577,63 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const bool outlet_ok = is_mana_outlet || SacFodderValueOutletEnabled();
                 if (!outlet_ok || !SacFodderSameLineEnabled()
                     || SameLineSacFodderSource(state, state.active_player_index, need_sub) < 0)
-                { continue; }   // no legal victim to sacrifice, and none makeable
+                {
+                    // FODDER FROM A MANA-COSTED MAKER (MTG_SAC_FODDER_ACT_MAKER, default ON; see the
+                    // flag). Slimefoot's "{4}: Create a Saproling" cannot be fused into the sac the
+                    // way a spore pop is, so offer the outlet in its TRAILING form instead: the maker
+                    // is its own searched ActivatePermAbility, the dispatchers run this sac after it
+                    // (TurnSolver::DeferSameLineSacs), and the apply resolves the sentinel against
+                    // the board the maker produced. A subset without the maker strands the sac (no
+                    // victim -> no-op, both worlds), i.e. it collapses onto its sibling -- dedupe
+                    // work, never a wrong line. Gated on a maker that is affordable NOW so a board
+                    // that cannot make the body does not grow the menu.
+                    if (SacFodderActMakerEnabled() && !sd->params.sac_outlet_self_only
+                        && !sd->params.sac_outlet_self_pump_power_from_victim
+                        && ActivatedSacFodderMakerAffordable(state, state.active_player_index,
+                                                             need_sub)
+                        && (is_mana_outlet || HumanPlayActive()
+                            || ResolveProvider(state).FodderSacUseful(state, src, *sd)))
+                    {
+                        Action ta;
+                        ta.kind           = Action::Kind::SacCreatureOutlet;
+                        ta.card_name      = src.card.m_name;
+                        ta.hand_index     = -1;
+                        ta.sac_source_id  = src.card.m_number;
+                        ta.sac_victim_id  = kSameLineSacVictim;   // resolved at apply, after the maker
+                        ta.is_noncreature = true;
+                        if (is_mana_outlet)
+                        {
+                            // Mana floats AFTER the casts (trailing pass), so ritual_float stays 0:
+                            // the subset math must not credit it to a cast it cannot reach.
+                            ta.cost = ManaCost{};
+                            ta.eval = 0;
+                            if (sd->params.sac_outlet_add_mana_any_color)
+                            {
+                                for (const std::string& col : ChosenFloatColorCandidates(state))
+                                {
+                                    Action v = ta;
+                                    v.chosen_float_color = col;
+                                    actions.push_back(std::move(v));
+                                }
+                            }
+                            else { actions.push_back(std::move(ta)); }   // fixed letter: the apply floats it
+                        }
+                        else
+                        {
+                            // The value-branch payload, verbatim (see the canonical emission below).
+                            ta.cost          = sd->params.sac_creature_cost.value_or(ManaCost{});
+                            ta.direct_damage = sd->params.sac_outlet_damage;
+                            ta.eval          = (sd->params.sac_outlet_damage
+                                                + sd->params.sac_outlet_creates_tokens
+                                                + sd->params.sac_outlet_draw
+                                                + (sd->params.sac_outlet_grants_haste ? 1 : 0)
+                                                + (-sd->params.sac_outlet_minus_power)
+                                                + (-sd->params.sac_outlet_minus_tough)) * DMG;
+                            actions.push_back(std::move(ta));
+                        }
+                    }
+                    continue;   // no legal victim to sacrifice, and none makeable for free
+                }
                 victim_id        = kSameLineSacVictim;   // resolved (and created) at apply time
                 same_line_fodder = true;
             }
@@ -33300,6 +33396,24 @@ struct LpSite
 // note. Mirrors that else-if chain one-for-one; keep them in step when a kind is added there.
 // Consumed by AIEngine::ReorderPlanCasts (which of a plan's actions the human may sequence) and by
 // the human-order inline dispatch inside apply_plan_actions.
+bool TurnSolver::HasSameLineTrailingSac(const std::vector<Action>& acts)
+{
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_victim_id == kSameLineSacVictim)
+        { return true; }
+    }
+    return false;
+}
+
+bool TurnSolver::DeferSameLineSacs(std::vector<Action>& acts)
+{
+    if (!HasSameLineTrailingSac(acts)) { return false; }
+    std::stable_partition(acts.begin(), acts.end(), [](const Action& a)
+    { return !(a.kind == Action::Kind::SacCreatureOutlet && a.sac_victim_id == kSameLineSacVictim); });
+    return true;
+}
+
 bool TurnSolver::IsTrailingActivation(Action::Kind k)
 {
     switch (k)
@@ -37123,6 +37237,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             TurnSolver::OrderTrailingActivations(state, _ord_buf);
             _acts = &_ord_buf;
         }
+        // MTG_SAC_FODDER_ACT_MAKER: a sac of fodder this line makes runs after its maker (see
+        // TurnSolver::DeferSameLineSacs; the executor twin does the identical move).
+        if (TurnSolver::HasSameLineTrailingSac(*_acts))
+        {
+            if (_acts != &_ord_buf) { _ord_buf = trailing_acts_in; _acts = &_ord_buf; }
+            TurnSolver::DeferSameLineSacs(_ord_buf);
+        }
     }
     const std::vector<Action>& trailing_acts = *_acts;
     // ACTIVATION TAP reserve for the trailing pass (MTG_ACT_TAP_RESERVE, default off -> empty vector ->
@@ -37151,7 +37272,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 else if (a.sac_count > 1)
                 { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); }
                 else
-                { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+                { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                                         a.chosen_float_color.str()); }
             }
         }
         else if (a.kind == Action::Kind::Channel)

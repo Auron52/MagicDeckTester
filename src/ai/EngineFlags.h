@@ -225,6 +225,33 @@ inline bool SacFodderTapMakerEnabled()
     return heurarm::Flag(heurarm::SAC_FODDER_TAP_MAKER, env_on);
 }
 
+// MTG_SAC_FODDER_ACT_MAKER -- DEFAULT ON (=0 restores the old enumeration exactly). Fodder made by a
+// MANA-COSTED token ability the same line activates: Slimefoot, the Stowaway's "{4}: Create a 1/1
+// Saproling", then Utopia Mycon (or a Thallid value outlet) sacrificing that Saproling -- the ping
+// line, "cast Slimefoot, make a Saproling, sac it for the last point of damage" (FungusB, Soldiers
+// ledger 2026-10-04).
+//
+// A MISSING LINE, NOT A HEURISTIC, so this ships default-on like MTG_SAC_FODDER_SAME_LINE did. The
+// free makers (spore/fade) are FUSED into the sac (SameLineSacFodderSource); a mana-costed maker
+// cannot be, because its cost would be paid inside a pre-cast SacForMana the enumerator had already
+// credited. So the outlet is emitted in its TRAILING form (Kind::SacCreatureOutlet, victim
+// kSameLineSacVictim), the maker stays its own searched ActivatePermAbility, and both trailing
+// dispatchers run the sentinel sac AFTER every other activation of the pass
+// (TurnSolver::DeferSameLineSacs) -- so the token exists when the outlet looks for it, and the
+// outlet's mana (if any) floats after the casts and is credited to nothing. Read at EMISSION only:
+// with it off no such action exists and the dispatcher reorder is a no-op.
+//
+// WHY THE JUST-CAST CASE NEEDED NOTHING ELSE: a Slimefoot cast this turn reaches its {4} through
+// breakpoint site 9's continuation, which is enumerated by the same CollectActions -- so the
+// continuation [{4} token, sac it] is one candidate of the one site-9 occurrence. The previous
+// diagnosis ("site 9 fires once per apply, so the token cannot open a second occurrence") was a
+// symptom: a Slimefoot ALREADY on the battlefield could not find the line either.
+inline bool SacFodderActMakerEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_ACT_MAKER", true);   // DEFAULT ON; =0 disables
+    return env_on;
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw

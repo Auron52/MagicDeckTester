@@ -1,0 +1,52 @@
+{
+  "_comment": "Slimefoot, the Stowaway CAST THIS TURN, its {4} Saproling, and Utopia Mycon sacrificing that Saproling -> Slimefoot's death trigger deals the last point (opponent at 1). 7 lands = Slimefoot (3) + {4}. The Slimefoot cast opens breakpoint site 9; its continuation [{4} token, sac it] needs the outlet's TRAILING same-line form (MTG_SAC_FODDER_ACT_MAKER): before it the sac outlet was never emitted (no Saproling on the board when the continuation was enumerated) and the line was inexpressible at any budget -- the win slipped to T6 (Slimefoot attacks). Mycon is summoning-sick on purpose: its sac ability has no {T}, so sickness must not matter. Twin: fungusb_slimefoot_onboard_token_sac_ping.",
+  "deck": "decks/Fungus/candidate-b-2026-09/Fungus.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 1,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Blooming Marsh",
+      "controller": 0
+    },
+    {
+      "name": "Utopia Mycon",
+      "controller": 0,
+      "sick": true
+    }
+  ],
+  "hand": [
+    "Slimefoot, the Stowaway"
+  ],
+  "library_filler": "Doubling Season",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "expect_win_turn": 5
+}

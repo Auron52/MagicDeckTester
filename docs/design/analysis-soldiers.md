@@ -137,9 +137,8 @@ Cross-cutting changes:
    scope note, Rick first strike, Jirina x2, Harbin, Kudro x2, Cathar Commando x2, Brutal Cathar x1 (back-face first strike + ward; the other two FIXED),
    King Darien) -- approve or reject each.
 4. ~~**Slimefoot (Fungus):**~~ RESOLVED 2026-10-04 -- USER: mark it (see Rulings A).
-   NEW follow-up: same-turn Slimefoot -> token -> Utopia Mycon sac (the ping) needs a SECOND site-9
-   occurrence in one apply, which the class does not allow (see Rulings A, Finding). Worth a design
-   doc, or accept as-is?
+   Follow-up (same-turn Slimefoot -> token -> Utopia Mycon sac, the ping): FIXED 2026-10-04, see
+   Rulings A, "Finding -- FIXED". The site-9 "once per apply" diagnosis was wrong; nothing to decide.
 5. **Silent Clearing dig:** generic dig gate (VialProvider inherits it). Opt into a searched dig later?
 6. **Recruitment Officer:** pick axis = every legal hit (no width cap); one activation per action
    (picks 2..K never a ranked default). Taken as defaults.
@@ -162,11 +161,46 @@ Cross-cutting changes:
   construction while the `fungusb` cases (all three tiers) will move. Each moved game needs a
   per-game verdict at the next smoke/regression before any `--accept` (no suite was run here: the
   box belongs to another batch).
-- Finding (not fixed, surfaced): a same-turn Slimefoot + token + Utopia Mycon SACRIFICE of that token
-  (the ping line) is still not found in one phase -- site 9 fires once per apply, so the continuation
-  that makes the Saproling cannot open a second site-9 occurrence for the Mycon outlet the new token
-  just armed. A Slimefoot already on the board does find it (one plan: token, then the outlet).
-  Probe: /tmp/slime/s1.json shape (7 lands, sick Mycon, hand Slimefoot, opp at 1) -> T6 not T5.
+- Finding -- FIXED 2026-10-04 (`MTG_SAC_FODDER_ACT_MAKER`, default ON, `=0` = the old enumeration).
+  The same-turn Slimefoot + {4} Saproling + Utopia Mycon sacrifice (the ping for the last point) was
+  inexpressible at any budget. **The earlier diagnosis -- "site 9 fires once per apply" -- was a
+  symptom, and the claim that an on-board Slimefoot finds the line was FALSE**: that probe won by
+  ATTACKING with the (non-sick) Slimefoot. With Slimefoot on the board but sick (`resume_at main1`)
+  the line failed identically (T6 not T5, at budget 2000 / d5 too).
+  * ROOT CAUSE: the sac-outlet emitter (CollectActions) resolves its victim against the board the
+    plan STARTS from (`CanonicalSacVictim` -> -1 with no Saproling out) and `continue`s, unless a FREE
+    counter-costed maker (spore/fade, `SameLineSacFodderSource`) can be fused into the sac. A
+    mana-costed maker (`pay_token_cost`) is excluded from fusion on purpose -- its {4} would be paid
+    inside a pre-cast SacForMana the enumerator had already credited. So no plan, and no site-9
+    continuation (enumerated by the same CollectActions at the post-cast state), could ever hold
+    "make the Saproling, then sacrifice it".
+  * FIX: when there is no victim and no free maker but an AFFORDABLE pay-token maker of the outlet's
+    subtype is on the board, emit the outlet in its TRAILING form -- `Kind::SacCreatureOutlet`,
+    victim `kSameLineSacVictim`, no ritual credit (its mana floats after the casts; an any-colour
+    outlet is fanned over `ChosenFloatColorCandidates` and `ApplySacCreatureOutlet` floats the chosen
+    letter). Both trailing dispatchers (rollout `apply_trailing_activations`, executor
+    `exec_trailing_activations`) move such sacs to the END of the pass via the one shared
+    `TurnSolver::DeferSameLineSacs`, so the co-selected `{4}` activation has made the token when the
+    sac resolves its sentinel. A subset without the maker strands the sac (no victim -> no-op, both
+    worlds) and collapses onto its sibling: dedupe work, never a wrong line. The fodder guard
+    (`plan_can_add` / `plan_fodder_credit` / the FodderIndex twin) credits a co-selected PayToken
+    activation as UNBOUNDED supply (was: zero -> an over-reject). No new breakpoint, no new site,
+    no greedy, no truncation; the just-cast case rides the EXISTING site-9 occurrence, whose
+    continuation list now contains `[{4} Saproling, sac it]`.
+  * Fixtures (both FAIL T6 with `=0`, PASS T5 with the fix): `fungusb_slimefoot_cast_token_sac_ping`
+    (cast Slimefoot this turn) and `fungusb_slimefoot_onboard_token_sac_ping` (sick Slimefoot
+    already out). mtg-test 389/389; scenarios 136/136.
+  * Cost (single games, play settings, `MTG_ROLLOUT_STATS` units ON vs `=0`): FungusB seeds 5005+gi
+    gi0-5 units 1,834,533 vs 1,829,857 (+0.26%; 4 of 6 games identical, gi1 +2.9%, gi4 +6.7%), win
+    turns identical; Soldiers d3/b20 gi0-3 units identical (no non-self outlet in the list). Wall
+    within noise.
+  * Blast radius: only a deck holding a `pay_token_cost` card AND a non-self-only sac outlet --
+    FungusB alone today (King Darien's Soldiers outlets are all self-only). Incumbent Fungus,
+    Soldiers and every other deck are unaffected by construction. **FungusB GT will move** --
+    per-game verdicts at the next suite run (no suite run here: the box belongs to another batch).
+  * Not logged: the executor's `SacCreatureOutlet` branch writes no LogAbility line (pre-existing,
+    every value outlet); the sac shows only in the life totals. Unchanged here because a log line
+    folds into every value-outlet deck's digest.
 
 **B. Brutal Cathar -- "There are actually critters for Brutal Cathar sometimes. They just don't do
 anything otherwise."**

@@ -4816,6 +4816,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             TurnSolver::OrderTrailingActivations(state, _ord_buf);
             _acts = &_ord_buf;
         }
+        // MTG_SAC_FODDER_ACT_MAKER: a sac of fodder this line makes runs after its maker (see
+        // TurnSolver::DeferSameLineSacs; lockstep twin of ApplyPlanDirect's trailing pass).
+        if (TurnSolver::HasSameLineTrailingSac(*_acts))
+        {
+            if (_acts != &_ord_buf) { _ord_buf = trailing_acts_in; _acts = &_ord_buf; }
+            TurnSolver::DeferSameLineSacs(_ord_buf);
+        }
     }
     const std::vector<Action>& trailing_acts = *_acts;
     // EXECUTOR TWIN of the rollout's activation-tap reserve (MTG_ACT_TAP_RESERVE, default off -> empty
@@ -4842,7 +4849,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   else
                   { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); } }
                 else
-                { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+                { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                                         a.chosen_float_color.str()); }
             }
         }
         else if (a.kind == Action::Kind::GraveyardExileAbility)

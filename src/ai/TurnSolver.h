@@ -1801,6 +1801,14 @@ public:
     // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
     // apply or a dropped action.
     static bool IsTrailingActivation(Action::Kind k);
+    // MTG_SAC_FODDER_ACT_MAKER: a trailing sac whose victim this same line makes
+    // (Kind::SacCreatureOutlet with sac_victim_id == kSameLineSacVictim) has to run AFTER the
+    // activation that makes it -- Slimefoot's {4} Saproling -- so BOTH trailing dispatchers stable-
+    // move every such sac to the END of the pass. Returns false (and touches nothing) when the list
+    // holds none, which is every list unless that lever (or MTG_SAC_FODDER_VALUE_OUTLET) emitted one.
+    // ONE definition for the two worlds, like OrderTrailingActivations.
+    static bool DeferSameLineSacs(std::vector<Action>& acts);
+    static bool HasSameLineTrailingSac(const std::vector<Action>& acts);
     // The ability's KIND for DecisionProvider::ActivationOrderRankFor: 1 = equip / attach (Equip,
     // AttachAllEquipment, AttachAllFreeEquipment), 2 = a counter-spending mode (Umezawa's Jitte's
     // JitteModeAbility, which acts on whatever the equips attached it to), 0 = anything else.

@@ -10157,6 +10157,8 @@ enum class SameLineFodderKind { None, Spore, Fade, TapForTokens };
 // it would debit mana the subset's accounting never charged. That is exactly the phantom-mana shape
 // MTG_SAC_NO_PHANTOM_FLOAT was added to remove, pointing the other way. Widening to mana-costed
 // makers needs the cost visible to the ENUMERATOR, not just to the apply: a separate change.
+// (Built 2026-10-04 as MTG_SAC_FODDER_ACT_MAKER -- NOT through this function: the maker stays its own
+// searched activation and the outlet is emitted in its trailing form; see that flag in EngineFlags.h.)
 inline int SameLineSacFodderSource(const GameState& state, int controller,
                                    const std::string& need_sub,
                                    SameLineFodderKind* out_kind = nullptr)
@@ -11951,7 +11953,13 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
     OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus);
 }
 
-inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id)
+// `any_color_float` (MTG_SAC_FODDER_ACT_MAKER): the CONCRETE letter an ANY-COLOUR mana outlet (Utopia
+// Mycon) floats when it is activated in its trailing form -- the enumerator fans it over
+// ChosenFloatColorCandidates exactly as it fans the pre-cast SacForMana, so the pool only ever holds
+// typed mana. Empty for every other caller, which keeps the payload below byte-identical (an
+// any-colour outlet carries an EMPTY sac_outlet_add_mana_color, so it floated nothing here before).
+inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id,
+                                   const std::string& any_color_float = std::string())
 {
     const CardParams* op = nullptr;
     for (const Permanent& p : state.battlefield)
@@ -12069,6 +12077,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     if (!found) { return; }
     // Payload (copy the scalars before CreateToken invalidates `op` via battlefield realloc).
     const std::string mana_color = op->sac_outlet_add_mana_color;
+    const bool mana_any = op->sac_outlet_add_mana_any_color;
     const int mana_amt = op->sac_outlet_add_mana_amount, dmg = op->sac_outlet_damage;
     const int ntok = op->sac_outlet_creates_tokens, tp = op->sac_outlet_token_power,
               tt = op->sac_outlet_token_toughness;
@@ -12098,6 +12107,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     }
     if (pump_from_victim) { PdStats::Count(PdStats::DinaPump); }
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
+    else if (mana_any && !any_color_float.empty())
+    { AddChosenColorFloat(state, any_color_float, std::max(1, mana_amt)); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     CreateTokens(state, controller, ntok, tp, tt, tsub);   // bulk: one DoublerShift, not ntok
     // DRAW payload (Psychotrope Thallid "{1}, Sacrifice a Saproling: Draw a card") -- the same

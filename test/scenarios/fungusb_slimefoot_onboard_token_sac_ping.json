@@ -1,0 +1,44 @@
+{
+  "_comment": "Twin of fungusb_slimefoot_cast_token_sac_ping with Slimefoot ALREADY on the battlefield but summoning-sick (resume_at main1, so it cannot attack for the win): {4} Saproling then Utopia Mycon sacrifices it -> 1 damage, opponent at 1. Proves the defect was never the site-9 'once per turn' rule -- the base plan could not express token-then-sac either, because the sac outlet was only emitted against fodder already on the board (or a free spore/fade maker). FAIL (T6) before MTG_SAC_FODDER_ACT_MAKER, PASS (T5) after.",
+  "deck": "decks/Fungus/candidate-b-2026-09/Fungus.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 1,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Utopia Mycon",
+      "controller": 0,
+      "sick": true
+    },
+    {
+      "name": "Slimefoot, the Stowaway",
+      "controller": 0,
+      "sick": true
+    }
+  ],
+  "hand": [],
+  "library_filler": "Doubling Season",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "expect_win_turn": 5
+}

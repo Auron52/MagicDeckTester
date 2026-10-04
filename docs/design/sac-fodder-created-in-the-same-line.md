@@ -342,6 +342,15 @@ the sacrifice's mana — so paying `{4}` there would debit mana the subset's acc
 That is the phantom-mana shape `MTG_SAC_NO_PHANTOM_FLOAT` was just fixed to remove. Widening to
 mana-costed makers requires the COST to be visible to the enumerator, not just to the apply.
 
+**→ DONE 2026-10-04 without fusion (`MTG_SAC_FODDER_ACT_MAKER`, default ON).** The cost IS visible
+to the enumerator because the maker is NOT fused: it stays its own searched `ActivatePermAbility`,
+and the outlet is offered in its TRAILING form (`Kind::SacCreatureOutlet`, victim
+`kSameLineSacVictim`, no ritual credit) which both trailing dispatchers run after every other
+activation of the pass (`TurnSolver::DeferSameLineSacs`). Its mana, if any, floats after the casts and
+is credited to nothing, so no phantom. The motivating line (FungusB: cast Slimefoot, `{4}` Saproling,
+Utopia Mycon eats it for Slimefoot's last point of damage) and the full diagnosis are in
+`docs/design/analysis-soldiers.md`, Rulings A, "Finding -- FIXED".
+
 ## OPEN — the fusion fires inside a line the human DECLARED (user ruling, 2026-09-25)
 
 **Not started.** Recorded here because the ruling is the user's and the diagnosis below is a
