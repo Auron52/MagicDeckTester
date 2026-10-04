@@ -22864,8 +22864,12 @@ enum class Adv { MostCasts, PayloadFirst, ChainFirst, Search };
 // work, never change the verdict, and ~90% of trials end there. The two places that still carry a
 // fixed cap are the two places that have NO decision budget to charge:
 //   * BEYOND THE HORIZON (TurnSolver::InRolloutPlayout) the doctrine permits a greedy policy, so the
-//     rollout trial runs the certificate alone by default; MTG_EQUIP_ROUTE_ROLLOUT_NODES=N re-arms a
-//     capped DFS there as a measured quality lever (it was +48% wall on the 14 references at 256).
+//     rollout trial runs the certificate and then a DFS capped at MTG_EQUIP_ROUTE_ROLLOUT_NODES links
+//     (default 128; =0 is certificate-only). Measured 2026-10-04 on the 14 references at the
+//     committed policy, wall of the ONE pooled batch: 0 -> 1/14 short, 403 s; 32 -> 1/14, 136 s;
+//     64 -> 1/14, 185 s; 128 -> 0/14, 268 s; 256 -> 0/14, 448 s. A rollout that FINDS the kill ends
+//     there, which is why a small cap is CHEAPER than no DFS at all; claude_s5_gi4's turn-3 kill
+//     needs between 65 and 128 links, so 128 is the lightest cap that recovers it.
 //   * The VIEWER's menu frames have no budget at all; MTG_EQUIP_ROUTE_VIEWER_NODES bounds the DFS so
 //     a click comes back, and the trace says CUT when it bound.
 // Previous shape, for the record: width 32 x 256 nodes, flag default OFF -- which made the greedy
@@ -22885,7 +22889,7 @@ inline int RolloutDfsNodes()
 {
     static const int v = []() -> int {
         const char* e = std::getenv("MTG_EQUIP_ROUTE_ROLLOUT_NODES");
-        const int n = (e && *e) ? std::atoi(e) : 0;
+        const int n = (e && *e) ? std::atoi(e) : 128;
         return n > 0 ? n : 0;
     }();
     return v;
