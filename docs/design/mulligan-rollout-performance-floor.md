@@ -97,6 +97,28 @@ hunting a wide odometer or a hot symbol — both have been measured and are not 
 
 ## The structural ask
 
+**FIRST, A CORRECTION (2026-10-03). USER: *"I never agreed to a per-rollout bound."***
+
+An earlier draft of this document presented section 6's reachable-states truncation as the agreed
+remedy and listed it as acceptance criterion 1. **That was an agent's inference and it is withdrawn.**
+The user required that the PERFORMANCE be fixed; they did not choose a mechanism. Truncating a rollout
+changes what the rollout returns, so it is a **LOSSY quality decision and it is UNAPPROVED.**
+
+The criteria below are kept because they describe what a bound would have to satisfy IF it were ever
+approved. **They are not a plan.** Pursue the lossless routes first:
+
+* **Delete wasted work.** This is what `632fde7a` did -- a deck-presence gate that made a provably
+  dead scan unreachable, byte-identical, no quality question to answer. CLAUDE.md mandates this class
+  unconditionally. The censuses above say where it is NOT (branching width) and that the remaining
+  cost is node count, which is the harder but still lossless direction.
+* **Remove scheduling blockages.** This is what the user's *"there should be no blockages"* points at,
+  and it is `keepgen-producer-barrier-and-durability.md` Defect 3: one cell gating 343,538 cell-sides
+  through a whole-wave join that exists as a race guard, not a value dependency. It changes no
+  rollout's value by construction, so it costs no quality -- though wave COMPOSITION feeds back into
+  which cells get sampled next, so byte-identity must be VERIFIED, not assumed.
+
+
+
 `fungus-doubling-season-rollout-tail.md` section 6 already specifies it and it remains the right
 shape: **bound a rollout by REACHABLE STATES rather than by a wall clock** (the labeller precedent —
 a wall-clock bound would make the artifact machine-dependent and non-reproducible), and **record a
@@ -110,7 +132,7 @@ Two scheduling facts worth knowing before designing it:
 * **But the FINISH barrier recurs.** The run cannot complete until its last live cell lands, so a
   degenerate draw late in the refine phase stalls completion the same way.
 
-## Acceptance criteria (proposed, for the user to adjust)
+## Acceptance criteria for a bound IF ONE WERE EVER APPROVED (it is not)
 
 1. **No keep rollout exceeds a fixed reachable-states budget** at `d1/b3`, chosen so the current
    median rollout (~0.5 s) is unaffected. Cases 2-5 must all complete in seconds.
