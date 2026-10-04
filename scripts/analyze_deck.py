@@ -694,8 +694,13 @@ def _RunBatch(manifest: dict, log_dir: Path, threads: int, extra_env: dict) -> s
     return result.stderr
 
 
+# NOT anchored on the closing "===": the engine's SHED STATS line grew trailing fields
+# ("cleanups-that-shed=N  sheds/cleanup=X") and an anchored pattern then silently matched NOTHING,
+# so _ShedCensus returned (0, 0, 0) and the stage reported DISCARD_INERT for a deck that sheds
+# hundreds of thousands of times in its rollouts (Soldiers 2026-10-04: rollout=467,425 per 4,400
+# games). A census that cannot parse its own instrument must fail LOUDLY -- see _ShedCensus.
 _SHED_STATS_RE = re.compile(
-    r"=== SHED STATS: real=(\d+)\s+rollout=(\d+) \(low-land=(\d+)\) ===")
+    r"=== SHED STATS: real=(\d+)\s+rollout=(\d+) \(low-land=(\d+)\)")
 
 
 def _ShedCensus(deck_path: Path, profile_path: Path, scratch: Path,
@@ -712,7 +717,12 @@ def _ShedCensus(deck_path: Path, profile_path: Path, scratch: Path,
     text = _RunBatch(manifest, scratch / "shed_census", threads=0,
                      extra_env={"MTG_SHED_STATS": "1"})
     m = _SHED_STATS_RE.search(text)
-    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
+    if m is None:
+        # Never read an unparseable instrument as "zero sheds" -- that is how DISCARD_INERT was
+        # reported for decks that shed constantly.
+        raise RuntimeError("shed census: no '=== SHED STATS' line parsed from the batch stderr "
+                           "(MTG_SHED_STATS output format changed?)")
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
 
 def _ParseWins(path: Path) -> dict[int, int]:
