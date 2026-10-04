@@ -367,3 +367,54 @@ Oracle never slower. Classification (single-game repros, all pooled/short):
 - **gi607 (d3 only) -- budget starvation**: T4 at d8b0 under both orders.
 - 5f (runtime gate): Soldiers adds **no** pruning heuristic. The existing generic gates' cost on this
   deck: unpruned d5b20 = 65.57M units / 1000 games vs shipped 57.79M (+13%) for the 4 games above.
+
+### 5g -- earliest-win rule miner (ONE pooled batch: MTG_DUMP_EWINS=1 MTG_SEARCH_ORDER=1, every turn,
+d5 b3000, seeds 2002/3003/4004 x 300 games; 3,926 decisions; 24/24 workers busy)
+- ORDER rules (0 conflicts): Champion before Esper Sentinel (12/0), Champion before Thalia's
+  Lieutenant (5/0), Esper Sentinel before Harbin (4/0). **All three agree with the proposed
+  `MTG_SOLDIERS_ORDER`** (Champion 1, Sentinel 6, Harbin 11, Lieutenant 17); none conflicts with it.
+  Sparse, as expected of a lord/anthem deck.
+- INCLUSION: Rick -0.30 (53 help / 2 hurt), Lieutenant -0.11, Champion -0.09, Coppercoat/Kudro -0.08,
+  Field Marshal -0.07, Officer -0.06 -> cast them (already cast). Positive deltas -- Brutal Cathar
+  +0.24, Thalia +0.17 (her tax hits our own Vial), Jirina +0.16, Ranger-Captain +0.15 -- all carry
+  help > 0, i.e. SITUATIONAL: left to the search, no gate (5g table: never gate a +delta with help>0).
+- LAND: earliest-win lines favour Silent Clearing then Plains; the land drop is searched -- no rule.
+- Verdict: nothing to encode beyond the (already proposed) order; no generic limiter found.
+
+### 5h -- play-viewer decision surface (`audit_viewer_decisions.py`, 40-game sweep from seed 9001)
+Expected types from params: choose_abilities, dig, land_entry, target, vial_charge. Observed in the
+sweep: choose_abilities, dig, land_entry, vial_charge; `target` (Brutal Cathar) escalated to a
+targeted seed-search -> VERIFIED (seed 9001 gi28). **5h PASS** -- no HARD MISS / SELF-GUARD / DRIVER
+failure. Oracle cross-check advisories: Kudro's and Cathar Commando's destroy-target abilities, both
+carrying their disclosed deferral notes (PROVISIONAL, open question 3). Fortified Beachhead's pump
+count rides the existing `firebreathe` decision (auditor files `team_pump_cost` under DEFERRED_PARAMS
+by name -- noted in Stage 2, unchanged); it never fired in 60 benchmark games ({5}+{T} is rarely
+affordable before the kill), so it is listed in the 5d plan as an item to exercise deliberately.
+
+### 5d -- claude-play sweep: NOT RUN HERE (orchestrator's fan-out). Plan + pooled benchmark manifest:
+`logs/soldiers_5d_plan.md` (gitignored; 20 seeds from 9,100,000 chosen for card coverage out of a
+60-seed benchmark pass; `logs/soldiers/5d/bench_manifest.json`, traces in `logs/soldiers/5d/traces/`).
+Benchmark (60 games, play settings): T4 x33, T5 x26, T7 x1 (s9100037: a 5-land + Vial + Rick flood
+keep -- T7 confirmed optimal at d8 b0).
+
+### 4-bis / 5j -- regression-suite membership (ALL THREE tiers)
+Rows added to `test/regression_cases.sh` at pirates' counts (smoke d0x1000 / d3 b10 x150 / d5 b20 x75
+@1001 + `soldiers2hg` d3 x50 smoke canary; regression d0 @2002, d3/d5 @2002+3003; overnight d0 x2000 @
+4004/6006/8008/10010, d3 b20 x1000 and d5 b40 x500 @4004-7007).
+- **smoke** (`--deck=soldiers,soldiers2hg`): 4 NEW -- d0 4.5940, d3 4.3333, d5 4.3600, 2hg d3 5.0400.
+  Cross-depth per game: no d5 game differs from d3 on the shared 75; no d3 game slower than d0.
+  ACCEPTED (filtered); GT diff = exactly the 4 keys + header; `check_gt_logs.py` consistent.
+- **regression** (`--deck=soldiers`): 5 NEW -- d0 4.5990, d3 4.3800/4.3533, d5 4.3733/4.3733; only
+  cross-depth difference s3003 gi72 d3 T5 / d5 T4 (deeper better). The tier printed REGRESSION
+  DETECTED solely from the reference-reproducibility gate: `Hinata2/claude_s1_gi0.json` ENUM-GAP and
+  `Mirrorwing_Dragon/v2-instigator-entrance/claude_s51_gi50.json` play-drift (T5 vs ref T4). **Both
+  reproduce identically with the BASE binary bb5bcceb** (scratch-worktree build, `--only` those two
+  refs) -> pre-existing, not caused by this branch (whose C++ changes route only Soldiers). Not
+  investigated further here (out of this deck's scope) -- reported to the orchestrator. Soldiers
+  keys ACCEPTED (filtered); diff = exactly the 5 keys; GT logs consistent.
+- **3x cost rule** (`suite_gate.py --cost --no-run`): soldiers 3077.8 ms/game (worst searched case,
+  d5 b20 s2002) vs fivecolour 1033.5 = **2.98x -> PASS, but borderline.** Methodology note: in a
+  small FILTERED run the per-game ms is ~2-3x a large pooled run's (the same d5 b20 cell read 1.04
+  s/game in the 4,400-game 5b batch; units/game are equal, 61-75k, so it is per-unit wall, i.e. cold
+  per-worker caches / small pools, not deck cost). A `--measure-all` pooled measurement would be the
+  apples-to-apples figure; not run (it re-runs every deck's tier).

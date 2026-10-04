@@ -58,6 +58,7 @@ declare -A DECK_FILE=(
   [giants]=decks/Giants/Giants.cod
   [pirates]=decks/Pirates/Pirates.cod
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
+  [soldiers]=decks/Soldiers/soldiers.cod
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
@@ -89,6 +90,7 @@ declare -A DECK_PROF=(
   [giants]=decks/Giants/Giants.profile.json
   [pirates]=decks/Pirates/Pirates.profile.json
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+  [soldiers]=decks/Soldiers/soldiers.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -358,6 +360,7 @@ SMOKE_CASES=(
   "critter2hg         3 1001 50 10"
   "melira2hg          3 1001 25 10"
   "pirates2hg         3 1001 50 10"
+  "soldiers2hg        3 1001 50 10"
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
   # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
@@ -398,6 +401,17 @@ SMOKE_CASES=(
   "selesnya 0 1001 1000 0"
   "selesnya 3 1001  150 10"
   "selesnya 5 1001   75 20"
+  # soldiers: W/x Human Soldier tribal on Aether Vial (Champion / Thalia's Lieutenant counters, Field
+  # Marshal / Kudro / Coppercoat / Darien / Rick lords, Harbin's 5-attacker pump, Beachhead's team
+  # pump, Thalia's symmetric noncreature tax). ADDED 2026-10-04 (analysis-soldiers.md) at PIRATES'
+  # counts. Measured on an idle 24-core box at seed 777000, 600 games/cell: d3 b10 0.57 s/game,
+  # d5 b20 1.04 s/game, d5 b40 1.49 s/game, no game over 30 s -- pirates' class, so the same counts.
+  # 2HG: smoke canary only (soldiers2hg below) -- nothing in the 60 reads opponent heads or starting
+  # life; Brutal Cathar exiles an opponent creature (immaterial to damage) and Esper Sentinel's
+  # opponent-cast trigger is inert.
+  "soldiers 0 1001 1000 0"
+  "soldiers 3 1001  150 10"
+  "soldiers 5 1001   75 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -634,6 +648,12 @@ REGRESSION_CASES=(
   "selesnya 3 3003  150 10"
   "selesnya 5 2002   75 20"
   "selesnya 5 3003   75 20"
+  # soldiers: see the SMOKE block (pirates' counts).
+  "soldiers 0 2002 1000 0"
+  "soldiers 3 2002  150 10"
+  "soldiers 3 3003  150 10"
+  "soldiers 5 2002   75 20"
+  "soldiers 5 3003   75 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -1036,6 +1056,20 @@ OVERNIGHT_CASES=(
   "selesnya 5 5005  500 40"
   "selesnya 5 6006  500 40"
   "selesnya 5 7007  500 40"
+  # soldiers: see the SMOKE block. Full angels/pirates overnight shape (~1.9 core-h at the measured
+  # 0.94 s/game d3 b20 and 1.49 s/game d5 b40).
+  "soldiers 0  4004 2000 0"
+  "soldiers 0  6006 2000 0"
+  "soldiers 0  8008 2000 0"
+  "soldiers 0 10010 2000 0"
+  "soldiers 3 4004 1000 20"
+  "soldiers 3 5005 1000 20"
+  "soldiers 3 6006 1000 20"
+  "soldiers 3 7007 1000 20"
+  "soldiers 5 4004  500 40"
+  "soldiers 5 5005  500 40"
+  "soldiers 5 6006  500 40"
+  "soldiers 5 7007  500 40"
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.

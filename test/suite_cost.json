@@ -194,6 +194,14 @@
    "total_core_ms": 415499,
    "worst_case": "snow_regression_d5_s3003"
   },
+  "soldiers": {
+   "cost_per_game_ms": 3077.7867,
+   "jobs": 5,
+   "key": "soldiers",
+   "tier": "regression",
+   "total_core_ms": 859382,
+   "worst_case": "soldiers_regression_d5_s2002"
+  },
   "stompy": {
    "cost_per_game_ms": 81.0733,
    "jobs": 5,
