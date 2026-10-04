@@ -5721,7 +5721,7 @@ const char* SoldiersProvider::CastOrderTierName(int rank) const
 // beyond the first (board copy included).
 // Every hand card is named (index 0 is always the policy's), and the return routes through
 // CleanupDiscardRankingWithOrder so staged-card / required-piece protections stay engine-enforced.
-static bool SoldiersBucketDiscardOn()
+static bool SoldiersBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_SOLDIERS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::SOLDIERS_BUCKET_DISCARD, on);
@@ -5730,7 +5730,7 @@ static bool SoldiersBucketDiscardOn()
 std::vector<int> SoldiersProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
-    if (!SoldiersBucketDiscardOn()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    if (!SoldiersBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
     const Player& ap = s.players[s.active_player_index];
     const int n = static_cast<int>(ap.hand.size());
     if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
