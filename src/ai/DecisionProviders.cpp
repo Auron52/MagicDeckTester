@@ -22591,6 +22591,23 @@ static std::uint64_t BoardKey(const GameState& s, int me)
         if (p.controller_index != me) { continue; }
         Mix(h, static_cast<std::uint64_t>(p.card.m_number) * 11
                + (p.tapped ? 1 : 0) + (p.aura_attached_to != 0 ? 64ULL * static_cast<std::uint64_t>(p.aura_attached_to) : 0));
+        // EQUIPMENT ATTACHMENT, which this key used to omit entirely -- it hashed `aura_attached_to`
+        // and not `equipped_to`, so two boards differing only in which Equipment sits on which host
+        // shared an entry. On an equipment deck mid-chain that is not a corner case, it is the
+        // common case, and the consequence is a verdict leaking across boards: the trial reports a
+        // kill the apply cannot reproduce and the cut REFUTES its own certificate (measured on
+        // claude_s5_gi4 -- 3 refutations at t3, dropping to 1 with the memo bypassed).
+        // MTG_EQUIP_ROUTE_ATTACH_KEY=0 is the A/B control: it restores the colliding key, which is
+        // the only way to price what sharpening it COSTS (a sharper key means more memo misses,
+        // i.e. more playouts). Kept rather than deleted so the measurement does not have to be
+        // rebuilt from scratch next time.
+        static const bool s_attach_key = EnvOn("MTG_EQUIP_ROUTE_ATTACH_KEY", true);
+        if (s_attach_key)
+        {
+            Mix(h, p.equipped_to != 0
+                       ? 1315423911ULL * static_cast<std::uint64_t>(p.equipped_to) + 17
+                       : 0);
+        }
     }
     const ManaPool& f = s.floating_mana;
     Mix(h, static_cast<std::uint64_t>(f.white + 31 * f.blue + 961 * f.black));
@@ -22744,15 +22761,39 @@ inline int MaxProbe()
     return v;
 }
 
+inline bool PayloadRetryEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_PAYLOAD");   // DEFAULT OFF -- measuring
+    return v;
+}
+int TrialPolicy(const GameState& s, int me);
+
 // Suppresses the emission site for the duration of a playout (see RE-ENTRY above).
 inline bool& InRouteFlag() { static thread_local bool v = false; return v; }
 struct Scope
 {
-    Scope()  { InRouteFlag() = true;  }
-    ~Scope() { InRouteFlag() = false; }
+    // SAVE/RESTORE, not set/clear: there are two playout entry points now (Run and RunSearch), and
+    // a nested scope that cleared the flag on exit would re-open the emission site in the MIDDLE of
+    // the outer playout -- the one thing this guard exists to prevent.
+    Scope()  : prev(InRouteFlag()) { InRouteFlag() = true;  }
+    ~Scope() { InRouteFlag() = prev; }
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
+private:
+    bool prev;
 };
+
+// MTG_EQUIP_ROUTE_MEMO=0 bypasses the per-board verdict memo. The EDF route carries the same hatch
+// for the same reason: BoardKey does NOT hash `equipped_to`, so two frames differing only in which
+// Equipment sits on which host share an entry, and a root's own trial becomes a silent hit on a
+// rollout's earlier verdict for a board that is not this one. The cut's re-verify then REFUTES the
+// plan (it replays the recorded policy and no kill appears), which is safe but loses the line, and
+// nothing in the trace says why.
+inline bool MemoEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_MEMO", true);
+    return v;
+}
 
 static int CastCount(const TurnSolver::Plan& p)
 {
@@ -22762,11 +22803,337 @@ static int CastCount(const TurnSolver::Plan& p)
     return n;
 }
 
+// ---- TWO ADVANCE POLICIES, TRIED IN ORDER (2026-10-04) ----------------------------------------
+// The chain advance used to have exactly one rule -- "the plan that casts the most" -- and on
+// claude_s5_gi4 that rule is what loses the game. Measured: with the turn-1 hold forced so the
+// opening matches the human's, the turn-3 chain fires, draws fourteen cards INCLUDING the Colossus
+// Hammer, and then spends the turn's four mana on Puresteel Paladin ({W}{W}) plus Sram ({1}{W}) --
+// five casts, two draw engines -- and never casts the {1} Hammer it is holding. The human spent
+// three mana on Puresteel plus the Hammer and won on turn 3 with the +10/+10.
+//
+// So "most casts" is the right rule for BUILDING the chain (a cast is a draw and an artifact toward
+// metalcraft) and the wrong rule for CASHING it: once the chain is self-feeding, the scarce resource
+// is mana and the thing worth mana is the damage payload, not another draw.
+//
+// Rather than replace one greedy rule with another, try both and keep whichever WINS -- the same
+// shape comboroute::Run already uses for its two deploy orders (auras first / auras last). The cost
+// discipline matters and falls out for free: PayloadFirst only runs when MostCasts has FAILED, and
+// ~90% of trials succeed on the first policy, so the common path pays nothing. That is the opposite
+// of every other cost lever tried on this route, each of which bought wall by giving up a reference.
+// ---- ...AND WHY TWO WERE NOT ENOUGH (2026-10-04, claude_s5_gi4) -------------------------------
+// Traced from the human's exact turn-3 board (--choices-then-auto after their recorded t1+t2), the
+// chain runs twelve casts over three links and never reaches lethal. The trace names both
+// mistakes, and NEITHER policy above can avoid them:
+//
+//   it0 (3 mana): casts "Kite Shield, Puresteel Paladin, Accorder's Shield, Spidersilk Net,
+//                 Spidersilk Net, SIGARDA'S AID, Bone Saw" -- seven casts. The human cast the
+//                 same six minus the Aid, banking that {W}.
+//   it1 (1 mana off Ancient Den, BOTH Colossus Hammers now in hand): buys SKATEBOARD ({1}, +1/+0)
+//                 and then goes SPENT still holding two {1} Hammers worth +10/+10 each.
+//
+// MostCasts cannot: the Aid and the Skateboard each ADD a cast, so it prefers them by construction.
+// PayloadFirst cannot: neither Sigarda's Aid nor Puresteel Paladin is Equipment, so they TIE at
+// payload 0 and it falls through to the same cast-count rule, diverging at it0 before it1 is ever
+// reached. The winning line casts FEWER spells and spends its mana LATER, on cards the chain's own
+// draws have not revealed yet -- which is precisely what a one-step greedy on the current hand
+// cannot represent.
+//
+// So the advance gets a THIRD greedy that encodes exactly those two errors, and a bounded SEARCH
+// that does not rely on getting the greedy right at all:
+//
+//   ChainFirst -- rank by (draw watchers added, payload added, mana WASTED on neither), so the
+//                 second Puresteel Paladin beats Sigarda's Aid (a watcher vs nothing at the same
+//                 price) and a Colossus Hammer beats a Skateboard. Still one playout per link.
+//   Search     -- DFS over DISTINCT PURCHASES (see PurchaseKey): the chain's {0} casts ride every
+//                 plan by construction, so the only real choice at a link is which mana it spends
+//                 and which land it plays, and that set is small (~15-25 here) even on a
+//                 24,576-plan frame. Complete up to its node bound, so "we did not have enough
+//                 budget" becomes the only way it can miss -- which is the USER's bar.
+enum class Adv { MostCasts, PayloadFirst, ChainFirst, Search };
+
+// Cost bounds for Adv::Search. Both bound a SOUND detector (a missed win costs the turn it would
+// have saved and nothing else), so they are safe to tune for cost.
+inline int SearchWidth()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_SEARCH_WIDTH");
+        const int n = (e && *e) ? std::atoi(e) : 32;
+        return n > 0 ? n : 32;
+    }();
+    return v;
+}
+inline int SearchNodes()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_SEARCH_NODES");
+        const int n = (e && *e) ? std::atoi(e) : 256;
+        return n > 0 ? n : 256;
+    }();
+    return v;
+}
+inline bool SearchRetryEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_SEARCH");   // DEFAULT OFF -- measuring
+    return v;
+}
+inline bool ChainRetryEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_CHAIN");    // DEFAULT OFF -- measuring
+    return v;
+}
+
+// Does this card WATCH equipment -- i.e. does putting it on the battlefield make every later
+// Equipment cast draw? Sram draws on Equipment CAST, Puresteel Paladin on Equipment ETB. This is
+// the resource the cast-count rule cannot see: a second watcher DOUBLES the chain's draw rate, so
+// it is worth strictly more than any other two-mana play the chain could make instead.
+static bool IsEquipmentDrawWatcher(const CardDefinition& d)
+{
+    return d.params.draw_on_equipment_etb || !d.params.draw_on_cast_subtypes.empty();
+}
+
+// What the plan SPENDS, and on what. Free casts are excluded on purpose: they ride every plan by
+// construction (FREE_CAST_HOIST forces them into auto_sel), so two plans differing only in their
+// free casts advance the chain identically and must not both be searched.
+// THE LAND IS PART OF THE PURCHASE, and it is NOT in `actions`: Kind::PlayLand "never appears in
+// plan.actions" (TurnSolver.cpp's plan signature switch says so outright) -- the land axis rides
+// Plan::land_to_play and is applied separately by ApplyPlanDirect. Keying off the action therefore
+// collapses every land choice into one purchase, which is the exact blindness that loses this game:
+// Ancient Den enters UNTAPPED and pays for a Colossus Hammer this turn, Remote Farm enters tapped
+// and pays for nothing, and both links cast the same number of spells either way, so neither cast
+// count nor `value` can tell them apart.
+static std::uint64_t PurchaseKey(const TurnSolver::Plan& p)
+{
+    // Key on the card NAME, not `def->card.m_number`: that field belongs to the DEFINITION's
+    // prototype card and is 0 there, not the deck-numbered card the action refers to. Keying on it
+    // hashed every paid cast identically, so "Ancient Den + Colossus Hammer", "+ Dragonfire Blade"
+    // and "+ Skateboard" collapsed into ONE purchase and the DFS only ever tried whichever
+    // representative won -- which is the Skateboard, i.e. the very choice this exists to escape.
+    std::vector<std::string> bought;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }   // free: forced, not a choice
+        bought.push_back(a.def->card.m_name.str());
+    }
+    std::sort(bought.begin(), bought.end());
+    std::uint64_t h = 1469598103934665603ULL;
+    const auto mix = [&h](std::uint64_t v) { h ^= v; h *= 1099511628211ULL; };
+    for (const std::string& n : bought)
+    {
+        for (const char c : n) { mix(static_cast<std::uint64_t>(c)); }
+        mix(0x1F1F1F1F1F1F1F1FULL);                 // separator: "ab"+"c" must not equal "a"+"bc"
+    }
+    // The land and its searched sub-decisions (MDFC face, fetch target, rad mode) -- the same
+    // triple bp_play_searched_land records, for the same reason: a different face or fetch target
+    // IS a different land.
+    mix(p.land_decided ? 0x9E3779B97F4A7C15ULL : 0x517CC1B727220A95ULL);
+    for (const char c : p.land_to_play) { mix(static_cast<std::uint64_t>(c)); }
+    mix(0xD6E8FEB86659FD93ULL);
+    for (const char c : p.land_face)    { mix(static_cast<std::uint64_t>(c)); }
+    mix(0xA24BAED4963EE407ULL);
+    for (const char c : p.fetch_target) { mix(static_cast<std::uint64_t>(c)); }
+    mix(static_cast<std::uint64_t>(p.rad_mode + 2));
+    return h;
+}
+
+// Attack power this plan's EQUIPMENT casts would add once attached. Equipment only, and scaled
+// bonuses are priced against the board they will actually see (Golem-Skin Gauntlets grows per
+// Equipment), which is what makes a Colossus Hammer outrank a second draw engine here.
+static int PayloadScore(const TurnSolver::Plan& p, const GameState& s, int me)
+{
+    int equips_on_board = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const CardDefinition* qd = comboroute::DefOf(q.card);
+        if (qd != nullptr && qd->params.is_equipment) { ++equips_on_board; }
+    }
+    int score = 0;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        const CardParams& cp = a.def->params;
+        if (!cp.is_equipment) { continue; }
+        score += cp.equip_power_bonus
+               + cp.equip_scale_power_per_equipment * (equips_on_board + 1);
+    }
+    return score;
+}
+
+// How many NEW equipment draw-watchers this plan puts on the battlefield, and how much mana it
+// spends on paid casts that are neither a watcher nor a damage payload. Those are the two terms
+// the cast-count rule is blind to, and between them they name both of claude_s5_gi4's mistakes:
+// Sigarda's Aid is `waste` at the price of a watcher, a Skateboard is `waste` at the price of a
+// Colossus Hammer.
+static void ChainTerms(const TurnSolver::Plan& p, int& watchers, int& waste)
+{
+    watchers = 0;
+    waste    = 0;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        const CardParams& cp = a.def->params;
+        const int mv = a.def->card.m_mana_cost.ManaValue();
+        if (IsEquipmentDrawWatcher(*a.def)) { ++watchers; continue; }
+        if (mv == 0) { continue; }                      // free: costs the chain nothing either way
+        if (cp.is_equipment
+            && (cp.equip_power_bonus > 0 || cp.equip_scale_power_per_equipment > 0)) { continue; }
+        waste += mv;                                    // paid, no draws, no damage
+    }
+}
+
+static int Run(GameState& s, int me, Adv adv);
+
+// DFS over DISTINCT PURCHASES. One node = one link applied on a copy; `nodes` is the shared bound.
+// On success `s` holds the winning board, exactly as Run leaves it, so the apply path is lockstep
+// with the trial path here too.
+static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
+{
+    if (iters_left <= 0 || nodes <= 0) { return 0; }
+    std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    if (plans.empty()) { return 0; }
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.wins_this_turn)
+        {
+            TurnSolver::ApplyPlan(s, p, /*is_pre_combat=*/true);
+            return 1;
+        }
+    }
+    // One representative per purchase, and within a purchase the MOST free casts: those are
+    // dominant inside the chain (an artifact toward metalcraft plus a watcher draw), so they are
+    // not a branch -- only the spending is.
+    std::unordered_map<std::uint64_t, const TurnSolver::Plan*> reps;
+    std::vector<std::uint64_t> order;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (CastCount(p) <= 0) { continue; }
+        const std::uint64_t k = PurchaseKey(p);
+        const auto it = reps.find(k);
+        if (it == reps.end())
+        {
+            reps.emplace(k, &p);
+            order.push_back(k);
+            continue;
+        }
+        const int c_new = CastCount(p), c_old = CastCount(*it->second);
+        if (c_new > c_old || (c_new == c_old && p.value > it->second->value)) { it->second = &p; }
+    }
+    if (order.empty()) { return 0; }
+    // Try the biggest payload first: it only changes WHICH win is found first and how fast, never
+    // whether one is found, because every purchase below the width bound is tried.
+    std::sort(order.begin(), order.end(),
+              [&](std::uint64_t a, std::uint64_t b) {
+                  const TurnSolver::Plan* pa = reps[a];
+                  const TurnSolver::Plan* pb = reps[b];
+                  const int sa = PayloadScore(*pa, s, me), sb = PayloadScore(*pb, s, me);
+                  if (sa != sb) { return sa > sb; }
+                  const int ca = CastCount(*pa), cb = CastCount(*pb);
+                  if (ca != cb) { return ca > cb; }
+                  return pa->value > pb->value;
+              });
+    const int width = std::min<int>(SearchWidth(), static_cast<int>(order.size()));
+    if (Trace())
+    {
+        std::fprintf(stderr, "[equip-route]   dfs d%d nplans=%d purchases=%d width=%d nodes=%d\n",
+                     iters_left, (int)plans.size(), (int)order.size(), width, nodes);
+        // The two things a missing purchase could blame: the HAND (the card is not there) and the
+        // enumerator (it is there and never offered). Print both so the next step is not a guess.
+        std::string hand;
+        for (const Card& c : s.players[me].hand)
+        {
+            if (!hand.empty()) { hand += ", "; }
+            hand += c.m_name.str();
+        }
+        std::fprintf(stderr, "[equip-route]     hand: %s\n", hand.c_str());
+        std::set<std::string> offered;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }
+                offered.insert(a.def->card.m_name.str());
+            }
+        }
+        std::string off;
+        for (const std::string& n : offered) { if (!off.empty()) { off += ", "; } off += n; }
+        std::fprintf(stderr, "[equip-route]     paid casts offered: %s\n",
+                     off.empty() ? "(none)" : off.c_str());
+        // SELF-CHECK on the dedup, counted straight off the plans as printable strings. This is
+        // how the first version of PurchaseKey was caught keying on `def->card.m_number` (0 on a
+        // definition prototype), which hashed every paid cast alike and collapsed six purchases
+        // into four -- silently deleting the only one that wins. A mismatch here means the KEY is
+        // wrong, not the enumeration.
+        std::set<std::string> direct;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            if (CastCount(p) <= 0) { continue; }
+            std::string b = !p.land_decided ? "?" : p.land_to_play;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }
+                b += "+" + a.def->card.m_name.str();
+            }
+            direct.insert(b);
+        }
+        if (static_cast<int>(direct.size()) != static_cast<int>(order.size()))
+        {
+            std::fprintf(stderr,
+                "[equip-route]     !! DEDUP MISMATCH: keys=%d distinct purchases=%d\n",
+                (int)order.size(), (int)direct.size());
+        }
+        for (int i = 0; i < width; ++i)
+        {
+            const TurnSolver::Plan* rp = reps[order[i]];
+            std::string buy = rp->land_decided
+                ? ("land:" + (rp->land_to_play.empty() ? std::string("(defer)") : rp->land_to_play))
+                : std::string("land:(undecided)");
+            for (const Action& a : rp->actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }
+                buy += " + ";
+                buy += a.def->card.m_name;
+            }
+            std::fprintf(stderr, "[equip-route]     buy[%d] %s\n",
+                         i, buy.empty() ? "(free casts only)" : buy.c_str());
+        }
+    }
+    for (int i = 0; i < width && nodes > 0; ++i)
+    {
+        --nodes;
+        GameState next = s;
+        TurnSolver::ApplyPlan(next, *reps[order[i]], /*is_pre_combat=*/true);
+        if (RunSearchRec(next, me, iters_left - 1, nodes) == 1)
+        {
+            s = next;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int RunSearch(GameState& s, int me)
+{
+    Scope _guard;                       // no nested route emission for the whole search
+    int nodes = SearchNodes();
+    const int r = RunSearchRec(s, me, MaxIter(), nodes);
+    if (Trace())
+    {
+        std::fprintf(stderr, "[equip-route] t%d SEARCH %s (nodes left %d/%d)\n",
+                     s.turn_number, r == 1 ? "LETHAL" : "no win", nodes, SearchNodes());
+    }
+    return r;
+}
+
 // Play the turn out. Returns 1 iff the realised board is lethal this turn, else 0. `s` is mutated,
 // so the caller decides whether it is a copy (trial) or the live state (apply) -- the two paths run
 // THIS function and nothing else, which is the lockstep guarantee.
-static int Run(GameState& s, int me)
+static int Run(GameState& s, int me, Adv adv)
 {
+    if (adv == Adv::Search) { return RunSearch(s, me); }
     Scope _guard;                       // no nested route emission for the whole playout
     int iters = 0, links = 0;
     for (; iters < MaxIter(); ++iters)
@@ -22793,12 +23160,46 @@ static int Run(GameState& s, int me)
         // is what produces the next link (two draws and an artifact toward metalcraft). Ties go to
         // the engine's own `value` so the choice is never arbitrary.
         const TurnSolver::Plan* best = nullptr;
-        int best_casts = 0, best_value = -1;
+        int best_casts = 0, best_value = -1, best_payload = -1;
+        int best_watch = -1, best_waste = 0;
         const int probe = std::min<int>(MaxProbe(), static_cast<int>(plans.size()));
         for (int i = 0; i < probe; ++i)
         {
             const int c = CastCount(plans[i]);
             if (c <= 0) { continue; }
+            if (adv == Adv::ChainFirst)
+            {
+                // Feed the chain, then hit, then stop wasting mana on neither. Cast count is the
+                // LAST tie-break here, not the first -- that inversion is the whole point.
+                int w = 0, waste = 0;
+                ChainTerms(plans[i], w, waste);
+                const int pay = PayloadScore(plans[i], s, me);
+                const bool better =
+                      best == nullptr
+                   || w > best_watch
+                   || (w == best_watch && pay > best_payload)
+                   || (w == best_watch && pay == best_payload && waste < best_waste)
+                   || (w == best_watch && pay == best_payload && waste == best_waste
+                       && c > best_casts)
+                   || (w == best_watch && pay == best_payload && waste == best_waste
+                       && c == best_casts && plans[i].value > best_value);
+                if (better)
+                {
+                    best = &plans[i]; best_casts = c; best_value = plans[i].value;
+                    best_payload = pay; best_watch = w; best_waste = waste;
+                }
+                continue;
+            }
+            if (adv == Adv::PayloadFirst)
+            {
+                // Damage first, cast count only as the tie-break: spend the mana on the payload.
+                const int pay = PayloadScore(plans[i], s, me);
+                if (pay > best_payload
+                    || (pay == best_payload && c > best_casts)
+                    || (pay == best_payload && c == best_casts && plans[i].value > best_value))
+                { best = &plans[i]; best_casts = c; best_value = plans[i].value; best_payload = pay; }
+                continue;
+            }
             if (c > best_casts || (c == best_casts && plans[i].value > best_value))
             { best = &plans[i]; best_casts = c; best_value = plans[i].value; }
         }
@@ -22814,14 +23215,27 @@ static int Run(GameState& s, int me)
             break;                               // nothing left to cast: the chain is spent
         }
         const int hand_before = static_cast<int>(s.players[me].hand.size());
+        // WHAT the advance buys, not just how much: a cast count alone cannot distinguish
+        // "second Puresteel Paladin" from "Sigarda's Aid" -- same mana, same cast count, and only
+        // the first one doubles the draw rate of every Equipment cast after it.
+        std::string bought;
+        if (Trace())
+        {
+            for (const Action& a : best->actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                if (!bought.empty()) { bought += ", "; }
+                bought += a.def->card.m_name;
+            }
+        }
         TurnSolver::ApplyPlan(s, *best, /*is_pre_combat=*/true);
         if (Trace())
         {
             std::fprintf(stderr,
-                "[equip-route]   it%d casts=%d nplans=%d hand %d->%d bf=%d life=%d\n",
+                "[equip-route]   it%d casts=%d nplans=%d hand %d->%d bf=%d life=%d :: %s\n",
                 iters, best_casts, (int)plans.size(), hand_before,
                 (int)s.players[me].hand.size(), (int)s.battlefield.size(),
-                s.players[1 - me].life);
+                s.players[1 - me].life, bought.c_str());
         }
         links += best_casts;
     }
@@ -22905,19 +23319,56 @@ int EquipRouteTrial(const GameState& s, int me)
     if (!equiproute::On() || equiproute::InRouteFlag()) { return 0; }
     // Memoised per board, exactly as the EDF trial is: the enumerator reaches this site many times
     // for one frame (every rollout, every interior node), and the playout is the expensive half.
+    const int v = equiproute::TrialPolicy(s, me);
+    return v != 0 ? 1 : 0;              // 1 = lethal (either policy); the policy itself is internal
+}
+
+namespace equiproute
+{
+// -> 0 no win, else WHICH policy won: 1 MostCasts, 2 PayloadFirst, 3 ChainFirst, 4 Search.
+// Memoised per board, exactly as the EDF trial is: the enumerator reaches the emission site many
+// times for one frame and the playout is the expensive half. The POLICY is memoised with the
+// verdict because the apply has to replay the one that actually won -- the same reason
+// comboroute::Run records `attempt_used`.
+//
+// A LADDER, CHEAPEST FIRST, AND EACH RUNG ONLY ON FAILURE. ~90% of trials are lethal under
+// MostCasts, so the common path still pays exactly one playout; a rung is reached only by a board
+// that has already been proven NOT to win the cheap way, which is the same cost discipline the
+// PayloadFirst retry was built with.
+int TrialPolicy(const GameState& s, int me)
+{
     static thread_local std::unordered_map<std::uint64_t, int> memo;
+    const bool use_memo = MemoEnabled();
     const std::uint64_t key = comboroute::BoardKey(s, me);
-    const std::unordered_map<std::uint64_t, int>::const_iterator it = memo.find(key);
-    if (it != memo.end()) { return it->second; }
+    if (use_memo)
+    {
+        const std::unordered_map<std::uint64_t, int>::const_iterator it = memo.find(key);
+        if (it != memo.end()) { return it->second; }
+    }
     int r = 0;
     {
         RevealLogPause _rlp;            // a trial must leak no reveal/draw events into the game log
         GameState probe = s;
-        r = equiproute::Run(probe, me);
+        if (Run(probe, me, Adv::MostCasts) == 1) { r = 1; }
     }
-    memo[key] = r;
+    // Each retry gets a FRESH copy -- the previous attempt mutated its own.
+    const auto retry = [&](Adv adv, int code, const char* label) {
+        if (r != 0) { return; }
+        RevealLogPause _rlp;
+        GameState probe = s;
+        if (Run(probe, me, adv) != 1) { return; }
+        r = code;
+        if (Trace())
+        { std::fprintf(stderr, "[equip-route] t%d %s won where most-casts did not\n",
+                       s.turn_number, label); }
+    };
+    if (PayloadRetryEnabled()) { retry(Adv::PayloadFirst, 2, "PAYLOAD-FIRST"); }
+    if (ChainRetryEnabled())   { retry(Adv::ChainFirst,   3, "CHAIN-FIRST");   }
+    if (SearchRetryEnabled())  { retry(Adv::Search,       4, "SEARCH");        }
+    if (use_memo) { memo[key] = r; }
     return r;
 }
+}   // namespace equiproute
 
 int EquipRouteApply(GameState& s, int me)
 {
@@ -22932,7 +23383,13 @@ int EquipRouteApply(GameState& s, int me)
                      g_real_resolution ? 1 : 0, s.turn_number, verdict);
     }
     if (verdict != 1) { return 0; }
-    return equiproute::Run(s, me);
+    // Replay the policy that actually won on the live state (see TrialPolicy).
+    const int pol = equiproute::TrialPolicy(s, me);
+    const equiproute::Adv adv = pol == 4 ? equiproute::Adv::Search
+                              : pol == 3 ? equiproute::Adv::ChainFirst
+                              : pol == 2 ? equiproute::Adv::PayloadFirst
+                                         : equiproute::Adv::MostCasts;
+    return equiproute::Run(s, me, adv);
 }
 
 

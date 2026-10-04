@@ -14117,6 +14117,17 @@ static bool EquipRouteReverifyEnabled()
     return v;
 }
 
+// The route owns its own land drop -- see the long note at the cut. DEFAULT ON because it is a
+// LOCKSTEP fix, not a policy: without it the board the trial certified and the board the apply
+// replays differ by the turn's land drop, so the cut can refute its own certificate (measured on
+// claude_s5_gi4: `CUT t3 REFUTED by re-verify: pre=1 dmg=2 opp_life=20` where the trial had found
+// a 23-damage kill). `=0` restores the pre-fix arm for the A/B.
+static bool EquipRouteLandDeferEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_LAND_DEFER", true);
+    return v;
+}
+
 // ---- FOLD PREFIX: hoist the canonical-prefix rejection into the odometer -----------------------
 // Same move as EquipPieceDepViolated below, for the rule that dominates Snow.
 //
@@ -44915,6 +44926,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             sat_bypass = false;
             if (plans.size() > before)
             {
+                // THE ROUTE OWNS ITS OWN LAND DROP, so this plan must not play one.
+                //
+                // The trial that certified the route ran in CollectActions, on a board whose land
+                // drop is still UNUSED -- and the route's playout re-enumerates main plans, so it
+                // makes (and needs) that drop itself. This plan, though, inherits whatever land the
+                // frame's land axis happens to be sitting on, and ApplyPlanDirect plays it BEFORE
+                // the ComboRoute action. So the apply handed the route a board with the drop already
+                // spent, on a land the route did not choose, and the chain stalled: on claude_s5_gi4
+                // the certified t3 kill needs the drop for Ancient Den (the one land that enters
+                // UNTAPPED and so pays for a {1} Colossus Hammer), the axis had played a tapped
+                // Remote Farm instead, and the re-verify refuted its own trial at dmg=2 vs 20 life.
+                // Deferring the land here is what makes the trial board and the apply board the
+                // same board, which is the lockstep guarantee the whole cut rests on.
+                if (EquipRouteLandDeferEnabled())
+                {
+                    plans.back().land_decided = true;    // decided: and the decision is "not yet"
+                    plans.back().land_to_play.clear();
+                    plans.back().land_face.clear();
+                    plans.back().fetch_target.clear();
+                    plans.back().rad_mode    = -1;
+                    plans.back().scry_choice = -1;
+                }
                 bool verified = true;
                 if (EquipRouteReverifyEnabled())     // see EquipRouteReverifyEnabled: duplicated work
                 {
@@ -44928,9 +44961,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     plans.back().wins_this_turn = true;
                     if (EquipRouteTraceOn())
                     {
-                        std::fprintf(stderr, "[equip-route] CUT t%d verified\n", state.turn_number);
+                        std::fprintf(stderr, "[equip-route] CUT t%d verified pre=%d\n", state.turn_number, is_pre_combat ? 1 : 0);
                     }
                     return { std::move(plans.back()) };
+                }
+                if (EquipRouteTraceOn())
+                {
+                    GameState copy2 = state;
+                    ApplyPlanDirect(copy2, plans.back(), is_pre_combat);
+                    std::fprintf(stderr,
+                        "[equip-route] CUT t%d REFUTED by re-verify: pre=%d dmg=%d opp_life=%d\n",
+                        state.turn_number, is_pre_combat ? 1 : 0,
+                        PendingAttackDamage(copy2), copy2.Opponent().life);
                 }
                 plans.pop_back();                    // refuted -> enumerate normally (no dup)
             }
