@@ -10099,6 +10099,7 @@ namespace
     const BreachingDragonstormProvider g_breaching_dragonstorm;
     const KnightsProvider        g_knights;
     const WhiteKnightsProvider   g_white_knights;
+    const SoldiersProvider       g_soldiers;
     const AntiLifegainProvider   g_antilife;
     const TreasureHuntProvider   g_treasure;
     const VialProvider           g_vial;
@@ -11550,7 +11551,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // misroute class again. Signature = Soldiers-only gated params OR'd across FIVE different cards
     // (Harbin, Thalia, Thalia's Lieutenant, Recruitment Officer, Rick), all new in this onboarding and
     // carried by no other card, so one deckbuilding swap cannot lose the routing. Routes to
-    // VialProvider (the Aether Vial archetype it rides) until Stage 4a gives it its own provider.
+    // SoldiersProvider (Stage 4a, 2026-10-04: an empty derivation of VialProvider, the archetype it rode).
     bool soldiers = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
@@ -12026,9 +12027,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // is carried by no other deck, so the position is free.
     if (selesnya)    { return g_selesnya_lifegain; }
     if (angels)      { return g_angels; }
-    // Soldiers: ABOVE goblin and anti -- see the flag. VialProvider for now (Stage 4a decides the
-    // deck's own provider); the signature is carried by no other deck, so the position is free.
-    if (soldiers)    { return g_vial; }
+    // Soldiers: ABOVE goblin and anti -- see the flag. SoldiersProvider (Stage 4a, 2026-10-04) is an
+    // EMPTY derivation of VialProvider, the provider this deck rode until then, so the move is
+    // play-neutral by construction; it only stops Soldiers SHARING Vial with slivers_vial. The
+    // signature is carried by no other deck, so the position is free.
+    if (soldiers)    { return g_soldiers; }
     // WhiteKnights ABOVE Knights, and that order is the whole point: WhiteKnights trips BOTH
     // signatures (it shares the Knight Exemplar / Worthy Knight / Acclaimed Contender core), so
     // below the `knights` branch it would never be reached and the two lists would share a

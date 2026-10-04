@@ -1,0 +1,95 @@
+{
+  "card_scores": {
+    "Aether Vial": [
+      -0.037991812488398224,
+      -0.35494393476044817
+    ],
+    "Brutal Cathar": [
+      -0.16016416764235597
+    ],
+    "Cathar Commando": [
+      0.023944040893193907
+    ],
+    "Cavern of Souls": [
+      -0.11323252623855584
+    ],
+    "Champion of the Parish": [
+      0.39064364625320813,
+      0.1003344481605346
+    ],
+    "Coppercoat Vanguard": [
+      0.12021466905187861,
+      -0.21611721611721624
+    ],
+    "Esper Sentinel": [
+      0.08519829892046893,
+      -0.030052472571155953
+    ],
+    "Field Marshal": [
+      -0.07301587301587364,
+      0.02777777777777768
+    ],
+    "Fortified Beachhead": [
+      -0.04859168331906005,
+      0.015263349735739062
+    ],
+    "General Kudro of Drannith": [
+      -0.04423850323483158
+    ],
+    "Harbin, Vanguard Aviator": [
+      0.001875000000000071
+    ],
+    "Jirina, Dauntless General": [
+      -0.0683487703609078
+    ],
+    "King Darien XLVIII": [
+      -0.06345255251321014
+    ],
+    "Plains": [
+      -0.01059615292826166,
+      -0.1502966381015156
+    ],
+    "Ranger-Captain of Eos": [
+      -0.13451240481454185
+    ],
+    "Recruiter of the Guard": [
+      -0.029007177033493647
+    ],
+    "Recruitment Officer": [
+      0.2069819640343189
+    ],
+    "Rick, Steadfast Leader": [
+      -0.010332133068200022
+    ],
+    "Secluded Courtyard": [
+      0.046969013237063706,
+      -0.03541666666666732
+    ],
+    "Silent Clearing": [
+      -0.0009359498330887561
+    ],
+    "Thalia's Lieutenant": [
+      0.06769650159018692,
+      0.08953258722843938
+    ],
+    "Thalia, Guardian of Thraben": [
+      0.004476955670144278
+    ],
+    "Unclaimed Territory": [
+      -0.022398181401390715,
+      -0.15498500749625244
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

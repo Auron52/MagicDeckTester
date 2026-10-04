@@ -139,11 +139,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // point, not of play. See its declaration in DecisionProviders.h.
         {"SelesnyaLifegain", "SelesnyaLifegain"},
         // Soldiers (onboarding 2026-10-04): its own `soldiers` signature (Harbin / Thalia / Thalia's
-        // Lieutenant / Recruitment Officer / Rick params) returns VialProvider ABOVE goblin (three sac
+        // Lieutenant / Recruitment Officer / Rick params) routes ABOVE goblin (three sac
         // outlets) and anti (two creature tutors) -- and the Angels term it used to trip (Champion of
-        // the Parish's self-counter watcher) is now keyed on an ["Angel"] filter. Vial until Stage 4a
-        // gives it its own provider; update this pin then.
-        {"Soldiers", "Vial"},
+        // the Parish's self-counter watcher) is now keyed on an ["Angel"] filter. Stage 4a gave it
+        // SoldiersProvider (an empty derivation of VialProvider) so it no longer shares slivers_vial's.
+        {"Soldiers", "Soldiers"},
     };
 
     namespace fs = std::filesystem;

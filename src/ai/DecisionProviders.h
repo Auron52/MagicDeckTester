@@ -645,6 +645,28 @@ public:
 };
 
 
+// Soldiers (2026-10-04) -- W/x Human Soldiers on Aether Vial. Stage 4a: before this class the deck
+// rode VialProvider, SHARED with slivers_vial, which provider_audit.py --check rejects. An EMPTY
+// derivation of VialProvider -- what the deck actually routed to -- so it inherits every judgement
+// hook byte-for-byte (VialProvider's MTG_KNIGHTS_ORDER cast-order clauses key on
+// cast_trigger_creates_tokens / etb_dig_requires_subtypes, which no Soldiers card carries, so they
+// fall through to the generic rank; everything else is the root default). It exists for the
+// every-deck-owns-a-provider rule: a name in the audit, a certificate, and the home for any
+// deck-specific hook that is later MEASURED and USER-ADOPTED (a cast order is a user question --
+// docs/design/cast-order-rankings.md -- and is NOT encoded here).
+class SoldiersProvider : public VialProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat looks like the only route to the "
+               "opponent's life (no burn, no drain), but three things must be priced before any "
+               "winless-this-turn bound is sound: Aether Vial puts creatures onto the battlefield at "
+               "instant speed (Cathar Commando also has flash); Fortified Beachhead's {5}+{T} team "
+               "pump and Harbin's 5-Soldier attack pump add power after the board is read; and Rick's "
+               "anthem switches on mid-turn once a fourth Human is controlled." }; }
+    const char* Name() const override { return "Soldiers"; }
+};
+
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
 // lands in play (its curve tops at mana value 2), it BANKS further land drops so a future
 // topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). Inherits
