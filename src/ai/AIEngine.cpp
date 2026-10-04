@@ -4237,6 +4237,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // dispatch a continuation's BOARD ACTIVATIONS -- lockstep twins of ApplyPlanDirect's
     // apply_continuation_activations, which records them and applies them after the casts.
     std::function<void(const std::vector<Action>&)> exec_trailing_activations;
+    // Continuation activations reached before the phase's own trailing pass are QUEUED and run in it
+    // -- the lockstep twin of ApplyPlanDirect's pending_cont_acts (USER 2026-10-04: equips at the
+    // END of main 1). After that pass they apply at once.
+    std::vector<Action> pending_cont_acts;
+    bool                main_trailing_done = false;
+    auto exec_continuation_activations = [&](const std::vector<Action>& acts)
+    {
+        if (main_trailing_done) { exec_trailing_activations(acts); return; }
+        for (const Action& a : acts)
+        { if (TurnSolver::IsTrailingActivation(a.kind)) { pending_cont_acts.push_back(a); } }
+    };
     std::function<void(const std::vector<Action>&)> replay_recorded =
         [&](const std::vector<Action>& recs)
     {
@@ -4352,7 +4363,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Nested breakpoint casts this recorded draw engine (or dug Treasure Hunt) revealed.
             if (!a.breakpoint_casts.empty()) { replay_recorded(a.breakpoint_casts); }
         }
-        if (!rec_acts.empty()) { exec_trailing_activations(rec_acts); }
+        if (!rec_acts.empty()) { exec_continuation_activations(rec_acts); }
     };
 
     // Fallback draw breakpoint for the NON-committed full-depth plan (the develop-when-
@@ -4720,7 +4731,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
         // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw
         // offers: Snow s5005 gi147). The trailing pass is a no-op on a cast-only continuation.
-        exec_trailing_activations(extra.actions);
+        exec_continuation_activations(extra.actions);
         // Flood-keep (fallback path): if the draw overfilled the hand and the land drop is
         // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as
@@ -4797,7 +4808,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            if (d != nullptr && _p.ActivationOrderRank(state, *d) != 0) { _any = true; break; }
+            if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
         }
         if (_any)
         {
@@ -6108,7 +6119,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
     }
 
-    exec_trailing_activations(plan.actions);
+    if (pending_cont_acts.empty()) { exec_trailing_activations(plan.actions); }
+    else
+    {
+        std::vector<Action> all = plan.actions;
+        all.insert(all.end(), pending_cont_acts.begin(), pending_cont_acts.end());
+        exec_trailing_activations(all);
+    }
+    pending_cont_acts.clear();
+    main_trailing_done = true;
 
     // BREAKPOINT SITE 9 executor twin -- POST-ENTRY ACTIVATION (lockstep pair of ApplyPlanDirect's
     // trailing-pass site; gate and header note at TurnSolver::PostEntryActivationPending). Same

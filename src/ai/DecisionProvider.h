@@ -995,6 +995,12 @@ public:
     // scored one. Default 0 everywhere means the stable sort is skipped entirely -> byte-identical
     // for every deck that does not override this.
     virtual int ActivationOrderRank(const GameState&, const CardDefinition&) const { return 0; }
+    // ...the same, told WHICH KIND of ability this activation is (TurnSolver::ActivationClass:
+    // 0 other, 1 equip / attach, 2 a counter-spending mode like Umezawa's Jitte's), because one card
+    // can carry several (Jitte: equip AND its modes). Every trailing-pass consumer calls this one;
+    // the default defers to the per-card rank, so a deck that overrides neither is byte-identical.
+    virtual int ActivationOrderRankFor(const GameState& s, const CardDefinition& d, int /*act_class*/) const
+    { return ActivationOrderRank(s, d); }
 
     // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
     // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns

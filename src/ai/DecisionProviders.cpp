@@ -2790,13 +2790,17 @@ int SnowProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) 
 // and the expensive cast are commitments better made once you have it. Draw-last inverts that.
 //
 // This is a cast ORDER, and cast order is user-reviewed per deck (docs/design/
-// cast-order-ideal-with-ranges.md), so the decision is not the agent's to take. It ships off.
+// cast-order-ideal-with-ranges.md), so the decision is not the agent's to take. It is the user's order,
+// so it is what Snow plays (default ON below).
 // Routed through heurarm so ONE pooled batch can carry BOTH arms as separate jobs -- the per-job
 // override the repo requires for a lever sweep (a function-local `static const bool` makes a
 // process one arm forever, which forces one batch per arm and starves the box on the tail).
+// DEFAULT ON since 2026-10-04 (USER: "we are still using the generic order for snow? We shouldn't
+// be."). It had shipped OFF on an agent's own call after the 2026-09-25 sweep (snow-intractable-games.md
+// §7) that was never put to the user; the order is the user's, so it is the order Snow plays.
 inline bool SnowCastOrderOn()
 {
-    static const bool env = EnvOn("MTG_SNOW_CAST_ORDER");
+    static const bool env = EnvOn("MTG_SNOW_CAST_ORDER", true);
     return heurarm::Flag(heurarm::SNOW_CAST_ORDER, env);
 }
 // The three halves, each default ON with the order, each separately switchable so one pooled batch
@@ -2823,6 +2827,13 @@ inline bool SnowActOrderOn()
 {
     static const bool env = EnvOn("MTG_SNOW_ACT_ORDER", true);
     return heurarm::Flag(heurarm::SNOW_ACT_ORDER, env);
+}
+// Which tap-draw goes first under the activation order: Frost Augur (default, USER 2026-10-04) or
+// Scrying Sheets (off; the order as first written).
+inline bool SnowActAugurFirstOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_ACT_AUGUR_FIRST", true);
+    return heurarm::Flag(heurarm::SNOW_ACT_AUGUR_FIRST, env);
 }
 
 // THE DRAW BAND'S BASE -- 300 (LAST, shipped) or 2 (immediately after the fixer).
@@ -2974,6 +2985,11 @@ int SnowProvider::ActivationOrderRank(const GameState& s, const CardDefinition& 
     (void)s;
     if (!SnowCastOrderOn() || !SnowActOrderOn()) { return 0; }
     if (!def.params.tap_draw_cost)               { return 0; }   // not a tap-draw: no opinion
+    // AUGUR FIRST (USER 2026-10-04): "Sometimes you draw something cheaper and augur costs quite a lot
+    // less to activate." The Augur's look is {S}, the Sheets' is {1}{S} -- and Sheets is also a {C}
+    // source, so looking with it first spends mana the Augur's look (or the find) needed; the
+    // 2026-09-25 sweep measured Sheets-first as the harmful half of this order. Off = Sheets first.
+    if (SnowActAugurFirstOn()) { return def.card.IsLand() ? 20 : 10; }
     return def.card.IsLand() ? 10 : 20;
 }
 
@@ -16701,31 +16717,55 @@ int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& d
         return base;
     }
     if (!KittyOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
-    // Order within the ruling's own list. The three tests are disjoint on this deck: no card
-    // carries two of them (Paladin is the only metalcraft/equipment-ETB watcher, Stoneforge the
-    // only Equipment tutor, and neither is an Equipment).
-    // Sram, Senior Edificer joins the Paladin at 6: it is the same KIND of card under the
-    // ruling's own information-first logic (a watcher that must be on the battlefield BEFORE the
-    // Equipment it profits from, or both halves are wasted). Sharing the tier is benign -- this
-    // is a stable_sort, and neither watcher triggers off the other (Sram is not an Equipment,
-    // Puresteel is not an Aura/Equipment/Vehicle spell), so their relative order cannot change
-    // the board.
-    if (def.params.draw_on_equipment_etb
-        || def.params.metalcraft_equip_zero_artifacts > 0
-        || !def.params.draw_on_cast_subtypes.empty())           { return 6; }
-    if (def.params.tap_put_from_hand_cost.has_value()
-        || (def.params.tutor_to_hand
-            && std::find(def.params.tutor_types.begin(), def.params.tutor_types.end(),
-                         std::string("Equipment")) != def.params.tutor_types.end())) { return 7; }
-    // A cost REDUCER must precede what it discounts (Cid, Freeflier Pilot). Without this it falls
-    // through to GenericProvider, which also returns 8 for reduces_spell_subtype -- the same tier
-    // as is_equipment below -- and the within-tier tie-break is cheapest-first, so the {0}/{1}
-    // Equipment would be cast BEFORE the {1}{W} Cid and the discount would never be realised.
-    // That is verbatim the Minotaur Ragemonger / Gnarled-Scarhide bug recorded in this file.
-    if (!def.params.reduces_spell_subtype.empty())              { return 7; }
-    if (def.params.is_equipment)                                { return 8; }
-    if (def.tmpl == CardTemplate::Removal)                      { return 30; }
-    return GenericProvider::CastOrderRank(s, def);   // hosts (Duelist / Kemba / Balan / Skyhunter) = 10
+    // ONE ORDER FOR BOTH LISTS (v1 and v2-puresteel-hammer), TOTAL, USER 2026-10-04: *"the only cards
+    // with this list that cares about order (even regarding condemnation) are Sol Ring and Puresteel
+    // Paladin. If we played Sigarda's Aid in this list I would say to put it before the creatures and
+    // creatures before the equipment ... We should probably make the order generic for both."* and
+    // *"Sram should go just after puresteel. We should order all of them. No reason to leave ties as
+    // that weakens condemnation."*
+    //   1  Sol Ring -- untapped mana for the rest of the turn.
+    //   2  Sigarda's Aid -- on the battlefield before every Equipment it attaches for free.
+    //   3  Puresteel Paladin, 4 Sram -- they draw off every Equipment entering / cast after them.
+    //   5  Cid (discounts every Equipment cast after it), 6 Stoneforge Mystic.
+    //   7  every other creature (the hosts).
+    //   8  every Equipment.
+    // Inside 7 and 8 the order is the USER's "does not matter" -- so it is a deterministic total
+    // order rather than a tie: cheapest mana value first, then the name hash. The scale leaves room
+    // for both keys, so no two distinct cards share a rank (checked on both lists with
+    // --cast-order-report). Removal is never cast (EquipmentProvider::NeverCast) and needs no slot.
+    // Equip ACTIVATIONS are not cast order: they run in the phase's trailing pass, after every cast
+    // (USER: "the equip usages should all go at the end of main 1").
+    // Superseded here: the 2026-08-25 class order (watchers 6 / Stoneforge+Cid 7 / Equipment 8 /
+    // hosts at the generic 10, i.e. Equipment BEFORE the hosts, with ties).
+    const CardParams& p = def.params;
+    const auto total = [&](int cls)
+    {
+        return cls * 4096 + (def.card.m_mana_cost.ManaValue() & 0xF) * 256
+             + static_cast<int>(def.card.m_name_hash & 0xFF);
+    };
+    if (p.mana_rock && !def.card.IsCreature())                   { return total(1); }
+    if (p.attach_equipment_on_etb)                               { return total(2); }
+    if (p.draw_on_equipment_etb || p.metalcraft_equip_zero_artifacts > 0) { return total(3); }
+    if (!p.draw_on_cast_subtypes.empty())                        { return total(4); }
+    if (!p.reduces_spell_subtype.empty())                        { return total(5); }
+    if (p.tap_put_from_hand_cost.has_value()
+        || (p.tutor_to_hand
+            && std::find(p.tutor_types.begin(), p.tutor_types.end(),
+                         std::string("Equipment")) != p.tutor_types.end())) { return total(6); }
+    if (def.card.IsCreature())                                   { return total(7); }
+    if (p.is_equipment)                                          { return total(8); }
+    // Anything else (none on either list today) after the Equipment, still totally ordered.
+    return total(9);
+}
+
+int EquipmentProvider::LandDropCastOrderRank() const { return KittyOrderEnabled() ? 0 : -1; }
+
+int EquipmentProvider::ActivationOrderRankFor(const GameState&, const CardDefinition&,
+                                              int act_class) const
+{
+    if (!KittyOrderEnabled()) { return 0; }
+    // other abilities (Stoneforge's put) 10 -> equips 20 -> Jitte's counter modes 30
+    return act_class == 2 ? 30 : act_class == 1 ? 20 : 10;
 }
 
 bool EquipmentProvider::OrderOpaqueCastsByRank() const

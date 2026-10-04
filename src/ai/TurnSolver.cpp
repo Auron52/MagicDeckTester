@@ -33271,7 +33271,7 @@ void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Ac
     {
         if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        return d != nullptr ? prov.ActivationOrderRank(state, *d) : 0;
+        return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
     };
     bool any = false;
     for (const Action& a : acts) { if (rank_of(a) != 0) { any = true; break; } }
@@ -33844,6 +33844,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // tail, replay_recorded's trailing dispatch) mirror. RECORDED first when this level pushed a
     // sink -- the committed-line replay walks records, not the list -- and before the apply, so a
     // nested breakpoint the activation opens records after it, in apply order.
+    //
+    // END OF THE PHASE, NOT MID-PHASE (USER 2026-10-04: "the equip usages should all go at the end of
+    // main 1"). A continuation reached BEFORE the phase's own trailing pass -- an inline site inside
+    // the cast loop (a cantrip, Puresteel's equipment-ETB draw) -- QUEUES its activations; the
+    // trailing pass then runs them together with the plan's own, in one provider-ordered list. A
+    // continuation reached after it (the deferred site, a node resume) is already at the end of the
+    // phase and applies at once. The executor twin queues on the same condition.
+    std::vector<Action> pending_cont_acts;
+    bool                main_trailing_done = false;
     auto apply_continuation_activations = [&](const TurnSolver::Plan& sp, bool recorded)
     {
         bool any = false;
@@ -33854,6 +33863,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             for (const Action& a : sp.actions)
             { if (TurnSolver::IsTrailingActivation(a.kind)) { sink_stack.back()->push_back(a); } }
+        }
+        if (!main_trailing_done)
+        {
+            for (const Action& a : sp.actions)
+            { if (TurnSolver::IsTrailingActivation(a.kind)) { pending_cont_acts.push_back(a); } }
+            return;
         }
         apply_trailing_activations(sp.actions);
     };
@@ -37029,7 +37044,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            if (d != nullptr && _p.ActivationOrderRank(state, *d) != 0) { _any = true; break; }
+            if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
         }
         if (_any)
         {
@@ -37706,6 +37721,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // skip straight to the deferred re-solve and re-arm the context that must resume with it.
     if (bp_resume != nullptr)
     {
+        main_trailing_done = true;   // the snapshot already ran the phase's trailing pass
         bp_seen                  = bp_resume->bp_seen;
         deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
         deferred_cantrip_site    = bp_resume->deferred_site;
@@ -37833,8 +37849,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const Action& a : plan.actions)
             { if (TurnSolver::IsTrailingActivation(a.kind)) { line_order_trace("trailing", a); } }
         }
-        apply_trailing_activations(plan.actions);
+        if (pending_cont_acts.empty()) { apply_trailing_activations(plan.actions); }
+        else
+        {
+            // The plan's own activations, then every queued continuation's, as ONE trailing pass.
+            std::vector<Action> all = plan.actions;
+            all.insert(all.end(), pending_cont_acts.begin(), pending_cont_acts.end());
+            apply_trailing_activations(all);
+        }
     }
+    else if (!pending_cont_acts.empty()) { apply_trailing_activations(pending_cont_acts); }
+    pending_cont_acts.clear();
+    main_trailing_done = true;
 
     // BREAKPOINT SITE 9 -- POST-ENTRY ACTIVATION (TurnSolver::PostEntryActivationPending; USER
     // 2026-09-08: "Walkers and other sources with activated abilities should also breakpoint in

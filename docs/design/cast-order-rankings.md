@@ -1167,3 +1167,29 @@ Lightning Greaves, but last otherwise, so the power is okay"* (USER 2026-08-19) 
 **Net: the engine already does what the USER recommended here, on all three points.** Recorded
 because the rules were previously only in scattered code comments, and the question "does the cast
 order control equips?" has an answer that is easy to guess wrong.
+
+## KittyEquipment (v1 and v2-puresteel-hammer) -- USER ruling 2026-10-04, ONE order for both lists
+
+USER: *"Realistically, most of the cast orders do not matter. However, the equip usages should all go
+at the end of main 1."* / *"the only cards with this list that cares about order (even regarding
+condemnation) are Sol Ring and Puresteel Paladin. If we played Sigarda's Aid in this list I would say to
+put it before the creatures and creatures before the equipment ... We should probably make the order
+generic for both."* / *"Sram should go just after puresteel. We should order all of them. No reason to
+leave ties as that weakens condemnation."* / *"land goes first and equipment equip abilities go last."*
+/ *"Stoneforge mystic ability comes after the equipment."* / Swords to Plowshares and Unexpectedly
+Absent: never cast (goldfish-irrelevant).
+
+`EquipmentProvider` (MTG_KE_ORDER, on), TOTAL:
+
+| step | what |
+|---|---|
+| 0 | land drop (`LandDropCastOrderRank`) |
+| casts | Sol Ring -> Sigarda's Aid -> Puresteel Paladin -> Sram -> Cid -> Stoneforge Mystic -> other creatures -> Equipment; inside the last two classes cheapest mana value first, then name hash (deterministic, no ties) |
+| trailing 10 | every other activation (Stoneforge's put) |
+| trailing 20 | equip / attach abilities (`ActivationOrderRankFor`) |
+| trailing 30 | Umezawa's Jitte counter modes, after the equips (USER: "Jitte's ability ... needs to go after the other abilities") |
+
+Removal: `EquipmentProvider::NeverCast` (template Removal), never enumerated. A breakpoint
+continuation's activations (e.g. equips after a Puresteel draw) queue into the phase's trailing pass,
+never mid-phase. Supersedes the 2026-08-25 class order (Equipment before hosts, with ties) and the
+agent-filled 17-position `MTG_KE_ORDER_FULL` (left in code, off; delete on request).

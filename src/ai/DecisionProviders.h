@@ -1279,6 +1279,20 @@ public:
 class EquipmentProvider : public DeckProvider
 {
 public:
+    // Removal is never cast (USER 2026-10-04: Swords to Plowshares and Unexpectedly Absent "aren't
+    // relevant for Goldfishing"). The opponent has no creatures that block or attack and no permanent
+    // worth answering, so a removal cast only spends mana and a card. Dropped at the enumeration
+    // choke point (CollectActions), so it is never searched -- the Snow / Skred shape.
+    bool NeverCast(const CardDefinition& def) const override
+    { return def.tmpl == CardTemplate::Removal; }
+    // The land drop FIRST; in the trailing pass (after every cast) the other abilities, then the equip
+    // / attach abilities, then Jitte's counter modes LAST (USER 2026-10-04: "land goes first and
+    // equipment equip abilities go last", "Stoneforge mystic ability comes after the equipment",
+    // "Jitte's ability ... needs to go after the other abilities"). Declaring the drop's slot also
+    // arms the land half of condemnation. Gated with the order.
+    int LandDropCastOrderRank() const override;
+    int ActivationOrderRankFor(const GameState& s, const CardDefinition& d, int act_class) const override;
+
     // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
     // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
     // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the

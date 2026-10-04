@@ -180,8 +180,9 @@ enum Slot : int
     // cause for free and has been wrong about it twice. Each defaults ON with the order.
     SNOW_ORDER_FIXER,         // MTG_SNOW_ORDER_FIXER    the fixer (Astrolabe) sits right AFTER the land drop
     SNOW_ORDER_SPLIT,         // MTG_SNOW_ORDER_SPLIT    split every within-cost tie (mana -> permanent -> non-perm)
-    SNOW_ACT_ORDER,           // MTG_SNOW_ACT_ORDER      Scrying Sheets activates before Frost Augur
+    SNOW_ACT_ORDER,           // MTG_SNOW_ACT_ORDER      order the two tap-draws (direction: SNOW_ACT_AUGUR_FIRST)
     SNOW_ORDER_WATCHER,       // MTG_SNOW_ORDER_WATCHER  Slumber's enter-scry right after the fixer, ahead of what it watches
+    SNOW_ACT_AUGUR_FIRST,     // MTG_SNOW_ACT_AUGUR_FIRST Frost Augur activates before Scrying Sheets (off = Sheets first)
     // Breakpoint-condemnation SOUNDNESS guard: the snapshot binds only on the turn it was taken.
     // Overridable per job so "what does the hole cost?" is measurable without a rebuild; `false` is
     // the BROKEN arm, kept to reproduce the finding, not a neutral one.
@@ -458,6 +459,7 @@ inline const char* Name(int slot)
         "MTG_SNOW_ORDER_SPLIT",
         "MTG_SNOW_ACT_ORDER",
         "MTG_SNOW_ORDER_WATCHER",
+        "MTG_SNOW_ACT_AUGUR_FIRST",
         "MTG_BP_CONDEMN_SAME_TURN",
         "MTG_SNOW_CONDEMN",
         "MTG_BP_CONDEMN_NEW_OPTION",

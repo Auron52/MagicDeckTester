@@ -117,6 +117,28 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     run itself** (which deck, which list, which commit to freeze). Nothing else. If you are
     unsure which kind you have, surface it and keep working.
 
+- **A USER-OWNED DECISION IS NEVER SETTLED BY AN AGENT — NOT EVEN "LEAVE IT OFF" (user directive,
+  2026-10-04).** Cast order, its range, main-1-vs-main-2, mulligan/keep policy, discard buckets, card
+  deferrals: the user decides these per deck. That covers REJECTING, keeping default-off, or quietly
+  falling back from something the user asked for, exactly as much as adopting it. A measurement is
+  input to the user's decision, never the decision.
+  * **What went wrong.** 2026-09-25 an agent measured the user's own Snow cast order, found it a few
+    thousandths of a turn worse, wrote *"`MTG_SNOW_CAST_ORDER` stays OFF, measured, not deferred"* into
+    `docs/design/snow-intractable-games.md` §7, and never told the user. Snow ran the generic order for
+    nine days, until the user asked: *"we are still using the generic order for snow? We shouldn't be."*
+    *"I need agents to stop making these decisions unilaterally without telling me."*
+  * **How to apply:** state the decision IN YOUR MESSAGE to the user (verdict, numbers, what you would
+    recommend), keep working, and repeat it in the closing summary until they answer. A doc line, a
+    commit message, or a code comment is NOT telling the user. Until they answer, the user's stated
+    intent stands. The current setting is not the default just because it is already in place.
+    This is surfacing, not blocking (see NEVER BLOCK above).
+  * **When the user's own order/rule measures worse, ROOT-CAUSE IT and propose a fix.** USER: *"If I
+    gave you an order you should try to figure out why it doesn't work and maybe suggest
+    alternatives."* Find the games it loses, name the mechanism (e.g. which sub-rule, which card
+    interaction), and bring back an amended version plus its measurement. Never stop at "it's worse,
+    so it stays off", and never fall back to a generic default. *"There is no case where we should do
+    that."*
+
 - **NEVER create merge commits — REBASE local work onto origin (user directive, 2026-08-12).**
   The user wants linear history. `git config pull.rebase true` + `rebase.autoStash true` are
   set in this repo; keep them set on any new clone, and integrate remote work with

@@ -1800,6 +1800,16 @@ public:
     // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
     // apply or a dropped action.
     static bool IsTrailingActivation(Action::Kind k);
+    // The ability's KIND for DecisionProvider::ActivationOrderRankFor: 1 = equip / attach (Equip,
+    // AttachAllEquipment, AttachAllFreeEquipment), 2 = a counter-spending mode (Umezawa's Jitte's
+    // JitteModeAbility, which acts on whatever the equips attached it to), 0 = anything else.
+    static int ActivationClass(Action::Kind k)
+    {
+        if (k == Action::Kind::Equip || k == Action::Kind::AttachAllEquipment
+            || k == Action::Kind::AttachAllFreeEquipment) { return 1; }
+        if (k == Action::Kind::JitteModeAbility) { return 2; }
+        return 0;
+    }
 
     // ORDER THE TRAILING ACTIVATIONS by the provider's declared rank, in place and stably.
     //
