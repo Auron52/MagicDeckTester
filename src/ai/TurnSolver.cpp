@@ -27833,6 +27833,8 @@ namespace groupwave
     struct State
     {
         int    tranche_rank   = -1;     // >= 0: tranche mode, require the group ranked HERE
+        bool   tranche_singles = false; // tranche mode: keep wave 0's ranks [0..cap) + the rank-R
+                                        // group ONLY (not [0..R]) -- see EnumerateMainPlansExhaustive
         double bound_limit    = 0.0;    // tranche mode: max plan-space bound (<= 0 = unlimited)
         bool   bound_exceeded = false;  // OUT: a tranche was skipped for its enumeration bound
         bool   call_active    = false;  // OUT (per EnumeratePlans call): rank-R group exists here
@@ -28690,6 +28692,15 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     // (x 2^independent) stays under the cap -- always at least one group, so the top-ranked line
     // class survives any bound.
     int keep_n = (R < 0) ? std::min(cap, static_cast<int>(groups.size())) : (R + 1);
+    // SINGLES tranche (groupwave::State::tranche_singles; the equip-route's sub-search): the kept set
+    // is wave 0's top `cap` ranks PLUS the rank-R group, not every rank up to R. The full protocol's
+    // tranche R is the product of R+1 groups -- on a chain board holding 27 paid casts the last
+    // tranches are 2^27 positions each (measured 26-87 s per enumeration), and the route keeps one
+    // representative per PURCHASE out of them. A sub-search that re-enumerates after every link
+    // reaches two dropped-rank purchases as two links, so each tranche needs only its own group.
+    const bool singles = (R >= 0) && groupwave::g_state.tranche_singles;
+    const int  base_n  = std::min(cap, static_cast<int>(groups.size()));
+    auto kept_rank = [&](int i) -> bool { return singles ? (i < base_n || i == R) : (i < keep_n); };
     if (R < 0 && vcap > 0.0)
     {
         const double pcap = vcap;
@@ -28725,8 +28736,8 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         if (groupwave::g_state.bound_limit > 0.0)
         {
             double bound = std::ldexp(1.0, std::min(num_independent, 60));
-            for (int i = 0; i < keep_n; ++i)
-            { bound *= 1.0 + static_cast<double>(groups[ranked[i].second].size()); }
+            for (int i = 0; i < static_cast<int>(ranked.size()); ++i)
+            { if (kept_rank(i)) { bound *= 1.0 + static_cast<double>(groups[ranked[i].second].size()); } }
             if (bound > groupwave::g_state.bound_limit)
             {
                 groupwave::g_state.bound_exceeded = true;
@@ -28749,7 +28760,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     }
 
     std::vector<char> keep(groups.size(), 0);
-    for (int i = 0; i < keep_n; ++i) { keep[ranked[i].second] = 1; }
+    for (int i = 0; i < static_cast<int>(ranked.size()); ++i) { if (kept_rank(i)) { keep[ranked[i].second] = 1; } }
     std::vector<std::vector<int>> kept_groups;
     std::vector<int>              kept_hand_index;
     for (int g = 0; g < static_cast<int>(groups.size()); ++g)
@@ -63671,6 +63682,12 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const Gam
                      plans.size(), dropped, state.players[state.active_player_index].hand.size(),
                      state.battlefield.size());
     }
+    // SINGLES tranches (CapGroupsBySituationalRank): each dropped rank comes back with wave 0's
+    // groups only, not with every rank below it. Complete for a sub-search that re-enumerates after
+    // every link (two dropped-rank purchases are two links), and it is what keeps a tranche on a
+    // 27-paid-cast chain board at wave-0 cost instead of 2^27 positions.
+    const bool saved_singles = groupwave::g_state.tranche_singles;
+    groupwave::g_state.tranche_singles = true;
     for (int R = cap_base; R < cap_base + dropped; ++R)
     {
         if (budget != nullptr && !budget->Unlimited() && (budget->Exhausted() || budget->Overrun()))
@@ -63703,6 +63720,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const Gam
         }
         plans.insert(plans.end(), std::make_move_iterator(tp.begin()), std::make_move_iterator(tp.end()));
     }
+    groupwave::g_state.tranche_singles = saved_singles;
     return plans;
 }
 
