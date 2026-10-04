@@ -1921,7 +1921,8 @@ inline void AnnihilateCounters(Permanent& p)
 // early sites (Ancient Cornucopia's cast lifegain, the enter-watchers) can call them.
 inline void GainLife(GameState& state, int player, int amount);
 inline void FireLifegainWatchers(GameState& state, int player, int amount = 0);
-inline void FireCreatureDiesWatchers(GameState& state, int dead_controller);
+inline void FireCreatureDiesWatchers(GameState& state, int dead_controller,
+                                     const std::vector<int>* prefiltered = nullptr);
 inline void RefreshDevotionCreatures(GameState& state);
 // Doubling Season's multiplier exponent; defined beside CreateToken (the token chokepoint) but
 // needed here by the counter-put chokepoint below.
@@ -4011,6 +4012,12 @@ struct BoardSources
     std::vector<int> lifelink;   // any of the three lifelink GRANTS        -> CreatureHasLifelink
     std::vector<int> attached;   // an ATTACHED Aura / Equipment    -> Aura/EquipBonusFor, the Jitte
     std::vector<int> deaths;     // a death watcher that PAYS                  -> DeathOfWouldPay
+    // Every watcher OnCreatureDies itself consults -- the UNION of its two per-death board walks
+    // (FireCreatureDiesWatchers' own_creature_dies_lifegain, and the `reactions` gather's
+    // dies_watch_subtype). A union, so each consumer keeps its OWN predicate test and this stays a
+    // superset; see the bs.ds note above for the same discipline. Distinct from `deaths`, which
+    // answers DeathOfWouldPay's victim-independent "would it pay" question over different params.
+    std::vector<int> dwatch;
 
     // MAINTAIN THE LISTS ACROSS AN ERASE. Every list holds battlefield INDICES, so a caller that
     // removes a permanent mid-loop (SweepDeadFadeTokens) invalidates them: the erased index is gone
@@ -4035,7 +4042,7 @@ struct BoardSources
             v.resize(w);
         };
         fix(haste.lords); fix(haste.equips);
-        fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths);
+        fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths); fix(dwatch);
     }
 };
 
@@ -4087,6 +4094,9 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         if (pp.dies_trigger_damage > 0 || pp.dies_trigger_creates_tokens > 0
             || pp.dies_trigger_self_gain > 0 || pp.dies_trigger_impulse_exile)
         { bs.deaths.push_back(i); }
+        // OnCreatureDies' own two walks. The UNION of their predicates, so each keeps its own test.
+        if (pp.own_creature_dies_lifegain > 0 || !pp.dies_watch_subtype.empty())
+        { bs.dwatch.push_back(i); }
     }
     return bs;
 }
@@ -5211,12 +5221,21 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
 // from OnCreatureDies, i.e. AFTER the dead creature has left the battlefield at every death site,
 // which is what makes "another" structural: a scan cannot see the dying Daxos itself. One GainLife
 // per watcher (one event each, CR 119.10). Param-gated -> byte-identical elsewhere.
-inline void FireCreatureDiesWatchers(GameState& state, int dead_controller)
+inline void FireCreatureDiesWatchers(GameState& state, int dead_controller,
+                                     const std::vector<int>* prefiltered)
 {
-    const int n = static_cast<int>(state.battlefield.size());
-    for (int i = 0; i < n; ++i)
+    // Prefiltered: BoardSources::dwatch already holds this controller's death watchers, so a mass
+    // death (a fading Saproling Burst's LTB destroying dozens of tokens at once) costs
+    // O(watchers) per death instead of O(battlefield) -- and the walk below is a LookupCached per
+    // permanent, which `perf annotate` measured at 44% of OnCreatureDies on that very case. The
+    // list is a UNION with the `reactions` gather's predicate, so the own_creature_dies_lifegain
+    // test is KEPT here; an empty list is a proof this function can do nothing. Byte-identical by
+    // construction: same order (ascending index), same per-permanent test, same body.
+    const int n = static_cast<int>(prefiltered ? prefiltered->size() : state.battlefield.size());
+    for (int k = 0; k < n; ++k)
     {
-        const Permanent& w = state.battlefield[i];
+        const int i = prefiltered ? (*prefiltered)[static_cast<std::size_t>(k)] : k;
+        const Permanent& w = state.battlefield[static_cast<std::size_t>(i)];
         if (w.controller_index != dead_controller) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
         if (!wd || wd->params.own_creature_dies_lifegain <= 0) { continue; }
@@ -7708,8 +7727,15 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
     return false;
 }
 
+// `dwatch` is an OPTIONAL BoardSources::dwatch for `dead_controller`. It exists for MASS DEATH: a
+// fading Saproling Burst's LTB destroys every token it made, and this function's two board walks
+// then ran once PER DEATH, each doing a LookupCached per permanent. On the 22.97 h candidate-b
+// straggler `perf annotate` put 88.6% of this function on exactly those two walks' argument loads,
+// striding sizeof(Permanent). Passing the gathered list makes each death O(watchers). Every call
+// site that passes nothing keeps the original full walk, so this is inert everywhere else.
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
-                           bool dead_was_token, int dead_minus_counters)
+                           bool dead_was_token, int dead_minus_counters,
+                           const std::vector<int>* dwatch = nullptr)
 {
     // LTB triggers fire on every death (Reveillark sacrificed to Carrion Feeder / Pod / combat).
     // Before the persist block: independent mechanics, and Reveillark itself has no persist.
@@ -7718,12 +7744,16 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     // you control dies" lifegain (Daxos) fires. Both ABOVE the `reactions.empty()` early-out
     // below, which only knows subtype-keyed watchers.
     RefreshDevotionCreatures(state);
-    FireCreatureDiesWatchers(state, dead_controller);
+    FireCreatureDiesWatchers(state, dead_controller, dwatch);
 
     std::vector<CardParams> reactions;
     // Other watchers still in play under the same controller: "another <subtype> you control dies".
-    for (const Permanent& w : state.battlefield)
+    // Prefiltered when `dwatch` is supplied -- same ascending-index order, and the
+    // dies_watch_subtype test is KEPT because the list is a union with the lifegain predicate.
+    const std::size_t wn = dwatch ? dwatch->size() : state.battlefield.size();
+    for (std::size_t wk = 0; wk < wn; ++wk)
     {
+        const Permanent& w = state.battlefield[dwatch ? static_cast<std::size_t>((*dwatch)[wk]) : wk];
         if (w.controller_index != dead_controller) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
         if (!wd) { continue; }
@@ -10806,7 +10836,10 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         bsrc[0].OnErase(static_cast<int>(i));
         bsrc[1].OnErase(static_cast<int>(i));
         const std::size_t expect = state.battlefield.size();
-        OnCreatureDies(state, ctrl, dead, tok, minus);
+        // The erase is already applied to the lists above, so `dwatch` is valid for the board
+        // OnCreatureDies is about to see -- which is the board the unprefiltered walk would read.
+        const BoardSources* ds = srcs(ctrl);
+        OnCreatureDies(state, ctrl, dead, tok, minus, ds ? &ds->dwatch : nullptr);
         if (state.battlefield.size() != expect)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -10826,6 +10859,18 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
 // unmodelled and provably inert -- the engine has no regeneration mechanic at all.
 inline void DestroyTokensCreatedBy(GameState& state, int source_number)
 {
+    // THE MASS-DEATH CASE. A Saproling Burst under Doubling Season makes dozens of tokens, and all
+    // of them die here at once -- so OnCreatureDies' two death-watcher board walks ran
+    // (deaths x battlefield) times with a LookupCached per permanent. Prefilter them with
+    // BoardSources::dwatch, maintained across the erases exactly as SweepDeadFadeTokens does.
+    //
+    // Gathered LAZILY (on the first actual death, not at entry): this function is called whenever
+    // ANY fade_ltb_destroys_created_tokens source leaves, and most such calls destroy nothing --
+    // same reasoning as the lazy CollectActions prefilter. Byte-identical by construction: the
+    // list only ever narrows WHICH permanents the watcher loops visit, each loop keeps its own
+    // per-permanent predicate, and an empty list is a proof neither loop can fire.
+    BoardSources bsrc[2];
+    bool gathered = false;
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
         Permanent& q = state.battlefield[i];
@@ -10833,8 +10878,27 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
         const Card dead  = q.card;
         const int  ctrl  = q.controller_index;
         const int  minus = MinusCountersOn(q);
+        if (!gathered)
+        {
+            bsrc[0] = GatherBoardSources(state.battlefield, 0);
+            bsrc[1] = GatherBoardSources(state.battlefield, 1);
+            gathered = true;
+        }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-        OnCreatureDies(state, ctrl, dead, /*dead_was_token=*/true, minus);
+        // Patch the lists for the erase, then detect anything OnCreatureDies did beyond it
+        // (Tukatongue's replacement Saproling, a persist return) and re-gather -- an added
+        // permanent could itself be a watcher, which OnErase cannot express.
+        bsrc[0].OnErase(static_cast<int>(i));
+        bsrc[1].OnErase(static_cast<int>(i));
+        const std::size_t expect = state.battlefield.size();
+        const BoardSources* ds = (ctrl == 0 || ctrl == 1) ? &bsrc[ctrl] : nullptr;
+        OnCreatureDies(state, ctrl, dead, /*dead_was_token=*/true, minus,
+                       ds ? &ds->dwatch : nullptr);
+        if (state.battlefield.size() != expect)
+        {
+            bsrc[0] = GatherBoardSources(state.battlefield, 0);
+            bsrc[1] = GatherBoardSources(state.battlefield, 1);
+        }
     }
 }
 
