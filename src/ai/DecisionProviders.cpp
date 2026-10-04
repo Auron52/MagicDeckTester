@@ -22841,6 +22841,21 @@ bool EquipRoutePiecesInPlace(const GameState& s, int me)
 {
     if (!equiproute::On() || equiproute::InRouteFlag()) { return false; }
     if (s.players[1 - me].life <= 0) { return false; }
+    // ONCE PER TURN, NOT ONCE PER SEGMENT (MTG_EQUIP_ROUTE_TOPMAIN). The playout plays the WHOLE
+    // turn out -- it drives EnumerateMainPlans and ApplyPlan repeatedly, through its own draws and
+    // the casts they enable -- so a kill that only becomes available after a mid-turn draw is
+    // already inside the answer computed at the turn's first main phase. Asking again after every
+    // breakpoint re-solve therefore re-derives a conclusion the frame already had, over a board the
+    // memo cannot match because the draws moved it.
+    //
+    // THAT REDUNDANCY IS THE DOMINANT COST, measured per game with MTG_EQUIP_ROUTE_TRACE:
+    // claude_s1_gi0 ran 13,810 playouts / 31,662 playout iterations, claude_s5_gi4 12,147 / 12,861 --
+    // and ~90% of trials on BOTH find a kill, so this is not wasted detection of hopeless boards
+    // (a damage pre-filter would buy almost nothing) and it is not playout depth either (MAX_ITER
+    // 24->6 and PROBE 12->3 leave the wall flat). It is frame COUNT. The same `spells_cast_this_turn
+    // == 0` restriction the Dragonstorm go-off cut already uses, for the same reason.
+    static const bool s_topmain = EnvOn("MTG_EQUIP_ROUTE_TOPMAIN");   // DEFAULT OFF -- measuring
+    if (s_topmain && s.spells_cast_this_turn != 0) { return false; }
     // THE CHEAP GATE, and it is deliberately a board-inventory conjunction rather than a score --
     // the same discipline ComboOffPossible is held to. Three things have to be true for the chain
     // to exist at all: a DRAW watcher so a cast refills the hand, a creature to carry the pile, and

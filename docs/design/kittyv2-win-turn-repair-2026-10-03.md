@@ -138,8 +138,12 @@ never see.
   (`08d32f9bfb345505`, 39,679 units on s1_gi0), so the cost A/B survives adoption.
 * 129/129 scenarios pass; `python3 test/check_gt_logs.py` -> 638 consistent, 0 stale.
 
-It also **removes** work where it fires without needing the extra depth: 39,679 -> 31,739 units on
-s1_gi0 (0.80x) while turning that game from turn 4 into turn 3.
+**CORRECTION (2026-10-04): the "it also removes work" claim above was measured on the wrong meter.**
+Units do fall (39,679 -> 31,739 on s1_gi0, 0.80x) and the WALL CLOCK rises 14x on that same game:
+**502 ms -> 7,056 ms**, on a game that now ends a turn EARLIER. The counted odometer work really does
+go down; the route's own playout, which units does not price, goes up far more. See
+"The cost, measured properly" below. The original claim should never have been written from the unit
+number alone -- `docs/design/` already carries the lesson that a cost ratio is not a cost.
 
 ## Levers
 
@@ -152,38 +156,102 @@ s1_gi0 (0.80x) while turning that game from turn 4 into turn 3.
 | `MTG_EQUIP_ROUTE_TRACE` | OFF | per-iteration playout / gate-census / EMIT / CUT diagnostics |
 | `MTG_EQUIP_ROUTE_MAX_ITER` / `_PROBE` | 24 / 12 | playout bounds; both bound a SOUND detector, so they can only cost a missed win |
 
-## The one remaining shortfall: `claude_s5_gi4`
+## The one remaining shortfall: `claude_s5_gi4` -- FIVE approaches refuted
 
-Human turn 3, search turn 4, and it is **a reachability hole, not a budget one**: at `depth=8
-budget=0ms` the digest is unchanged (`15fd465a2b092f19`) and the win is still turn 4. Neither the
-hold line nor the carve-out alters that game's play at all.
+Human turn 3, search turn 4. The line is real: `viewer_protocol_check.py --only claude_s5_gi4`
+replays the recorded picks to `won=True win_turn=3` on this engine.
 
-The route's own trace says where it stops. The gate passes all-true 20 times at turn 3, so the
-playout runs -- but it only ever CUTs at **turn 4**, and the turn-3 playouts end `no win: 4 link(s),
-2 iter(s)` with the opponent still at 20 life. So the chain is being built and is simply not lethal
-on the boards the search reaches, well short of `MaxIter` 24.
+**It is not a reachability failure.** `MTG_FREE_CAST_HOIST=0` is byte-identical on this game
+(digest `15fd465a2b092f19`), so "cast nothing on turn 1" is fully enumerable and the search picks the
+casts anyway. And it is not a budget failure: at depth 8 with a 120 s budget the search does
+**680,884 units (16.7x the shipped frame) and RUNS TO COMPLETION in 69 s** rather than being cut off,
+and still returns the identical digest. Depth 10 explores the same tree.
 
-What the human did on that turn 3, across four breakpoint segments: cast a SECOND Puresteel Paladin,
-cast Colossus Hammer (+10/+10), and then `equip all free (10) -> Puresteel Paladin` -- the whole pile
-onto ONE host. Remote Farm taps for `{W}{W}`, which is what pays for a 3-mana Paladin plus a 1-mana
-Hammer off three lands.
+**A CORRECTION TO AN EARLIER MEASUREMENT HERE.** The first version of this document reported s5_gi4
+as invariant "at `--depth 8 --budget-ms 0`". That proved nothing: in a `--batch` MANIFEST,
+`budget_ms: 0` is taken LITERALLY as a zero budget, not as unbounded. The tell is that depths 3, 5, 8
+and 12 all returned identical units (3,505 on s1_gi0, ~53 ms) against 31,739 at the deck's real
+default -- depth had no effect because the search was being cut off immediately. CLAUDE.md's
+`--depth 8 --budget-ms 0` bar is a CLI form; when checking it through a manifest, pass a large
+explicit budget instead. The conclusion survived re-measurement, but only after re-measuring.
 
-**Next suspect, and it is not the chain-advance policy.** My first guess was that
-`equiproute::Run`'s "advance by the plan that casts the most" strands the mana that buys the Hammer,
-but that cannot be it: `MTG_FREE_CAST_HOIST` forces every free Equipment cast into *every* plan, so
-cast counts differ only by the NON-free casts and "most casts" already prefers casting the Paladin
-and the Hammer. The likelier cause is the **equip-host collapse** -- the auto-equip fold that takes
-one creature per frame (`ConsolidatesEquips`, `MTG_EQUIP_ALL_HOSTS` to open it) -- diluting the pile
-across hosts instead of stacking all ten onto the Paladin the way the human did. That is a separate
-thread from this one and wants its own measurement.
+### What the search actually does, and where it stops
+
+Forcing the hold (`MTG_HOLD_FREE_EQUIP=1`, below) makes turns 1 and 2 match the human exactly --
+Remote Farm and pass, then Plains + Puresteel Paladin -- and the turn-3 chain then fires properly,
+casting nine Equipment and drawing fourteen cards **including the Colossus Hammer**. It still loses.
+The reason is one mana allocation: it spends the turn's four mana on Puresteel Paladin ({W}{W}) plus
+**Sram** ({1}{W}) -- a second draw engine -- and never casts the {1} Colossus Hammer it is holding.
+The human spent three mana on Puresteel plus the **Hammer** and killed with the +10/+10.
+
+So the residue is a valuation/sequencing choice between one more draw engine and the damage payload,
+on a turn where both are affordable but not together. That is not a search hole.
+
+### The five refuted repairs, with numbers
+
+| approach | result |
+|---|---|
+| `MTG_FREE_CAST_WATCHER_CARVE` (return the casts to `groups`, 2^k) | 3/14, avg 3.786 / 3.643 -- fails on COST |
+| `MTG_FREE_CAST_HOLD_LINE` (add the no-cast line, 1 plan) | reaches the search (units 10,089 -> 10,780), digest unmoved -- DECLINED |
+| `MTG_HOLD_FREE_EQUIP` (remove the cast while the watcher is in hand) | **quality regression 1/14 -> 3/14**, avg 3.786; breaks s3_gi2 and s8_gi7; still T4 |
+| route probe width (`_PROBE` 12 / 48 / 128) | identical digest -- the ranking prefers the same plan however many it sees |
+| one-link lookahead in the advance ("apply it, does the next frame win?") | identical digest, pure added cost -- REVERTED, not kept as a lever |
+
+The third is the interesting one: removing the cast is a large COST win (s5_gi4 40,820 -> 13,838
+units, s1_gi0 31,739 -> 11,572) and it buys the human's opening -- and it still loses two other
+references, which is the hoist's dominance argument being right on the boards that are not this one.
+
+## The cost, measured properly (2026-10-04)
+
+**Per-game route volume, `MTG_EQUIP_ROUTE_TRACE`, one game each:**
+
+| game | playouts | of which lethal | playout iterations |
+|---|---|---|---|
+| claude_s1_gi0 (wins T3) | 13,810 | 12,826 (93%) | 31,662 |
+| claude_s5_gi4 (wins T4) | 12,147 | 10,905 (90%) | 12,861 |
+
+Each playout iteration is a full `EnumerateMainPlans` + `ApplyPlan`. That is the 14x, and it is
+**frame count, not playout depth and not wasted detection**:
+
+* Not depth: `MAX_ITER` 24 -> 6 and `_PROBE` 12 -> 3 leave the wall flat (5.3-5.9 s on s1_gi0).
+* Not hopeless boards: ~90% of trials on BOTH games genuinely find a kill, so a cheap admissible
+  damage bound -- the obvious pre-filter -- would buy almost nothing. It was refuted before being
+  built, on the census.
+* It is that the emission site is re-entered once per distinct board, and a budget-free context
+  (value-leaf phase A, the H cells) never caps it. Phase A measured **2.27x wall / 0.56x units /
+  4.08x ms-per-unit** against the pre-change run, and the slow-game census put 94 of 221 slow games
+  at win-turn 5 and only 6 at win-turn 3 -- the cost lands hardest where the route pays off least.
+
+### Three cost levers tried, and each costs exactly one reference
+
+| lever | wall | quality |
+|---|---|---|
+| `MTG_EQUIP_ROUTE_REVERIFY=0` (trust the trial, skip the cut's re-apply) | s1_gi0 7,013 -> 5,343 ms (0.76x), identical digest | **costs claude_s6_gi5 a turn**, avg 3.500 -> 3.571 |
+| `MTG_EQUIP_ROUTE_TOPMAIN=1` (consult once per turn, not per segment) | s1_gi0 7,073 -> **2,132 ms (0.30x)**, 31,739 -> 12,787 units, identical digest | **costs claude_s2_gi1 a turn**, 1/14 -> 2/14 |
+| playout bound tightening | no effect | n/a |
+
+Both survive as default-OFF A/B controls. The REVERIFY result is the one that refuted a tempting
+argument: the cut's `ApplyPlanDirect` looked like pure duplication of the trial (the trial's verdict
+is already a statement about a realised board, in the same frame), and it is not -- the plan
+application path is not bit-for-bit the route's own internal apply sequence, and a memo HIT can
+answer for a board differing in a field `BoardKey` does not hash. TOPMAIN refuted the symmetric
+argument: the playout plays the whole turn out, so asking once per turn *ought* to suffice, and
+s2_gi1's kill is nevertheless only found after a mid-turn re-solve.
+
+**So on this deck the cost IS the accuracy.** Every lever that consults the route less loses exactly
+one reference. The promising direction is therefore not to consult it more cheaply in frames but to
+make each playout cheaper (a lighter enumeration inside the playout, or a sound cross-frame cache),
+and that has not been tried.
 
 ## Still owed
 
-* `claude_s5_gi4`, above.
-* The **regression and overnight GT tiers** have not been re-run; only smoke is accepted. kittyv2 is
-  the only deck whose play moved, and its regression-tier rows are knowingly stale.
-* The **full 442-reference corpus sweep** -- the only thing that can answer "are the user's win turns
-  matched on every OTHER deck too". Queued in `docs/design/reference-repair-2026-10-03.md`; it needs
-  the box to itself.
-* The cost side of the user's adoption bar on a large held-out sample (deck aggregate net <= 0). The
-  smoke audit above is the train-seed half of it.
+* `claude_s5_gi4`: a turn-3 mana allocation that prefers a second draw engine over the damage
+  payload. Needs a valuation fix, not a search one.
+* An adoptable optimization. The route is a quality win under a budget and a 2.27x cost regression
+  without one, which makes it worst exactly where generation runs it. No lever found yet that keeps
+  1/14.
+* The **regression and overnight GT tiers** (smoke is accepted; kittyv2's rows in those tiers are
+  stale).
+* The **full 442-reference corpus sweep** -- the only thing that can say whether the user's win turns
+  are matched on every other deck. It needs the box to itself.
+* The held-out cost half of the user's adoption bar.
