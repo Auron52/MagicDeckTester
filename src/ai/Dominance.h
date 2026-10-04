@@ -337,6 +337,12 @@ static_assert(sizeof(Player) == 200,
 // +bool (2026-10-03, no size change -- it sits in the padding after uses_second_main): `deck_has_attack_untap`.
 // Classification: DECK CONSTANT, stamped once in StampDeckTraits; only short-circuits
 // UntapSecondMainLive, so it is identical across every pair of states Build() compares -- nothing to fold.
+// +bool +bool +uint8 (2026-10-04, Soldiers; no size change -- all three land in existing padding):
+// `deck_has_spell_tax` (Thalia) and `deck_has_attack_threshold` (Harbin) are DECK CONSTANTS stamped
+// once in StampDeckTraits that only skip provably-empty walks -- nothing to fold. `day_night` (Brutal
+// Cathar, CR 726) is GAME STATE and IS folded above (nonzero-gated). Permanent gained
+// `chosen_keyword_mask` (Rick) and `linked_exile_number` (Brutal Cathar), both in existing padding
+// (sizeof(Permanent) unchanged) and both folded above, nonzero-gated.
 static_assert(sizeof(GameState) == 864,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -597,6 +603,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // no-win tiebreak), so states differing on it -- or on WHEN it was proven -- must not merge.
     // Only ever stamped in a deck that runs the loop, so this fold is byte-identical elsewhere.
     if (s.inf_life_turn >= 0) { fold(0x1F1F1Full + static_cast<std::uint64_t>(s.inf_life_turn)); }
+    // DAY / NIGHT (CR 726, Brutal Cathar): future-determining game designation (which face every
+    // daybound permanent shows, and whether a transform trigger fires). Exact-match; nonzero-gated,
+    // so every deck that never runs a daybound card keeps its exact prior key.
+    if (s.day_night != 0) { fold(0xDA1A00ull + static_cast<std::uint64_t>(s.day_night)); }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
     fold(static_cast<std::uint64_t>(s.vial_target_mv));
@@ -941,6 +951,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // BuildSimKey note), folded so a future searched choice cannot merge them. Nonzero only for
         // a type-choosing permanent -> every other deck's key is unchanged.
         if (p.chosen_subtype_id != 0) { mfold(0xC7BEull); mfold(static_cast<std::uint64_t>(p.chosen_subtype_id)); }
+        // Rick's chosen keyword pair (which keywords every Human has) and Brutal Cathar's linked
+        // exile (WHICH opponent creature returns when it leaves): per-object, exact-match, and
+        // NOT until-EOT. Nonzero-gated -> every other deck's key is unchanged.
+        if (p.chosen_keyword_mask != 0) { mfold(0xC4057ull); mfold(static_cast<std::uint64_t>(p.chosen_keyword_mask)); }
+        if (p.linked_exile_number != 0) { mfold(0x11E7Eull); mfold(static_cast<std::uint64_t>(p.linked_exile_number)); }
         // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays THIS turn and
         // a held one does not, while both read "sick" on the axis below -- so they must MATCH
         // exactly rather than compare. Set only on the ETB / Larcenist Treasures and cleared at the

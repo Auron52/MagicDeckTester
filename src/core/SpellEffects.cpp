@@ -874,10 +874,19 @@ bool PerformEtbDig(GameState& state, int controller_index,
         if (!have) { return false; }
     }
 
+    return PerformLookTakeDig(state, controller_index, pp.etb_dig_count, pp.etb_dig_subtypes,
+                              /*max_mv=*/-1, self ? self->card.m_name.str() : std::string("dig"));
+}
+
+bool PerformLookTakeDig(GameState& state, int controller_index, int count,
+                        const std::vector<std::string>& types, int max_mv,
+                        const std::string& src_name)
+{
+    if (count <= 0) { return false; }
     Player& ap = state.players[controller_index];
 
     std::vector<Card> examined;
-    int n = std::min(pp.etb_dig_count, static_cast<int>(ap.library.size()));
+    int n = std::min(count, static_cast<int>(ap.library.size()));
     for (int i = 0; i < n; ++i)
     {
         examined.push_back(ap.library.front());
@@ -897,8 +906,11 @@ bool PerformEtbDig(GameState& state, int controller_index,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
         const Card& pc = d ? d->card : examined[i];
         bool match = false;
-        for (const std::string& want : pp.etb_dig_subtypes)
+        for (const std::string& want : types)
         { if (CardMatchesTypeName(pc, want)) { match = true; break; } }
+        // Recruitment Officer: "a creature card with mana value 3 or less" -- the PRINTED mana
+        // value (a DFC in the library is its front face, CR 712.8). -1 = no filter (every ETB dig).
+        if (match && max_mv >= 0 && pc.m_mana_cost.ManaValue() > max_mv) { match = false; }
         if (match) { legal.push_back(i); }
     }
     // WHICH match to take is provider-owned (EtbDigCandidates). The base rule is the historical
@@ -937,8 +949,7 @@ bool PerformEtbDig(GameState& state, int controller_index,
     // hypothetical scoring -- only the real ETB. An out-of-range reply falls back to the heuristic.
     if (!legal.empty() && g_play_dig_chooser)
     {
-        const std::string src = self ? self->card.m_name.str() : std::string("dig");
-        int picked = (*g_play_dig_chooser)(state, controller_index, src, examined, legal, take);
+        int picked = (*g_play_dig_chooser)(state, controller_index, src_name, examined, legal, take);
         bool ok = (picked == -1);
         for (int li : legal) { if (li == picked) { ok = true; break; } }
         take = ok ? picked : take;

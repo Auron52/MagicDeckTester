@@ -478,7 +478,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered. [Simplified: modelled as producing all five colors; ETB choice, color restriction, and uncounterable clause not modelled]",
+   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered. [Modelled as producing {C} plus all five colours, the colours restricted to CREATURE spells (colored_creature_only, enforced in the payer); the ETB creature-type choice is simplified to 'any creature' -- exact for a tribal list whose creatures share the named type (Soldiers 2026-10-04: every creature there is a Human Soldier). The uncounterable clause is not modelled -- inert: the passive opponent never counters. [Bracket corrected 2026-10-04: it used to say the colour restriction was not modelled, which has been false since colored_creature_only.]]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -531,7 +531,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Modelled as producing all five colours plus {C}. colored_creature_only enforces the restriction in the payer (ProducesForPayment / TapFlowInfeasible / the backtracking payer): for a noncreature spell, or any activated ability, this land yields only {C}. So it cannot pay Lightning Bolt's {R} or Siren Stormtamer's {U}, but it pays generic costs such as Aether Vial {1} and a Clue's {2}. The ETB creature-type choice is simplified to 'any creature spell'. That is outcome-exact for Pirates: every creature except Metallic Mimic {2} and Adaptive Automaton {3} is a Pirate, and those two cost only generic mana, which the land's unrestricted {C} pays identically. Search-side only: with MTG_CCO_NONCREATURE_POOL off (default) the noncreature enumeration pool counts this land as any-colour, so a Bolt plan relying on it can be offered and is then refused by the payer (no illegal play).]",
+   "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Modelled as producing all five colours plus {C}. colored_creature_only enforces the restriction in the payer (ProducesForPayment / TapFlowInfeasible / the backtracking payer): for a noncreature spell, or any activated ability, this land yields only {C}. So it cannot pay Lightning Bolt's {R} or Siren Stormtamer's {U}, but it pays generic costs such as Aether Vial {1} and a Clue's {2}. The ETB creature-type choice is simplified to 'any creature spell'. That is outcome-exact for Pirates: every creature except Metallic Mimic {2} and Adaptive Automaton {3} is a Pirate, and those two cost only generic mana, which the land's unrestricted {C} pays identically. Search-side only: with MTG_CCO_NONCREATURE_POOL off (default) the noncreature enumeration pool counts this land as any-colour, so a Bolt plan relying on it can be offered and is then refused by the payer (no illegal play).] [Soldiers (2026-10-04): EXACT there too -- every creature in that list is BOTH a Human and a Soldier (Scryfall type lines verified), so naming either type pays for every creature it casts; King Darien XLVIII's {G}/{1}{G}{W} and Harbin's {U} are castable ONLY through these lands (Harbin also off Fortified Beachhead).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -574,7 +574,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Modelled as producing all five colors; the ETB type choice is simplified to \"any creature\" (exact for the mono-tribal decks that run it). colored_creature_only restricts the coloured mana to creature spells; colored_creature_ability_ok additionally permits it for an ACTIVATED ABILITY whose source is a creature (D12 fix: Burning-Fist / Sethron activations, paid under the CreatureAbilityPayScope guard). Ability sources are simplified to battlefield creatures -- the oracle's any-zone \"source\" (e.g. cycling a creature card) is not modelled.]",
+   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Modelled as producing all five colors; the ETB type choice is simplified to \"any creature\" (exact for the mono-tribal decks that run it). colored_creature_only restricts the coloured mana to creature spells; colored_creature_ability_ok additionally permits it for an ACTIVATED ABILITY whose source is a creature (D12 fix: Burning-Fist / Sethron activations, paid under the CreatureAbilityPayScope guard). Ability sources are simplified to battlefield creatures -- the oracle's any-zone \"source\" (e.g. cycling a creature card) is not modelled.] [Soldiers (2026-10-04): EXACT there too -- every creature in that list is BOTH a Human and a Soldier (Scryfall type lines verified), so naming either type pays for every creature it casts; King Darien XLVIII's {G}/{1}{G}{W} and Harbin's {U} are castable ONLY through these lands (Harbin also off Fortified Beachhead).] [Soldiers: its coloured mana also pays the abilities of Recruitment Officer ({3}{W}) and King Darien XLVIII ({3}{G}{W} -- its ONLY green source for that ability): every ActivatePermAbility whose source is a creature now pays under CreatureAbilityPayScope at both apply sites, as ActivatePump always did.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -8312,7 +8312,7 @@
    "keywords": [],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn. [ETB SINGLE-tutor to HAND (Ranger of Eos's params minus etb_tutor_hand_count, which selects the multi path at >1): tutor_to_hand + tutor_types Creature + tutor_max_mv 1 + tutor_shuffle_after. Legal pool in this deck is exactly Soul Warden / Soul's Attendant / Serra Ascendant (every other creature is MV>=2); WHICH one is a searched main_phase plan variant (tutor axis, width 6 >= 3 candidates, so all three are scored; plan-less paths take the first library match, disclosed). 'You may' is ALWAYS taken when a legal target exists -- declining is legal but never right with three castable {W} bodies; the only theoretical cost is the post-search shuffle, disclosed (same treatment as Ranger of Eos). The fetched card lands in HAND and IS castable in the same phase (2026-09-08): the creature-ETB tutor arms the same deferred acquisition re-solve (MTG_ACQ_RESOLVE) a tutor SPELL does, in the rollout as well as the depth-0 executor (only the executor half existed before, so at every searched depth the fetch waited a turn: 0 of 7 spare-mana fetches cast same-turn -> 6 of 7). Guarded by test/scenarios/critter_ranger_captain_fetch_same_turn.json. Clause 2: the effect ('opponents can't cast noncreature spells') is INERT -- the passive goldfish opponent never casts a spell of any kind -- but the SACRIFICE is real and is modelled: sac_creature_outlet + sac_outlet_self_only (the cost is 'Sacrifice this creature', so the source is the ONLY legal victim), with no payload params, so the activation's whole effect is the death event routed through OnCreatureDies. This is the deck's only way to kill its own creature, which matters solely because Daxos, Blessed by the Sun turns it into a lifegain event (-> Pridemate / Voice / Archangel of Thune / Heliod counters). Emitted to the search only when such a payoff is live (SelfSacHasDeathPayoff); with none on board the sac is strictly dominated (loses a 3/3, changes nothing else) so omitting it is lossless. Human play always sees it. A Ranger-Captain cast THIS turn with Daxos out can also sac in the phase it landed: breakpoint site 9 (post-entry activation, TurnSolver::PostEntryActivationPending) re-decides the phase after a permanent with a live, affordable activation enters. Sac timing: the engine plays first main only, so the search sacs pre-combat and forgoes that turn's 3 damage -- a small disclosed under-rating (the Goblins DeferSacOutletPreCombat gap).]",
+   "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn. [ETB SINGLE-tutor to HAND (Ranger of Eos's params minus etb_tutor_hand_count, which selects the multi path at >1): tutor_to_hand + tutor_types Creature + tutor_max_mv 1 + tutor_shuffle_after. Legal pool in this deck is exactly Soul Warden / Soul's Attendant / Serra Ascendant (every other creature is MV>=2); WHICH one is a searched main_phase plan variant (tutor axis, width 6 >= 3 candidates, so all three are scored; plan-less paths take the first library match, disclosed). 'You may' is ALWAYS taken when a legal target exists -- declining is legal but never right with three castable {W} bodies; the only theoretical cost is the post-search shuffle, disclosed (same treatment as Ranger of Eos). The fetched card lands in HAND and IS castable in the same phase (2026-09-08): the creature-ETB tutor arms the same deferred acquisition re-solve (MTG_ACQ_RESOLVE) a tutor SPELL does, in the rollout as well as the depth-0 executor (only the executor half existed before, so at every searched depth the fetch waited a turn: 0 of 7 spare-mana fetches cast same-turn -> 6 of 7). Guarded by test/scenarios/critter_ranger_captain_fetch_same_turn.json. Clause 2: the effect ('opponents can't cast noncreature spells') is INERT -- the passive goldfish opponent never casts a spell of any kind -- but the SACRIFICE is real and is modelled: sac_creature_outlet + sac_outlet_self_only (the cost is 'Sacrifice this creature', so the source is the ONLY legal victim), with no payload params, so the activation's whole effect is the death event routed through OnCreatureDies. This is the deck's only way to kill its own creature, which matters solely because Daxos, Blessed by the Sun turns it into a lifegain event (-> Pridemate / Voice / Archangel of Thune / Heliod counters). Emitted to the search only when such a payoff is live (SelfSacHasDeathPayoff); with none on board the sac is strictly dominated (loses a 3/3, changes nothing else) so omitting it is lossless. Human play always sees it. A Ranger-Captain cast THIS turn with Daxos out can also sac in the phase it landed: breakpoint site 9 (post-entry activation, TurnSolver::PostEntryActivationPending) re-decides the phase after a permanent with a live, affordable activation enters. Sac timing: the engine plays first main only, so the search sacs pre-combat and forgoes that turn's 3 damage -- a small disclosed under-rating (the Goblins DeferSacOutletPreCombat gap).] [Soldiers (2026-10-04): there the MV<=1 pool is Champion of the Parish / Esper Sentinel / Recruitment Officer; no card in that 60 pays off a death, so the sacrifice is strictly dominated and not emitted to the search (human play still sees it).]",
    "template": "custom",
    "parameters": {
     "tutor_to_hand": true,
@@ -10340,6 +10340,432 @@
    "template": "custom",
    "parameters": {
     "reveal_x_put_permanents": true
+   }
+  },
+  {
+   "name": "Champion of the Parish",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever another Human you control enters, put a +1/+1 counter on this creature. [own_creature_enters_self_counters 1 + enters_watch_subtypes [\"Human\"] -- the Youthful Valkyrie lane of FireCreatureEnterWatchers, the universal enter cascade shared lockstep by executor and rollout (reached from the shared ETB site, so it fires identically for a CAST Human, a Human PUT onto the battlefield by Aether Vial -- 'enters' is not 'cast', CR 603.6a -- and a Cavern of Souls cast). 'ANOTHER' is the loop's i == entered_index skip, so a Champion never counters its own enter; 'YOU CONTROL' is the controller test, so opponent spawns never trigger it. NOT legendary: with N Champions out, one Human entering puts a counter on EACH of them, and a second Champion entering pumps the first (it is itself a Human) without pumping itself. Non-Human entrants -- King Darien XLVIII's 1/1 Soldier TOKENS (Soldier, not Human) -- correctly do NOT trigger it. The counter goes on ITSELF via AddPlusCounters (merging entries so BuildSimKey does not split identical boards). No choice and no 'may': the trigger is mandatory, so there is nothing to surface.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_self_counters": 1,
+    "enters_watch_subtypes": [
+     "Human"
+    ]
+   }
+  },
+  {
+   "name": "Field Marshal",
+   "mana_cost": "{1}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Soldier creatures get +1/+1 and have first strike. (They deal combat damage before creatures without first strike.) [The +1/+1 Soldier lord is modelled: Knight Exemplar's / Goblin King's shape exactly (lord_effect, subtypes_affected Soldier, +1/+1, lord_excludes_self -- 'Other' is per-instance by address inside ComputeLordBonus, so Field Marshal never pumps itself but a second copy would pump it). Matching reads the creature's LIVE subtypes, so it reaches every Human Soldier in the deck, Soldier TOKENS (Myrel's colorless Soldier artifact tokens, King Darien's and General's Enforcer's Soldier tokens) and a typed-animated Gideon, Battle-Forged (4/4 Human Soldier) via animated_printed_types; it does NOT reach Moonrage Brute (Werewolf only) or Descendant of Storms' Spirit tokens. Field Marshal itself is a Soldier, so it counts for Harbin's five-Soldier attack and Myrel's X. [PARTIAL: the lord scope is 'Other Soldier creatures' on EVERY side, but ComputeLordBonus applies lords to the controller's creatures only. WHY inert: the passive opponent's only creatures are the scheduled GoldFishRunner::PopulateOpponentSpawns bodies (8 of 10 game indices), which carry no subtype at all -- no Soldier for the lord to reach -- and never attack or block; Goblin King carries the same disclosure. PROVISIONAL pending user sign-off.] [PARTIAL: the granted FIRST STRIKE is not modelled. WHY inert: structural -- the passive opponent never blocks, and the engine collapses combat damage into one event, so strike order can never change an outcome (Knight Exemplar, Ocelot Pride, Lyra carry the same disclosure). No card in this deck has double strike or reads 'creatures with first strike', so the keyword has no other reader. PROVISIONAL pending user sign-off.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Soldier"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Thalia, Guardian of Thraben",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [
+    "First strike"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "First strike\nNoncreature spells cost {1} more to cast. [First strike: real keyword (Keyword::FirstStrike), inert vs the passive non-blocking goldfish opponent but kept faithful. The tax is SYMMETRIC and modelled via noncreature_spell_tax:1 -- each permanent with it, controlled by ANY player, adds {1} GENERIC to every noncreature spell's cost, applied to the RAW cost in EffectiveSpellCost BEFORE reducers (CR 601.2f: cost + increases - reductions). It binds OUR noncreature spells: in Soldiers that is Aether Vial ({1} -> {2} with one Thalia out). Its opponent-facing half is inert (the goldfish opponent never casts). Creature spells (incl. Cavern-cast ones) are untaxed; Vial PUTs and activated abilities are not casts and are untaxed. Legendary: the second copy dies to the engine's legend rule (GameEngine EnforceLegendRule). Same-turn ORDER: a hand-cast Thalia and a hand-cast Vial in one plan are cast in the provider's CastOrderRank order (unchanged -- Thalia ranks as a creature, before the Vial), falling back to the payable order (MTG_PAYABLE_ORDER) when that order cannot pay; ranking a taxer after noncreature spells is a USER-OWNED cast-order question, recorded in analysis-soldiers.md, not adopted here. A VIAL-PUT Thalia alongside a noncreature hand cast is a searched order: TurnSolver::VialOrderMatters emits the puts-last twin (Plan::vial_after_casts), so 'cast the second Vial for {1}, THEN Vial in Thalia' is a line the search scores. Taxed sites: EffectiveSpellCost (all three worlds), the sequenced feasibility walk (joins_for_mana), the viewer's declared-order CheckLine walk. NOT taxed (no instance in this list): free / without-paying-its-mana-cost casts that bypass EffectiveSpellCost -- a cross-card scope note, PROVISIONAL.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "noncreature_spell_tax": 1
+   }
+  },
+  {
+   "name": "Thalia's Lieutenant",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, put a +1/+1 counter on each other Human you control.\nWhenever another Human you control enters, put a +1/+1 counter on this creature. [BOTH clauses modelled; nothing deferred, nothing inert. CLAUSE 1 (ETB): etb_each_other_own_creature_counters 1 + etb_counters_subtypes [\"Human\"] -- resolved in FireOwnEtbTriggers, the shared own-ETB site that the hand-cast path (EffectHandler::EnterBattlefield), the Aether Vial put (AIEngine deploy_via_vial and its TurnSolver apply_vial lockstep twin) and every rollout already call, so a VIAL-PUT Lieutenant (not cast, but it DOES enter -- CR 603.6a) fires it exactly like a cast one. 'Each OTHER' = skip entered_index; 'you control' = controller test; the Human set is read at RESOLUTION (CR 608.2), so it counts every Human on the board at that moment -- including a second Thalia's Lieutenant or Champion of the Parish, which ALSO each get +1 from their own clause-2 watcher on the same entry (net +2 each; commutative counter addition, so the FireEtbWatchers-then-FireOwnEtbTriggers order is immaterial). Counters via AddPlusCounters so they merge (BuildSimKey). CLAUSE 2 (watcher): own_creature_enters_self_counters 1 + enters_watch_subtypes [\"Human\"] -- Youthful Valkyrie's exact shape, fired from FireCreatureEnterWatchers; 'another' is the i == entered_index skip (it never counters its own entry), 'you control' is the controller test. Every creature in this list is a Human, so in practice it grows on EVERY own creature entry, cast or Vial-put. King Darien's 1/1 Soldier tokens are NOT Human and correctly do not trigger it (his token ability's {G} is payable only by Secluded Courtyard, whose coloured mana may pay a creature-source ability). A duplicate LEGENDARY Human (Thalia, Jirina, Harbin, Kudro, Darien, Rick/Greymond) entering and dying to the legend rule still triggers clause 2 -- the counter survives -- and DuplicateEntryOrDeathHasUpside already sees that through the reused watcher param. No choices: no target, no 'may', so nothing to surface in the viewer. Subtype tests read printed m_subtypes; there is no changeling or all-types animated land in the list, so that narrowing is inert here.]",
+   "template": "custom",
+   "parameters": {
+    "etb_each_other_own_creature_counters": 1,
+    "etb_counters_subtypes": [
+     "Human"
+    ],
+    "own_creature_enters_self_counters": 1,
+    "enters_watch_subtypes": [
+     "Human"
+    ]
+   }
+  },
+  {
+   "name": "Rick, Steadfast Leader",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "As Rick, Steadfast Leader enters, choose two abilities from among first strike, vigilance, and lifelink.\nHumans you control have each of the chosen abilities.\nAs long as you control four or more Humans, Humans you control get +2/+2. [Secret Lair printed name of GREYMOND, AVACYN'S STALWART (oracle text/cost/PT verified against that oracle card on Scryfall; the cards.json name is the deck's printed name because the engine has no alias table -- see scryfall_name). CLAUSE 1 (as-enters choice, CR 614.12 replacement, no stack): etb_choose_keyword_count 2 from etb_choose_keyword_menu [first strike, vigilance, lifelink], locked per OBJECT in Permanent::chosen_keyword_mask at the universal enter cascade (FireEtbWatchers), so a cast, a Cavern cast and an Aether Vial put all choose identically; a re-entering Rick is a new object and chooses afresh. Autonomous pick = provider EtbChosenKeywords (a provider one-option choice, Coldsteel Heart's EtbChosenColor precedent -- live-reader keywords first, i.e. Vigilance+Lifelink; PROVISIONAL pending user sign-off under the no-greedy rule); the human picks in the viewer (choose_abilities decision). CLAUSE 2 (static grant to Humans you control, SELF-INCLUSIVE -- Rick is a Human): lifelink read in CreatureHasLifelink, vigilance in CreatureHasVigilance (the Combat.cpp attack-tap), both via chosen_keyword_mask x keyword_grant_subtypes [Human]. FIRST STRIKE is recorded in the mask but STRUCTURALLY INERT -- Keyword::FirstStrike has no readers, there is no blocker path and combat damage is one event (Dwalin/Ocelot Pride disclosure); the passive opponent never blocks, so strike order cannot change an outcome. [PARTIAL: first-strike grant has no reader; PROVISIONAL pending user sign-off.] CLAUSE 3 (conditional static anthem, CR 611.3, continuously checked): lord_effect +2/+2 to Humans you control (self included, lord_excludes_self false) gated by lord_min_controlled_matching 4 -- counts Human PERMANENTS you control on the battlefield INCLUDING Rick; switches off the moment the count drops below four. Legend rule engine-enforced (2 copies in deck). In THIS deck vigilance and lifelink have no downstream consumer (no Human has a {T} ability; nothing reads life gained) -- disclosed, but modelled faithfully regardless.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Human"
+    ],
+    "power_bonus": 2,
+    "tough_bonus": 2,
+    "lord_min_controlled_matching": 4,
+    "etb_choose_keyword_count": 2,
+    "etb_choose_keyword_menu": [
+     "First strike",
+     "Vigilance",
+     "Lifelink"
+    ],
+    "keyword_grant_subtypes": [
+     "Human"
+    ]
+   },
+   "scryfall_name": "Greymond, Avacyn's Stalwart"
+  },
+  {
+   "name": "Esper Sentinel",
+   "mana_cost": "{W}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever an opponent casts their first noncreature spell each turn, draw a card unless that player pays {X}, where X is this creature's power. [Modelled as a 1/1 white ARTIFACT CREATURE -- Human Soldier (vanilla_creature, no params; colour W derived from the {W} pip). Every characteristic is live: ARTIFACT + CREATURE types (Card.h/EffectHandler permanent paths; TurnSolver marks the cast adds_durable_artifact -- harmless, nothing in this list reads artifact count), HUMAN (Champion of the Parish 'another Human enters', Thalia's Lieutenant / Coppercoat Vanguard / Kudro Human readers) and SOLDIER (Field Marshal and other Soldier lords, Harbin's Soldier-attack count, Fortified Beachhead's Soldier mana), MV 1 (Aether Vial on 1 counter; Ranger-Captain of Eos's MV<=1 tutor), toughness 1 (Recruiter of the Guard's toughness<=2 tutor). As a CREATURE spell it is NOT taxed by Thalia, Guardian of Thraben. Cavern of Souls' coloured mana casts it under either Human or Soldier. PARTIAL -- goldfish-inert, per the analysis-soldiers standing decision: the cast trigger watches only an OPPONENT's first NONCREATURE spell each turn, and the passive goldfish opponent never casts a spell (the opponent seat has no hand/library/action path) -- the Voice of Resurgence / Dragonlord Kolaghan precedent. Our own spells never trigger it (it says 'an opponent'). The 'unless that player pays {X}' choice and X = this creature's power (so Field Marshal / lord pumps would raise X) belong to that never-firing trigger and are equally dead. Nothing to model; disclosed. Would become live only if an opponent that casts spells is ever modelled. Covered by the analysis-soldiers.md standing decision (opponent-facing triggers inert); listed as PROVISIONAL pending explicit user sign-off.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Coppercoat Vanguard",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Each other Human you control gets +1/+0 and has ward {1}. (Whenever it becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.) [The +1/+0 is a plain subtype lord: template lord_effect, subtypes_affected [\"Human\"], power_bonus 1, tough_bonus 0, lord_excludes_self (\"each OTHER Human\") -- Knight Exemplar's shape with the toughness half zeroed (Plated Sliver is the existing proof that a one-sided bonus is legal: IsLordPermanent passes on the LordEffect template alone, and ComputeLordBonus adds tough_bonus 0 harmlessly). Resolved in ComputeLordBonus, so every combat / eval / SBA site in executor and rollout picks it up in lockstep. Matching is by LIVE subtype, so it reaches Human TOKENS too if any card creates them, and an animated all-types land (none in this list). Two Vanguards each pump the other (each is an 'other Human' to the other) -- stacks, non-legendary. Nearly the whole list is Human (Champion, Thalia, Thalia's Lieutenant, Field Marshal, Esper Sentinel, Recruitment Officer, Jirina, Harbin, Kudro, Cathar Commando, Brutal Cathar, King Darien, Rick, Ranger-Captain, Recruiter), so the bonus is effectively a team +1/+0. Being a Human itself, it triggers Champion of the Parish / Thalia's Lieutenant enter watchers and is a legal Cavern of Souls (Human) / Unclaimed Territory / Aether Vial (MV 2) target with no extra params. [PARTIAL: the WARD {1} grant is not modelled -- Keyword::Ward is an inert tag no engine code reads, and the grant would need a granted-keyword path that does not exist for ward. WHY inert, provably: ward triggers ONLY on a spell or ability an OPPONENT controls targeting the Human (CR 702.21a); our own targeting never triggers it, and the passive goldfish opponent never casts spells or activates abilities, so it has no reachable application. Not self-binding: ward taxes the opponent, never us. PROVISIONAL pending user sign-off.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Human"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 0,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Recruitment Officer",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "{3}{W}: Look at the top four cards of your library. You may reveal a creature card with mana value 3 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [Activated dig = PermAbilityMode::ActivatedDig (activated_dig_cost {3}{W}, activated_dig_count 4, activated_dig_types [Creature], activated_dig_max_mv 3 -- mana value read off the PRINTED card definition, as etb_dig's type filter is). NO {T} in the cost, so it is REPEATABLE within a turn and legal on a summoning-sick (or Vial-put) Officer (CR 302.6 restricts only {T} abilities) -- so the mode is listed in PermAbilityTaps' no-{T} exclusion list. Resolution shares PerformEtbDig's body (provider-ranked legal list, searched pick via the etbdig pin, human dig chooser), so the WHICH-creature pick is a searched axis, never an auto-pick. Each activation is ONE action (no K mana-sink axis): a second activation is reached through the site-8 put-in-hand breakpoint re-solve, which also lets the found creature be cast/Vialed the same turn and gives the next activation its own searched pick. An activation whose top four hold no legal hit is not enumerated autonomously (clairvoyant search, strictly dominated -- the Scrying Sheets whiff gate); humans keep the full offer. The pick axis searches EVERY legal hit (no width cap). 'You may' decline: the autonomous search always takes a legal hit (weakly dominant -- an extra card in hand is never worse in a goldfish; nothing in this list punishes hand size, and cleanup discard is itself a searched/surfaced choice); humans may decline (-1). 'Random order' to the bottom modelled as look order (unobservable to a goldfish; etb_dig precedent). Reveal is inert vs a passive opponent. Activation timing: the engine activates only in our main phase; instant-speed use (opponent's end step) is DOMINATED in a goldfish -- the same untapped lands pay it either way, and activating on our own turn additionally lets the hit be cast/Vialed now. Mana restriction: Secluded Courtyard's coloured mana MAY pay the {W} (an ability of a creature source -- CreatureAbilityPayScope), Cavern of Souls / Unclaimed Territory coloured mana may NOT (they yield {C} for it). Thalia, Guardian of Thraben does NOT tax it (an ability is not a spell).]",
+   "template": "custom",
+   "parameters": {
+    "activated_dig_cost": "{3}{W}",
+    "activated_dig_count": 4,
+    "activated_dig_types": [
+     "Creature"
+    ],
+    "activated_dig_max_mv": 3
+   }
+  },
+  {
+   "name": "Jirina, Dauntless General",
+   "mana_cost": "{W}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When Jirina enters, exile target player's graveyard.\nSacrifice Jirina: Humans you control gain hexproof and indestructible until end of turn. [BODY: a 2/2 LEGENDARY Human Soldier for {W}{B} -- legend rule via the existing SBA (2 copies in the list); being a Human it fires Champion of the Parish / Thalia's Lieutenant enter watchers and counts for Rick/Greymond's four-Humans and Kudro/Coppercoat anthems; being a Soldier it gets Field Marshal and counts toward Harbin's five-Soldier attack. The {B} pip is real: payable by Silent Clearing ({T}, pay 1 life: W or B), Cavern of Souls / Unclaimed Territory / Secluded Courtyard (any colour for a creature spell; Jirina is both Human and Soldier so it matches either chosen type), or bypassed by Aether Vial on 2. CLAUSE 1 (ETB 'exile target player's graveyard'): [PARTIAL, PROVISIONAL pending user sign-off: no params -- the trigger's resolution is a no-op. WHY INERT: the only two legal targets are the two players. The opponent's graveyard is ALWAYS empty here (it never casts or mills, and nothing in this 60 kills an opponent creature -- Brutal Cathar exiles, Kudro's destroy is not enumerated), so the dominant target resolves to exiling nothing, i.e. the no-op IS the faithful resolution of the correct target. Targeting OURSELVES is weakly dominated: no card in this 60 (no wish -> no sideboard access) reads our graveyard (no flashback/escape/delirium/threshold/recursion), so it changes no outcome. Re-examine if a graveyard reader ever joins the list.] CLAUSE 2 ('Sacrifice Jirina: Humans you control gain hexproof and indestructible until EOT'): the SACRIFICE is real and modelled -- sac_creature_outlet + sac_outlet_self_only (cost is 'Sacrifice Jirina', so the source is the ONLY legal victim; no mana cost, no {T}, so usable the turn it enters), no payload params, so the activation's whole effect is the death event through OnCreatureDies (Ranger-Captain of Eos precedent). [PARTIAL, PROVISIONAL pending user sign-off: the GRANT is not modelled. WHY INERT: hexproof only stops OPPONENT targeting (the passive opponent never targets); indestructible only stops destruction/lethal-damage SBA, and nothing in a goldfish destroys or damages our Humans (the opponent never blocks/casts; our own only destroy effect, Kudro's 'destroy target creature with power 4 or greater', is not enumerated). The 'target player' choice is therefore not surfaced in the viewer -- a disclosed inert-collapse, PROVISIONAL with the clause.] Autonomous play: SelfSacHasDeathPayoff is false for every board this list can produce (no own_creature_dies_lifegain / ltb_return / Human dies-watcher), so the enumerator drops the activation as a strictly dominated no-op (loses a 2/2 Human Soldier and can drop Rick below four Humans / Harbin below five Soldiers) -- lossless dominated-action removal, not a heuristic; human play always sees the board activation.]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true
+   }
+  },
+  {
+   "name": "Harbin, Vanguard Aviator",
+   "mana_cost": "{W}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "Flying\nWhenever you attack with five or more Soldiers, creatures you control get +1/+1 and gain flying until end of turn. [Cost/type/P-T pasted from Scryfall (WU, Legendary Creature -- Human Soldier, 3/2). Castable in this list off Fortified Beachhead ({W} or {U}) and off Unclaimed Territory / Secluded Courtyard / Cavern of Souls any-colour mana when their chosen type is Human OR Soldier (Harbin is both); Aether Vial on 2 puts it in. A creature spell, so Thalia's noncreature tax never applies. Recruiter of the Guard (toughness <= 2) and Recruitment Officer (MV <= 3) can both find it. THE TRIGGER: attack_with_n_threshold 5 / attack_with_n_subtype Soldier / attack_with_n_team_pump_power 1 / attack_with_n_team_pump_tough 1, applied by ApplyAttackThresholdTeamPump at declare-attackers in BOTH worlds (GameEngine::CombatPhase + TurnSolver::SimulateCombat -- ONE shared helper, lockstep by construction) and projected by PendingAttackDamage via CountAttackThresholdTeamPump so the search prices crossing the threshold. Harbin need NOT attack and need NOT be untapped or free of summoning sickness: the source is any Harbin you control on the battlefield as attackers are declared ('whenever YOU attack', not 'whenever this creature attacks'), so a Harbin cast or Vialed in pre-combat main enables the pump THIS turn -- which is why the param is an attack-helping Main1 term in ClassifyMainPhase and DeckFeedsCombat. The count is over DECLARED attackers only (CR 508.1 / 508.4): a creature put onto the battlefield attacking was never declared and does not count, so the count is taken BEFORE FireAttackCreateTokens widens the list (the Beastmaster Ascension / Inferno Titan position), while the PUMP lands AFTER the token block so such tokens are pumped (CR 603.3b ordering, tokens-first strictly dominant vs a never-blocking opponent -- the ApplyBattleCry precedent). A creature counts if it has the Soldier subtype or AnimatedAllTypes() (changeling-style animated land), the Kragma Warcaller matcher. Recipients: EVERY creature you control at resolution (Bogbeast's Craterhoof loop), not attackers only; temp bonuses, so 'until end of turn' is the CR 514.2 cleanup. Toughness half applied faithfully though inert in effect (the opponent deals no damage). Legendary: the engine's EnforceLegendRule keeps one copy, so at most one trigger per combat in practice; the helper still loops per source so a hypothetical copy effect would be counted faithfully. [PARTIAL (PROVISIONAL, awaiting user sign-off): the 'and gain flying until end of turn' grant is NOT modelled -- provably inert: evasion only matters against blockers and the passive goldfish opponent never blocks (no creatures, no block model); the engine has no temporary keyword-grant field and Combat reads no Flying. Verbatim the accepted Blossoming Bogbeast trample / Craterhoof Behemoth collapse. Harbin's own printed Flying is carried in keywords for fidelity and is inert for the same reason.] No interactive choice anywhere on the card (mandatory, untargeted, no modes, no 'may') -> no viewer decision.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_with_n_threshold": 5,
+    "attack_with_n_subtype": "Soldier",
+    "attack_with_n_team_pump_power": 1,
+    "attack_with_n_team_pump_tough": 1
+   }
+  },
+  {
+   "name": "General Kudro of Drannith",
+   "mana_cost": "{1}{W}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Other Humans you control get +1/+1.\nWhenever General Kudro or another Human you control enters, exile target card from an opponent's graveyard.\n{2}, Sacrifice two Humans: Destroy target creature with power 4 or greater. [LORD MODELLED: lord_effect subtypes_affected Human +1/+1 with lord_excludes_self -- the Knight Exemplar / Valiant Knight shape, applied in ComputeLordBonus on every combat/eval/SBA/viewer call site; 'you control' = our battlefield only. It is a Human Soldier itself, so it triggers Champion of the Parish / Thalia's Lieutenant watchers and is buffed by OTHER Human/Soldier lords (Field Marshal, Coppercoat Vanguard, King Darien); King Darien's 1/1 Soldier TOKENS are not Human and get nothing from Kudro. LEGENDARY: 2 copies in the list -- the second copy is a legend-rule duplicate (CR 704.5j, existing SBA). COLOUR: {B} is payable by Cavern of Souls / Unclaimed Territory / Secluded Courtyard (colored_creature_only -- Kudro is a creature spell, so allowed) and Silent Clearing (W/B horizon land, pay 1 life), or bypassed by Aether Vial at 3 counters. [PARTIAL, PROVISIONAL pending user sign-off: (1) the enters trigger 'exile target card from an opponent's graveyard' is NOT modelled -- the passive opponent never casts, discards, mills or loses a creature, so its graveyard is always empty (the same collapse disclosed on Deathrite Shaman and Scavenging Ooze); with no legal target the trigger is removed from the stack (CR 603.3d) and does nothing. (2) The activated ability '{2}, Sacrifice two Humans: Destroy target creature with power 4 or greater' is NOT enumerated -- its legal targets are a scheduled opponent spawn body with power >= 4 (GoldFishRunner::PopulateOpponentSpawns; spawns never attack or block, so destroying one changes no outcome) or one of OUR OWN power>=4 creatures; every activation sacrifices two of our Humans and pays {2}, and nothing in the 60 has a dies/sacrifice/leaves-the-battlefield payoff, so every such line is strictly dominated (fewer attackers, less mana, no compensation) and can never shorten the goldfish clock.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Human"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Cathar Commando",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [
+    "Flash"
+   ],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "Flash\n{1}, Sacrifice this creature: Destroy target artifact or enchantment. [Body modelled exactly: a 3/1 Human Soldier for {1}{W} -- both subtypes are load-bearing (Champion of the Parish / Thalia's Lieutenant / General Kudro count Humans; Field Marshal pumps Soldiers; Cavern of Souls naming either type pays for it; Aether Vial on 2 puts it in; Recruiter of the Guard can fetch it, toughness 1). It is a CREATURE spell, so Thalia's noncreature tax never applies to it. PARTIAL, PROVISIONAL (awaiting user sign-off): Flash is inert -- the engine opens no priority window outside our own main phase (the Ice-Fang Coatl precedent, whose Flash deferral the USER approved 2026-10-04 for THAT card), and in a goldfish an end-of-opponent's-turn cast is weakly dominated by a main-phase cast: the mana is the same untapped pool, the creature can attack on the same next turn either way, no information is gained (our next draw is still unseen at the opponent's end step), the opponent never acts so there is nothing to dodge, and a main-phase cast fires Champion/Lieutenant/Kudro enter-triggers SOONER and shrinks the hand before cleanup. The keyword is still listed (TurnSolver's timing_ok honours it for casts with a non-empty stack). PARTIAL, PROVISIONAL (awaiting user sign-off): the activated ability '{1}, Sacrifice this creature: Destroy target artifact or enchantment' is NOT modelled. WHY inert -- the passive opponent never casts, so it controls no artifact or enchantment ever (its library holds Sol Ring, but nothing is ever put onto its battlefield except creature spawns); the opponent's only permanents are the PopulateOpponentSpawns creature bodies, never an artifact or enchantment, so the ONLY legal targets are our own Aether Vial and Esper Sentinel (artifact creature), and every activation is strictly dominated by declining: it spends {1}, loses a 3-power attacker, and destroys a second own permanent, while this deck has no death/sacrifice payoff that could repay it. Optional activation, so declining is always legal (the Deconstruction Hammer precedent -- that card's deferral was USER-approved 2026-10-04; this one is not yet). Viewer cost, disclosed: a human cannot choose this strictly-dominated activation.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Brutal Cathar",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier",
+    "Werewolf"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever this creature enters or transforms into Brutal Cathar, exile target creature an opponent controls until this creature leaves the battlefield.\nDaybound (If a player casts no spells during their own turn, it becomes night next turn.) [TRANSFORMING DFC, FRONT FACE (Brutal Cathar // Moonrage Brute); listed under the front name as in every zone but the battlefield (CR 712.8). DAY/NIGHT (CR 726 + 702.145) is a NEW game designation, GameState::day_night {neither, day, night}, armed only for a deck that runs a daybound/nightbound card (deck stamp). (1) First appearance: if it is neither day nor night when a daybound permanent is on the battlefield, it becomes day. (2) If it is NIGHT as this enters (cast OR put -- Aether Vial), it enters with its BACK face up as Moonrage Brute (ruling: it does NOT enter as Brutal Cathar and then transform), so the enter trigger does not fire and it never enters as a Human/Soldier: Champion of the Parish / Thalia's Lieutenant / Kudro enter-watchers do not see a Human. The face is set at the TOP of the enter cascade, BEFORE the watchers and own-ETB triggers. (3) Turn-based check before untap (CR 726.3a), applied at BOTH turn boundaries in lockstep (executor end-of-turn/UntapStep + rollout SimulateEndAndStartNextTurn): the passive opponent's notional turn falls between ours (the opponentdeck::EndOfTurnDraw site). At the opponent's turn start: day && we cast 0 spells -> night; night && we cast >= 2 spells -> day. At our turn start: day && the opponent cast 0 spells (always, in a goldfish) -> night. So from the turn after it first lands, it is ALWAYS night on our turns and this permanent is Moonrage Brute (3/3 red Werewolf, not a Human or Soldier: it leaves every Human/Soldier lord and count -- Field Marshal, Kudro, Coppercoat Vanguard, Rick's four-Humans clause, Harbin's five Soldiers). A Vial put is not a cast and does not count toward spells. (4) Transforming is not entering and not leaving: counters (e.g. Lieutenant's), m_number, tapped state, summoning-sickness status and the linked exile all persist; no enter watcher fires. (5) The ETB / transforms-into-Brutal-Cathar trigger: exile target creature an opponent controls (spawned opponent creatures, 8 of 10 game indices) until this permanent leaves; with no opponent creature the trigger has no target and is removed. It fires on the cast turn (day) and again at the opponent's notional turn start whenever night -> day (we cast >= 2 spells). Target pick = the shared Chupacabra convention (largest opponent creature by power -- a resolution default with ~0 payoff, PROVISIONAL pending user sign-off under the no-greedy rule), human board-click via the `target` (loyalty-shape) chooser, which fires on both the enter and the transform route. Payoff is ~0 (spawns never attack or block) -- implemented faithfully, carries no eval credit. The exiled creature returns under its owner's control after this permanent (either face) leaves the battlefield -- implemented as an orphan sweep at the day/night turn boundary in both worlds (ReturnOrphanedLinkedExiles), i.e. at the next turn boundary rather than the instant it leaves: disclosed, unobservable (opponent creatures never act) and UNREACHABLE in this 60 (no card here can make it leave: Kudro's sac-two-Humans is not enumerated, it is not legendary, nothing bounces or destroys it). A token would cease to exist (ruling) -- spawns are not tokens. (6) Leaving the battlefield as Moonrage Brute should put BRUTAL CATHAR into the graveyard/hand (CR 712.8); the engine's ~30 graveyard-push sites keep the face name -- disclosed, unreachable here for the reason in (5). PARTIAL: the back face's FIRST STRIKE is parsed but inert (Keyword::FirstStrike has no readers; the passive opponent never blocks) and its WARD -- PAY 3 LIFE is inert (the opponent never targets) -- the established Dwalin / Kitesail Larcenist disclosures.]",
+   "template": "custom",
+   "parameters": {
+    "daybound_back_name": "Moonrage Brute",
+    "etb_or_transform_exile_opp_creature_until_leaves": true
+   }
+  },
+  {
+   "name": "Moonrage Brute",
+   "mana_cost": "",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Werewolf"
+   ],
+   "keywords": [
+    "First strike",
+    "Ward"
+   ],
+   "colors": [
+    "R"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "First strike\nWard—Pay 3 life.\nNightbound (If a player casts at least two spells during their own turn, it becomes day next turn.) [TRANSFORMING DFC, BACK FACE of Brutal Cathar // Moonrage Brute. NEVER CAST and never in any zone but the battlefield: the DB entry exists so a night-face permanent resolves its own characteristics (3/3, red by colour indicator, Werewolf only, first strike, ward) through LookupCached on its name -- the Kaldring precedent. mana_cost is empty (a TDFC back face has none); its mana value on the battlefield is the FRONT face's, 3 (transforming-DFC rule: a back face uses the front face's mana value) -- no Soldiers card reads a battlefield MV. Transforms back to Brutal Cathar (firing that face's transforms-into trigger) when it becomes day. PARTIAL: first strike inert (no blockers; Keyword::FirstStrike has no readers). PARTIAL: Ward -- Pay 3 life inert (the passive opponent never targets).]",
+   "template": "custom",
+   "parameters": {
+    "nightbound_front_name": "Brutal Cathar"
+   }
+  },
+  {
+   "name": "King Darien XLVIII",
+   "mana_cost": "{1}{G}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Other creatures you control get +1/+1.\n{3}{G}{W}: Put a +1/+1 counter on King Darien and create a 1/1 white Soldier creature token.\nSacrifice King Darien: Creature tokens you control gain hexproof and indestructible until end of turn. [Clause 1 (anthem): Benalish Marshal's exact shape -- lord_effect + affects_all_creatures + power/tough_bonus 1 + lord_excludes_self; tokens are creatures you control and get it too. Clause 2: the Slimefoot PayToken mode (pay_token_cost, NO {T}, NO sacrifice -> repeatable within a turn and legal the turn Darien lands, CR 302.6; activation count K is the searched axis, bounded only by mana) creating one 1/1 white Soldier token (subtype load-bearing: Field Marshal's 'Other Soldiers' lord reads it), plus the NEW pay_token_self_counters 1 rider: each activation also puts one +1/+1 counter on Darien via the PutPlusCounters chokepoint (counter first, then token, per oracle order -- unobservable difference). The {G} is payable in this mono-W shell ONLY by Secluded Courtyard (colored_creature_ability_ok: 'activate an ability of a creature source'); Cavern of Souls and Unclaimed Territory are cast-only and yield {C} here, Fortified Beachhead (W/U), Silent Clearing (W/B) and Plains make no green. The perm-ability payment therefore runs under CreatureAbilityPayScope when its source is a creature. Clause 3: the SACRIFICE is real and modelled as a self-only sac outlet (sac_creature_outlet + sac_outlet_self_only, no payload -- the Ranger-Captain of Eos shape): the activation's whole modelled effect is Darien leaving (anthem gone) and the death event via OnCreatureDies. The granted hexproof + indestructible on tokens is INERT in a goldfish -- the passive opponent never targets, destroys, blocks or deals damage to our creatures -- so it is not modelled [PARTIAL: token hexproof/indestructible grant not modelled; WHY inert -- no opponent removal, combat damage to our creatures, or targeting exists in a goldfish; PROVISIONAL pending user sign-off]. With no death payoff on board (SelfSacHasDeathPayoff false -- none in this deck) the sac is strictly dominated (loses the anthem and a 2/3+ body, gains nothing) so the search does not emit it (lossless); human play always sees it. Instant-speed timing of both activations: the engine enumerates them in the main phase only; inert vs a passive opponent (a token made at our main or at the opponent's end step first attacks on the same later turn, and the counter pre-combat is weakly better). Legend rule modelled (1 copy).]",
+   "template": "lord_effect",
+   "parameters": {
+    "affects_all_creatures": true,
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "pay_token_cost": "{3}{G}{W}",
+    "pay_token_count": 1,
+    "pay_token_power": 1,
+    "pay_token_toughness": 1,
+    "pay_token_subtypes": [
+     "Soldier"
+    ],
+    "pay_token_color": "W",
+    "pay_token_self_counters": 1,
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true
+   }
+  },
+  {
+   "name": "Fortified Beachhead",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As this land enters, you may reveal a Soldier card from your hand. This land enters tapped unless you revealed a Soldier card this way or you control a Soldier.\n{T}: Add {W} or {U}.\n{5}, {T}: Soldiers you control get +1/+1 until end of turn. [All three clauses modelled. ETB: etb_untap_reveal_subtypes (Soldier) (reveal from hand, the Frostboil Snarl/Game Trail path) OR etb_untap_control_subtypes (Soldier) (a permanent you control with that subtype, read off the LIVE permanent, so a transformed Moonrage Brute is not a Soldier and Soldier tokens are), both evaluated in the shared LandWouldEnterTapped predicate so enumeration pricing and the real drop agree; controlling a Soldier short-circuits to untapped before the provider's reveal hook (no choice exists then). Mana: produces W/U. Pump: team_pump_cost {5} + team_pump_taps_source (the land itself is tapped as part of the cost, so it cannot also pay; one activation per untapped Beachhead per turn) on the combat firebreathing converter (ApplyFirebreathing), team_pump_power 1 to every attacking Soldier. HOW MANY to activate is the combat converter's existing count (FirebreatheActivations, provider-owned, recorded COMPLIANT in docs/design/no-greedy-in-search-window.md) and the human's `firebreathe` decision. The +1 toughness (team_pump_tough 1 -> temp_tough_bonus) is applied for fidelity but is inert in a goldfish (no blockers, no damage to our creatures); +1/+1 to non-attacking Soldiers is likewise inert (no post-combat reader of their power).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U"
+    ],
+    "etb_untap_reveal_subtypes": [
+     "Soldier"
+    ],
+    "etb_untap_control_subtypes": [
+     "Soldier"
+    ],
+    "team_pump_cost": "{5}",
+    "team_pump_power": 1,
+    "team_pump_tough": 1,
+    "team_pump_subtypes": [
+     "Soldier"
+    ],
+    "team_pump_taps_source": true
+   }
+  },
+  {
+   "name": "Silent Clearing",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}, Pay 1 life: Add {W} or {B}.\n{1}, {T}, Sacrifice this land: Draw a card. [Exact sibling of Horizon Canopy / Fiery Islet (Horizon land cycle), same two params, nothing deferred. Clause 1: produces (W,B) + tap_self_damage 1 -- the land has NO {C} mode, so every tap (coloured or generic) costs 1 life (PainForTap: has_c_mode false). The life payment is a COST (CR 119.4/602.2), modelled through the shared pain path; on a dmg_events-armed board it is recorded via ArmedManaTap like every pain land -- no damage-prevention or lifegain card in this deck makes the cost-vs-damage distinction observable. Clause 2: sacrifice_draw_cost {1} -- pay {1}, tap and sacrifice the land, draw one (the land cannot tap for mana toward its own activation: {T} is part of the cost). Dig is offered by the GENERIC dig gate (GenericProvider::HasAnyDigSource/ShouldConsiderDig, MTG_GENERIC_DIG default on): VialProvider adds no override, so the deck digs only in the user-ruled 'nothing castable, >=2 lands left after the sac' case, and DigDecisionSearched stays false (clairvoyant-dig objection, USER 2026-09-29). Black matters only for the {B} pips of General Kudro of Drannith and Jirina, Dauntless General; both are Human Soldier creatures, so Unclaimed Territory / Cavern of Souls / Secluded Courtyard can pay them too.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "B"
+    ],
+    "tap_self_damage": 1,
+    "sacrifice_draw_cost": "{1}"
    }
   }
  ]

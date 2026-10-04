@@ -573,6 +573,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
     if (p.hone_counters != 0) { Mix(h, static_cast<uint64_t>(p.hone_counters) * 0x9E3779B1ull); }
     Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
     Mix(h, static_cast<uint64_t>(p.chosen_color + 1));
+    if (p.chosen_keyword_mask != 0) { Mix(h, 0xC4057ull ^ p.chosen_keyword_mask); }   // Rick
+    if (p.linked_exile_number != 0) { Mix(h, 0x11E7E00000000ull ^ static_cast<uint64_t>(p.linked_exile_number)); }
     // An ATTACHED aura/equipment is keyed by what it is attached to, so two auras on different
     // hosts never fuse. (Their hosts are force-uniqued separately, below.)
     Mix(h, static_cast<uint64_t>(p.aura_attached_to) << 32 | static_cast<uint64_t>(p.equipped_to));
@@ -4352,6 +4354,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         // then Wellwisher) -- see CollectActivationKeys, whose slots are kActModeBase + table INDEX.
         { PermAbilityMode::SacLifePerCreature, &sd.params.sac_lifegain_per_creature_cost },
         { PermAbilityMode::TapLifegain,        &sd.params.tap_lifegain_cost              },
+        { PermAbilityMode::ActivatedDig,       &sd.params.activated_dig_cost             },   // appended LAST (Recruitment Officer)
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -4385,6 +4388,12 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
             }
             if (!useful) { continue; }
         }
+        // Recruitment Officer: the enumerator's lossless whiff drop, mirrored (autonomous only).
+        if (m.mode == PermAbilityMode::ActivatedDig && !HumanPlayActive()
+            && LookTakeDigLegalNow(state, ctrl, sd.params.activated_dig_count,
+                                   sd.params.activated_dig_types,
+                                   sd.params.activated_dig_max_mv).empty())
+        { continue; }
         bits |= 1u << static_cast<int>(m.mode);
     }
     if (sd.params.spore_saproling_cost > 0 && src.spore_counters >= sd.params.spore_saproling_cost)
@@ -7257,7 +7266,10 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                                  || def.params.hinata_cost_reducer
                                  || !def.params.reduces_spell_subtype.empty()
                                  || def.params.chooses_creature_type
-                                 || !def.params.reduces_spell_color.empty();
+                                 || !def.params.reduces_spell_color.empty()
+                                 // Thalia's tax: a taxer cast earlier in the walk must be on the
+                                 // board so the live recompute taxes the noncreature casts after it.
+                                 || def.params.noncreature_spell_tax > 0;
         if (joins_for_mana)
         {
             Permanent perm;
@@ -7655,6 +7667,9 @@ static int PendingAttackDamage(const GameState& state)
     // Llanowar Elves swing at 1 instead of 1+X. Mirrors ApplyAttackLifegainTeamPump; returns 0 with
     // no such attacker, so every other deck's projection is byte-identical.
     dmg += CountAttackLifegainTeamPump(state, active, attackers, ds_of, tok_count);
+    // Harbin's "attack with five or more Soldiers" team pump -- same final-set / weight reasoning.
+    // Mirrors ApplyAttackThresholdTeamPump; 0 for every deck without the stamp.
+    dmg += CountAttackThresholdTeamPump(state, active, attackers, ds_of, tok_count);
     return dmg;
 }
 
@@ -9360,7 +9375,7 @@ static const char* kReasonNames[kReasonCount] = {
     "garth_chosen_mask", "loyalty", "colored_cast_lifegain_used",
     "lifegain_counters_used (Nykthos Paragon)", "chosen_color (locked mana rock)",
     "ice/age counters", "spore/quest counters", "temp_haste/lifelink/double_strike/exile_at_end",
-    "chosen_subtype_id", "is_animated/is_token/echo_resolved", "copy_printed_name",
+    "chosen_subtype_id/keyword_mask/linked_exile", "is_animated/is_token/echo_resolved", "copy_printed_name",
     "something ATTACHED to it", "PLAIN (folded)"
 };
 static std::atomic<long long> g_n[kReasonCount];
@@ -9484,6 +9499,9 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
+    // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
+    // same-named permanents play differently. Zero for every other deck -> byte-identical.
+    if (p.chosen_keyword_mask != 0 || p.linked_exile_number != 0) { return false; }
     why = foldcensus::kAnimatedToken;
     if (p.is_animated || p.is_token || p.echo_resolved) { return false; }
     // A copy effect can make two same-named permanents differ, and a token is never plain above.
@@ -15103,6 +15121,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::LifeGatedPutCreatures, &pp.life_gated_put_creatures_cost },   // appended LAST
         { PermAbilityMode::SacLifePerCreature, &pp.sac_lifegain_per_creature_cost },     // appended LAST
         { PermAbilityMode::TapLifegain,        &pp.tap_lifegain_cost              },     // appended LAST
+        { PermAbilityMode::ActivatedDig,       &pp.activated_dig_cost             },     // appended LAST (Recruitment Officer)
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -15122,7 +15141,9 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
 
     if (ActAffordable(state, ctrl, p.card, pp.blink_cost, total_cache))
     { out.push_back(ActKey(num, kActBlink)); }
-    if (ActAffordable(state, ctrl, p.card, pp.team_pump_cost, total_cache))
+    // A {T}-in-cost team pump (Fortified Beachhead) has no activation on a tapped source.
+    if ((!pp.team_pump_taps_source || (!p.tapped && p.CanTap()))
+        && ActAffordable(state, ctrl, p.card, pp.team_pump_cost, total_cache))
     { out.push_back(ActKey(num, kActTeamPump)); }
     if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && p.CanTap()))
         && ActAffordable(state, ctrl, p.card, pp.pod_activation_cost, total_cache))
@@ -17269,7 +17290,8 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
         || p.power_equals_creature_count
         || p.pt_equals_snow_permanents_you_control
         || p.pt_equals_snow_permanents_on_battlefield
-        || p.static_artifact_threshold > 0)   // Goblin Tomb Raider: hasty whenever an artifact is out
+        || p.static_artifact_threshold > 0   // Goblin Tomb Raider: hasty whenever an artifact is out
+        || p.attack_with_n_threshold > 0)    // Harbin: on the battlefield at declare-attackers, even sick
     { return MP::Main1; }
     // CARD-DEPENDENCY-MAP pull-forward (docs/design/card-dependency-map.md, USER 2026-08-15):
     // a card's phase is a consequence of the deck's dependency graph. A lifegain->loss ENABLER
@@ -23515,6 +23537,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::SacLifePerCreature,
                                                            &sd->params.sac_lifegain_per_creature_cost },
                     { Action::AbilityMode::TapLifegain,    &sd->params.tap_lifegain_cost    },
+                    // Recruitment Officer's activated dig -- appended LAST, same order as the other
+                    // two tables (CollectActivationKeys slots are kActModeBase + table INDEX).
+                    { Action::AbilityMode::ActivatedDig,   &sd->params.activated_dig_cost   },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -23608,7 +23633,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // times, which is strictly more expressive than a fixed menu -- and 53 exile
                     // variants would be a plan explosion on the deck that already OOM-killed the box.
                     std::vector<int> counts{ 1 };
-                    if (!taps && m.mode != Action::AbilityMode::SacDraw)
+                    // Recruitment Officer's dig is NEVER a K-count block: each activation's pick is
+                    // its own searched decision (the etbdig pin), so a second activation is reached
+                    // through the put-in-hand breakpoint re-solve with its own pick -- a block would
+                    // resolve picks 2..K by the ranked default inside the window (no-greedy rule).
+                    if (!taps && m.mode != Action::AbilityMode::SacDraw
+                        && m.mode != Action::AbilityMode::ActivatedDig)
                     {
                         const bool fold_fanout =
                             HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
@@ -23640,6 +23670,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 topd->card, sd->params.tap_draw_requires_top_supertype))
                         { continue; }
                     }
+                    // Recruitment Officer: an activation whose top `activated_dig_count` holds no
+                    // legal hit spends {3}{W} for nothing -- strictly dominated, and the search is
+                    // clairvoyant, so dropping it is a LOSSLESS dominated-action removal (the
+                    // Scrying Sheets whiff gate's shape). Autonomous only: a human cannot see the
+                    // library and keeps the full offer.
+                    if (m.mode == Action::AbilityMode::ActivatedDig && !HumanPlayActive()
+                        && LookTakeDigLegalNow(state, state.active_player_index,
+                                               sd->params.activated_dig_count,
+                                               sd->params.activated_dig_types,
+                                               sd->params.activated_dig_max_mv).empty())
+                    { continue; }
                     // MANA-CONTESTED DIG (MTG_DIG_MANA_LAST, default OFF) -- see DigManaWantedInHand.
                     // Sibling of the gate directly above and deliberately placed beside it, but the two
                     // are different in kind and the comments must not be read as one: that one is a
@@ -23703,6 +23744,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // SHARED CountOwnCreatures so the clamp and the resolver's payload cannot drift.
                     if (m.mode == Action::AbilityMode::SacLifePerCreature
                         && CountOwnCreatures(state, state.active_player_index) <= 0) { continue; }
+                    // HUMAN PLAY: never offer a CREATURE-source activation the real payment cannot
+                    // make (Soldiers, 2026-10-04 -- King Darien's {3}{G}{W} / Recruitment Officer's
+                    // {3}{W}). The pool above is colour-blind about Cavern of Souls / Unclaimed
+                    // Territory, whose colours may NOT pay an ability, so an "affordable" activation
+                    // could be a no-op the mid-phase re-prompt re-offers forever -- the Minotaur
+                    // ActivatePump loop the probe above exists for. Same probe, same pay scope as the
+                    // apply; human play only, so every rollout / autonomous run is byte-identical.
+                    if (HumanPlayActive() && (src.card.IsCreature() || src.is_animated))
+                    {
+                        GameState scratch = state;
+                        CreatureAbilityPayScope probe_pay_scope;
+                        if (!TapForCostDirect(scratch, cost, /*for_creature=*/false)) { continue; }
+                    }
                     for (int k : counts)
                     {
                         if (k <= 0) { continue; }
@@ -37239,6 +37293,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           a.sac_source_id, a.ability_mode))
             {
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
+                // A CREATURE source's ability may be paid with Secluded Courtyard's coloured mana
+                // (D12). Covers the K-1 repeat payments below too. Executor twin: AIEngine.
+                std::optional<CreatureAbilityPayScope> creature_ability_scope;
+                if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+                { creature_ability_scope.emplace(); }
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
                 {
@@ -38494,6 +38553,7 @@ static void SimulateCombat(GameState& state)
     // Tectonic Giant's modal attack trigger. Mirrors GameEngine::CombatPhase (lockstep).
     ApplyAttackModalTriggers(state, active, atk_idx);
 
+    const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {
@@ -38528,6 +38588,8 @@ static void SimulateCombat(GameState& state)
     // block above so tokens entering attacking are pumped, and BEFORE the damage loop reads power.
     // Mirrors GameEngine::CombatPhase (executor) -- lockstep, ONE shared helper. Gated inert.
     ApplyAttackLifegainTeamPump(state, active, atk_idx);
+    // Harbin's attack-threshold pump. Mirrors GameEngine::CombatPhase (lockstep, ONE shared helper).
+    ApplyAttackThresholdTeamPump(state, active, atk_idx, declared_n);
 
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
@@ -38758,6 +38820,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // rollout's win turn for a deck-out equals the realised one. No-op for every deck that was not
     // dealt an opponent library. See core/OpponentDeck.h.
     opponentdeck::EndOfTurnDraw(state);
+    // DAY / NIGHT turn-based check (CR 726.3a) -- lockstep twin of GameEngine::RunTurnFrom's call,
+    // at the same instant (spells_cast_this_turn still OUR turn's count). No-op unless a daybound
+    // card has set the designation.
+    DayNightTurnBoundary(state);
     // If that draw DECKED them, stop here without advancing the counter. Every caller's ordinary
     // OpponentHasLost check returns `state.turn_number`, so incrementing first would make the
     // rollout report the win a full turn later than the executor does -- the executor checks
@@ -43606,6 +43672,13 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     if (pp.blink_cost.has_value() || pp.team_pump_cost.has_value()) { return true; }
     if (pp.pod_mv_delta != 0) { return true; }
     if (pp.sac_creature_outlet) { return true; }
+    // Soldiers (2026-10-04): Recruitment Officer's activated dig and King Darien's token ability are
+    // both {T}-less, so a copy CAST this turn can activate in the same phase -- both are in
+    // CollectActivationKeys' table. King Darien is keyed on his counter rider rather than on
+    // pay_token_cost alone so Slimefoot's (Fungus) marking is untouched by this change; whether
+    // Slimefoot should be marked too is recorded as an open question in analysis-soldiers.md.
+    if (pp.activated_dig_cost.has_value()) { return true; }
+    if (pp.pay_token_cost.has_value() && pp.pay_token_self_counters > 0) { return true; }
     return false;
 }
 
@@ -44089,6 +44162,13 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                 const std::string t = a.tutor_target.str();
                 if (t == "Braingeyser" || t == "Regrowth") { mask |= 1 << 10; continue; }
             }
+            // Recruitment Officer's activated dig puts a creature into hand from an ACTIVATION --
+            // a non-cast hand entry, so the section-level arming fires site 10; the found card must
+            // be castable / Vial-able the same phase, and a second activation (its own searched
+            // pick) is reached only through that continuation. Mark the route so it is fanned.
+            if (a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::ActivatedDig)
+            { mask |= 1 << 10; continue; }
         }
     }
     return mask;
@@ -45675,6 +45755,41 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0) { continue; }
             for (const Action& act : p.actions)
             {
+                // Recruitment Officer's ACTIVATED dig shares the resolver and the pin, so it shares
+                // the axis. Its width is EVERY legal pick (the provider width is a cap measured on
+                // Knights' ETB dig, where picks past the third were ones already ranked last; here
+                // it would make a 4th legal pick inexpressible -- USER no-greedy rule), sized by the
+                // same predicate resolution uses.
+                if (act.kind == Action::Kind::ActivatePermAbility
+                    && act.ability_mode == Action::AbilityMode::ActivatedDig)
+                {
+                    const CardDefinition* ad = act.def ? act.def
+                                                       : CardDatabase::Instance().Lookup(act.card_name);
+                    if (ad == nullptr) { continue; }
+                    const std::vector<int> legal_now =
+                        LookTakeDigLegalNow(state, state.active_player_index,
+                                            ad->params.activated_dig_count,
+                                            ad->params.activated_dig_types,
+                                            ad->params.activated_dig_max_mv);
+                    std::size_t k = 0;
+                    if (!legal_now.empty())
+                    {
+                        std::vector<Card> examined;
+                        const Player& lap = state.players[state.active_player_index];
+                        const int nl = std::min(ad->params.activated_dig_count,
+                                                static_cast<int>(lap.library.size()));
+                        for (int i = 0; i < nl; ++i) { examined.push_back(lap.library[i]); }
+                        k = ResolveProvider(state).EtbDigCandidates(state, state.active_player_index,
+                                                                   examined, legal_now).size();
+                    }
+                    for (std::size_t c = 1; c < k; ++c)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.etbdig_choice = static_cast<int>(c);
+                        extra.push_back(std::move(v));
+                    }
+                    break;   // vary ONE dig per variant
+                }
                 if (act.kind != Action::Kind::CastFromHand
                     && act.kind != Action::Kind::ActivateVial) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
@@ -47215,6 +47330,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         if (pp.sac_lifegain_per_creature_cost)
         { s += "sl" + pp.sac_lifegain_per_creature_cost->ToString()
              + std::to_string(pp.sac_lifegain_per_creature); }
+        // Fortified Beachhead: untapped while we CONTROL a listed subtype -- an ETB condition, so a
+        // real behavioural difference (not optional) and it belongs here, not in land_bonus.
+        for (const std::string& cs : pp.etb_untap_control_subtypes) { s += "cu" + cs; }
         // NOTE: strictly-OPTIONAL extra activated abilities (Mutavault's animate, Sliver Hive's
         // token) are deliberately NOT discriminated here -- see land_bonus below. Splitting on them
         // doubles the land branch for no new line and measured +61% instructions on slivers_vial.
@@ -47239,6 +47357,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // rather than splitting the signature (measured: the split cost 2 smoke games of budget
         // churn on Knights with zero reachability gain over promotion).
         if (pp.colored_creature_ability_ok)     { b += "ccoa"; }
+        // Fortified Beachhead's "{5}, {T}: Soldiers you control get +1/+1" -- a strictly-optional
+        // activated ability on a land (the Mutavault / Sliver Hive class), so it promotes rather
+        // than splits.
+        if (pp.team_pump_cost && pp.team_pump_taps_source)
+        {
+            b += "tp" + pp.team_pump_cost->ToString() + std::to_string(pp.team_pump_power) + "/"
+               + std::to_string(pp.team_pump_tough);
+            for (const std::string& st : pp.team_pump_subtypes) { b += st; }
+        }
         if (pp.can_animate)                     // Mutavault: {1}: becomes a 2/2 creature
         {
             b += "an" + std::to_string(pp.animate_power) + "/" + std::to_string(pp.animate_toughness);
@@ -48513,6 +48640,9 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // so two identical-zone states can differ in it. User-suspected 2026-08-14; folded when nonzero.
     if (state.spells_cast_this_turn > 0)
     { Fold(k, 0x5709A); Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn)); }
+    // DAY / NIGHT (CR 726, Brutal Cathar): which face every daybound permanent shows and whether a
+    // transform trigger fires next turn. Nonzero-gated -> every other deck keeps its exact key.
+    if (state.day_night != 0) { Fold(k, 0xDA1A0); Fold(k, static_cast<uint64_t>(state.day_night)); }
     // MV-cast accumulator (Call Forth the Tempest's damage clause): future-determining for the
     // same reason as the storm count -- two identical-zone states can differ in it (retrace /
     // copy casts). Deck-gated (deck_reads_mv_cast): an unconditional fold would shift every
@@ -48993,6 +49123,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         if (perm.paired_with != 0)
         { Fold(tk, 0x50B0Dull); Fold(tk, static_cast<uint64_t>(perm.paired_with)); }
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
+        // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object, future-determining
+        // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
+        if (perm.chosen_keyword_mask != 0)
+        { Fold(tk, 0xC4057); Fold(tk, static_cast<uint64_t>(perm.chosen_keyword_mask)); }
+        if (perm.linked_exile_number != 0)
+        { Fold(tk, 0x11E7E); Fold(tk, static_cast<uint64_t>(perm.linked_exile_number)); }
         // Planeswalker loyalty + once-per-turn activation flag (found 2026-08-20 by the enum
         // memo's verify harness): loyalty is a DEDICATED field, not a Counter, and an
         // auto-resolved -3 with no targets changes nothing else this key folds -- so
@@ -63722,6 +63858,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 // its own `taplife=` verb, so it never reaches this `cast=` path anyway).
                 { Action::AbilityMode::SacLifePerCreature,
                                                        &bd->params.sac_lifegain_per_creature_cost },
+                // Recruitment Officer's "{3}{W}: look at the top four ..." (a real mana cost).
+                { Action::AbilityMode::ActivatedDig,   &bd->params.activated_dig_cost   },
             };
             for (const auto& m : modes)
             {
@@ -64097,12 +64235,23 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             if (!vd->params.reduces_spell_color.empty())   { reducers.push_back(vd->params.reduces_spell_color); }
             if (!vd->params.reduces_spell_subtype.empty()) { sub_reducers.push_back(vd->params.reduces_spell_subtype); }
         }
+        // Thalia's SYMMETRIC noncreature tax, the INCREASE twin of the reducer seeds above: a Vialed
+        // taxer is on the board before every hand cast, and one CAST in-line taxes the noncreature
+        // casts after it. full_cost already carries the taxers on the battlefield (EffectiveSpellCost).
+        int line_tax = 0;
+        for (const std::string& vn : line_spec.vial_deploys)
+        {
+            const CardDefinition* vd = CardDatabase::Instance().Lookup(vn);
+            if (vd) { line_tax += vd->params.noncreature_spell_tax; }
+        }
         bool ok = true;
         for (const PendingCast& pc : pending)
         {
             ManaCost cost = pc.alt_free ? ManaCost{}
                           : (pc.has_spectacle && spec) ? pc.spectacle_cost
                           : pc.full_cost;
+            if (line_tax > 0 && !pc.alt_free && pc.def && !pc.board_act && !pc.def->card.IsCreature())
+            { cost.generic += line_tax; }
             if (!cost.has_x && pc.def && !pc.board_act)   // same-turn Ruby-Medallion discount (generic -1 per matching reducer)
             {
                 const ManaCost& mc = pc.def->card.m_mana_cost;   // printed pips
@@ -64140,6 +64289,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             }
             if (!p.CanPay(cost)) { ok = false; break; }
             DeductPayable(p, cost);
+            if (pc.def && !pc.board_act) { line_tax += pc.def->params.noncreature_spell_tax; }
             if (pc.rock && pc.def) { AddSourceToPool(p, s, *pc.def); }
             else if (pc.def && IsManaRitual(*pc.def))
             {
@@ -64604,6 +64754,26 @@ bool TurnSolver::VialOrderMatters(const Plan& plan)
     if (std::none_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
                      { return a.kind == Action::Kind::ActivateVial; }))
     { return false; }
+    // Thalia, Guardian of Thraben put by Vial while a NONCREATURE spell is cast from hand the same
+    // phase: puts-first taxes that spell {1} (a second Aether Vial costs {2}), puts-last does not --
+    // "cast Vial #2, THEN Vial in Thalia" was inexpressible before this term (Soldiers, 2026-10-04).
+    // The clone is priced SOUNDLY: the enumerator prices hand casts off the pre-plan board, which is
+    // exactly the puts-last board for the casts; it is the puts-first BASE that is optimistic there.
+    const auto def_of = [](const Action& a) -> const CardDefinition*
+    { return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name); };
+    if (std::any_of(plan.actions.begin(), plan.actions.end(), [&](const Action& a)
+        {
+            if (a.kind != Action::Kind::ActivateVial) { return false; }
+            const CardDefinition* d = def_of(a);
+            return d != nullptr && d->params.noncreature_spell_tax > 0;
+        })
+        && std::any_of(plan.actions.begin(), plan.actions.end(), [&](const Action& a)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { return false; }
+            const CardDefinition* d = def_of(a);
+            return d != nullptr && !d->card.IsCreature();
+        }))
+    { return true; }
     for (const Action& a : plan.actions)
     {
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
@@ -65040,7 +65210,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
     static const char* kNames[] = {
         "None", "TapDamage", "TapInvestigate", "TapDraw", "SacDraw", "Drain", "ExileTop",
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
-        "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain"
+        "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

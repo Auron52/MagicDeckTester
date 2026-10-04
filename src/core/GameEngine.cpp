@@ -228,6 +228,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
     // TurnSolver::SimulateEndAndStartNextTurn.
     opponentdeck::EndOfTurnDraw(state);
+    // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
+    // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
+    DayNightTurnBoundary(state);
 }
 
 void GameEngine::UntapStep(GameState& state)
@@ -656,6 +659,7 @@ void GameEngine::CombatPhase(GameState& state)
     // searched Plan::tectonic_mode_choice pin. Mirrors TurnSolver::SimulateCombat.
     ApplyAttackModalTriggers(state, state.active_player_index, atk_idx);
 
+    const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     if (!atk_idx.empty())
@@ -696,6 +700,10 @@ void GameEngine::CombatPhase(GameState& state)
     // reads power, so the counters the gain triggers grow this very swing. Mirrors
     // TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
     ApplyAttackLifegainTeamPump(state, state.active_player_index, atk_idx);
+    // Harbin, Vanguard Aviator: "whenever you attack with five or more Soldiers" -- counted over the
+    // DECLARED attackers (declared_n, captured before the token block), pump applied after it.
+    // Mirrors TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
+    ApplyAttackThresholdTeamPump(state, state.active_player_index, atk_idx, declared_n);
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the

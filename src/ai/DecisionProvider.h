@@ -1894,6 +1894,20 @@ public:
     virtual int EtbChosenColor(const GameState& s, int controller,
                                const CardDefinition& def) const = 0;
 
+    // EtbChosenKeywords -- "As this enters, choose two abilities from among first strike, vigilance,
+    // and lifelink" (Rick, Steadfast Leader / Greymond, Avacyn's Stalwart; CardParams::
+    // etb_choose_keyword_count / _menu). Returns the kChosenKw* bitmask to LOCK into
+    // Permanent::chosen_keyword_mask -- exactly etb_choose_keyword_count bits from the menu.
+    //
+    // A PROVIDER ONE-OPTION choice, on the EtbChosenColor (Coldsteel Heart) precedent, NOT searched:
+    // the human picks in the viewer (`choose_abilities`). The base rule prefers keywords the engine
+    // has a LIVE reader for (lifelink -> CreatureHasLifelink, vigilance -> Combat's attack-tap) over
+    // one with none (first strike: no reader, no blockers -- inert), menu order breaking ties. In the
+    // Soldiers list the pairs differ only in our own life total. Recorded in analysis-soldiers.md as
+    // awaiting USER sign-off (no-greedy rule: a provider one-option prune needs approval).
+    virtual std::uint8_t EtbChosenKeywords(const GameState& s, int controller,
+                                           const CardDefinition& def) const;
+
     // ReserveCreatureHold -- which of the turn's reservable mana CREATURES the whole-turn reserve
     // ladder (BatchPrepayMainCasts) should keep holding once the full "hold every dork" rung has
     // FAILED, i.e. when the bodies genuinely compete for mana. `crea_mask` is the battlefield-index

@@ -1671,7 +1671,8 @@ public:
     // the plan holds at least one ActivateVial AND a non-sacrifice hand cast of an entering-effect
     // SOURCE (other_chosen_subtype_enters_counters -- Metallic Mimic; own_creature_enters_opp_life_loss
     // -- Forerunner of the Coalition) or of a reveal-cost card (reveal_or_pay_cost -- Daring
-    // Buccaneer). Params only, no state: it gates AppendVialOrderVariants' emission and keys the
+    // Buccaneer), or an ActivateVial of a noncreature-spell TAXER (Thalia) alongside a noncreature
+    // hand cast. Params only, no state: it gates AppendVialOrderVariants' emission and keys the
     // resolution-order summary / CheckLine sub, so it must not move between enumeration and display.
     static bool VialOrderMatters(const Plan& plan);
     // ...and the order this plan will ACTUALLY be cast in: the vector order for a searched_order

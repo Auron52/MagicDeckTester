@@ -36,5 +36,11 @@
  "Fungus Frolic": {
   "mana_cost": "The ADVENTURE HALF of Brightcap Badger // Fungus Frolic -- see the Brightcap Badger entry. Scryfall's combined mana_cost is '{3}{G} // {2}{G}'; the instant half is {2}{G} and this entry models that half.",
   "P/T": "An Instant has no power or toughness. Scryfall reports 3/4 because it describes the COMBINED card, whose creature face is the 3/4 Brightcap Badger. Giving this entry a P/T would make the adventure half a creature spell, which is exactly the modelling error the two-entry split exists to avoid."
+ },
+ "Brutal Cathar": {
+  "keywords": "Transforming DFC (Brutal Cathar // Moonrage Brute): Scryfall reports CARD-LEVEL keywords for both faces. The front face's only keyword is Daybound, modelled structurally (daybound_back_name + GameState::day_night, CR 726), not as a tag; First strike / Ward / Nightbound belong to the BACK face (the Moonrage Brute entry) and Transform is the layout itself. Reviewed 2026-10-04 (Soldiers)."
+ },
+ "Moonrage Brute": {
+  "keywords": "Transforming DFC back face: Scryfall's card-level keywords include the front's Daybound and the layout's Transform; Nightbound is modelled structurally (nightbound_front_name). First strike and Ward ARE tagged on this entry (both inert: no blockers, the passive opponent never targets). Reviewed 2026-10-04 (Soldiers)."
  }
 }

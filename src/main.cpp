@@ -822,6 +822,10 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         for (size_t i = 0; i < mdfc_backs.size(); ++i) { if (i) { os << ", "; } JsonStr(os, mdfc_backs[i]); }
         os << "],\n";
     }
+    // Day / night (Brutal Cathar // Moonrage Brute, CR 726): shown so the human can see why a
+    // daybound permanent is its 3/3 Werewolf face. Emitted only once the designation exists, so
+    // every other deck's decision JSON is byte-identical.
+    if (s.day_night != 0) { os << "  \"day_night\": \"" << (s.day_night == 1 ? "day" : "night") << "\",\n"; }
     // Iterate hand Cards (not just names) so per-instance flags (m_is_staged / expiry) survive.
     std::vector<const Card*> hand;
     for (const Card& c : me.hand) { hand.push_back(&c); }
@@ -2982,6 +2986,33 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
            "for the rest of the game. Default = the AI's pick.");
 }
 
+// "As this enters, choose two abilities" decision (Rick, Steadfast Leader / Greymond, Avacyn's
+// Stalwart; CardParams::etb_choose_keyword_count). The pair is LOCKED for that permanent's lifetime
+// and granted to every Human you control. Emits the enumerated legal pairs; reply = an option INDEX,
+// or anything out of range to keep the AI's pick.
+static void WriteEtbKeywordsDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                         const std::vector<int>& option_masks, int heuristic_default,
+                                         int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("choose_abilities").Source(source).Turn(s.turn_number).Board(s)
+     .HeuristicDefault(heuristic_default);
+    d.Array("options", option_masks.size(), [&](std::size_t i)
+    {
+        const int m = option_masks[i];
+        std::string label;
+        auto add = [&label](const char* k) { if (!label.empty()) { label += " + "; } label += k; };
+        if (m & kChosenKwFirstStrike) { add("First strike"); }
+        if (m & kChosenKwVigilance)   { add("Vigilance"); }
+        if (m & kChosenKwLifelink)    { add("Lifelink"); }
+        os << "{ \"index\": " << i << ", \"mask\": " << m << ", \"label\": ";
+        JsonStr(os, label);
+        os << " }";
+    });
+    d.Note("reply an option INDEX to lock that pair of abilities in for this permanent (Humans you "
+           "control have them) for the rest of the game. Default = the AI's pick.");
+}
+
 // Light-Paws tutor-attach decision (Light-Paws, Emperor's Voice): the player picks WHICH library Aura
 // Light-Paws fetches and attaches to itself (or declines -- it is a "may search"). Emits the library
 // Aura pool as image options with a `legal` flag (only fetchable Auras are pickable -- MV <= the cast
@@ -3890,6 +3921,7 @@ g_play_bounce_chooser = nullptr;
 g_play_sacrifice_chooser = nullptr;
 g_play_dig_chooser = nullptr;
 g_play_etb_color_chooser = nullptr;
+g_play_etb_keywords_chooser = nullptr;
 g_play_discard_chooser = nullptr;
 g_play_ei_chooser = nullptr;
 g_play_retrace_chooser = nullptr;
@@ -4159,6 +4191,7 @@ struct ClaudePlayHarness
     BounceChooser         sacrifice_chooser;
     DigChooser            dig_chooser;
     EtbColorChooser       etb_color_chooser;
+    EtbKeywordsChooser    etb_keywords_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
@@ -5194,6 +5227,37 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_etb_color_chooser = &etb_color_chooser;
+
+    // "As this enters, choose two abilities" (Rick, Steadfast Leader). Shares the --choices stream;
+    // the reply is an OPTION INDEX into the enumerated pairs, anything out of range keeps the
+    // provider's pick (live-reader keywords first).
+    etb_keywords_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               const std::vector<int>& option_masks, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEtbKeywordsDecisionJson(ss, s, source, option_masks, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEtbKeywordsDecisionJson(std::cout, s, source, option_masks, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_etb_keywords_chooser = &etb_keywords_chooser;
 
 
     // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it
@@ -6808,6 +6872,13 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         }
     }
     state.players[1].life       = j.value("opponent_life", 20);
+    // Day / night designation (CR 726; Brutal Cathar): "day" / "night" stages it, so a fixture can
+    // reach the night-entry and transform paths without playing the turns that set it.
+    if (j.contains("day_night"))
+    {
+        const std::string dn = j.at("day_night").get<std::string>();
+        state.day_night = dn == "day" ? 1 : dn == "night" ? 2 : 0;
+    }
     // 2HG opponent heads (core/GameSetup.h): how many opposing players share players[1]'s pool.
     // A fixture field (default unset -> env -> 1) so the second-face targeting and "each opponent"
     // scaling are reachable from a scenario -- unreachable code is untested code.
@@ -6929,6 +7000,23 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // same pick a played Heart would have made.
             if (const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card))
             {
+                // Rick's chosen keyword pair: an explicit "keywords" list pins it (e.g.
+                // ["Vigilance","Lifelink"]); otherwise the provider's pick, as a played Rick makes.
+                if (pd->params.etb_choose_keyword_count > 0)
+                {
+                    if (e.contains("keywords"))
+                    {
+                        std::uint8_t m = 0;
+                        for (const auto& kw : e.at("keywords"))
+                        { m = static_cast<std::uint8_t>(m | ChosenKeywordBit(kw.get<std::string>())); }
+                        p.chosen_keyword_mask = m;
+                    }
+                    else
+                    {
+                        p.chosen_keyword_mask = ResolveProvider(state)
+                                                    .EtbChosenKeywords(state, p.controller_index, *pd);
+                    }
+                }
                 if (pd->params.etb_choose_color)
                 {
                     if (e.contains("color"))

@@ -173,7 +173,9 @@ def do_update(cards, throttle):
             continue
         if name.endswith(" Token"):   # runtime-token definition, no Scryfall card
             continue
-        sf = acc.fetch(name)
+        # Alternate printed name (see audit_card_costs.py): fetch the ORACLE card, key it by the
+        # entry's own name so the offline diff finds it.
+        sf = acc.fetch(c.get("scryfall_name") or name)
         if "_error" in sf:
             errors.append((name, sf["_error"]))
             continue
@@ -276,7 +278,12 @@ def diff_card(local, ref, allow):
             hard.append(f"{field} {detail}")
 
     advisory = None
-    lo, ro = norm_oracle(local.get("oracle_text"), name), norm_oracle(ref.get("oracle_text"), name)
+    # The ORACLE text names the oracle card ("Greymond, Avacyn's Stalwart"); a printed-name entry
+    # (scryfall_name) names itself -- normalise the reference by the oracle name too.
+    ro_text = ref.get("oracle_text") or ""
+    if local.get("scryfall_name"):
+        ro_text = ro_text.replace(local["scryfall_name"], name or "")
+    lo, ro = norm_oracle(local.get("oracle_text"), name), norm_oracle(ro_text, name)
     if lo != ro:
         sim = difflib.SequenceMatcher(None, lo, ro).ratio()
         if sim < ORACLE_SIMILARITY_MIN:

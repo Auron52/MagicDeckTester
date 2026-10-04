@@ -207,7 +207,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         // Vigilance: own printed keyword OR an attached Equipment that grants it (the shields).
         // This is the single site in the engine that reads vigilance for anything, and it is
         // shared executor+rollout, so the grant stays lockstep by construction.
-        if (!CreatureHasVigilance(p, state, &bs.attached)) { p.tapped = true; }
+        if (!CreatureHasVigilance(p, state, &bs.vigilance)) { p.tapped = true; }
         attackers.push_back(&p);
     }
 

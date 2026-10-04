@@ -2140,7 +2140,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','attack_mode','lifegain_counters'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -3897,7 +3897,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
-                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color'
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_abilities'
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
                 || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
@@ -3934,6 +3934,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='jitte' ? jittePanelHtml(d)
                   : dec==='storage_hold' ? storageHoldPanelHtml(d)
                   : dec==='choose_color' ? chooseColorPanelHtml(d)
+                  : dec==='choose_abilities' ? chooseAbilitiesPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -4704,6 +4705,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitStorageHold(d, +b.dataset.opt));
   else if (dec==='choose_color')
     panel.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>commitChooseColor(d, +b.dataset.col));
+  else if (dec==='choose_abilities')
+    panel.querySelectorAll('[data-kw]').forEach(b=>b.onclick=()=>commitChooseAbilities(d, +b.dataset.kw));
   else if (dec==='land_entry')
     panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
@@ -5070,6 +5073,24 @@ function chooseColorPanelHtml(d){
   }
   return h+`</div>`;
 }
+// Rick, Steadfast Leader: "As this enters, choose two abilities from among first strike, vigilance,
+// and lifelink" -- the engine enumerates the legal pairs; reply = an option index.
+function chooseAbilitiesPanelHtml(d){
+  const src=d.source||'this permanent', ai=(d.heuristic_default===undefined?-1:d.heuristic_default);
+  let h=`<h3>${esc(src)} — choose two abilities</h3>`;
+  h+=`<div class="sub">This is an <b>as-enters</b> choice: the pair is <b>locked for the rest of the game</b> and every Human you control has both abilities. The AI's pick is highlighted.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(src)+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  for (const o of (d.options||[])){
+    const isAi = (o.index===ai);
+    h+=`<button class="${isAi?'primary':'ghost'}" data-kw="${o.index}">${esc(o.label)}${isAi?'  ·  AI':''}</button>`;
+  }
+  return h+`</div>`;
+}
+function commitChooseAbilities(d, idx){
+  const nm=((d.options||[]).find(o=>o.index===idx)||{}).label||idx;
+  pushChoice(d, idx, `${d.source||'permanent'}: chose ${nm}`);
+}
 function commitChooseColor(d, ord){
   const nm=((d.colors||[]).find(c=>c.ordinal===ord)||{}).name||ord;
   pushChoice(d, ord, `${d.source||'permanent'}: chose ${nm}`);
@@ -5277,6 +5298,7 @@ const AUTO_RESOLVABLE = {
   storage_hold:    'Storage lands — hold to charge vs. tap/burst',
   jitte:           "Umezawa's Jitte — how many charge counters to spend",
   choose_color:    'As it enters — choose a color (locked for the game)',
+  choose_abilities:'As it enters — choose two abilities (locked for the game)',
 };
 const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }

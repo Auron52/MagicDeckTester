@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <cctype>
 #include <map>
 #include <string>
 #include <vector>
@@ -137,6 +138,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // construction -- so this change of routing is a change of NAME and of future extension
         // point, not of play. See its declaration in DecisionProviders.h.
         {"SelesnyaLifegain", "SelesnyaLifegain"},
+        // Soldiers (onboarding 2026-10-04): its own `soldiers` signature (Harbin / Thalia / Thalia's
+        // Lieutenant / Recruitment Officer / Rick params) returns VialProvider ABOVE goblin (three sac
+        // outlets) and anti (two creature tutors) -- and the Angels term it used to trip (Champion of
+        // the Parish's self-counter watcher) is now keyed on an ["Angel"] filter. Vial until Stage 4a
+        // gives it its own provider; update this pin then.
+        {"Soldiers", "Vial"},
     };
 
     namespace fs = std::filesystem;
@@ -150,6 +157,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {
             const fs::path cand = root / folder / (folder + ext);
             if (fs::exists(cand)) { deck = cand; break; }
+            // decks/Soldiers/soldiers.cod: a lower-cased list name inside its folder.
+            std::string lower = folder;
+            for (char& ch : lower) { ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); }
+            const fs::path cand_lc = root / folder / (lower + ext);
+            if (fs::exists(cand_lc)) { deck = cand_lc; break; }
         }
         REQUIRE_MESSAGE(!deck.empty(), "no decklist for ", folder);
         const DecisionProvider& p = DetectDecisionProvider(DeckLoader::LoadFromFile(deck));

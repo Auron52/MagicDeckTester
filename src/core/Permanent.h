@@ -210,6 +210,15 @@ enum class PermAbilityMode
     // (tap_lifegain_count_all), exactly Priest of Titania's mana_per_creature_count_all. ONE
     // GainLife of the full amount, same CR 119.10 reason as the mode above. Appended LAST.
     TapLifegain,
+    // {cost}: Look at the top N cards of your library; you may reveal a <type> card with mana value
+    // M or less and put it into your hand; the rest to the bottom in a random order  (Recruitment
+    // Officer, "{3}{W}", N = 4, creature, M = 3; CardParams::activated_dig_*). NO {T} and NO
+    // sacrifice -> REPEATABLE within a turn and legal on a summoning-sick body (CR 302.6), so it is in
+    // PermAbilityTaps' exclusion list. Unlike the other repeatable sinks it is NEVER given a K-count
+    // block: each activation's PICK is its own decision and must be searched (the etbdig pin), so a
+    // second activation is reached through the put-in-hand breakpoint re-solve, one at a time.
+    // Resolution shares PerformEtbDig's body (PerformLookTakeDig). Appended LAST.
+    ActivatedDig,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -227,7 +236,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::SporeSaproling
         && m != PermAbilityMode::PayToken
         && m != PermAbilityMode::FadeSaproling
-        && m != PermAbilityMode::PingAll;
+        && m != PermAbilityMode::PingAll
+        && m != PermAbilityMode::ActivatedDig;   // Recruitment Officer: "{3}{W}:" -- no {T}
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding
     // either would make its ability repeatable within a turn and legal on an already-tapped (or
@@ -421,6 +431,13 @@ struct Permanent
                                            // permanent object (per WotC ruling; a second/returned
                                            // Garth starts fresh). Bit order in CardParams::
                                            // garth_copy_ability's comment.
+    // Rick, Steadfast Leader (Greymond): "As this enters, choose two abilities from among first
+    // strike, vigilance, and lifelink." Locked per OBJECT at the universal enter cascade (a
+    // re-entering Rick chooses afresh); bits are kChosenKw* (CardDatabase.h). 0 = chose nothing,
+    // which is every other permanent -> byte-identical. Sits in the pad byte before
+    // chosen_subtype_id, so sizeof(Permanent) does not move. Folded into the sim / dominance keys
+    // NONZERO-gated.
+    uint8_t   chosen_keyword_mask  = 0;
     // "As this permanent enters, choose a creature type" (Urza's Incubator). The chosen type is
     // carried here as an INTERNED SUBTYPE ID (SubtypeRegistry), fixed at ETB and never changed, so
     // the card is generic -- the type is a property of the DECK it is played in, not baked into
@@ -544,6 +561,12 @@ struct Permanent
                                            // banks the bonus and cashes it on a later equip.
                                            // Same dedicated-int rationale and the same byte-identity
                                            // and sim-key obligations as spore_counters above.
+    // Brutal Cathar: "exile target creature an opponent controls UNTIL THIS CREATURE LEAVES THE
+    // BATTLEFIELD." card.m_number of the exiled card, parked in GameState::exile; 0 = none. It
+    // survives transformation (transforming is not leaving -- the Moonrage Brute face keeps it) and
+    // is returned to the battlefield under its owner when this permanent leaves (ReturnLinkedExile).
+    // Sits in the pad before copy_printed_name (sizeof unchanged). Folded NONZERO-gated.
+    int       linked_exile_number  = 0;
     // Sakashima's Protege (CardParams::enter_as_copy_of_entrant): when the enter swap replaced the
     // entering card with the copied permanent's PRINTED card (CR 706.2), this holds the PRINTED
     // name of the card that was cast ("Sakashima's Protege"). DISPLAY-ONLY: set at both worlds'

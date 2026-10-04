@@ -1510,11 +1510,30 @@ void ApplyColoredPipReduction(ManaCost& cost, const ManaCost& reduction)
     for (int k = 0; k < reduction.green; ++k) { reduce_colored_pip(cost, Color::Green); }
 }
 
+// Thalia, Guardian of Thraben's SYMMETRIC tax on a noncreature spell: the sum of every battlefield
+// permanent's noncreature_spell_tax, ANY controller. 0 for a creature spell and for every deck whose
+// stamp (GameState::deck_has_spell_tax) says no taxer can ever reach a battlefield.
+static int NoncreatureSpellTax(const CardDefinition& def, const GameState& state)
+{
+    if (!state.deck_has_spell_tax || def.card.IsCreature()) { return 0; }
+    int tax = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd) { tax += pd->params.noncreature_spell_tax; }
+    }
+    return tax;
+}
+
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies)
 {
     if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
     {
-        return def.params.spectacle_cost.value();
+        // An alternative cost still takes cost increases (CR 118.9d).
+        ManaCost sc = def.params.spectacle_cost.value();
+        sc.generic += NoncreatureSpellTax(def, state);
+        return sc;
     }
     ManaCost cost = def.card.m_mana_cost;
     // Splice onto Arcane: casting ONE base while splicing k = copies-1 OTHER copies adds each spliced
@@ -1558,6 +1577,12 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         cost.green     += rc.green;
         cost.colorless += rc.colorless;
     }
+    // COST INCREASE -- Thalia, Guardian of Thraben: "Noncreature spells cost {1} more to cast."
+    // SYMMETRIC (no controller filter: it taxes OUR noncreature spells too -- Aether Vial costs {2}
+    // with a Thalia out). Joins the RAW cost before every reduction below (CR 601.2f: cost +
+    // increases - reductions), like the additional cost above. Gated on the per-game deck stamp
+    // (GameState::deck_has_spell_tax), so a deck without a taxer never walks the board here.
+    cost.generic += NoncreatureSpellTax(def, state);
     if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
     {
         int reduction = 0;

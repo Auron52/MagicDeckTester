@@ -243,6 +243,21 @@ MANIFEST = {
     # is exactly why the human is asked rather than handed the provider's heuristic silently.
     # USER 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
     "etb_choose_color":      ("choose_color",         truthy),
+    # Rick, Steadfast Leader (Soldiers, 2026-10-04): "As this enters, choose two abilities from among
+    # first strike, vigilance, and lifelink." The Coldsteel Heart shape exactly -- an as-enters
+    # REPLACEMENT decided at resolution (g_play_etb_keywords_chooser in FireOwnEtbTriggers), its own
+    # decision type `choose_abilities` (WriteEtbKeywordsDecisionJson / chooseAbilitiesPanelHtml),
+    # reply = an index into the enumerated pairs. Locked for the permanent's life.
+    "etb_choose_keyword_count": ("choose_abilities",   positive),
+    # Recruitment Officer: "{3}{W}: look at the top four ... you MAY reveal a creature card with mana
+    # value 3 or less ... put it into your hand". WHETHER to activate is a main_phase board
+    # activation (ActivatePermAbility/ActivatedDig); WHICH card (or none) is the shared `dig` chooser
+    # at resolution (PerformLookTakeDig, the ETB-dig body).
+    "activated_dig_cost":    ("dig",                  truthy),
+    # Brutal Cathar: "whenever this creature enters or transforms into Brutal Cathar, exile target
+    # creature an opponent controls until this creature leaves" -- the board-click `target` (the
+    # loyalty-chooser shape the mandatory ETB destroys use), on the enter AND the transform route.
+    "etb_or_transform_exile_opp_creature_until_leaves": ("target", truthy),
     "sac_draw_cost":         ("main_phase",           truthy),
     # "Enchant land": WHICH land carries the aura is a real decision and rides the existing
     # enchant_target plan-variant axis (one main_phase variant per legal land host), opened to
@@ -1163,6 +1178,27 @@ INERT_PARAMS = {
     "shuffles_self_into_library_on_resolve": "Green Sun's Zenith: the resolved spell shuffles itself into the library -- automatic, no choice",
     # ---- Prevent Damage (2026-09-27, phase I3) -- creatures + sideboard ----
     "activate_min_life": "Bilbo: 'Activate only if you have 111 or more life' -- an activation RESTRICTION (legality gate), no choice; the activation rides life_gated_put_creatures_cost -> main_phase",
+    # ---- Soldiers (2026-10-04). Classified inert by the integrator; PENDING USER OK per the self-guard
+    #      (recorded in docs/design/analysis-soldiers.md -- surfaced, not blocking).
+    "etb_each_other_own_creature_counters": "Thalia's Lieutenant ETB: a +1/+1 counter on EACH other Human you control -- mandatory, untargeted, exhaustive; no choice",
+    "etb_counters_subtypes": "recipient subtype filter on the Lieutenant ETB above -- narrows WHO, adds no choice",
+    "noncreature_spell_tax": "Thalia's static symmetric tax ({1} on noncreature spells) -- a continuous cost increase, no choice",
+    "etb_untap_control_subtypes": "Fortified Beachhead: untapped while you CONTROL a Soldier -- a forced condition (the reveal half rides etb_untap_reveal_subtypes -> land_entry, and is suppressed when this condition already holds)",
+    "team_pump_taps_source": "Fortified Beachhead: the {T} half of its team pump's cost -- a cost detail; the activation count rides the combat `firebreathe` decision",
+    "team_pump_tough": "the toughness half of a team pump (Beachhead +1/+1) -- magnitude constant, no choice",
+    "attack_with_n_threshold": "Harbin: 'whenever you attack with five or more Soldiers' -- an automatic, untargeted controller-level attack trigger; which creatures attack is the always-wired attackers decision",
+    "attack_with_n_subtype": "Harbin trigger's counted subtype -- a printed constant",
+    "attack_with_n_team_pump_power": "Harbin trigger's pump magnitude -- a printed constant",
+    "attack_with_n_team_pump_tough": "Harbin trigger's pump magnitude -- a printed constant",
+    "pay_token_self_counters": "King Darien: the +1/+1 counter rider on its token activation (always on itself) -- no choice; the activation and its count ride pay_token_cost",
+    "activated_dig_count": "Recruitment Officer dig detail (rides activated_dig_cost -> dig)",
+    "activated_dig_types": "Recruitment Officer dig detail (rides activated_dig_cost -> dig)",
+    "activated_dig_max_mv": "Recruitment Officer dig detail (rides activated_dig_cost -> dig)",
+    "lord_min_controlled_matching": "Rick's 'as long as you control four or more Humans' -- a conditional static threshold, no choice",
+    "etb_choose_keyword_menu": "Rick's keyword menu (rides etb_choose_keyword_count -> choose_abilities)",
+    "keyword_grant_subtypes": "Rick's grant recipients ('Humans you control') -- exhaustive, no choice",
+    "daybound_back_name": "Brutal Cathar's night face -- day/night is a turn-based action (CR 726.3a), not a player choice",
+    "nightbound_front_name": "Moonrage Brute's day face -- day/night is a turn-based action (CR 726.3a), not a player choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

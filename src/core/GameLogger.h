@@ -453,6 +453,18 @@ using EtbColorChooser = std::function<int(const GameState& state, int controller
                                           const std::vector<int>& menu, int heuristic_pick)>;
 extern thread_local EtbColorChooser* g_play_etb_color_chooser;
 
+// ---- Human-play "as this enters, choose two abilities" chooser (Rick, Steadfast Leader) --------
+// CardParams::etb_choose_keyword_count/_menu. The chooser receives the entering card's name, the
+// enumerated legal OPTIONS (each a kChosenKw* bitmask with exactly `count` bits -- C(3,2) = 3 for
+// Rick) and the provider pick's index, and returns an option index (anything out of range keeps the
+// provider's pick). Same lifetime and gating as the colour chooser above: set only by RunClaudePlay,
+// skipped under g_tap_speculating, so autonomous play / rollouts take the provider's pick in lockstep.
+using EtbKeywordsChooser = std::function<int(const GameState& state, int controller,
+                                             const std::string& source,
+                                             const std::vector<int>& option_masks,
+                                             int heuristic_index)>;
+extern thread_local EtbKeywordsChooser* g_play_etb_keywords_chooser;
+
 // ---- Human-play Light-Paws tutor-attach chooser (which Aura Light-Paws fetches) -----------
 // Light-Paws, Emperor's Voice: whenever an Aura you CAST resolves, search your library for an Aura
 // (mana value <= the cast Aura's, a name different from every Aura you control, and whose own enchant

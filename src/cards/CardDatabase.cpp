@@ -337,6 +337,9 @@ std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
     for (const auto& [name, def] : m_cards)
     {
         if (!def.params.mdfc_back_name.empty()) { out.push_back(def.params.mdfc_back_name); }
+        // A transforming DFC's back face (Moonrage Brute, the night face of Brutal Cathar) is the
+        // same image problem: Scryfall's default image for the name is the FRONT.
+        if (!def.params.daybound_back_name.empty()) { out.push_back(def.params.daybound_back_name); }
     }
     std::sort(out.begin(), out.end());
     out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -1505,6 +1508,37 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tap_lifegain_cost =
             ManaCostFromString(params.value("tap_lifegain_cost", std::string{}));
     }
+
+    // ---- Soldiers (2026-10-04) -- see CardParams for each field's oracle clause.
+    p.etb_each_other_own_creature_counters = params.value("etb_each_other_own_creature_counters", 0);
+    for (const std::string& s : params.value("etb_counters_subtypes", json::array()))
+        p.etb_counters_subtypes.push_back(s);
+    p.noncreature_spell_tax = params.value("noncreature_spell_tax", 0);
+    for (const std::string& s : params.value("etb_untap_control_subtypes", json::array()))
+        p.etb_untap_control_subtypes.push_back(s);
+    p.team_pump_taps_source = params.value("team_pump_taps_source", false);
+    p.team_pump_tough       = params.value("team_pump_tough", 0);
+    p.attack_with_n_threshold       = params.value("attack_with_n_threshold", 0);
+    p.attack_with_n_subtype         = params.value("attack_with_n_subtype", std::string{});
+    p.attack_with_n_team_pump_power = params.value("attack_with_n_team_pump_power", 0);
+    p.attack_with_n_team_pump_tough = params.value("attack_with_n_team_pump_tough", 0);
+    p.pay_token_self_counters = params.value("pay_token_self_counters", 0);
+    if (params.contains("activated_dig_cost"))
+        p.activated_dig_cost = ManaCostFromString(params["activated_dig_cost"].get<std::string>());
+    p.activated_dig_count  = params.value("activated_dig_count", 0);
+    for (const std::string& s : params.value("activated_dig_types", json::array()))
+        p.activated_dig_types.push_back(s);
+    p.activated_dig_max_mv = params.value("activated_dig_max_mv", -1);
+    p.lord_min_controlled_matching = params.value("lord_min_controlled_matching", 0);
+    p.etb_choose_keyword_count     = params.value("etb_choose_keyword_count", 0);
+    for (const std::string& s : params.value("etb_choose_keyword_menu", json::array()))
+        p.etb_choose_keyword_menu.push_back(s);
+    for (const std::string& s : params.value("keyword_grant_subtypes", json::array()))
+        p.keyword_grant_subtypes.push_back(s);
+    p.daybound_back_name    = params.value("daybound_back_name", std::string{});
+    p.nightbound_front_name = params.value("nightbound_front_name", std::string{});
+    p.etb_or_transform_exile_opp_creature_until_leaves =
+        params.value("etb_or_transform_exile_opp_creature_until_leaves", false);
 
     return p;
 }

@@ -624,6 +624,12 @@ struct GameState
     // post-combat site of every deck -- so a deck without one never pays its battlefield scan.
     // Lives in the padding after the two bools above, so sizeof(GameState) does not move.
     bool                     deck_has_attack_untap = false;
+    // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
+    // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
+    // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.
+    // Defaults TRUE (an unstamped state keeps the walk -- erring the other way UNDERCHARGES a spell).
+    // Lives in the padding after the bools above.
+    bool                     deck_has_spell_tax    = true;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole
@@ -648,6 +654,16 @@ struct GameState
     // pull = prior classifier behaviour for any state not built through SetupGame.
     bool                     dep_enabler_main1     = false;
     bool                     dep_castpayoff_main1  = false;
+    // Harbin, Vanguard Aviator ("whenever you attack with five or more Soldiers"): does the deck run a
+    // controller-level attack-threshold pump (CardParams::attack_with_n_threshold)? DECK CONSTANT,
+    // stamped by StampDeckTraits; gates the per-combat board scan in ApplyAttackThresholdTeamPump /
+    // CountAttackThresholdTeamPump so no other deck pays it. Defaults TRUE (unstamped keeps the scan).
+    bool                     deck_has_attack_threshold = true;
+    // DAY / NIGHT (CR 726): 0 = neither, 1 = day, 2 = night. GAME STATE -- once set it persists for
+    // the rest of the game; it only ever leaves 0 when a daybound/nightbound permanent enters
+    // (Brutal Cathar // Moonrage Brute), so every deck without one stays at 0 and is byte-identical.
+    // Folded into the sim key / dominance only when nonzero.
+    std::uint8_t             day_night = 0;
     // Deck-level input to EOT DOMINANCE: WHICH PROJECTION of a graveyard this deck can observe
     // (GoldFishRunner::DeckGraveyardReaders, stamped by SetupGame; bits from GyReader below).
     // Conditional like the storm counter -- on for the cards/decks that can read it, ignored

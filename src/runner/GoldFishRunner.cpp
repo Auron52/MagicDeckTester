@@ -396,6 +396,7 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         // above, so this clause is belt-and-braces -- but a signal that depends on one card can be
         // lost by a list revision, and this function's own comment says the WIDE direction is safe.
         if (p.attack_team_pump_per_life_gained)                              { return true; }
+        if (p.attack_with_n_threshold > 0)                                   { return true; }   // Harbin's attack-threshold pump
         if (p.life_threshold_pump_life > 0)                                  { return true; }   // Serra Ascendant's +5/+5
         if (p.static_artifact_threshold > 0)                                 { return true; }   // Goblin Tomb Raider's +1/+0 + haste
         if (p.pt_equals_snow_permanents_you_control
@@ -1123,6 +1124,19 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Harbin's attack-threshold pump: only a deck that runs one pays its per-combat board scan.
+    state.deck_has_attack_threshold = [&deck]{
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && (d->params.attack_with_n_threshold > 0 || d->params.garth_copy_ability))
+                { return true; }
+            }
+        }
+        return false;
+    }();
     // Card-dependency-map pull closure (DeriveDependencyPulls above): which dependency classes
     // the classifier pulls to Main1 for this deck.
     const DependencyPulls dep_pulls = DeriveDependencyPulls(deck);
@@ -1345,6 +1359,28 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             }
         }
         state.deck_has_cost_reducer = any;
+        // Thalia's SYMMETRIC noncreature tax: same scanned set (mainboard + sideboard + the
+        // passive opponent's 60), so the gate is sound by construction for an opponent taxer too.
+        bool tax = false;
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && (d->params.noncreature_spell_tax > 0 || d->params.garth_copy_ability))
+                { tax = true; break; }
+            }
+            if (tax) { break; }
+        }
+        if (!tax)
+        {
+            for (const std::pair<const char*, int>& e : opponentdeck::List())
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(e.first);
+                if (d && d->params.noncreature_spell_tax > 0) { tax = true; break; }
+            }
+        }
+        state.deck_has_spell_tax = tax;
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers

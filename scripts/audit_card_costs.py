@@ -85,7 +85,11 @@ def main():
         if not local_cost:
             continue
         checked += 1
-        sf = fetch(name)
+        # An alternate PRINTED name (Secret Lair "Rick, Steadfast Leader" = the oracle card Greymond,
+        # Avacyn's Stalwart): the deck lists the printed name, which /cards/named?exact= 404s on, so
+        # the entry carries `scryfall_name` and the audit queries THAT. Without it the miss read as a
+        # benign "custom card" 404 and the cost went unverified without moving the exit code.
+        sf = fetch(c.get("scryfall_name") or name)
         time.sleep(args.throttle)
         if "_error" in sf:
             err = sf["_error"]

@@ -2659,6 +2659,30 @@ int GenericProvider::EtbChosenColor(const GameState& s, int controller,
     return EtbChosenColorFrom(s, controller, def, def.params.produces);
 }
 
+// Rick's as-enters keyword pair (see the declaration). Live-reader keywords first, then menu order;
+// deterministic (it runs in the rollouts and the executor alike).
+std::uint8_t DecisionProvider::EtbChosenKeywords(const GameState& /*s*/, int /*controller*/,
+                                                 const CardDefinition& def) const
+{
+    const int want = def.params.etb_choose_keyword_count;
+    std::uint8_t mask = 0;
+    int got = 0;
+    for (int pass = 0; pass < 2 && got < want; ++pass)
+    {
+        for (const std::string& k : def.params.etb_choose_keyword_menu)
+        {
+            if (got >= want) { break; }
+            const std::uint8_t bit = ChosenKeywordBit(k);
+            if (bit == 0 || (mask & bit) != 0) { continue; }
+            const bool live = bit != kChosenKwFirstStrike;   // first strike has no engine reader
+            if ((pass == 0) != live) { continue; }
+            mask = static_cast<std::uint8_t>(mask | bit);
+            ++got;
+        }
+    }
+    return mask;
+}
+
 // ---- SnowProvider ------------------------------------------------------------
 
 // Coldsteel Heart: GREEN or BLUE, never Red. USER 2026-09-08: "Technically the deck has red, but
@@ -11520,6 +11544,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (verified play-neutral by the smoke audit, play-changed=0). What it adds is a place for a
     // proof and a name in the audit -- see the always-own-a-provider block above the routing chain.
     bool angels = false;
+    // SOLDIERS (W/x Human Soldiers on Aether Vial, 2026-10-04). MUST return ABOVE `goblin`
+    // (Ranger-Captain of Eos / Jirina / King Darien carry sac_creature_outlet) and ABOVE `anti`
+    // (Recruiter of the Guard / Ranger-Captain carry tutor_to_hand) -- the archetype-neutral
+    // misroute class again. Signature = Soldiers-only gated params OR'd across FIVE different cards
+    // (Harbin, Thalia, Thalia's Lieutenant, Recruitment Officer, Rick), all new in this onboarding and
+    // carried by no other card, so one deckbuilding swap cannot lose the routing. Routes to
+    // VialProvider (the Aether Vial archetype it rides) until Stage 4a gives it its own provider.
+    bool soldiers = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -11604,13 +11636,28 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // inert), so no existing deck can set it, and none is a colourless staple another deck
         // might splash (Lightning Greaves and Sol Ring are deliberately not in the list -- that is
         // exactly the class the Dragons block excluded).
+        // The self-counter watcher term is keyed on its ANGEL filter (Youthful Valkyrie, the only
+        // Angels carrier). Unfiltered, it is archetype-NEUTRAL: Champion of the Parish and Thalia's
+        // Lieutenant (Soldiers, 2026-10-04) carry the identical param with a HUMAN filter, and the
+        // bare term routed that whole deck to AngelsProvider -- the misroute class this file keeps
+        // recording. Byte-identical for Angels: Valkyrie's watcher is ["Angel"].
+        const bool angel_self_counter_watcher = p.own_creature_enters_self_counters > 0
+            && std::find(p.enters_watch_subtypes.begin(), p.enters_watch_subtypes.end(),
+                         std::string("Angel")) != p.enters_watch_subtypes.end();
         if (p.other_subtype_enters_counters_per_each > 0
             || p.grants_lifelink
-            || p.own_creature_enters_self_counters > 0
+            || angel_self_counter_watcher
             || p.life_above_start_anthem_life > 0
             || !p.wish_requires_name.empty())
         {
             angels = true;
+        }
+
+        if (p.attack_with_n_threshold > 0 || p.noncreature_spell_tax > 0
+            || p.etb_each_other_own_creature_counters > 0 || p.activated_dig_cost.has_value()
+            || p.lord_min_controlled_matching > 0)
+        {
+            soldiers = true;
         }
 
         // Knights. Keyed on the literal subtype string "Knight" across THREE different cards
@@ -11979,6 +12026,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // is carried by no other deck, so the position is free.
     if (selesnya)    { return g_selesnya_lifegain; }
     if (angels)      { return g_angels; }
+    // Soldiers: ABOVE goblin and anti -- see the flag. VialProvider for now (Stage 4a decides the
+    // deck's own provider); the signature is carried by no other deck, so the position is free.
+    if (soldiers)    { return g_vial; }
     // WhiteKnights ABOVE Knights, and that order is the whole point: WhiteKnights trips BOTH
     // signatures (it shares the Knight Exemplar / Worthy Knight / Acclaimed Contender core), so
     // below the `knights` branch it would never be reached and the two lists would share a

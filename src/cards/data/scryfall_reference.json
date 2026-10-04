@@ -678,6 +678,21 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Brutal Cathar": {
+    "cmc": 3.0,
+    "keywords": [
+      "Daybound",
+      "First strike",
+      "Nightbound",
+      "Transform",
+      "Ward"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Whenever this creature enters or transforms into Brutal Cathar, exile target creature an opponent controls until this creature leaves the battlefield.\nDaybound (If a player casts no spells during their own turn, it becomes night next turn.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Soldier Werewolf"
+  },
   "Burning-Fist Minotaur": {
     "cmc": 2.0,
     "keywords": [
@@ -749,6 +764,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Cathar Commando": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flash"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Flash\n{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Human Soldier"
+  },
   "Cathar's Shield": {
     "cmc": 0.0,
     "keywords": [
@@ -786,6 +812,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Human Wizard Knight"
+  },
+  "Champion of the Parish": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Whenever another Human you control enters, put a +1/+1 counter on this creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Soldier"
   },
   "Chord of Calling": {
     "cmc": 3.0,
@@ -878,6 +913,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Coppercoat Vanguard": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Each other Human you control gets +1/+0 and has ward {1}. (Whenever it becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Soldier"
   },
   "Corsair Captain": {
     "cmc": 3.0,
@@ -1311,6 +1355,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Esper Sentinel": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Whenever an opponent casts their first noncreature spell each turn, draw a card unless that player pays {X}, where X is this creature's power.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Artifact Creature — Human Soldier"
+  },
   "Essence Depleter": {
     "cmc": 3.0,
     "keywords": [
@@ -1442,6 +1495,15 @@
     "toughness": null,
     "type_line": "Land — Island Swamp"
   },
+  "Field Marshal": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "Other Soldier creatures get +1/+1 and have first strike. (They deal combat damage before creatures without first strike.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Soldier"
+  },
   "Fiery Islet": {
     "cmc": 0.0,
     "keywords": [],
@@ -1536,6 +1598,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Fortified Beachhead": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, you may reveal a Soldier card from your hand. This land enters tapped unless you revealed a Soldier card this way or you control a Soldier.\n{T}: Add {W} or {U}.\n{5}, {T}: Soldiers you control get +1/+1 until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Fortifying Draught": {
     "cmc": 1.0,
     "keywords": [],
@@ -1625,6 +1696,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Human Wizard"
+  },
+  "General Kudro of Drannith": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}{B}",
+    "oracle_text": "Other Humans you control get +1/+1.\nWhenever General Kudro or another Human you control enters, exile target card from an opponent's graveyard.\n{2}, Sacrifice two Humans: Destroy target creature with power 4 or greater.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Human Soldier"
   },
   "Genesis Wave": {
     "cmc": 3.0,
@@ -1840,6 +1920,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Golem-Skin Gauntlets": {
+    "cmc": 1.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{1}",
+    "oracle_text": "Equipped creature gets +1/+0 for each Equipment attached to it.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
+  },
   "Grafted Wargear": {
     "cmc": 3.0,
     "keywords": [
@@ -1906,6 +1997,17 @@
     "power": "6",
     "toughness": "6",
     "type_line": "Creature — Giant Warrior"
+  },
+  "Harbin, Vanguard Aviator": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{W}{U}",
+    "oracle_text": "Flying\nWhenever you attack with five or more Soldiers, creatures you control get +1/+1 and gain flying until end of turn.",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Human Soldier"
   },
   "Hatchery Sliver": {
     "cmc": 2.0,
@@ -2212,6 +2314,15 @@
     "toughness": null,
     "type_line": "Land — Mountain Forest Plains"
   },
+  "Jirina, Dauntless General": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{B}",
+    "oracle_text": "When Jirina enters, exile target player's graveyard.\nSacrifice Jirina: Humans you control gain hexproof and indestructible until end of turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Human Soldier"
+  },
   "Jorn, God of Winter": {
     "cmc": 3.0,
     "keywords": [],
@@ -2268,6 +2379,15 @@
     "power": "2",
     "toughness": "4",
     "type_line": "Legendary Creature — Cat Cleric"
+  },
+  "King Darien XLVIII": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}{W}",
+    "oracle_text": "Other creatures you control get +1/+1.\n{3}{G}{W}: Put a +1/+1 counter on King Darien and create a 1/1 white Soldier creature token.\nSacrifice King Darien: Creature tokens you control gain hexproof and indestructible until end of turn.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Human Soldier"
   },
   "Kinsbaile Cavalier": {
     "cmc": 4.0,
@@ -2783,6 +2903,21 @@
     "toughness": "2",
     "type_line": "Creature — Human Monk"
   },
+  "Moonrage Brute": {
+    "cmc": 3.0,
+    "keywords": [
+      "Daybound",
+      "First strike",
+      "Nightbound",
+      "Transform",
+      "Ward"
+    ],
+    "mana_cost": "",
+    "oracle_text": "First strike\nWard—Pay 3 life.\nNightbound (If a player casts at least two spells during their own turn, it becomes day next turn.)",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Werewolf"
+  },
   "Mossfire Valley": {
     "cmc": 0.0,
     "keywords": [],
@@ -3270,6 +3405,15 @@
     "toughness": "1",
     "type_line": "Creature — Human Soldier"
   },
+  "Recruitment Officer": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "{3}{W}: Look at the top four cards of your library. You may reveal a creature card with mana value 3 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Soldier"
+  },
   "Reflecting Pool": {
     "cmc": 0.0,
     "keywords": [],
@@ -3368,6 +3512,15 @@
     "power": "1",
     "toughness": "5",
     "type_line": "Creature — Rhino Monk"
+  },
+  "Rick, Steadfast Leader": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "As Greymond, Avacyn's Stalwart enters, choose two abilities from among first strike, vigilance, and lifelink.\nHumans you control have each of the chosen abilities.\nAs long as you control four or more Humans, Humans you control get +2/+2.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Human Soldier"
   },
   "Righteous Valkyrie": {
     "cmc": 3.0,
@@ -3743,6 +3896,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Silent Clearing": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life: Add {W} or {B}.\n{1}, {T}, Sacrifice this land: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Silverblade Paladin": {
     "cmc": 3.0,
     "keywords": [
@@ -3962,6 +4124,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Spidersilk Net": {
+    "cmc": 0.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{0}",
+    "oracle_text": "Equipped creature gets +0/+2 and has reach. (It can block creatures with flying.)\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
   },
   "Spirebluff Canal": {
     "cmc": 0.0,
@@ -4222,6 +4395,26 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Thalia's Lieutenant": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "When this creature enters, put a +1/+1 counter on each other Human you control.\nWhenever another Human you control enters, put a +1/+1 counter on this creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Soldier"
+  },
+  "Thalia, Guardian of Thraben": {
+    "cmc": 2.0,
+    "keywords": [
+      "First strike"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "First strike\nNoncreature spells cost {1} more to cast.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Legendary Creature — Human Soldier"
   },
   "Thallid": {
     "cmc": 1.0,

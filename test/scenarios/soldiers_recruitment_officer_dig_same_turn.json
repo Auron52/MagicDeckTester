@@ -1,0 +1,44 @@
+{
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 7,
+  "_comment": "Recruitment Officer's activated dig must find Coppercoat Vanguard and cast it the SAME phase: Officer 2 + Coppercoat's +1/+0 = 3 = lethal T5.",
+  "battlefield": [
+    {
+      "name": "Recruitment Officer"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    }
+  ],
+  "hand": [],
+  "expect_win_turn": 5,
+  "library_top": [
+    "Plains",
+    "Plains",
+    "Coppercoat Vanguard",
+    "Plains"
+  ]
+}

@@ -5147,6 +5147,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 // {T} half first -- see the rollout twin and SetPermTapped.
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
+                // Lockstep twin of the rollout's creature-source pay scope (D12: Secluded Courtyard
+                // may pay an ability of a creature source). Covers the K-1 repeat payments too.
+                std::optional<CreatureAbilityPayScope> creature_ability_scope;
+                if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+                { creature_ability_scope.emplace(); }
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 ManaPool avail = AvailableManaPool(state);
                 if (!TapForCost(state, a.cost, avail, /*for_creature=*/false))

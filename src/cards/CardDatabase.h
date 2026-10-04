@@ -3346,7 +3346,87 @@ struct CardParams
     std::optional<ManaCost> tap_lifegain_cost;
     std::string tap_lifegain_per_subtype;
     bool tap_lifegain_count_all = false;
+
+    // ---- Soldiers (2026-10-04) -------------------------------------------------------------------
+    // Every field below is new and gated (0 / false / empty / nullopt inert), so every deck that does
+    // not carry one is byte-identical. See docs/design/analysis-soldiers.md for the per-card notes.
+    //
+    // Thalia's Lieutenant clause 1: "When this creature enters, put a +1/+1 counter on each other
+    // Human you control." N counters on each OTHER creature the controller controls whose subtypes
+    // hit etb_counters_subtypes (RECIPIENT OR-filter; empty = every other creature). Resolved in
+    // FireOwnEtbTriggers, the shared own-ETB site (cast, Vial put, every rollout). Distinct from
+    // enters_watch_subtypes, which filters the ENTERING creature of a watcher.
+    int                      etb_each_other_own_creature_counters = 0;
+    std::vector<std::string> etb_counters_subtypes;
+    // Thalia, Guardian of Thraben: "Noncreature spells cost {1} more to cast." SYMMETRIC static: each
+    // permanent carrying it, controlled by ANY player, adds {N} generic to every noncreature spell's
+    // cost. Applied to the RAW cost in EffectiveSpellCost before every reduction (CR 601.2f).
+    // Activated abilities and Vial PUTS are not casts and are never taxed.
+    int                      noncreature_spell_tax = 0;
+    // Fortified Beachhead: "... enters tapped unless you revealed a Soldier card this way or YOU
+    // CONTROL A SOLDIER." A disjunct of the reveal-land predicate: a battlefield permanent we control
+    // with one of these subtypes forces the land untapped (no reveal choice exists then).
+    std::vector<std::string> etb_untap_control_subtypes;
+    // Fortified Beachhead: "{5}, {T}: Soldiers you control get +1/+1 until end of turn." The {T} half
+    // of a team pump's cost (the source taps, so it cannot pay for itself and fires once per untapped
+    // copy per turn) and the toughness half of the pump (inert in a goldfish, applied for fidelity).
+    bool                     team_pump_taps_source = false;
+    int                      team_pump_tough = 0;
+    // Harbin, Vanguard Aviator: "Whenever you attack with five or more Soldiers, creatures you control
+    // get +1/+1 and gain flying until end of turn." A controller-level attack trigger: the source
+    // need not attack; DECLARED attackers matching the subtype are counted (CR 508.1/508.4 -- tokens
+    // put onto the battlefield attacking do not count but are pumped). Flying grant inert (disclosed).
+    int                      attack_with_n_threshold = 0;
+    std::string              attack_with_n_subtype;
+    int                      attack_with_n_team_pump_power = 0;
+    int                      attack_with_n_team_pump_tough = 0;
+    // King Darien XLVIII: "{3}{G}{W}: Put a +1/+1 counter on King Darien and create a 1/1 white
+    // Soldier creature token." The counter rider on the PayToken mode (Slimefoot shape).
+    int                      pay_token_self_counters = 0;
+    // Recruitment Officer: "{3}{W}: Look at the top four cards of your library. You may reveal a
+    // creature card with mana value 3 or less from among them and put it into your hand. Put the rest
+    // on the bottom of your library in a random order." PermAbilityMode::ActivatedDig -- no {T}, so
+    // repeatable and legal while summoning-sick. max_mv < 0 = no mana-value filter.
+    std::optional<ManaCost>  activated_dig_cost;
+    int                      activated_dig_count = 0;
+    std::vector<std::string> activated_dig_types;
+    int                      activated_dig_max_mv = -1;
+    // Rick, Steadfast Leader (Greymond, Avacyn's Stalwart): "As this enters, choose two abilities from
+    // among first strike, vigilance, and lifelink. Humans you control have each of the chosen
+    // abilities. As long as you control four or more Humans, Humans you control get +2/+2."
+    //   lord_min_controlled_matching -- the lord's P/T bonus applies only while its controller
+    //                                   controls >= N permanents matching subtypes_affected (the lord
+    //                                   itself counts). 0 = unconditional lord (every other lord).
+    //   etb_choose_keyword_count/_menu -- the as-enters choice (CR 614.12), locked per OBJECT in
+    //                                   Permanent::chosen_keyword_mask (bits: kChosenKw* below).
+    //   keyword_grant_subtypes       -- who receives the chosen keywords (self-inclusive).
+    int                      lord_min_controlled_matching = 0;
+    int                      etb_choose_keyword_count = 0;
+    std::vector<std::string> etb_choose_keyword_menu;
+    std::vector<std::string> keyword_grant_subtypes;
+    // Brutal Cathar // Moonrage Brute (daybound / nightbound transforming DFC, CR 726 + 702.145).
+    //   daybound_back_name  -- on the FRONT entry: the back face's DB entry (it is night -> that face)
+    //   nightbound_front_name -- on the BACK entry: the front face's DB entry (day -> that face; also
+    //                            the card that goes to any other zone, CR 712.8)
+    //   etb_or_transform_exile_opp_creature_until_leaves -- "Whenever this creature enters or
+    //                            transforms into <front>, exile target creature an opponent controls
+    //                            until this creature leaves the battlefield."
+    std::string              daybound_back_name;
+    std::string              nightbound_front_name;
+    bool                     etb_or_transform_exile_opp_creature_until_leaves = false;
 };
+
+// Rick's chosen-keyword bits (Permanent::chosen_keyword_mask).
+constexpr std::uint8_t kChosenKwFirstStrike = 1u << 0;
+constexpr std::uint8_t kChosenKwVigilance   = 1u << 1;
+constexpr std::uint8_t kChosenKwLifelink    = 1u << 2;
+inline std::uint8_t ChosenKeywordBit(const std::string& s)
+{
+    if (s == "First strike" || s == "First Strike" || s == "first strike") { return kChosenKwFirstStrike; }
+    if (s == "Vigilance" || s == "vigilance") { return kChosenKwVigilance; }
+    if (s == "Lifelink" || s == "lifelink")   { return kChosenKwLifelink; }
+    return 0;
+}
 
 // A MANA CONVERSION source: one whose `produces` colours are NOT unconditionally available,
 // because reaching them costs a mana FEED from another source (is_filter / ramp_filter /

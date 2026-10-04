@@ -1,0 +1,35 @@
+{
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "_comment": "Brutal Cathar day/night: cast T3 at 'neither' -> it becomes DAY, the front face's ETB exiles the opponent's 2/2 (a token -> ceases to exist). End of T3 we cast 1 spell (day stays at the opponent's untap) and the passive opponent casts 0 -> NIGHT before our T4 untap, so it attacks as Moonrage Brute (3/3) on T4 and T5: 20-3-3 = 14. A 2/2 front face would leave 16.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "token": true,
+      "controller": 1,
+      "power": 2,
+      "toughness": 2,
+      "subtypes": []
+    }
+  ],
+  "hand": [
+    "Brutal Cathar"
+  ],
+  "expect_opponent_life": 14
+}

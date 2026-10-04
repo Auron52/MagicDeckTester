@@ -873,6 +873,10 @@ inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
 inline void DestroyLargestOppCreature(GameState&, int controller);
 inline void TapLargestOppCreature(GameState&, int controller);
+// Day / night (Brutal Cathar // Moonrage Brute, CR 726) -- defined beside DestroyLargestOppCreature.
+inline void ApplyDayboundOnEnter(GameState& state, int entered_index);
+inline void ExileOppCreatureUntilLeaves(GameState& state, int controller, int source_number,
+                                        const std::string& src_name);
 // The lethal-damage SBA's toughness (CR 704.5g) -- see the definition for why it is shared.
 // Forward-declared because Pyroclasm's sweep (PerformDamageAllCreatures) needs it well before
 // DynamicBaseToughness, one of its three inputs, is defined.
@@ -3186,6 +3190,20 @@ inline bool CreatureHasShroud(const Permanent& creature, const GameState& state,
     return false;
 }
 
+// Does a chosen-keyword GRANT (Rick, Steadfast Leader: "Humans you control have ...") reach this
+// creature? keyword_grant_subtypes OR-filter on the LIVE subtypes; an all-creature-types animation
+// matches any typed grant (the lord rule). Empty list -> nothing (a grant must name its recipients).
+inline bool KeywordGrantReaches(const CardParams& gp, const Permanent& creature)
+{
+    if (gp.keyword_grant_subtypes.empty()) { return false; }
+    if (creature.AnimatedAllTypes()) { return true; }
+    for (const std::string& want : gp.keyword_grant_subtypes)
+    {
+        for (const std::string& cs : creature.card.m_subtypes) { if (cs == want) { return true; } }
+    }
+    return false;
+}
+
 // True if `creature` deals combat damage with lifelink -- its own keyword, any attached
 // aura_grants_lifelink Aura, or any attached equip_grants_lifelink Equipment (Loxodon
 // Warhammer / Shadowspear). Combat sites gain the controller that much life.
@@ -3234,6 +3252,11 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
                 { if (cs == sub) { return true; } }
             }
         }
+        // Rick, Steadfast Leader: "Humans you control have each of the chosen abilities" -- the
+        // per-OBJECT choice (chosen_keyword_mask) x keyword_grant_subtypes, SELF-INCLUSIVE (Rick is
+        // a Human). Zero mask on every other permanent -> byte-identical.
+        if ((a.chosen_keyword_mask & kChosenKwLifelink) != 0
+            && KeywordGrantReaches(d->params, creature)) { return true; }
         return false;
     };
     if (granter_idx)
@@ -3264,10 +3287,20 @@ inline bool CreatureHasVigilance(const Permanent& creature, const GameState& sta
     auto grants = [&](const Permanent& a)
     {
         if (a.controller_index != creature.controller_index) { return false; }
-        if (a.equipped_to != creature.card.m_number) { return false; }
         if (a.def_absent) { return false; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
-        return d && d->params.is_equipment && d->params.equip_grants_vigilance;
+        if (a.equipped_to == creature.card.m_number)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+            if (d && d->params.is_equipment && d->params.equip_grants_vigilance) { return true; }
+        }
+        // Rick, Steadfast Leader's chosen vigilance (see the lifelink twin above). Zero mask on
+        // every other permanent -> the equipment-only behaviour is byte-identical.
+        if ((a.chosen_keyword_mask & kChosenKwVigilance) != 0)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+            if (d && KeywordGrantReaches(d->params, creature)) { return true; }
+        }
+        return false;
     };
     if (granter_idx)
     {
@@ -3857,6 +3890,29 @@ inline std::pair<int,int> ComputeLordBonus(
         }
         if (!matches) { return; }
 
+        // Rick, Steadfast Leader (Greymond): "As long as you control FOUR OR MORE HUMANS, Humans
+        // you control get +2/+2" -- a CONDITIONAL static (CR 611.3), continuously re-evaluated at
+        // every read, so it switches off the moment the count drops (a sacrifice, a transform).
+        // Counts PERMANENTS the lord's controller controls carrying a subtypes_affected entry (the
+        // lord itself included; an all-creature-types animation counts). 0 = unconditional lord ->
+        // every other lord is byte-identical.
+        if (ldef->params.lord_min_controlled_matching > 0)
+        {
+            int have = 0;
+            for (const Permanent& other : battlefield)
+            {
+                if (other.controller_index != lord.controller_index) { continue; }
+                bool m = other.AnimatedAllTypes();
+                for (std::size_t si = 0; !m && si < ldef->params.subtypes_affected.size(); ++si)
+                {
+                    for (const std::string& cs : other.card.m_subtypes)
+                    { if (cs == ldef->params.subtypes_affected[si]) { m = true; break; } }
+                }
+                if (m) { ++have; }
+            }
+            if (have < ldef->params.lord_min_controlled_matching) { return; }
+        }
+
         if (ldef->params.scales_per_matching)
         {
             // Bonus per Sliver = power_bonus * (number of other matching Slivers on board).
@@ -4237,6 +4293,7 @@ struct BoardSources
     // superset; see the bs.ds note above for the same discipline. Distinct from `deaths`, which
     // answers DeathOfWouldPay's victim-independent "would it pay" question over different params.
     std::vector<int> dwatch;
+    std::vector<int> vigilance;  // attached ∪ chosen-keyword granters (Rick)   -> CreatureHasVigilance
 
     // MAINTAIN THE LISTS ACROSS AN ERASE. Every list holds battlefield INDICES, so a caller that
     // removes a permanent mid-loop (SweepDeadFadeTokens) invalidates them: the erased index is gone
@@ -4261,7 +4318,7 @@ struct BoardSources
             v.resize(w);
         };
         fix(haste.lords); fix(haste.equips);
-        fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths); fix(dwatch);
+        fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths); fix(dwatch); fix(vigilance);
     }
 };
 
@@ -4298,8 +4355,14 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         { bs.anthems.push_back(i); }
         if ((pp.is_aura && pp.aura_grants_lifelink)
             || (pp.is_equipment && pp.equip_grants_lifelink)
-            || pp.grants_lifelink)
+            || pp.grants_lifelink
+            || pp.etb_choose_keyword_count > 0)   // Rick: a chosen lifelink grant (superset contract)
         { bs.lifelink.push_back(i); }
+        // CreatureHasVigilance's granters: every Aura/Equipment (the list `attached` already is --
+        // Combat.cpp used to pass that one) plus a chosen-keyword granter (Rick). A SUPERSET, so an
+        // empty list remains a proof; byte-identical for every deck without a keyword chooser.
+        if (pp.is_aura || pp.is_equipment || pp.etb_choose_keyword_count > 0)
+        { bs.vigilance.push_back(i); }
         // Any Aura or Equipment, attached or not. Deliberately NOT narrowed to the attached ones:
         // the three consumers each test `aura_attached_to`/`equipped_to` against a specific host's
         // m_number, and narrowing here would additionally assume no host can ever have m_number 0
@@ -4883,11 +4946,22 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             AddPlusCounters(state.battlefield[i], wp.own_creature_enters_self_counters);
             if (log)
             {
+                // Name the watched subtype the entrant actually matched (Angel for Youthful
+                // Valkyrie, Human for Champion of the Parish / Thalia's Lieutenant) -- it used to be
+                // a hard-coded "Angel", which told a Soldiers viewer an Angel had entered.
+                std::string what = "creature";
+                for (const std::string& want : wp.enters_watch_subtypes)
+                {
+                    bool hit = false;
+                    for (const std::string& cs : state.battlefield[entered_index].card.m_subtypes)
+                    { if (cs == want) { hit = true; break; } }
+                    if (hit) { what = want; break; }
+                }
                 EmitPlayEvent(state.turn_number, "ability",
                               "\xE2\x9E\x95 " + wname + ": +"
                               + std::to_string(wp.own_creature_enters_self_counters) + "/+"
                               + std::to_string(wp.own_creature_enters_self_counters)
-                              + " counter (Angel entered)");
+                              + " counter (" + what + " entered)");
             }
         }
         // Hamletback Goliath: "Whenever another creature enters, you may put X +1/+1 counters on
@@ -6113,6 +6187,12 @@ inline void FireSnowEnterWatchers(GameState& state, int entered_index)
 inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // DAYBOUND (Brutal Cathar): FIRST, before anything can observe the entrant. "If it's neither day
+    // nor night, it becomes day"; and a daybound permanent entering at NIGHT enters with its BACK
+    // face up (it does not enter as the front and transform -- no enter trigger, and it never enters
+    // as a Human/Soldier for Champion of the Parish / Thalia's Lieutenant's watchers). Param-gated
+    // inside (one cached lookup) -> byte-identical for every other deck.
+    ApplyDayboundOnEnter(state, entered_index);
     if (tokenstats::On())
     {
         tokenstats::g_enters.fetch_add(1, std::memory_order_relaxed);
@@ -7164,6 +7244,10 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                            const std::string& chosen_tutor = "", int etb_kx = -1)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // Daybound face first (idempotent; a no-op when FireEtbWatchers already ran it) -- a path that
+    // reaches the own-ETB cascade without the watcher cascade must still not fire a front-face
+    // trigger for a permanent that entered at night.
+    ApplyDayboundOnEnter(state, entered_index);
     const CardDefinition* def =
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
@@ -7220,6 +7304,55 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                               def->card.m_name.str() + " -- chose "
                               + ColorName(static_cast<Color>(pick)));
             }
+        }
+    }
+
+    // Rick, Steadfast Leader (Greymond): "As this enters, choose two abilities from among first
+    // strike, vigilance, and lifelink." A REPLACEMENT (CR 614.12), resolved here beside Coldsteel
+    // Heart's for the same reason -- nothing can observe the permanent before the choice is locked.
+    // Per OBJECT; a re-entering Rick is a new Permanent (mask 0) and chooses afresh. Autonomous play,
+    // the executor and every rollout take the provider's pick (DecisionProvider::EtbChosenKeywords --
+    // a provider one-option choice on the Coldsteel precedent); the HUMAN picks among the enumerated
+    // C(n,k) options in the viewer (g_play_etb_keywords_chooser, null outside RunClaudePlay).
+    // Param-gated -> byte-identical for every other deck.
+    if (p.etb_choose_keyword_count > 0 && state.battlefield[entered_index].chosen_keyword_mask == 0)
+    {
+        std::uint8_t pick = ResolveProvider(state).EtbChosenKeywords(state, controller, *def);
+        if (g_play_etb_keywords_chooser && !g_tap_speculating)
+        {
+            // Every legal pair (exactly `count` distinct menu bits), menu order.
+            std::vector<int> opts;
+            std::vector<std::uint8_t> bits;
+            for (const std::string& k : p.etb_choose_keyword_menu)
+            {
+                const std::uint8_t b = ChosenKeywordBit(k);
+                if (b != 0 && std::find(bits.begin(), bits.end(), b) == bits.end()) { bits.push_back(b); }
+            }
+            const int nb = static_cast<int>(bits.size());
+            for (unsigned m = 1; m < (1u << nb); ++m)
+            {
+                int c = 0; std::uint8_t mask = 0;
+                for (int bi = 0; bi < nb; ++bi) { if (m & (1u << bi)) { ++c; mask |= bits[bi]; } }
+                if (c == p.etb_choose_keyword_count) { opts.push_back(mask); }
+            }
+            int def_idx = 0;
+            for (int oi = 0; oi < static_cast<int>(opts.size()); ++oi)
+            { if (opts[oi] == pick) { def_idx = oi; break; } }
+            const int human = (*g_play_etb_keywords_chooser)(state, controller,
+                                                             def->card.m_name.str(), opts, def_idx);
+            if (human >= 0 && human < static_cast<int>(opts.size()))
+            { pick = static_cast<std::uint8_t>(opts[human]); }
+        }
+        state.battlefield[entered_index].chosen_keyword_mask = pick;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            std::string what;
+            auto add = [&what](const char* k) { if (!what.empty()) { what += " and "; } what += k; };
+            if (pick & kChosenKwFirstStrike) { add("first strike"); }
+            if (pick & kChosenKwVigilance)   { add("vigilance"); }
+            if (pick & kChosenKwLifelink)    { add("lifelink"); }
+            EmitPlayEvent(state.turn_number, "choose_abilities",
+                          def->card.m_name.str() + " -- chose " + what);
         }
     }
 
@@ -7357,6 +7490,43 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                 if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated))
                 { q.temp_power_bonus += x; q.temp_tough_bonus += x; }
             }
+        }
+    }
+
+    // Thalia's Lieutenant: "When this creature enters, put a +1/+1 counter on each other Human you
+    // control." The Human set is read at RESOLUTION (CR 608.2), so every matching creature on the
+    // board now gets one -- including a second Lieutenant / Champion of the Parish, whose own
+    // "another Human enters" watchers (FireCreatureEnterWatchers) already fired for this entry;
+    // counter addition commutes, so the order of the two passes is immaterial. Indexed loop:
+    // AddPlusCounters adds no permanent. Hand-rolled subtype test (CardHasSubtype is defined further
+    // down this header). Param-gated -> byte-identical for every other deck.
+    if (p.etb_each_other_own_creature_counters > 0)
+    {
+        int hit = 0;
+        for (int qi = 0; qi < static_cast<int>(state.battlefield.size()); ++qi)
+        {
+            if (qi == entered_index) { continue; }
+            Permanent& q = state.battlefield[qi];
+            if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+            bool ok = p.etb_counters_subtypes.empty() || q.AnimatedAllTypes();
+            for (std::size_t si = 0; !ok && si < p.etb_counters_subtypes.size(); ++si)
+            {
+                for (const std::string& cs : q.card.m_subtypes)
+                { if (cs == p.etb_counters_subtypes[si]) { ok = true; break; } }
+            }
+            if (!ok) { continue; }
+            PutPlusCounters(state, q, p.etb_each_other_own_creature_counters);   // doubler-aware chokepoint
+            ++hit;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            const std::string who = p.etb_counters_subtypes.empty()
+                                  ? std::string("creature") : p.etb_counters_subtypes.front();
+            EmitPlayEvent(state.turn_number, "ability",
+                          def->card.m_name.str() + ": +"
+                          + std::to_string(p.etb_each_other_own_creature_counters)
+                          + "/+" + std::to_string(p.etb_each_other_own_creature_counters)
+                          + " counter on each other " + who + " (" + std::to_string(hit) + ")");
         }
     }
 
@@ -7575,6 +7745,15 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // entered_index may be stale (an erase shifts indices) -- but only when this very card set
     // the param, and it sets no later-read one.
     if (p.etb_destroy_opp_creature) { DestroyLargestOppCreature(state, controller); }
+    // Brutal Cathar: "Whenever this creature enters or transforms into Brutal Cathar, exile target
+    // creature an opponent controls until this creature leaves the battlefield." The ENTERS half
+    // (the transform half fires from SetDayNight). A night entry is already the Moonrage Brute face
+    // here (ApplyDayboundOnEnter), whose definition does not carry the param -- so no trigger.
+    if (p.etb_or_transform_exile_opp_creature_until_leaves)
+    {
+        ExileOppCreatureUntilLeaves(state, controller, state.battlefield[entered_index].card.m_number,
+                                    def->card.m_name.str());
+    }
     if (p.etb_tap_opp_creature)     { TapLargestOppCreature(state, controller); }
 
     // Shriekmaw ("destroy target nonartifact, nonblack creature") / Acidic Slime ("destroy target
@@ -13002,6 +13181,95 @@ inline int CountAttackLifegainTeamPump(const GameState& state, int controller,
     return extra;
 }
 
+// ---- Harbin, Vanguard Aviator: "Whenever you attack with five or more Soldiers, creatures you
+// control get +1/+1 and gain flying until end of turn." -----------------------------------------
+// A CONTROLLER-level attack trigger (attack_with_n_threshold): the source need not attack, need not
+// be untapped, and may be summoning-sick -- it only has to be on the battlefield as attackers are
+// declared. Counted over the DECLARED attackers only, atk_idx[0, declared_n): CR 508.1/508.4 -- a
+// token put onto the battlefield attacking was never declared and does not count, so both callers
+// pass the attacker count from BEFORE FireAttackCreateTokens widened the list. The PUMP lands after
+// the token block (every creature you control at resolution, tokens included -- the tokens-first
+// ordering, CR 603.3b, is strictly dominant vs a never-blocking opponent; ApplyBattleCry precedent).
+// The flying grant is NOT modelled -- provably inert: the passive opponent never blocks (the
+// Bogbeast-trample / Craterhoof collapse). ONE shared helper for executor (GameEngine::CombatPhase)
+// and rollout (TurnSolver::SimulateCombat). Gated on the deck stamp -> other decks byte-identical.
+inline void ApplyAttackThresholdTeamPump(GameState& state, int controller,
+                                         const std::vector<int>& atk_idx, int declared_n)
+{
+    if (!state.deck_has_attack_threshold || atk_idx.empty()) { return; }
+    struct Src { int thr; std::string sub; int pw; int tg; std::string name; };
+    std::vector<Src> srcs;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.attack_with_n_threshold <= 0) { continue; }
+        srcs.push_back({ d->params.attack_with_n_threshold, d->params.attack_with_n_subtype,
+                         d->params.attack_with_n_team_pump_power,
+                         d->params.attack_with_n_team_pump_tough, p.card.m_name.str() });
+    }
+    if (srcs.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    const int dn = std::min<int>(declared_n, static_cast<int>(atk_idx.size()));
+    for (const Src& src : srcs)
+    {
+        int count = 0;
+        for (int i = 0; i < dn; ++i)
+        {
+            const int idx = atk_idx[i];
+            if (idx < 0 || idx >= bf_size) { continue; }
+            const Permanent& a = state.battlefield[idx];
+            if (a.controller_index != controller) { continue; }
+            if (a.AnimatedAllTypes() || CardHasSubtype(a.card, src.sub)) { ++count; }
+        }
+        if (count < src.thr) { continue; }
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+            q.temp_power_bonus += src.pw;
+            q.temp_tough_bonus += src.tg;
+        }
+        if (g_play_event_sink != nullptr)
+        {
+            EmitPlayEvent(state.turn_number, "pump",
+                          "\xE2\x9A\xA1 " + src.name + ": " + std::to_string(count) + " "
+                          + src.sub + "s attacked -- creatures you control get +"
+                          + std::to_string(src.pw) + "/+" + std::to_string(src.tg) + " (and flying)");
+        }
+    }
+}
+
+// Projection twin of ApplyAttackThresholdTeamPump for PendingAttackDamage's const path -- must agree
+// with it exactly (the fd-diverge / overshoot class). `attackers` is the DECLARED set (the projection
+// adds attack-trigger tokens separately as tok_count, which are pumped but never counted). `weight`
+// is what +1 power on every attacker is worth this combat (double strikers twice, tokens once) --
+// the Bogbeast weight. Non-attacking creatures' pump deals no damage, so it is not projected.
+inline int CountAttackThresholdTeamPump(const GameState& state, int controller,
+                                        const std::vector<const Permanent*>& attackers,
+                                        const std::vector<bool>& ds_of, int tok_count)
+{
+    if (!state.deck_has_attack_threshold || attackers.empty()) { return 0; }
+    int weight = tok_count;
+    for (std::size_t i = 0; i < ds_of.size(); ++i) { weight += ds_of[i] ? 2 : 1; }
+    if (weight <= 0) { return 0; }
+    int extra = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.attack_with_n_threshold <= 0) { continue; }
+        int count = 0;
+        for (const Permanent* a : attackers)
+        {
+            if (a->AnimatedAllTypes() || CardHasSubtype(a->card, d->params.attack_with_n_subtype))
+            { ++count; }
+        }
+        if (count >= d->params.attack_with_n_threshold)
+        { extra += d->params.attack_with_n_team_pump_power * weight; }
+    }
+    return extra;
+}
+
 // ---- Inferno Titan: "Whenever this creature ... attacks, it deals 3 damage ..." -----------------
 // Self-only attack-trigger DAMAGE (CardParams::attack_trigger_damage_any), once per attacking copy
 // at declare-attackers, in BOTH worlds (GameEngine::CombatPhase + TurnSolver::SimulateCombat) so
@@ -13792,7 +14060,13 @@ inline int ApplyFirebreathing(GameState& state, int controller,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
             if (!d || !d->params.team_pump_cost.has_value() || d->params.team_pump_power <= 0)
             { continue; }
-            const ManaCost& c = d->params.team_pump_cost.value();
+            // "{5}, {T}: ..." (Fortified Beachhead): the source TAPS as part of the cost, so a tapped
+            // copy has no activation left, and its own mana -- which the leftover pool counts while
+            // it is untapped -- cannot pay for its own activation: require one generic more.
+            const bool taps_src = d->params.team_pump_taps_source;
+            if (taps_src && (src.tapped || !src.CanTap())) { continue; }
+            ManaCost c = d->params.team_pump_cost.value();
+            if (taps_src) { c.generic += 1; }
             if (!pool.CanPay(c)) { continue; }
             int matching = 0;
             for (int idx : attacker_indices)
@@ -13821,6 +14095,10 @@ inline int ApplyFirebreathing(GameState& state, int controller,
                 state.battlefield[pay_idx].card);
             const ManaCost& pc = best_kind == 1 ? pd->params.firebreathing_cost.value()
                                                 : pd->params.team_pump_cost.value();
+            // {T}-in-cost team pump: tap the source BEFORE the payer runs so the payment cannot tap
+            // it for mana; payment stays atomic -- untapped again below if it fails.
+            const bool tap_first = best_kind == 2 && pd->params.team_pump_taps_source;
+            if (tap_first) { state.battlefield[pay_idx].tapped = true; }
             // No index survives a successful payment: CommitPaySacSacrifices can erase a cracked
             // pay-sac source (Treasure / Eldrazi Spawn) from the battlefield, shifting everything
             // above it. Snapshot per-copy ids (m_number is unique: deck cards numbered at setup,
@@ -13858,6 +14136,11 @@ inline int ApplyFirebreathing(GameState& state, int controller,
             }
             if (!paid)
             {
+                if (tap_first)
+                {
+                    for (Permanent& tp : state.battlefield)
+                    { if (tp.card.m_number == best_id) { tp.tapped = false; break; } }
+                }
                 if (best_kind == 1) { self_dead = true; } else { team_dead = true; }
                 if (self_dead && team_dead) { break; }
                 continue;
@@ -13899,7 +14182,16 @@ inline int ApplyFirebreathing(GameState& state, int controller,
         {
             const CardDefinition* d =
                 CardDatabase::Instance().LookupCached(state.battlefield[best_src_idx].card);
-            PayFromPool(pool, d->params.team_pump_cost.value());
+            if (d->params.team_pump_taps_source)
+            {
+                // The {T} half (already tapped on the payer path; tapped here on the read-only-pool
+                // path) and the source's own mana, which the pool still counts: debit cost + {1}.
+                state.battlefield[best_src_idx].tapped = true;
+                ManaCost c1 = d->params.team_pump_cost.value();
+                c1.generic += 1;
+                PayFromPool(pool, c1);
+            }
+            else { PayFromPool(pool, d->params.team_pump_cost.value()); }
             for (int idx : attacker_indices)
             {
                 Permanent& a = state.battlefield[idx];
@@ -13907,7 +14199,11 @@ inline int ApplyFirebreathing(GameState& state, int controller,
                 bool m = d->params.team_pump_subtypes.empty();
                 for (const std::string& sub : d->params.team_pump_subtypes)
                 { if (a.AnimatedAllTypes() || CardHasSubtype(a.card, sub)) { m = true; break; } }
-                if (m) { a.temp_power_bonus += d->params.team_pump_power; }
+                if (m)
+                {
+                    a.temp_power_bonus += d->params.team_pump_power;
+                    a.temp_tough_bonus += d->params.team_pump_tough;   // 0 for every pre-Soldiers pump
+                }
             }
         }
         ++activations;
@@ -14884,6 +15180,205 @@ inline void DestroyLargestOppCreature(GameState& state, int controller)
     }
 }
 
+// ---- DAY / NIGHT (CR 726) and the daybound / nightbound transform (CR 702.145) -----------------
+// Brutal Cathar // Moonrage Brute. The game designation lives on GameState::day_night (0 neither,
+// 1 day, 2 night); it leaves 0 only when a daybound permanent enters, so every other deck never
+// touches any of this. The faces are SEPARATE DB entries (the Kaldring precedent): a transform swaps
+// the permanent's Card IN PLACE (keeping m_number, counters, tapped state, summoning sickness, the
+// linked exile) -- transforming is neither leaving nor entering, so no enter watcher fires.
+//
+// "Exile ... until this creature leaves the battlefield" (CR 610.3): the exiled card is parked in
+// GameState::exile with its m_staged_expiry set to kLinkedExileBase - <source m_number> (a value no
+// staged card can hold), and the source records it in Permanent::linked_exile_number (the key fold).
+// The RETURN is an orphan sweep (ReturnOrphanedLinkedExiles) run at the day/night turn boundary in
+// both worlds: any linked card whose source is no longer on the battlefield returns under its owner.
+// That defers the return from the instant the source leaves to the next turn boundary -- disclosed;
+// unobservable in a goldfish (the opponent's creatures never act) and unreachable in the Soldiers 60
+// (nothing there can make Brutal Cathar / Moonrage Brute leave the battlefield).
+constexpr int kLinkedExileBase = -0x10000000;
+inline bool CardIsLinkedExile(const Card& c)
+{ return !c.m_is_staged && c.m_staged_expiry <= kLinkedExileBase + 0 && c.m_staged_expiry > kLinkedExileBase - 0x08000000; }
+inline int LinkedExileSource(const Card& c) { return kLinkedExileBase - c.m_staged_expiry; }
+
+inline void SwapDayboundFace(Permanent& p, const CardDefinition& to)
+{
+    Card c = to.card;
+    c.m_number = p.card.m_number;
+    p.card = c;
+    p.def_absent = false;
+}
+
+// The trigger body. Default target = the largest opponent creature by effective power (the shared
+// Chupacabra / Abominable Treefolk convention -- payoff ~0, spawns never attack or block); the human
+// board-clicks it (g_play_loyalty_chooser, the mandatory-ETB `target` shape). No opponent creature ->
+// the trigger has no legal target and is removed (CR 603.3d). A TOKEN exiled this way ceases to exist.
+inline void ExileOppCreatureUntilLeaves(GameState& state, int controller, int source_number,
+                                        const std::string& src_name)
+{
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+        legal.push_back(i);
+    }
+    if (legal.empty())
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no creature to exile -- the trigger is removed"); }
+        return;
+    }
+    int k = 0, best = -1;
+    for (int i = 0; i < static_cast<int>(legal.size()); ++i)
+    {
+        const int pw = state.battlefield[static_cast<std::size_t>(legal[i])].EffectivePower();
+        if (pw > best) { best = pw; k = i; }
+    }
+    if (g_play_loyalty_chooser && legal.size() > 1)
+    {
+        const int c = (*g_play_loyalty_chooser)(state, controller, src_name,
+                                                "exiled until it leaves (target creature an opponent controls)",
+                                                legal, k);
+        if (c >= 0 && c < static_cast<int>(legal.size())) { k = c; }
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    const Permanent gone = state.battlefield[static_cast<std::size_t>(bi)];
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.aura_attached_to == gone.card.m_number) { e.aura_attached_to = 0; }
+        if (e.equipped_to      == gone.card.m_number) { e.equipped_to      = 0; }
+    }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    if (!gone.is_token)
+    {
+        Card c = gone.card;
+        c.m_is_staged     = false;
+        c.m_staged_expiry = kLinkedExileBase - source_number;
+        state.exile.push_back(c);
+        for (Permanent& sp : state.battlefield)
+        { if (sp.card.m_number == source_number) { sp.linked_exile_number = c.m_number; break; } }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": exiles the opponent's " + gone.card.m_name.str()
+                      + " until it leaves the battlefield");
+    }
+}
+
+// Linked exiles whose source has left the battlefield return under their owner (see the block note).
+// Owner = the player the passive opponent seat is, i.e. NOT the active player of our turns.
+inline void ReturnOrphanedLinkedExiles(GameState& state)
+{
+    for (std::size_t i = 0; i < state.exile.size(); )
+    {
+        const Card& c = state.exile[i];
+        if (!CardIsLinkedExile(c)) { ++i; continue; }
+        const int src = LinkedExileSource(c);
+        bool alive = false;
+        for (const Permanent& p : state.battlefield) { if (p.card.m_number == src) { alive = true; break; } }
+        if (alive) { ++i; continue; }
+        Permanent back;
+        back.card = c;
+        back.card.m_staged_expiry = 0;
+        back.controller_index = 1 - state.active_player_index;
+        back.owner_index      = back.controller_index;
+        state.exile.erase(state.exile.begin() + static_cast<long>(i));
+        state.battlefield.push_back(back);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          back.card.m_name.str() + " returns to the battlefield (its exiler left)");
+        }
+        FireCreatureEnterWatchers(state, back.controller_index,
+                                  static_cast<int>(state.battlefield.size()) - 1);
+    }
+}
+
+// Change the designation, transforming every daybound / nightbound permanent (CR 726.3a). A
+// permanent that becomes BRUTAL CATHAR fires its "transforms into" exile trigger.
+inline void SetDayNight(GameState& state, std::uint8_t v)
+{
+    if (state.day_night == v) { return; }
+    state.day_night = v;
+    std::vector<std::pair<int, int>> into_front;   // (m_number, controller)
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (v == 2 && !d->params.daybound_back_name.empty())
+        {
+            if (const CardDefinition* bd = CardDatabase::Instance().Lookup(d->params.daybound_back_name))
+            { SwapDayboundFace(p, *bd); }
+        }
+        else if (v == 1 && !d->params.nightbound_front_name.empty())
+        {
+            if (const CardDefinition* fd = CardDatabase::Instance().Lookup(d->params.nightbound_front_name))
+            {
+                SwapDayboundFace(p, *fd);
+                into_front.push_back({ p.card.m_number, p.controller_index });
+            }
+        }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "daynight", v == 1 ? "It becomes DAY" : "It becomes NIGHT"); }
+    for (const auto& [num, ctl] : into_front)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != num) { continue; }
+            const CardDefinition* fd = CardDatabase::Instance().LookupCached(p.card);
+            if (fd && fd->params.etb_or_transform_exile_opp_creature_until_leaves)
+            { ExileOppCreatureUntilLeaves(state, ctl, num, fd->card.m_name.str()); }
+            break;
+        }
+    }
+}
+
+inline void ApplyDayboundOnEnter(GameState& state, int entered_index)
+{
+    Permanent& p = state.battlefield[static_cast<std::size_t>(entered_index)];
+    if (p.def_absent) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (!d || (d->params.daybound_back_name.empty() && d->params.nightbound_front_name.empty())) { return; }
+    if (state.day_night == 0)
+    {
+        state.day_night = 1;   // CR 726.2: a daybound permanent with neither -> it becomes day
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "daynight", "It becomes DAY"); }
+        return;
+    }
+    if (state.day_night == 2 && !d->params.daybound_back_name.empty())
+    {
+        if (const CardDefinition* bd = CardDatabase::Instance().Lookup(d->params.daybound_back_name))
+        { SwapDayboundFace(p, *bd); }
+    }
+    else if (state.day_night == 1 && !d->params.nightbound_front_name.empty())
+    {
+        if (const CardDefinition* fd = CardDatabase::Instance().Lookup(d->params.nightbound_front_name))
+        { SwapDayboundFace(p, *fd); }
+    }
+}
+
+// The TURN-BASED day/night check (CR 726.3a), applied at the boundary between OUR turn and the
+// passive opponent's notional turn and again before our next untap, in BOTH worlds at the same
+// instant (GameEngine::RunTurnFrom after opponentdeck::EndOfTurnDraw; TurnSolver::
+// SimulateEndAndStartNextTurn at the same site) -- `spells_cast_this_turn` is still OUR turn's count.
+//   opponent's untap: day && we cast 0 spells -> night;  night && we cast >= 2 -> day (Cathar's
+//                     transform trigger fires, on the opponent's turn)
+//   our next untap:   the passive opponent cast 0 spells, so day -> night.
+// No-op until a daybound card has set the designation (day_night != 0).
+inline void DayNightTurnBoundary(GameState& state)
+{
+    if (state.day_night == 0) { return; }
+    const int spells = state.spells_cast_this_turn;
+    if (state.day_night == 1 && spells == 0)      { SetDayNight(state, 2); }
+    else if (state.day_night == 2 && spells >= 2) { SetDayNight(state, 1); }
+    if (state.day_night == 1) { SetDayNight(state, 2); }
+    ReturnOrphanedLinkedExiles(state);
+}
+
 // Abominable Treefolk's ETB ("tap target creature an opponent controls"): the Chupacabra pick with
 // tapped=true instead of destruction. No erase, so no index invalidation. Payoff is provably 0 --
 // no engine path reads an opponent permanent's tapped state (spawns never attack, block or tap for
@@ -15631,6 +16126,35 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
 // PerformEtbDig -- body in SpellEffects.cpp (see the header note above).
 bool PerformEtbDig(GameState& state, int controller_index,
                           const CardParams& pp, const Permanent* self);
+// The look-and-take resolution PerformEtbDig shares with Recruitment Officer's ACTIVATED dig
+// (PermAbilityMode::ActivatedDig): look at the top `count`, the legal set is every examined card
+// matching one of `types` (CardMatchesTypeName on the printed card) and, when max_mv >= 0, with
+// printed mana value <= max_mv; provider-ranked pick (EtbDigCandidates), the searched pin
+// (g_scripted_etbdig_choice, consumed), the human dig chooser (src_name), the rest to the bottom.
+bool PerformLookTakeDig(GameState& state, int controller_index, int count,
+                        const std::vector<std::string>& types, int max_mv,
+                        const std::string& src_name);
+// Indices (into the top `count` of `controller`'s library, look order) of the cards a
+// PerformLookTakeDig with these filters would accept RIGHT NOW -- the SAME predicate, so an
+// enumerator sizing a searched pick axis or dropping a whiff agrees with resolution exactly.
+inline std::vector<int> LookTakeDigLegalNow(const GameState& state, int controller, int count,
+                                            const std::vector<std::string>& types, int max_mv)
+{
+    std::vector<int> legal;
+    const Player& ap = state.players[controller];
+    const int n = std::min(count, static_cast<int>(ap.library.size()));
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        const Card& pc = d ? d->card : ap.library[i];
+        bool match = false;
+        for (const std::string& want : types)
+        { if (CardMatchesTypeName(pc, want)) { match = true; break; } }
+        if (match && max_mv >= 0 && pc.m_mana_cost.ManaValue() > max_mv) { match = false; }
+        if (match) { legal.push_back(i); }
+    }
+    return legal;
+}
 
 // Hand-aware Aether Vial charge decision: should the active player add a charge counter
 // to `vial` this upkeep? The Vial deploys (in the main phase) a creature whose mana value
@@ -18597,6 +19121,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::SacLifePerCreature:
                                               return "sacrifice it: gain 2 life for each creature you control";
         case PermAbilityMode::TapLifegain:    return "gain 1 life for each Elf on the battlefield";
+        case PermAbilityMode::ActivatedDig:   return "look at the top four; put a creature (MV 3 or less) into hand";
         default:                              return "activate";
     }
 }
@@ -19074,6 +19599,20 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                                                std::max(1, d->params.ping_all_amount));
             break;
         }
+        case PermAbilityMode::ActivatedDig:
+        {
+            // Recruitment Officer: "{3}{W}: Look at the top four cards of your library. You may
+            // reveal a creature card with mana value 3 or less from among them and put it into your
+            // hand. Put the rest on the bottom of your library in a random order." The mana is paid
+            // by the caller. Resolution is PerformEtbDig's shared body: provider-ranked default, the
+            // SEARCHED pick (the etbdig pin, consumed here), the human dig chooser ("you may" -> -1
+            // declines), the rest to the bottom in look order (random order is unobservable).
+            // Reveal is inert vs the passive opponent. A put-in-hand, not a draw.
+            PerformLookTakeDig(state, controller, d->params.activated_dig_count,
+                               d->params.activated_dig_types, d->params.activated_dig_max_mv,
+                               src_name);
+            break;
+        }
         case PermAbilityMode::PayToken:
         {
             // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token."
@@ -19084,6 +19623,12 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // The token goes through CreateToken, so Doubling Season applies at the single
             // chokepoint and one Season makes this {4} produce two Saprolings.
             const int ntok  = d->params.pay_token_count > 0 ? d->params.pay_token_count : 1;
+            // King Darien XLVIII: "Put a +1/+1 counter on King Darien and create a 1/1 white Soldier
+            // creature token." The counter first (oracle order), through the doubler-aware
+            // chokepoint, on the SOURCE (idx is resolved above and nothing has moved yet).
+            // 0 for Slimefoot -> byte-identical.
+            if (d->params.pay_token_self_counters > 0)
+            { PutPlusCounters(state, state.battlefield[idx], d->params.pay_token_self_counters); }
             for (int t = 0; t < ntok; ++t)
             {
                 CreateToken(state, controller, d->params.pay_token_power,
@@ -19093,7 +19638,11 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "token",
-                              "\xF0\x9F\x8D\x84 " + src_name + ": creates "
+                              "\xF0\x9F\x8D\x84 " + src_name + ": "
+                              + (d->params.pay_token_self_counters > 0
+                                   ? "+" + std::to_string(d->params.pay_token_self_counters)
+                                     + " counter, " : std::string())
+                              + "creates "
                               + std::to_string(ntok) + " "
                               + (d->params.pay_token_subtypes.empty()
                                    ? std::string("token")
@@ -23873,6 +24422,20 @@ struct CreatureAbilityPayScope
     CreatureAbilityPayScope()  : prev(PayingCreatureAbility()) { PayingCreatureAbility() = true; }
     ~CreatureAbilityPayScope() { PayingCreatureAbility() = prev; }
 };
+// Is the source of a battlefield ActivatePermAbility a CREATURE (Recruitment Officer's dig, King
+// Darien's token ability, Slimefoot's)? Then its payment runs under CreatureAbilityPayScope, so
+// Secluded Courtyard's coloured mana is legal for it (D12) -- Cavern of Souls / Unclaimed Territory
+// stay cast-only. A land / artifact source (Shivan Gorge, a Clue) answers false. Read at both apply
+// sites (TurnSolver apply_one and AIEngine's executor twin) so the worlds agree.
+inline bool PermAbilitySourceIsCreature(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        return p.card.IsCreature() || p.is_animated;
+    }
+    return false;
+}
 
 // ---- SUBTYPE-RESTRICTED MANA (Giada, Font of Hope) ------------------------------------------
 // "{T}: Add {W}. Spend this mana only to cast an ANGEL spell." The payment layer threads only a
@@ -25206,6 +25769,24 @@ inline bool LandCanReveal(const GameState& state, const CardDefinition& def)
     return false;
 }
 
+// Fortified Beachhead: "... enters tapped unless you revealed a Soldier card this way OR YOU
+// CONTROL A SOLDIER." True iff the active player controls a permanent carrying one of
+// etb_untap_control_subtypes, read off the LIVE permanent (a transformed Moonrage Brute is a Werewolf
+// only; Soldier tokens count; an all-creature-types animation counts). Empty list -> false.
+inline bool LandControlUntapMet(const GameState& state, const CardDefinition& def)
+{
+    const CardParams& pp = def.params;
+    if (pp.etb_untap_control_subtypes.empty()) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.AnimatedAllTypes()) { return true; }
+        for (const std::string& want : pp.etb_untap_control_subtypes)
+        { if (CardHasSubtype(p.card, want)) { return true; } }
+    }
+    return false;
+}
+
 // Pure heuristic predicate: would this land enter tapped under autonomous play? Does NOT mutate
 // state (no life payment). Call while the card is still in hand (the reveal check scans the hand).
 //   - Shock land (etb_pay_life_to_untap): enters untapped iff the AI pays the life -- it does so
@@ -25224,8 +25805,13 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
         const bool heur = allow_pay_life && state.ActivePlayer().life > pp.etb_pay_life_to_untap;
         return !ResolveProvider(state).LandEntersUntapped(state, def, heur);
     }
+    // Controlling a listed subtype forces the land untapped BEFORE the provider's reveal hook: there
+    // is no choice left to make, so a provider override must not be able to "decline the reveal"
+    // into a tapped land the rules say enters untapped. Param-gated (empty list -> false).
+    if (LandControlUntapMet(state, def)) { return false; }
     if (!pp.etb_untap_reveal_subtypes.empty())
         return !ResolveProvider(state).LandEntersUntapped(state, def, LandCanReveal(state, def));
+    if (!pp.etb_untap_control_subtypes.empty()) { return true; }   // no reveal clause, none controlled
     if (pp.fastland_max_other_lands >= 0)
     {
         // Fastland (Razorverge Thicket): enters untapped iff you control <= N other lands. The card
@@ -25264,6 +25850,8 @@ inline bool LandEntryHasChoice(const GameState& state, const CardDefinition& def
 {
     const CardParams& pp = def.params;
     if (pp.etb_pay_life_to_untap > 0) return state.ActivePlayer().life > pp.etb_pay_life_to_untap;
+    // Fortified Beachhead with a Soldier already controlled: forced untapped, the reveal is moot.
+    if (LandControlUntapMet(state, def)) return false;
     if (!pp.etb_untap_reveal_subtypes.empty()) return LandCanReveal(state, def);
     return false;
 }

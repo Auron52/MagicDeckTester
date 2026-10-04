@@ -1,0 +1,35 @@
+{
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "_comment": "King Darien's {3}{G}{W} must be payable with Secluded Courtyard's G (creature-source ability pay scope): 3 Plains + 2 Courtyard. Darien 2/3 + the activation's counter = 3 = lethal T5; without the scope the G is unpayable and the win slips.",
+  "battlefield": [
+    {
+      "name": "King Darien XLVIII"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Secluded Courtyard"
+    },
+    {
+      "name": "Secluded Courtyard"
+    }
+  ],
+  "hand": [],
+  "expect_win_turn": 5
+}
