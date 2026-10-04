@@ -72,9 +72,27 @@ def discover(root="decks"):
     rather than the subdirectory, because the engine resolves every sidecar directory-relative off
     the profile -- so a variant is found by looking for the parent's stem inside it.
 
-    One shared field to be aware of: `staged` is keyed by stem, so a variant and its parent name the
-    same `logs/eval/<stem>.value.STAGED.json`. Staging is transient and only ever done for the
-    shipping list, so this is left as-is rather than inventing a second naming convention."""
+    ONE SHARED FIELD, AND ITS COLLISION IS REACHABLE: `staged` is keyed by stem, so a variant and
+    its parent name the same `logs/eval/<stem>.value.STAGED.json`. This used to say staging "is
+    transient and only ever done for the shipping list, so this is left as-is" -- that premise is
+    now false. Fungus candidate-b is a variant carried in the regression suite as `fungusb` and
+    staged in its own right, so a candidate-b value-leaf run writes the path the INCUMBENT's run
+    writes, and would clobber it (or, before its own phase B lands, be read as though the
+    incumbent's model were its own -- a model fitted to a different decklist).
+
+    Until `staged` is keyed by `key` for a variant, the mitigation is manual and belongs to whoever
+    starts such a run: move any existing file aside first, under the self-describing name
+    `logs/eval/<stem>.<which-list>.value.STAGED.json` that valueleaf.sh already recommends for the
+    adjacent list-replacement case. Done once on 2026-10-04 for
+    `Fungus.incumbent-169bf491-20260921.value.STAGED.json`.
+
+    The reason it is not simply changed here: `logs/eval/<stem>.value.STAGED.json` is hardcoded at
+    seven sites in valueleaf.sh plus three per-deck chain scripts, and a single missed site reads or
+    writes a different path than the rest -- silent, and precisely the failure this field already
+    has. It wants one helper and all call sites moved together, not a one-line change to this
+    property. Note the DISTINCTION that makes it safe to do later: the staged path lives under
+    logs/eval/ and may be keyed however we like, whereas a sidecar INSIDE a deck dir must keep the
+    parent's stem, because the engine resolves it directory-relative off the profile."""
     out = {}
     for d in sorted(glob.glob("%s/*" % root)):
         if not os.path.isdir(d):
