@@ -10830,10 +10830,23 @@ inline void RefreshFadeTokens(GameState& state, int source_number, int counters)
 //       contributes 0 whether it is on the battlefield or not.
 //   (d) no watcher on that side can reach GainLife: `own_creature_dies_lifegain`
 //       (FireCreatureDiesWatchers) or `dies_trigger_self_gain` (the reactions loop). THIS IS THE
-//       SUBTLE ONE and it is why the guard exists at all: GainLife -> FireLifegainWatchers carries
-//       a `lifegain_each_own_creature_counters` loop that puts a +1/+1 counter on EACH own
-//       creature, which would both count the doomed bodies and actually SAVE a 0/0 token that was
-//       about to die. That is a real play difference, so any board that can reach it declines.
+//       SUBTLE ONE: GainLife -> FireLifegainWatchers carries a
+//       `lifegain_each_own_creature_counters` loop that puts a +1/+1 counter on EACH own creature,
+//       so with the doomed bodies still present it both COUNTS them and -- in THIS ENGINE -- saves
+//       a 0/0 the sweep has not reached yet, because the loop below evaluates `is_dead` per body as
+//       it descends, i.e. AFTER the higher-indexed deaths have already fired their triggers.
+//
+//       *** THAT ENGINE BEHAVIOUR IS RULES-INCORRECT AND THIS GUARD DELIBERATELY PRESERVES IT. ***
+//       Under CR 704.3 state-based actions are performed BEFORE triggered abilities are even put on
+//       the stack, so a creature at 0 toughness (CR 704.5f) is already in the graveyard by the time
+//       a triggered counter could resolve -- a trigger can NEVER save it. Only counters it entered
+//       with, or received while still above 0, can. So the SIMULTANEOUS model is the correct one,
+//       which makes ApplyMassDeathBulk the rules-CORRECT path (and the one the EXECUTOR already uses) and this interleaved loop the buggy
+//       one -- the same CR 608.2 reasoning PerformDamageAllCreatures already documents for its
+//       two-pass sweep. Making bulk unconditional would be a play CHANGE and a rules FIX, owed an
+//       A/B and a GT re-accept, so it is recorded in
+//       docs/design/sba-precedes-triggers-in-mass-death.md rather than smuggled in behind a perf
+//       commit. Until then identity wins: a board that can reach GainLife takes the old path.
 //       Checking BoardSources::dwatch suffices: a `dies_trigger_self_gain` watcher with an empty
 //       dies_watch_subtype can never enter `reactions` in the first place, and a dying body cannot
 //       contribute its OWN self-watcher because (a) makes its definition lookup fail.
