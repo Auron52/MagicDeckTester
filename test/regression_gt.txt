@@ -1,9 +1,9 @@
-# Regression ground truth -- commit ecb422af  date 2026-10-03
+# Regression ground truth -- commit 1f0881a4  date 2026-10-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-03): 3de66a1f vs origin GT: searched net -514 turns; every searched slower game recovers at d8 b0 (291/291; snow ov d3 s4004 gi104 = T8-only tree, still running at d8 b0, never finished on any binary). Decks above GT, all churn with d8b0 recovery: antilife +4, antilife2hg +5, dragonstorm2hg +1, mirrorwing +1, slivers2hg +1 (checkpoint 4, unchanged); snow +1 (reg s2002 gi56 = scored-T5 kill missed by 1 dmg, separate divergence, recovers d8b0); kittyv2 +1 (new upstream deck). fungus_d0 +6 upstream; slivers_d0 +135 deferred d0 runner.
-# accepted-with-regressions (smoke, 2026-10-03): snow only (Skred never cast + Jorn front face, main 2 only on Jorn turns): every searched cell better (0.03-0.20 avg turn); slower searched games all recover at d8b0 -- gi108 T8, gi85/gi149/gi57/gi8 T6, gi78/gi38 T7 (=GT), smoke d5 gi18 T7 (GT T8)
-# accepted-with-regressions (regression, 2026-10-03): snow only (Skred never cast + Jorn front face, main 2 only on Jorn turns): every searched cell better (0.03-0.20 avg turn); slower searched games all recover at d8b0 -- gi108 T8, gi85/gi149/gi57/gi8 T6, gi78/gi38 T7 (=GT), smoke d5 gi18 T7 (GT T8)
 # accepted-with-regressions (overnight, 2026-10-03): snow only (Skred never cast + Jorn front face, main 2 only on Jorn turns): every searched cell better (0.03-0.20 avg turn); slower searched games all recover at d8b0 -- gi108 T8, gi85/gi149/gi57/gi8 T6, gi78/gi38 T7 (=GT), smoke d5 gi18 T7 (GT T8)
+# accepted-with-regressions (smoke, 2026-10-04): fungusb: ADOPT the candidate-b exhaustive mulligan keep profile (gen 2026-10-03/04, fast/R30). Validated by mullgen A/B: keep -0.185313t, 16/16 seeds, mean/se -36.11; bottoming (confounded) -0.068937t, 16/16. The 3 moved smoke configs are fungusb only; its d3/d5 cells are 75/40 games on ONE seed (sd ~0.10) so their +0.027/+0.050 is ~0.5sd of apparatus noise, NOT evidence against a 16,000-game A/B. All 107 other configs byte-identical.
+# accepted-with-regressions (regression, 2026-10-04): fungusb: ADOPT the candidate-b exhaustive mulligan keep profile (gen 2026-10-03/04, fast/R30). mullgen A/B: keep -0.185313t 16/16 seeds mean/se -36.11; bottoming (confounded) -0.068937t 16/16. Net direction on this tier is FASTER (searched 79 faster / 31 slower; d0 130/83). 5 of 6 moved configs are fungusb (the adopted deck). The 6th, selesnya_regression_d3_s3003, moved DIGEST ONLY at an identical average 5.4133 on a budgeted cell -- the documented open batch nondeterminism (docs/design/batch-run-to-run-nondeterminism.md), not a play change. SEPARATE PRE-EXISTING FAILURE, not from this adoption: reference reproducibility fails on 4 refs (Mirrorwing v2 s51_gi50 play-drift wt4->5, Hinata2 s1_gi0 ENUM-GAP, Snow s4_gi3 board-diverged, Mirrorwing v1 s29_gi28 shuffle-dead) IDENTICALLY on pure origin/phase-1-2-deck-analyzer, so it predates every commit here.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -11,9 +11,9 @@
 fungus_smoke_d0_s1001=5.6810/37e0278068c9d895
 fungus_smoke_d3_s1001=5.3800/965558cacae26a96
 fungus_smoke_d5_s1001=5.3867/21b66babceb1529b
-fungusb_smoke_d0_s1001=6.3160/2013cd8147b9d195
-fungusb_smoke_d3_s1001=5.2933/373b9e398305891c
-fungusb_smoke_d5_s1001=5.1750/435f7b275064108c
+fungusb_smoke_d0_s1001=6.2100/9160ce8a870f7f8f
+fungusb_smoke_d3_s1001=5.3200/673b594bfb351c11
+fungusb_smoke_d5_s1001=5.2250/c98ecd74b73626a5
 slivers_smoke_d0_s1001=4.6540/702869fecc3f5110
 slivers_smoke_d3_s1001=4.2440/078b64d6cae6dc66
 slivers_smoke_d5_s1001=4.1867/d1f110581417eb3e
@@ -125,11 +125,11 @@ fungus_regression_d3_s2002=5.4050/95ae20e0a9a43635
 fungus_regression_d3_s3003=5.4550/4e46daa73d7ce9de
 fungus_regression_d5_s2002=5.4600/f52773d4c3326845
 fungus_regression_d5_s3003=5.4500/a16ddc6de3c5a97f
-fungusb_regression_d0_s2002=6.3800/60c024e9a21b93a5
-fungusb_regression_d3_s2002=5.4400/ee49030f9169b3e2
-fungusb_regression_d3_s3003=5.4600/4ac27cb1e351ce61
-fungusb_regression_d5_s2002=5.4600/a2fd726e7bcb8c94
-fungusb_regression_d5_s3003=5.4400/6b53eafc4554a4f6
+fungusb_regression_d0_s2002=6.2080/cfe853c067d829b6
+fungusb_regression_d3_s2002=5.2100/2b3e42c1d8542921
+fungusb_regression_d3_s3003=5.2100/ecc3c686d132e394
+fungusb_regression_d5_s2002=5.1600/553a39657f882705
+fungusb_regression_d5_s3003=5.2400/6f9ff67c6402142a
 slivers_regression_d0_s2002=4.6890/82da819faff1b2fc
 slivers_regression_d3_s2002=4.2250/230c77bb799eb20d
 slivers_regression_d3_s3003=4.2500/bcab93367004d0cd
@@ -267,7 +267,7 @@ pirates_regression_d5_s2002=4.4000/2da8841acf81be19
 pirates_regression_d5_s3003=4.4133/665caa69b31754dc
 selesnya_regression_d0_s2002=6.2470/2b8c3e964cbbbd0a
 selesnya_regression_d3_s2002=5.1800/59fade39e17b791b
-selesnya_regression_d3_s3003=5.4133/f7438f90f70f62e4
+selesnya_regression_d3_s3003=5.4133/6a4c011d73e6896d
 selesnya_regression_d5_s2002=5.0533/e92cba51cc5af027
 selesnya_regression_d5_s3003=5.4133/2a227b6b22c989cc
 snow_regression_d0_s2002=6.5270/f37190bf0c0ef07a
