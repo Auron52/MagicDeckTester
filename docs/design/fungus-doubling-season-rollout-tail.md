@@ -112,7 +112,7 @@ just do not price it as the difference between a feasible and an infeasible run 
 
 Full measurement: `slow-rollout-tail-and-the-uncharged-greedy-walk.md`, AMENDMENT 3.
 
-## 6b. USER RULING (2026-10-03): the bound is REQUIRED, not optional
+## 6b. The PERFORMANCE is user-required. The BOUND IN SECTION 6 IS NOT — IT IS UNAPPROVED (2026-10-03)
 
 Section 6a downgraded this from a feasibility blocker to something to "build on its merits". **The
 user has since ruled that the performance itself is unacceptable**, after a single in-flight keep
@@ -126,4 +126,21 @@ configuration means the cost is bounded by nothing the configuration states.
 
 The repro set, the censuses already run (so they are not re-derived), why no existing mitigation
 bounds it, and proposed acceptance criteria are in **`mulligan-rollout-performance-floor.md`**.
-Section 6's reachable-states shape is unchanged and is still the right one.
+
+### CORRECTION, same day — do not read the above as approving section 6's bound
+
+An earlier version of this section was headed *"the bound is REQUIRED, not optional"*. **That was an
+agent's inference and it was wrong.** USER:
+
+> *"I never agreed to a per-rollout bound."*
+
+What the user required is that **the performance be fixed**. Section 6's remedy — truncating a rollout
+at a reachable-states budget — is a **LOSSY** change: it alters what the rollout returns, so it is a
+QUALITY decision, and it is **UNAPPROVED**. Do not implement it, cite it as agreed, or price a plan
+around it.
+
+The distinction that was collapsed: *"this performance is unacceptable, I'll want to fix it"* names a
+problem. It does not pick a mechanism. The lossless mechanisms — deleting wasted work (as the
+soulbond gate did, byte-identically) and removing scheduling blockages (see
+`keepgen-producer-barrier-and-durability.md` Defect 3, which is what the user's *"there should be no
+blockages"* points at) — are the ones to pursue first, because they need no quality trade at all.

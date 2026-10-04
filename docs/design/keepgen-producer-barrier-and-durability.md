@@ -579,10 +579,15 @@ the END of the run, not the middle.
 
 ## Fixes, cheapest first
 
-1. **Bound the rollout** — `fungus-doubling-season-rollout-tail.md` §6, now user-required per
-   `mulligan-rollout-performance-floor.md`. This does not remove any barrier; it caps **every**
-   barrier's worst case, which is why it is first. A wave join costing ~seconds is a non-issue; one
-   costing 6.7 h is this document.
+1. ~~**Bound the rollout**~~ — **NOT AVAILABLE. UNAPPROVED.** USER, 2026-10-03: *"I never agreed to a
+   per-rollout bound."* Truncating a rollout is LOSSY (it changes what the rollout returns), so it is
+   a quality decision the user has not taken. An earlier draft of this list had it first and called it
+   user-required; that was an agent's inference from *"I'll want to fix it anyway"*, which named the
+   PROBLEM and not a mechanism. **Do not plan around it.** It is left in the list, struck through,
+   because deleting it would invite the next reader to re-derive it.
+   **The consequence for this document is important: with no bound available, fixing THIS defect is
+   not an optimisation, it is the remedy.** A barrier whose worst case cannot be capped must instead
+   be removed.
 2. **§5 Fix 4, still outstanding, and this run is the second time it would have paid.** The monitor
    now prints journal age (`journal=... (24099s ago)`) and `subwave`, but **not** the warning §5 asked
    for, and **not which of the three conditions holds `floor_incomplete`**. I could not tell from the
