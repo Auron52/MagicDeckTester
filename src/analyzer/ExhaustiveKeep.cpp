@@ -1,4 +1,5 @@
 #include "../core/EnvFlags.h"
+#include "../ai/GameProgress.h"
 #include "../core/GameSetup.h"
 #include "ExhaustiveKeep.h"
 #include "BucketPolicy.h"
@@ -1952,6 +1953,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 std::unique_lock<std::mutex> lk(mx);
                 long long prev_7 = 0, prev_rs = 0, prev_sd = 0; double prev_el = 0.0;
                 long long prev_fed_seen = 0;   // rollouts enqueued as of the previous wake (unbanked-work warning)
+                double    last_longrun = 0.0;  // last in-flight long-run report (gameprogress), seconds since t0
                 while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
                     const double el = std::chrono::duration<double>(
@@ -2021,6 +2023,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                      " docs/design/keepgen-producer-barrier-and-durability.md\n" << std::flush;
                     }
                     prev_fed_seen = r7 + rs;
+                    // IN-FLIGHT units over the long-run threshold. Slow().Dump below lists the slowest
+                    // FINISHED rollouts; this is the one that can name a rollout still running, with the
+                    // turn and odometer width needed to predict it. Silent unless something is stuck, so
+                    // a healthy run's monitor output is unchanged. See src/ai/GameProgress.h.
+                    if (el - last_longrun >= static_cast<double>(gameprogress::ReportS()))
+                    {
+                        last_longrun = el;
+                        gameprogress::Report(std::cerr, gameprogress::ReportS(), "[keepgen]   long-run");
+                    }
                     Slow().Dump(std::cerr, "so far", 3);
                     lk.lock();
                 }
@@ -2466,6 +2477,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
             double wt;
             const auto t_roll = std::chrono::steady_clock::now();
+            gameprogress::Scope _gp([&]{ return describe_cell(H, comp, pd, r, rs); });   // see run_one
             if (trace_on)
             {
                 std::fill(hit.begin(), hit.end(), 0);
@@ -2532,6 +2544,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
         const auto t_roll = std::chrono::steady_clock::now();
         double wt;
+        // IN-FLIGHT progress (src/ai/GameProgress.h). capture_slow below reports this rollout once it
+        // FINISHES; this makes it observable WHILE it runs, which is the only way a straggler holding
+        // a phase barrier can be predicted rather than waited out. Same description, so a live report
+        // and the slow-log line name the same cell.
+        gameprogress::Scope _gp([&]{ return describe_cell(H, comp, pd, r, rs); });
         if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
         else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming

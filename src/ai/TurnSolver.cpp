@@ -19,6 +19,7 @@
 #include "../core/EffectHandler.h"
 #include "../core/SpellEffects.h"
 #include "../core/Trace.h"
+#include "GameProgress.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -28615,6 +28616,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     for (int g = 0; g < num_groups; ++g) { stride[g] = acc; acc *= static_cast<std::uint64_t>(groups[g].size()) + 1; }
     // Whole-odometer size, for the fallback telemetry only: group product x the independent bits.
     const std::uint64_t flat_positions = (num_ind < 63) ? (acc << num_ind) : acc;
+    // Long-run progress: the whole-odometer size of the decision being worked on RIGHT NOW. This is
+    // the only true denominator the search computes up front, so it is what tells a stuck report
+    // "this decision is 4.9e+07 wide" rather than merely "still going". Always on -- one branch plus
+    // two relaxed stores per enumeration call. See src/ai/GameProgress.h.
+    gameprogress::NoteEnumerate(flat_positions);
     if (s_odo_fb_stats)
     {
         g_odo_calls.fetch_add(1, std::memory_order_relaxed);
@@ -29454,6 +29460,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                             const GreedyPermit& permit)
 {
     (void)permit;   // the permit's constructor already enforced the claim
+    // Long-run progress: publish which TURN this thread's tracked unit is on, and count decision
+    // roots. One branch + two relaxed stores, and a no-op outside a gameprogress::Scope. See
+    // src/ai/GameProgress.h -- this is what makes a ten-hour rollout predictable instead of opaque.
+    gameprogress::NoteDecision(state.turn_number);
     struct GreedyNest { GreedyNest() { ++g_greedy_solve_nest; } ~GreedyNest() { --g_greedy_solve_nest; } } _gn;
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     const Player& ap = state.ActivePlayer();

@@ -286,6 +286,7 @@ add_executable(mtg-test
     test/unit/test_mana_payment.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
+    test/unit/test_game_progress.cpp
     test/unit/test_cost_reducers.cpp
     test/unit/test_subtype_registry.cpp
     test/unit/test_greedy_window.cpp
