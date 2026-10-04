@@ -23701,10 +23701,19 @@ enum class Adv { MostCasts, PayloadFirst, ChainFirst, Search };
 inline int NodeUnits()
 {
     // Units charged per DFS link. A unit is one simulated turn-step (SearchBudget.h); a link is one
-    // EnumerateMainPlans + one ApplyPlan on a copy, the same work a rollout step does for its main.
+    // EnumerateMainPlans + one ApplyPlan on a copy. PRICED BY MEASUREMENT, not by that analogy: on
+    // the boards the route actually walks (a chain mid-draw, 20+ artifacts out) a link costs 2-4 ms
+    // of wall against ~0.17 ms for an ordinary unit of this deck (6,150 units/s in a route-light
+    // game), i.e. ~12-24 units. Charged at 1, the budget stopped bounding wall: the value-leaf row
+    // dump (d5/b20, K=3 labels) had games at 250-400 units/s, 2.5-3+ HOURS each, pinning phase A on
+    // two of them for hours with 30 cores idle, and the mulligan generation at d1/b3 would have had
+    // ~8 s decisions. Measured on the 14 references at the committed policy plus the s5_gi4 cold
+    // ladder (b20 d5 / b200 d8): 1 -> 0/14 T3 T3; 4 -> 0/14 T3 T3; 8 -> 0/14 T3 T3; 16 -> 1/14
+    // (s5_gi4 T4 at b20) T3. 8 is the largest price that keeps the references, so a b20 decision is
+    // at most ~2,250 links (~7 s) and a b3 decision ~340 (~1 s) instead of 18,000 / 2,700.
     static const int v = []() -> int {
         const char* e = std::getenv("MTG_EQUIP_ROUTE_NODE_UNITS");
-        const int n = (e && *e) ? std::atoi(e) : 1;
+        const int n = (e && *e) ? std::atoi(e) : 8;
         return n > 0 ? n : 1;
     }();
     return v;
