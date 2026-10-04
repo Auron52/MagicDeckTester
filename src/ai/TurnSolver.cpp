@@ -14335,6 +14335,31 @@ static bool HoldLineEnabled()
     return v;
 }
 
+// ---- THE GO-OFF CUT'S RE-VERIFY IS DUPLICATED WORK (2026-10-04) --------------------------------
+// Both equip-chain cuts used to confirm the route by ApplyPlanDirect-ing it on a copy and testing
+// the realised board's damage. That re-runs, exactly, the computation the EMISSION already did:
+// CollectActions only emits the action when EquipRouteTrial returns 1, and equiproute::Run returns 1
+// only after it has found a `wins_this_turn` plan ON A BOARD THE PLAYOUT ALREADY REALISED and
+// applied it. So the cut's apply is a second full go-off playout certifying the first one.
+//
+// MEASURED on claude_s1_gi0, one game, MTG_EQUIP_ROUTE_TRACE: 13,810 route playouts and 31,662
+// playout iterations, of which 4,791 are trials (one per emission) and 8,251 are APPLIES -- about
+// TWO per cut, because the verify applies the route and then the caller applies the returned plan
+// again. That is the bulk of the 502 ms -> 7,056 ms this cut cost the deck's shipped frame.
+//
+// AND IT IS LOAD-BEARING, which refuted the "pure duplication" argument above and is why it stays
+// DEFAULT ON. Turning it off is worth 24% of the wall on s1_gi0 at identical play (7,013 -> 5,343 ms,
+// same digest) -- and it costs claude_s6_gi5 a turn (3 -> 4), taking the pooled average from 3.500
+// to 3.571 with shortfalls unchanged at 1/14. So the realised ApplyPlanDirect really does refute
+// cuts the trial accepted: the plan-application path is not bit-for-bit the route's own internal
+// apply sequence, and a memo HIT can answer for a board that differs in a field BoardKey does not
+// hash. `=0` keeps the cheaper arm measurable.
+static bool EquipRouteReverifyEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_REVERIFY", true);   // DEFAULT ON -- load-bearing
+    return v;
+}
+
 // ---- FOLD PREFIX: hoist the canonical-prefix rejection into the odometer -----------------------
 // Same move as EquipPieceDepViolated below, for the rule that dominates Snow.
 //
@@ -33466,17 +33491,22 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             { std::vector<int> route_sel{ eroute_idx }; consider(route_sel); }
             if (best_sel.size() == 1 && best_sel[0] == eroute_idx)
             {
-                GameState copy = state;
-                ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
-                if (OpponentHasLost(copy)
-                    || (is_pre_combat && PendingAttackDamage(copy) >= copy.Opponent().life))
+                bool verified = true;
+                if (EquipRouteReverifyEnabled())      // see EquipRouteReverifyEnabled
+                {
+                    GameState copy = state;
+                    ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
+                    verified = OpponentHasLost(copy)
+                            || (is_pre_combat && PendingAttackDamage(copy) >= copy.Opponent().life);
+                }
+                if (verified)
                 {
                     best.wins_this_turn = true;
                     if (EquipRouteTraceOn())
                     {
                         std::fprintf(stderr, "[equip-route] CUT(solve) t%d verified\n", state.turn_number);
                     }
-                    return best;                          // verified lethal (materialized above)
+                    return materialize_best();            // trial-certified lethal
                 }
             }
             best      = saved_best;
@@ -45418,10 +45448,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             sat_bypass = false;
             if (plans.size() > before)
             {
-                GameState copy = state;
-                ApplyPlanDirect(copy, plans.back(), is_pre_combat);
-                if (OpponentHasLost(copy)
-                    || (is_pre_combat && PendingAttackDamage(copy) >= copy.Opponent().life))
+                bool verified = true;
+                if (EquipRouteReverifyEnabled())     // see EquipRouteReverifyEnabled: duplicated work
+                {
+                    GameState copy = state;
+                    ApplyPlanDirect(copy, plans.back(), is_pre_combat);
+                    verified = OpponentHasLost(copy)
+                            || (is_pre_combat && PendingAttackDamage(copy) >= copy.Opponent().life);
+                }
+                if (verified)
                 {
                     plans.back().wins_this_turn = true;
                     if (EquipRouteTraceOn())
