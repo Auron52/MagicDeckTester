@@ -303,6 +303,8 @@ enum Slot : int
     EQUIP_COPY_XNAME,         // MTG_EQUIP_COPY_XNAME  let the fungible-equip-copy fold (BuildFungibleEquipClasses) class copies by BEHAVIOURAL IDENTITY instead of by CARD NAME. USER, 2026-10-02 (KittyEquipment v2, from the play viewer): *"Also, Cathar's Shield and Accorder's Shield are duplicates. This might be useful for us as well."* and *"They are identical except for the name."* VERIFIED IN THE CARD DATA, not assumed: both are `{0}` with parameters `{equip_cost_generic:3, equip_grants_vigilance:true, equip_tough_bonus:3, is_equipment:true}`, the same keywords, types and subtypes -- byte-identical on every field the engine reads, differing only in the name string and in oracle prose. The existing class signature opens with `"E|" + a0.card_name`, so the two land in DIFFERENT classes and their cross-name symmetry is never folded: v2 plays four of each, so the deck's equip classes are five of size 4 rather than {4,8,4,4}. On a 2-host board the canonical (non-increasing) count per class is C(n+2,n), so this merges 15x15 into 45 -- a 5x cut on the equip axis of the very boards that make the viewer's plan space unenumerable. Keyed on CardDefinition::behaviour_identity, which digests the whole cards.json entry MINUS name and oracle_text, so it fails toward "not interchangeable" and cannot be defeated by a param added later; a Register-built definition digests to 0 and falls back to name equality (the pre-existing behaviour). Built DEFAULT OFF and measured rather than assumed-on, for the same reason its parent MTG_EQUIP_COPY_COLLAPSE carries: the surviving representative can be a different PHYSICAL copy, so card numbers and therefore play digests may move on a board that is merely isomorphic
     PD_ALL_M2,                // MTG_PD_ALL_M2             Prevent Damage: EVERY hand cast goes to the searched SECOND main (USER 2026-09-29: "do everything in the second main with this deck so creatures can attack even if we choose to sacrifice them"). Main 1 keeps activations (Vito's team lifelink, Dina's sac-pump, Pyrohemia) and the land drop. Unlike MTG_PD_SECOND_MAIN (which ADDED a searched m2 on top of a full m1, 1.6x) this MOVES the cast search. Measurement lever, default OFF
     PD_QUAKE_TWO_TURN,        // MTG_PD_QUAKE_TWO_TURN     Prevent Damage (inside MTG_PD_QUAKE_NO_OVERKILL): past the survival ceiling the MAX X is also kept when a SECOND Rolling Earthquake in hand is lethal next turn at next turn's max X (today's mana + one land drop if a land is in hand) -- USER 2026-09-29: "allow the max quake if it is lethal or we have another in hand that will be lethal next turn". Measurement lever, default OFF
+    SOLDIERS_ORDER,           // MTG_SOLDIERS_ORDER        Soldiers PROPOSED total cast order (USER question, default OFF)
+    SOLDIERS_BUCKET_DISCARD,  // MTG_SOLDIERS_BUCKET_DISCARD Soldiers authored cleanup-discard buckets (=0 -> generic max-MV)
     PD_M2_ROOT_ONLY,          // MTG_PD_M2_ROOT_ONLY       Prevent Damage (with MTG_PD_ALL_M2): the main-phase split applies at the ROOT turn only; projected future turns keep every cast in main 1 (PhaseFilterRootTurnOnly). Diagnostic arm for the ALL_M2 regression, default OFF
     COUNT
 };
@@ -568,6 +570,8 @@ inline const char* Name(int slot)
         "MTG_EQUIP_COPY_XNAME",
         "MTG_PD_ALL_M2",
         "MTG_PD_QUAKE_TWO_TURN",
+        "MTG_SOLDIERS_ORDER",
+        "MTG_SOLDIERS_BUCKET_DISCARD",
         "MTG_PD_M2_ROOT_ONLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

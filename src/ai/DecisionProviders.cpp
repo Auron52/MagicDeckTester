@@ -5626,6 +5626,229 @@ const char* VialProvider::CastOrderTierName(int rank) const
     }
 }
 
+// ---- SoldiersProvider --------------------------------------------------------
+
+// MTG_SOLDIERS_ORDER -- PROPOSED total cast order for Soldiers (analyze-deck, 2026-10-04). A USER
+// QUESTION, not an adoption: docs/design/cast-order-rankings.md ("Soldiers") carries the proposal
+// and its measurement. DEFAULT OFF; per-job overridable so both arms run in ONE pooled batch.
+// Off => VialProvider::CastOrderRank, i.e. today's generic tiers (every creature tied at 10, Vial
+// at 20, ties kept in plan order).
+static bool SoldiersOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_SOLDIERS_ORDER");   // default OFF; =1 enables (A/B lever)
+    return heurarm::Flag(heurarm::SOLDIERS_ORDER, on);
+}
+
+// The order is TOTAL over the 60 (no two distinct cards share a rank -- condemnation needs a total
+// order) and the land drop stays FIRST (generic: no cantrip in the deck). Role classes are read
+// from PARAMS where a param expresses the role; the value order WITHIN the vanilla/lord bodies is
+// deck knowledge keyed on the name (the FiveColour/Equipment precedent), and any card not named
+// falls back to its generic rank +100 -- after every named card, still deterministic.
+//   1 Champion of the Parish  -- Human-enters watcher WITHOUT the Lieutenant's ETB: first, so every
+//                                later Human this turn is +1 counter on it.
+//   2 Recruiter of the Guard  -- creature tutor to hand: early, so the fetched card can still be cast
+//   3 Ranger-Captain of Eos      this turn (and both are Humans, so after Champion).
+//   4 Aether Vial             -- the deck's only noncreature spell: BEFORE Thalia (her tax binds our
+//                                own noncreature spells -- {1} -> {2}).
+//   5 Recruitment Officer     -- cheap body whose {3}{W} dig wants to come after the casts.
+//   6..15 bodies and lords    -- cheapest/vanilla first, lords late (static: order-free) --
+//                                Esper Sentinel, Thalia (after Vial: rank > 4), Coppercoat, Cathar
+//                                Commando, Jirina, Harbin, Brutal Cathar, Field Marshal, Kudro,
+//                                King Darien, Rick.
+//   17 Thalia's Lieutenant    -- LAST: its ETB counters every OTHER Human, including this turn's.
+int SoldiersProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!SoldiersOrderEnabled()) { return VialProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (p.etb_each_other_own_creature_counters > 0)                     { return 17; }  // Lieutenant
+    if (p.own_creature_enters_self_counters > 0)                        { return 1; }   // Champion
+    if (p.upkeep_adds_charge)                                           { return 4; }   // Aether Vial
+    if (p.noncreature_spell_tax > 0)                                    { return 7; }   // Thalia
+    if (p.tutor_to_hand && p.tutor_max_toughness >= 0)                  { return 2; }   // Recruiter
+    if (p.tutor_to_hand)                                                { return 3; }   // Ranger-Captain
+    if (p.activated_dig_count > 0)                                      { return 5; }   // Officer
+    static const std::pair<const char*, int> kBodies[] = {
+        {"Esper Sentinel", 6}, {"Coppercoat Vanguard", 8}, {"Cathar Commando", 9},
+        {"Jirina, Dauntless General", 10}, {"Harbin, Vanguard Aviator", 11},
+        {"Brutal Cathar", 12}, {"Field Marshal", 13}, {"General Kudro of Drannith", 14},
+        {"King Darien XLVIII", 15}, {"Rick, Steadfast Leader", 16},
+    };
+    for (const auto& [name, rank] : kBodies)
+    { if (def.card.m_name == name) { return rank; } }
+    return 100 + VialProvider::CastOrderRank(s, def);
+}
+
+const char* SoldiersProvider::CastOrderTierName(int rank) const
+{
+    if (!SoldiersOrderEnabled()) { return VialProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case 1:  return "HUMAN-ENTERS WATCHER (Champion): first -- every later Human this turn is a counter";
+        case 2:  return "CREATURE TUTOR (toughness<=2): early, the fetched card can still be cast";
+        case 3:  return "CREATURE TUTOR (mv<=1): early, after Champion";
+        case 4:  return "AETHER VIAL: the only noncreature spell -- before Thalia taxes it";
+        case 5:  return "ACTIVATED-DIG BODY (Officer): cheap, its {3}{W} dig comes after the casts";
+        case 6:  return "VANILLA 1-DROP";
+        case 7:  return "THALIA (noncreature tax): AFTER every noncreature spell this turn";
+        case 8: case 9: case 10: case 11: case 12:
+                 return "BODY: cheapest/simplest first";
+        case 13: case 14: case 15: case 16:
+                 return "LORD/ANTHEM: static, order-free -- late";
+        case 17: return "ETB-COUNTERS-EACH-OTHER-HUMAN (Lieutenant): LAST -- counters this turn's Humans too";
+        default: return rank >= 100 ? "UNNAMED CARD: generic rank + 100" : nullptr;
+    }
+}
+
+// ---- SoldiersProvider::CleanupDiscardCandidates ------------------------------
+//
+// Authored BUCKET policy (analyze-deck 5i, docs/design/soldiers-discard-policy-proposal.md).
+// PROVISIONAL -- adoption is a USER review; shipped default ON per the authoring brief's contract,
+// MTG_SOLDIERS_BUCKET_DISCARD=0 restores the generic max-MV ranking.
+//
+// THE DECK: a low-curve tribal aggro deck (1-3 drops, Rick at 4, Officer's {3}{W} dig, Beachhead's
+// {5}) -- the SIMPLE shape, two buckets, plus Aether Vial as a one-copy accelerant:
+//   MANA    lands, quota 4 NET OF BOARD (board lands count first; the hand owes 4 - board).
+//           Within the bucket the most flexible land is kept: a creature-only any-colour land
+//           (Courtyard > Territory/Cavern) over a two-colour land over a basic -- the gold cards
+//           (Kudro/Jirina B, Harbin U, Darien G) need the off-colour pip.
+//   THREATS the catch-all, ordered by a PARAM-derived value (printed P+T, lord bonus x2, the
+//           Lieutenant/Champion counters, Harbin's team pump, tutors), DISTANCE-TO-PLAYABLE first:
+//           a threat that cannot be cast next turn (mana value beyond next turn's reach, or an
+//           off-colour pip no land on board/in hand can make) sheds before a castable one.
+//   VIAL    one copy, and only EARLY (turn <= 3, none on board): a Vial cast later deploys its first
+//           creature a turn after it would have been cast anyway. Kept after a 2-threat floor.
+// DEAD cards shed first: a legendary whose namesake is already on our battlefield, and a Vial
+// beyond the first (board copy included).
+// Every hand card is named (index 0 is always the policy's), and the return routes through
+// CleanupDiscardRankingWithOrder so staged-card / required-piece protections stay engine-enforced.
+static bool SoldiersBucketDiscardOn()
+{
+    static const bool on = EnvOn("MTG_SOLDIERS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::SOLDIERS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> SoldiersProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!SoldiersBucketDiscardOn()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- board census (net of board) --------------------------------------------------------------
+    int board_lands = 0, board_vials = 0;
+    bool colour_src[6] = {false, false, false, false, false, false};   // indexed by Color
+    std::vector<std::string> board_legends;
+    auto credit_colours = [&](const CardDefinition* d)
+    {
+        if (d == nullptr) { return; }
+        for (Color c : d->params.produces) { colour_src[static_cast<int>(c)] = true; }
+    };
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+        if (perm.card.IsLand()) { ++board_lands; credit_colours(d); }
+        if (d != nullptr && d->params.upkeep_adds_charge) { ++board_vials; }
+        if (perm.card.HasSupertype(Supertype::Legendary)) { board_legends.push_back(perm.card.m_name.str()); }
+    }
+    bool hand_land = false;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged || !CleanupDiscardIsLand(ap.hand[i])) { continue; }
+        hand_land = true;
+        credit_colours(def_of(ap.hand[i]));
+    }
+    const int reach_next = board_lands + (hand_land ? 1 : 0);
+
+    // ---- per-card roles ---------------------------------------------------------------------------
+    auto land_keep_score = [&](const CardDefinition* d)   // higher = more worth keeping
+    {
+        if (d == nullptr) { return 0; }
+        int v = static_cast<int>(d->params.produces.size());
+        if (d->params.colored_creature_ability_ok) { v += 1; }   // Courtyard also pays Darien's ability
+        return v;
+    };
+    auto threat_value = [&](const CardDefinition* d)
+    {
+        if (d == nullptr) { return 0; }
+        const CardParams& p = d->params;
+        int v = d->card.m_power.value_or(0) + d->card.m_toughness.value_or(0);
+        if (!p.subtypes_affected.empty() || p.affects_all_creatures)
+        { v += 2 * (p.power_bonus + p.tough_bonus); }
+        v += 3 * p.etb_each_other_own_creature_counters;
+        v += 2 * p.own_creature_enters_self_counters;
+        v += 2 * p.attack_with_n_team_pump_power;
+        if (p.tutor_to_hand)            { v += 2; }
+        if (p.activated_dig_count > 0)  { v += 1; }
+        return v;
+    };
+    auto castable_next = [&](const CardDefinition* d)
+    {
+        if (d == nullptr) { return true; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.ManaValue() > reach_next) { return false; }
+        if (mc.blue  > 0 && !colour_src[static_cast<int>(Color::Blue)])  { return false; }
+        if (mc.black > 0 && !colour_src[static_cast<int>(Color::Black)]) { return false; }
+        if (mc.green > 0 && !colour_src[static_cast<int>(Color::Green)]) { return false; }
+        if (mc.red   > 0 && !colour_src[static_cast<int>(Color::Red)])   { return false; }
+        return true;
+    };
+
+    std::vector<int> dead, lands, vials, threats;
+    int vials_seen = board_vials;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
+        if (d != nullptr && d->params.upkeep_adds_charge)
+        {
+            if (vials_seen > 0) { dead.push_back(i); } else { vials.push_back(i); }
+            ++vials_seen;
+            continue;
+        }
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary)
+            && std::find(board_legends.begin(), board_legends.end(), c.m_name.str()) != board_legends.end())
+        { dead.push_back(i); continue; }
+        threats.push_back(i);
+    }
+
+    // Lands: worst first; the land quota keeps the BEST (4 - board) of them.
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    { return land_keep_score(def_of(ap.hand[a])) < land_keep_score(def_of(ap.hand[b])); });
+    const int land_quota = std::max(0, 4 - board_lands);
+    const int land_excess = std::max(0, static_cast<int>(lands.size()) - land_quota);
+
+    // Threats: most expendable first -- uncastable-next-turn, then lower value, then higher MV.
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        const CardDefinition* da = def_of(ap.hand[a]);
+        const CardDefinition* db = def_of(ap.hand[b]);
+        const bool ca = castable_next(da), cb = castable_next(db);
+        if (ca != cb) { return !ca; }
+        const int va = threat_value(da), vb = threat_value(db);
+        if (va != vb) { return va < vb; }
+        return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]);
+    });
+    constexpr int kThreatFloor = 2;
+    const int threat_over = std::max(0, static_cast<int>(threats.size()) - kThreatFloor);
+    const bool vial_early = s.turn_number <= 3;
+
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    for (int i : dead) { shed.push_back(i); }
+    for (int k = 0; k < land_excess; ++k) { shed.push_back(lands[static_cast<std::size_t>(k)]); }
+    if (!vial_early) { for (int i : vials) { shed.push_back(i); } }
+    for (int k = 0; k < threat_over; ++k) { shed.push_back(threats[static_cast<std::size_t>(k)]); }
+    if (vial_early)  { for (int i : vials) { shed.push_back(i); } }
+    for (std::size_t k = static_cast<std::size_t>(threat_over); k < threats.size(); ++k) { shed.push_back(threats[k]); }
+    for (std::size_t k = static_cast<std::size_t>(land_excess); k < lands.size(); ++k) { shed.push_back(lands[k]); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- BurnProvider -----------------------------------------------------------
 
 bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const

@@ -665,6 +665,18 @@ public:
                "pump and Harbin's 5-Soldier attack pump add power after the board is read; and Rick's "
                "anthem switches on mid-turn once a fourth Human is controlled." }; }
     const char* Name() const override { return "Soldiers"; }
+    // MTG_SOLDIERS_ORDER -- a PROPOSED total cast order (analyze-deck 4a/5e, 2026-10-04), DEFAULT
+    // OFF: cast order is USER-OWNED (docs/design/cast-order-rankings.md, "Soldiers"). Off =>
+    // VialProvider::CastOrderRank byte-for-byte.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // Authored cleanup-discard BUCKET policy (analyze-deck 5i; docs/design/soldiers-discard-policy-
+    // proposal.md): MANA (lands net of board, quota 4) / THREATS (catch-all, param-derived value,
+    // distance-to-playable) / VIAL (one, early only), every hand card named.
+    // MTG_SOLDIERS_BUCKET_DISCARD (default ON per the authoring brief; =0 ->
+    // GenericProvider::CleanupDiscardCandidates, the max-MV fallback). PROVISIONAL (user review).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
