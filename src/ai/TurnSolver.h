@@ -1632,6 +1632,30 @@ public:
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+    // The FINITE budget of the OUTERMOST solve of this thread's current decision, or nullptr when
+    // that budget is unlimited (`--budget-ms 0`) or no solve is on the stack (the viewer's menu
+    // enumeration, the executor's committed apply). A provider-side sub-search run INSIDE a
+    // decision (the equip-route DFS) charges its work here and stops when it is exhausted -- and
+    // on nullptr runs unbounded. The USER's bar (2026-10-04): the search must be ABLE to find any
+    // line at an unlimited budget, and "not enough budget" is the only excuse at a finite one; a
+    // fixed cap of its own inside such a sub-search is exactly the excuse that bar forbids.
+    static SearchBudget*     DecisionBudget();
+    // Charge `n` units of such sub-search work to `budget` (no-op on nullptr), attributed to the
+    // census's `equip_route` bucket.
+    static void              ChargeDecisionUnits(SearchBudget* budget, int n);
+    // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
+    static bool              InRolloutPlayout();
+    // EnumerateMainPlans plus every group-wave TRANCHE the breadth cap dropped (see groupwave in
+    // TurnSolver.cpp), requested one at a time while `budget` (nullptr = unlimited) allows, so the
+    // result equals the UNCAPPED enumeration at an unlimited budget and is cut only by the budget
+    // at a finite one. `*truncated` (optional) reports a budget cut. For sub-searches that re-walk
+    // the plan space themselves and so cannot rely on a host's wave phase to re-open dropped ranks.
+    static std::vector<Plan> EnumerateMainPlansExhaustive(const GameState& state, bool is_pre_combat,
+                                                          SearchBudget* budget, bool* truncated);
+    // The thread's current decision epoch (see g_decision_epoch): bumped by every budgeted root
+    // solve, so a memo keyed on it is scoped to one decision of one game, exactly as the
+    // enumeration memo is.
+    static std::uint64_t     DecisionEpoch();
 
     // The candidate list a SEARCHED breakpoint continuation indexes with Plan::bp_choice (see the
     // field). Identical to EnumerateMainPlans except it suppresses the bp_choice fan-out, so the
