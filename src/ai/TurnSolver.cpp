@@ -1237,12 +1237,13 @@ enum Site
     // APPEND LAST ONLY -- see the enum's note below; these ordinals index a persisted name table
     // and the census's u_* column order.
     kGreedyWalk,           // EnumeratePlans' subset walk, one unit per W visits (MTG_SOLVE_CHARGE)
+    kEquipRoute,           // equip-route DFS: one unit per link applied (TurnSolver::ChargeDecisionUnits)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
-    "fs_m2_wave", "greedy_walk"
+    "fs_m2_wave", "greedy_walk", "equip_route"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -3270,6 +3271,36 @@ struct GreedyChargeGuard
     }
 };
 static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahead frame
+// TurnSolver::DecisionBudget() -- the FINITE budget of the outermost frame of this thread's current
+// decision, or nullptr when that budget is unlimited (`--budget-ms 0`) or no decision frame is on
+// the stack (the viewer's menu enumeration, the executor's committed apply). Read by sub-searches
+// a provider runs INSIDE a decision -- the equip-route DFS -- so that they are bounded by the same
+// budget as everything else and by nothing else: the USER's bar (2026-10-04) is that "not enough
+// budget" is the ONLY excuse for a missed win, so a fixed node cap inside a search that still has
+// budget is forbidden, and so is any cap at all when the budget is unlimited.
+static thread_local SearchBudget* g_decision_budget = nullptr;
+SearchBudget* TurnSolver::DecisionBudget() { return g_decision_budget; }
+// Owned by the OUTERMOST frame of a real decision -- SolveWithLookahead's budgeted root and
+// FullSearchLineHybrid (the executor's commit-the-line path, which bypasses SolveWithLookahead
+// entirely) -- and restored on exit, so a nested or later solve never inherits another frame's
+// budget. `set` false => a pure no-op scope.
+struct DecisionBudgetScope
+{
+    SearchBudget* const prev;
+    DecisionBudgetScope(bool set, SearchBudget* b) : prev(g_decision_budget)
+    { if (set) { g_decision_budget = (b != nullptr && !b->Unlimited()) ? b : nullptr; } }
+    ~DecisionBudgetScope() { g_decision_budget = prev; }
+};
+// Charge `n` units of provider-side sub-search work to the decision's budget. Attributed to its own
+// census bucket so the u_* columns still sum to `units` (turn_census.py refuses a row otherwise).
+void TurnSolver::ChargeDecisionUnits(SearchBudget* budget, int n)
+{
+    if (budget == nullptr) { return; }
+    for (int i = 0; i < n; ++i) { ConsumeAt(budget, unitsite::kEquipRoute); }
+}
+// True inside a horizon playout (SimulateToEnd's RolloutNestGuard), i.e. BEYOND the search window,
+// where the doctrine permits a greedy policy and a provider's sub-search is not owed completeness.
+bool TurnSolver::InRolloutPlayout() { return g_rollout_nest > 0; }
 
 // Decision epoch: bumped at each committed-decision driver entry (SolveWithLookahead
 // enforce_budget, FSLineWin nest 0, FullSearchLineHybrid). Scopes the per-decision caches --
@@ -3278,6 +3309,7 @@ static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahea
 // library digest's size=>content assumption only holds within one decision). Also read by the
 // MTG_CONSIDER_STATS diagnostics to scope duplicate counting the same way.
 static thread_local uint64_t g_decision_epoch = 0;
+std::uint64_t TurnSolver::DecisionEpoch() { return g_decision_epoch; }
 
 // MTG_CANTRIP_ORDER watermark: the cantrip-class cast whose breakpoint CONTINUATION is being
 // enumerated on this thread (nullptr = no continuation context / lever off). Set only via
@@ -36667,6 +36699,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // by the hand emptying -- each continuation cast consumes a card -- the same argument the
     // executor's kMaxDrawBreakpointDepth makes explicit on its side.
     bool bp_truncate = false;
+    // DIAGNOSTIC (MTG_EQUIP_ROUTE_TRACE, inside a route playout only): which SECTION of this apply
+    // is casting -- the plan's own cast loop, a breakpoint continuation, the deferred re-solve, the
+    // trailing pass, the alt-payload auto-fire. The route's DFS keys its branches on the plan's
+    // DECLARED casts, so a cast made by any other section is a branch the key cannot see.
+    const char* apply_section = "main";
     // Same-turn loyalty activation riding a CAST action (Action::loyalty_ability). Set by the
     // Action-based apply_one callers right before the call, consumed (and reset) at apply_one's
     // head; -1 = none. A captured local rather than a 21st apply_one parameter.
@@ -37314,7 +37351,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Both branches live in TurnSolver::BpUnbranchedCanon, SHARED with the executor's committed-line
         // mirror (AIEngine resolve_draw_breakpoint / the pod twin): the two worlds must resolve an
         // untargeted breakpoint identically or played != scored.
-        if (!resolved && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
+        // INSIDE AN EQUIP-ROUTE PLAYOUT THE CONTINUATION IS ALWAYS EMPTY (2026-10-04, claude_s5_gi4).
+        // The route's DFS re-enumerates the WHOLE plan space after every link, so it is itself the
+        // continuation search; the canon default is redundant there -- and worse than redundant,
+        // because the route keys its branches on a plan's DECLARED casts and merges the variants
+        // that would challenge the canon. Measured on the human's t3 board: the link `3 free
+        // Equipment + Colossus Hammer` (hold one mana for the Hammer the draws reveal -- the human's
+        // exact line) came back with the deferred canon having cast a drawn Kite Shield and a
+        // Skateboard, the held mana gone, and the win unreachable at ANY node budget. Human-play
+        // route trials never had this (s_human_play suppresses the arming), so this also makes the
+        // search-side trial and the human-side trial the same procedure.
+        if (!resolved && !EquipRouteInProgress()
+            && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
         { resolved = true; canon_used = true; }
         // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is
         // only legitimate while the ALTERNATIVES are reachable.
@@ -37528,6 +37576,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
         // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
         if (bp_truncate) { return; }
+        // Diagnostic only (default OFF -> byte-identical), and deliberately BEFORE the karoo hold
+        // below so the trace records every cast that ENTERS apply_one, including one the hold defers.
+        if (EquipRouteTraceOn() && EquipRouteInProgress() && !s_human_play)   // search frames only
+        {
+            std::fprintf(stderr, "[route-apply] cast %s section=%s sink=%zu\n",
+                         name.c_str(), apply_section, sink_stack.size());
+        }
         // A land Aura naming the DEFERRED karoo as its host (Bruna sweep D) waits until the karoo is
         // played below; its pre-paid mana stays in the float. Lockstep: AIEngine::TakeTurn's
         // cast_by_name holds it the same way. Inert unless a karoo is deferred this apply.
@@ -38803,6 +38858,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
+                apply_section = "cont0";   // route-apply trace only
                 apply_continuation_plan(extra);
                 apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                 if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
@@ -39477,6 +39533,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                         bp_play_searched_land(extra, my_bp_sink);
                         apply_continuation_precasts(extra);
+                        apply_section = "cont6";   // route-apply trace only
                         apply_continuation_plan(extra);
                         apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                     }
@@ -40073,6 +40130,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!DecisionUnpruned(UnprunedGate::AltPayload))
         for (;;)
         {
+            apply_section = "altpayload";   // route-apply trace only
             Player& ap2 = state.ActivePlayer();
             int target = -1; int amt = 0;
             for (int i = 0; i < static_cast<int>(ap2.hand.size()); ++i)
@@ -41271,6 +41329,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             return;
         }
         deferred_cantrip_resolve = false;
+        apply_section            = "deferred";   // route-apply trace only
         deferred_hand_pinned     = false;   // the nested pass pins its own first arming cast
         // MTG_CANTRIP_ORDER: bind the continuation to its site for the whole re-solve (the
         // searched list, the greedy fallback, and the continuation's own application). The
@@ -60286,6 +60345,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                  decisionwork::Exceeded() ? 1 : 0); } }
     } _dwdbg_fs(s_dw_debug_fs && fs_decision_root, state.turn_number);
     GreedyChargeGuard _gcg_fs(state, budget);   // MTG_SOLVE_CHARGE: root-level greedy walks bill here
+    // TurnSolver::DecisionBudget(): the executor's decision root (the other one is
+    // SolveWithLookahead's). Same outermost-frame predicate as the work ceiling, minus the
+    // finite-budget clause -- an unlimited budget is exactly the case this exists to announce.
+    DecisionBudgetScope _dbs_fs(g_cs_solver_nest == 0 && g_rollout_nest == 0 && g_fsline_nest == 0,
+                                budget);
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
     SearchBudget  probe_cap_budget;
@@ -62227,6 +62291,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // `depth` is what makes that legal and makes a depth>0 dispatch fatal.
     const greedywindow::Frame _gw(depth);
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    // TurnSolver::DecisionBudget(): this is one of the two decision roots (see the struct).
+    DecisionBudgetScope _dbs(enforce_budget && g_cs_solver_nest == 1 && g_rollout_nest == 0
+                                 && g_fsline_nest == 0,
+                             budget);
     // Per-decision TOTAL work ceiling (MTG_DECISION_WORK_X, default 0 = off; DecisionWorkMeter.h):
     // limit = base budget x multiplier, armed ONLY at the outermost real budgeted decision --
     // rollout / line-walk / measurement re-entries bill the root's meter, they never re-arm it.
@@ -64306,6 +64374,56 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             std::fprintf(stderr, "[devour-menu] %d plans, distinct devour counts: {%s}\n",
                          static_cast<int>(plans.size()), s.c_str());
         }
+    }
+    return plans;
+}
+
+// EnumerateMainPlans plus the group-wave TRANCHES (see groupwave), for a sub-search that re-walks the
+// plan space itself. The breadth cap drops the lowest-ranked groups from a normal enumeration and
+// records how many; a host's deferred wave phase re-opens them one tranche at a time, but a
+// provider-side DFS (the equip route) is its own host and had no wave phase -- so inside it a plan
+// needing a dropped group was unreachable AT ANY BUDGET, which is the exact defect the wave doctrine
+// exists to forbid. Same contract as the SolveWithLookahead/FSLineWin wave phases: tranche R keeps
+// the groups ranked [0..R] and requires the rank-R group, so wave 0 plus the tranches partition the
+// uncapped space exactly; tranches run while `budget` allows (nullptr = all of them).
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const GameState& state,
+                                                                       bool is_pre_combat,
+                                                                       SearchBudget* budget,
+                                                                       bool* truncated)
+{
+    if (truncated != nullptr) { *truncated = false; }
+    // max_dropped is an OUT accumulator (max over the per-land inner calls): reset, capture, restore.
+    const int saved_md = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = 0;
+    std::vector<Plan> plans = EnumerateMainPlans(state, is_pre_combat);
+    const int dropped = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = saved_md;
+    if (dropped <= 0 || !groupwave::Enabled()) { return plans; }
+    const int cap_base = EffectiveGroupCap(state);
+    for (int R = cap_base; R < cap_base + dropped; ++R)
+    {
+        if (budget != nullptr && !budget->Unlimited() && (budget->Exhausted() || budget->Overrun()))
+        {
+            if (truncated != nullptr) { *truncated = true; }
+            break;
+        }
+        groupwave::g_state.tranche_rank   = R;
+        groupwave::g_state.bound_limit    = (budget != nullptr && !budget->Unlimited())
+                                          ? static_cast<double>(budget->Remaining()) : 0.0;
+        groupwave::g_state.bound_exceeded = false;
+        std::vector<Plan> tp = EnumeratePlansWithLand(state, is_pre_combat);
+        groupwave::g_state.tranche_rank   = -1;
+        if (groupwave::g_state.bound_exceeded)
+        {
+            if (truncated != nullptr) { *truncated = true; }
+            break;
+        }
+        if (groupwave::ProbeOn())
+        {
+            groupwave::g_probe.tranches.fetch_add(1);
+            groupwave::g_probe.enumerated.fetch_add(tp.size());
+        }
+        plans.insert(plans.end(), std::make_move_iterator(tp.begin()), std::make_move_iterator(tp.end()));
     }
     return plans;
 }
@@ -69138,7 +69256,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     return t;
 }
 #define MTG_TURN_CENSUS_FIELDS(X)                                                                 \
-    /* ---- WHERE THE UNITS WENT. These 14 sum exactly to `units`, and turn_census.py ABORTS if    \
+    /* ---- WHERE THE UNITS WENT. These 15 sum exactly to `units`, and turn_census.py ABORTS if    \
      * they ever don't -- add a bucket with every new Consume site. ---- */                       \
     X(u_rollout_step,     MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRolloutStep]))          \
     X(u_fs_main2,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsMain2]))              \
@@ -69154,6 +69272,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_fs_bp_node,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsBpNode]))             \
     X(u_fs_m2_wave,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsM2Wave]))             \
     X(u_greedy_walk,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kGreedyWalk]))           \
+    X(u_equip_route,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEquipRoute]))           \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \

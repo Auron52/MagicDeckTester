@@ -23591,12 +23591,11 @@ private:
     bool prev;
 };
 
-// MTG_EQUIP_ROUTE_MEMO=0 bypasses the per-board verdict memo. The EDF route carries the same hatch
-// for the same reason: BoardKey does NOT hash `equipped_to`, so two frames differing only in which
-// Equipment sits on which host share an entry, and a root's own trial becomes a silent hit on a
-// rollout's earlier verdict for a board that is not this one. The cut's re-verify then REFUTES the
-// plan (it replays the recorded policy and no kill appears), which is safe but loses the line, and
-// nothing in the trace says why.
+// MTG_EQUIP_ROUTE_MEMO=0 bypasses the per-board verdict memo (TrialPolicy; scoped to one decision,
+// keyed on RouteStateKey). The EDF route carries the same hatch for the same reason: a key that
+// misses a feature the verdict depends on makes a root's own trial a silent hit on a rollout's
+// earlier verdict for a board that is not this one, the cut's re-verify then REFUTES the plan, and
+// nothing in the trace says why. Bypassing the memo is how that is diagnosed.
 inline bool MemoEnabled()
 {
     static const bool v = EnvOn("MTG_EQUIP_ROUTE_MEMO", true);
@@ -23659,35 +23658,139 @@ static int CastCount(const TurnSolver::Plan& p)
 //                 budget" becomes the only way it can miss -- which is the USER's bar.
 enum class Adv { MostCasts, PayloadFirst, ChainFirst, Search };
 
-// Cost bounds for Adv::Search. Both bound a SOUND detector (a missed win costs the turn it would
-// have saved and nothing else), so they are safe to tune for cost.
-inline int SearchWidth()
+// ---- THE SEARCH'S BOUNDS ARE THE DECISION'S BUDGET, NOT ITS OWN (USER, 2026-10-04) -------------
+// "There should be no question of whether the search can find the line. It must be able to. The
+// bigger question should be whether it finds it within the budget and, if it doesn't, then we can
+// fill that particular gap with the heuristics, which should be good at finding their way to the
+// win." And: completeness must hold at an unlimited budget AND at a very high finite one.
+//
+// So inside the search window the DFS carries NO cap of its own. It charges one unit per link
+// applied to TurnSolver::DecisionBudget() -- the same budget every other search of the decision
+// draws on -- and stops when that is exhausted; with no finite budget (`--budget-ms 0`) it runs to
+// the end of the tree, which the transposition fold keeps finite. The greedy rungs above it are the
+// cheap CERTIFICATE: a found kill is a proof, so trying the one-playout policy first can only save
+// work, never change the verdict, and ~90% of trials end there. The two places that still carry a
+// fixed cap are the two places that have NO decision budget to charge:
+//   * BEYOND THE HORIZON (TurnSolver::InRolloutPlayout) the doctrine permits a greedy policy, so the
+//     rollout trial runs the certificate alone by default; MTG_EQUIP_ROUTE_ROLLOUT_NODES=N re-arms a
+//     capped DFS there as a measured quality lever (it was +48% wall on the 14 references at 256).
+//   * The VIEWER's menu frames have no budget at all; MTG_EQUIP_ROUTE_VIEWER_NODES bounds the DFS so
+//     a click comes back, and the trace says CUT when it bound.
+// Previous shape, for the record: width 32 x 256 nodes, flag default OFF -- which made the greedy
+// the policy and the search an opt-in retry, i.e. the inversion the user ruled against.
+inline int NodeUnits()
 {
+    // Units charged per DFS link. A unit is one simulated turn-step (SearchBudget.h); a link is one
+    // EnumerateMainPlans + one ApplyPlan on a copy, the same work a rollout step does for its main.
     static const int v = []() -> int {
-        const char* e = std::getenv("MTG_EQUIP_ROUTE_SEARCH_WIDTH");
-        const int n = (e && *e) ? std::atoi(e) : 32;
-        return n > 0 ? n : 32;
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_NODE_UNITS");
+        const int n = (e && *e) ? std::atoi(e) : 1;
+        return n > 0 ? n : 1;
     }();
     return v;
 }
-inline int SearchNodes()
+inline int RolloutDfsNodes()
 {
     static const int v = []() -> int {
-        const char* e = std::getenv("MTG_EQUIP_ROUTE_SEARCH_NODES");
-        const int n = (e && *e) ? std::atoi(e) : 256;
-        return n > 0 ? n : 256;
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_ROLLOUT_NODES");
+        const int n = (e && *e) ? std::atoi(e) : 0;
+        return n > 0 ? n : 0;
     }();
     return v;
 }
+inline int ViewerDfsNodes()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_VIEWER_NODES");
+        const int n = (e && *e) ? std::atoi(e) : 16384;
+        return n > 0 ? n : 16384;
+    }();
+    return v;
+}
+// Links deep the DFS may go. NOT a cost bound: every link casts at least one card from hand and the
+// library is finite, so a chain cannot run longer than the deck -- this only sizes the recursion.
+constexpr int kDfsMaxLinks = 128;
 inline bool SearchRetryEnabled()
 {
-    static const bool v = EnvOn("MTG_EQUIP_ROUTE_SEARCH");   // DEFAULT OFF -- measuring
+    // DEFAULT ON (2026-10-04). =0 is the A/B control that restores the greedy-only route.
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_SEARCH", true);
     return v;
 }
 inline bool ChainRetryEnabled()
 {
     static const bool v = EnvOn("MTG_EQUIP_ROUTE_CHAIN");    // DEFAULT OFF -- measuring
     return v;
+}
+// BRANCH ON EVERY PLAN, not one representative per purchase (DEFAULT OFF -- diagnostic).
+//
+// RunSearchRec dedups the link's plans by PurchaseKey -- paid cast names plus the land axis -- and
+// keeps ONE representative per purchase (most free casts, then value), on the claim that the free
+// casts are dominant inside the chain and so "not a branch". This opens that claim to measurement:
+// with it on, every plan with a cast is its own branch. The diagnosis it was built for is that the
+// route is OPTION-bound rather than budget-bound on claude_s5_gi4 t3 -- 54 enumerated plans collapse
+// to 5 branches and the DFS exhausts its tree in 6 nodes, identically at 256 and at 200,000 nodes.
+inline bool SearchAllPlans()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_SEARCH_ALL");
+    return v;
+}
+// PER-PLAN DUMP at the DFS ROOT (diagnostic, DEFAULT OFF; needs MTG_EQUIP_ROUTE_TRACE too). Every
+// enumerated plan's full action list in ACTION ORDER -- casts with mana value, equips as
+// source->host, the land -- plus its purchase key and, for each branch tried, the board the apply
+// actually produced (hand, untapped mana, drop). `buy[]` prints only the paid casts of the kept
+// representative, which is a statement about the KEY; this is a statement about the PLAN and the
+// APPLY, and the two are allowed to disagree (a cast the apply could not pay is dropped silently).
+inline bool TracePlans()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_TRACE_PLANS");
+    return v;
+}
+static std::string PlanText(const TurnSolver::Plan& p)
+{
+    std::string s = !p.land_decided ? "land=(undecided)"
+                  : p.land_to_play.empty() ? "land=(defer)" : ("land=" + p.land_to_play);
+    for (const Action& a : p.actions)
+    {
+        s += " ";
+        switch (a.kind)
+        {
+            case Action::Kind::CastFromHand:
+                s += "C:";
+                s += a.def ? a.def->card.m_name.str() : std::string("?");
+                s += "{" + std::to_string(a.def ? a.def->card.m_mana_cost.ManaValue() : -1) + "}";
+                break;
+            case Action::Kind::Equip:
+                s += "E:" + std::to_string(a.sac_source_id) + "->" + std::to_string(a.sac_victim_id);
+                break;
+            case Action::Kind::AttachAllEquipment:
+                s += "EALL->" + std::to_string(a.sac_victim_id);
+                break;
+            default:
+                s += "k" + std::to_string(static_cast<int>(a.kind));
+                if (!a.card_name.str().empty()) { s += ":" + a.card_name.str(); }
+                break;
+        }
+    }
+    return s;
+}
+static std::string BoardText(const GameState& s, int me)
+{
+    int untapped_lands = 0, lands = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || !q.card.IsLand()) { continue; }
+        ++lands;
+        if (!q.tapped) { ++untapped_lands; }
+    }
+    std::string h;
+    for (const Card& c : s.players[me].hand)
+    {
+        if (!h.empty()) { h += ", "; }
+        h += c.m_name.str();
+    }
+    return "lands=" + std::to_string(lands) + " untapped=" + std::to_string(untapped_lands)
+         + " drops_used=" + std::to_string(s.players[me].lands_played_this_turn)
+         + " hand[" + std::to_string(s.players[me].hand.size()) + "]: " + h;
 }
 
 // Does this card WATCH equipment -- i.e. does putting it on the battlefield make every later
@@ -23720,7 +23823,7 @@ static std::uint64_t PurchaseKey(const TurnSolver::Plan& p)
     for (const Action& a : p.actions)
     {
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
-        if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }   // free: forced, not a choice
+        if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }   // forced, not a choice
         bought.push_back(a.def->card.m_name.str());
     }
     std::sort(bought.begin(), bought.end());
@@ -23741,6 +23844,13 @@ static std::uint64_t PurchaseKey(const TurnSolver::Plan& p)
     mix(0xA24BAED4963EE407ULL);
     for (const char c : p.fetch_target) { mix(static_cast<std::uint64_t>(c)); }
     mix(static_cast<std::uint64_t>(p.rad_mode + 2));
+    // THE EQUIP ASSIGNMENT IS DELIBERATELY NOT IN THE KEY (tried 2026-10-04 as
+    // MTG_EQUIP_ROUTE_EQUIP_KEY, measured, removed). With it, the width filled with equip
+    // PERMUTATIONS of one spend: at claude_s5_gi4's t3 root 16 of the 32 branches were
+    // `Skateboard + Blade + Hammer` under different attach sets, every one landing on the same hand
+    // and the same mana, and the spend that wins ranked past the bound. Which host carries what only
+    // matters at the LAST link, where `wins_this_turn` is read straight off the enumerated plan, so
+    // the representative's attach set is never the thing that decides the chain.
     return h;
 }
 
@@ -23790,15 +23900,123 @@ static void ChainTerms(const TurnSolver::Plan& p, int& watchers, int& waste)
     }
 }
 
-static int Run(GameState& s, int me, Adv adv);
+enum class RunMode;
+static int Run(GameState& s, int me, Adv adv, RunMode mode);
+
+// TRANSPOSITION FOLD for the DFS (identity fold, DEFAULT ON; MTG_EQUIP_ROUTE_TRANSPOSE=0 is the
+// control). A board already searched to at least this many remaining links, and found winless
+// with node budget to spare, has the same winless subtree now, so re-walking it is work with no
+// information in it. The key is comboroute::BoardKey (hand, battlefield with tapped + attachments,
+// life, drops, float, library top) plus the graveyard and exile.
+//
+// SCOPED TO THE DECISION, NOT THE SEARCH, and that is where the saving is. Measured within one
+// search the fold never fires (PurchaseKey already merges the plans that would reach one board:
+// `boards == nodes` in every trace). Across the trials of one decision it is the common case: the
+// route is trialled at every rollout frame, and the frames that fail all walk the same handful of
+// post-chain boards -- which is what made claude_s8_gi7 a 13-minute game under the DFS (every
+// failing frame exhausting 256 fresh nodes). One decision epoch, one table; cleared on the epoch.
+//
+// SOUNDNESS: a board is recorded only AFTER its subtree returned 0 with nodes still left -- a
+// subtree cut by the node bound proves nothing and is not recorded. Hits skip uncharged.
+inline bool TransposeEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_TRANSPOSE", true);
+    return v;
+}
+static std::uint64_t RouteStateKey(const GameState& s, int me)
+{
+    std::uint64_t h = comboroute::BoardKey(s, me);
+    comboroute::Mix(h, 0xA5A5A5A5A5A5A5A5ULL);
+    for (const Card& c : s.players[me].graveyard)
+    { comboroute::Mix(h, static_cast<std::uint64_t>(c.m_number) * 13 + 5); }
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.exile.size()));   // exile is a GameState zone
+    // What BoardKey leaves out and the chain's verdict depends on: SUMMONING SICKNESS (the host cast
+    // this turn cannot attack, so the same hand+battlefield is lethal on one board and not on the
+    // other) and COUNTERS (a Remote Farm's depletion counters decide whether it pays for the Hammer).
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        std::uint64_t v = static_cast<std::uint64_t>(p.card.m_number) * 17 + (p.entered_this_turn ? 1 : 0);
+        for (std::size_t i = 0; i < p.counters.size(); ++i)
+        {
+            v = v * 31 + (static_cast<std::uint64_t>(p.counters[i].type) + 1) * 101
+                + static_cast<std::uint64_t>(p.counters[i].count);
+        }
+        comboroute::Mix(h, v);
+    }
+    return h;
+}
+// Winless boards of the current decision: board key -> the most remaining links it was searched
+// with (and found winless, with node budget to spare).
+using Seen = std::unordered_map<std::uint64_t, int>;
+struct DecisionSeen
+{
+    std::uint64_t epoch = ~0ULL;
+    Seen          seen;
+    std::uint64_t hits = 0, visits = 0;
+};
+inline DecisionSeen& DSeen() { static thread_local DecisionSeen d; return d; }
+inline Seen& SeenForThisDecision()
+{
+    DecisionSeen& d = DSeen();
+    const std::uint64_t ep = TurnSolver::DecisionEpoch();
+    if (d.epoch != ep || d.seen.size() > (1u << 20))
+    {
+        if (Trace() && d.visits > 0)
+        {
+            std::fprintf(stderr, "[equip-route] transposition table: %llu hits / %llu visits, %zu boards (epoch %llu)\n",
+                         (unsigned long long)d.hits, (unsigned long long)d.visits, d.seen.size(),
+                         (unsigned long long)d.epoch);
+        }
+        d.seen.clear();
+        d.epoch  = ep;
+        d.hits   = 0;
+        d.visits = 0;
+    }
+    return d.seen;
+}
 
 // DFS over DISTINCT PURCHASES. One node = one link applied on a copy; `nodes` is the shared bound.
 // On success `s` holds the winning board, exactly as Run leaves it, so the apply path is lockstep
 // with the trial path here too.
-static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
+// What bounds one DFS, and whether a bound bit. `cut` is sticky: once a bound stops the walk, every
+// verdict below it is "not searched" rather than "winless", so nothing is recorded in the fold.
+struct DfsBounds
 {
-    if (iters_left <= 0 || nodes <= 0) { return 0; }
-    std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    SearchBudget* budget     = nullptr;   // charged NodeUnits() per link; nullptr = not charged
+    int           nodes_left = std::numeric_limits<int>::max();   // fixed cap where no budget exists
+    bool          cut        = false;     // the walk STOPPED: budget exhausted or node cap reached
+    bool          partial    = false;     // a tranche was skipped for its bound: the walk goes on over
+                                          // the branches it has, but no winless verdict below is a proof
+    int           nodes_used = 0;
+};
+// Mana the plan spends on things other than casts (paid equips, activations). Inside a chain that
+// is never worth doing before the LAST link -- the attack is at the end and metalcraft makes the
+// equips free by then -- so within one purchase the representative is the plan that spends the
+// least of it, which is what keeps that mana available for the casts the next link's draws reveal.
+static int NonCastSpend(const TurnSolver::Plan& p)
+{
+    int n = 0;
+    for (const Action& a : p.actions)
+    { if (a.kind != Action::Kind::CastFromHand) { n += a.cost.ManaValue(); } }
+    return n;
+}
+static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen& seen)
+{
+    if (iters_left <= 0 || b.cut) { return 0; }
+    // EXHAUSTIVE: the breadth cap's dropped groups come back as tranches while the budget allows,
+    // so a purchase the cap ranked out is a branch here, not a line that no budget could reach.
+    bool trunc = false;
+    std::vector<TurnSolver::Plan> plans =
+        TurnSolver::EnumerateMainPlansExhaustive(s, /*is_pre_combat=*/true, b.budget, &trunc);
+    if (trunc)
+    {
+        // A tranche was withheld. If the budget is spent that is the cut; otherwise the tranche's
+        // own enumeration bound (its plan space exceeds the units left) kept it out, and the walk
+        // continues over wave 0 -- but nothing below here can be recorded as searched-and-winless.
+        if (b.budget != nullptr && (b.budget->Exhausted() || b.budget->Overrun())) { b.cut = true; }
+        else { b.partial = true; }
+    }
     if (plans.empty()) { return 0; }
     for (const TurnSolver::Plan& p : plans)
     {
@@ -23808,28 +24026,60 @@ static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
             return 1;
         }
     }
-    // One representative per purchase, and within a purchase the MOST free casts: those are
-    // dominant inside the chain (an artifact toward metalcraft plus a watcher draw), so they are
-    // not a branch -- only the spending is.
+    // One representative per purchase. Within a purchase: the BASE plan over any breakpoint
+    // VARIANT, then the least non-cast spend, then the most free casts, then value.
+    //
+    // BASE OVER VARIANT is a completeness condition, not a preference. A variant is the base's
+    // casts plus one fixed continuation resolved mid-apply, and the purchase key does not see that
+    // continuation -- so with variants admitted, a purchase's one representative could be a variant
+    // whose continuation spends the mana, with the base (EMPTY continuation inside a route playout,
+    // see TurnSolver's bp_searched_plan) and every sibling variant merged away: the canon hole one
+    // level up. The base dominates them all here, because the DFS re-enumerates after every link
+    // and so reaches every continuation a variant could carry, as a branch. Variants are kept only
+    // for a purchase that has NO base plan, each as its own branch.
+    // MOST FREE CASTS: a {0} Equipment cast is an artifact toward metalcraft plus a watcher draw, so
+    // it is dominant inside the chain and not a branch -- only the spending is.
+    const bool all_plans = SearchAllPlans();
     std::unordered_map<std::uint64_t, const TurnSolver::Plan*> reps;
     std::vector<std::uint64_t> order;
-    for (const TurnSolver::Plan& p : plans)
+    std::uint64_t synth = 0;                 // SearchAllPlans: a unique key per plan, so nothing merges
+    int base_keys = 0;                       // distinct purchases among BASE plans (self-check below)
+    const auto is_base = [](const TurnSolver::Plan& p) { return p.bp_choice < 0 && !p.bp_all; };
+    const auto better_rep = [](const TurnSolver::Plan& n, const TurnSolver::Plan& o) {
+        const int sn = NonCastSpend(n), so = NonCastSpend(o);
+        if (sn != so) { return sn < so; }
+        const int cn = CastCount(n), co = CastCount(o);
+        if (cn != co) { return cn > co; }
+        return n.value > o.value;
+    };
+    for (int pass = 0; pass < 2; ++pass)
     {
-        if (CastCount(p) <= 0) { continue; }
-        const std::uint64_t k = PurchaseKey(p);
-        const auto it = reps.find(k);
-        if (it == reps.end())
+        for (const TurnSolver::Plan& p : plans)
         {
-            reps.emplace(k, &p);
-            order.push_back(k);
-            continue;
+            if (CastCount(p) <= 0) { continue; }
+            const bool base = all_plans || is_base(p);
+            if ((pass == 0) != base) { continue; }
+            std::uint64_t k = all_plans ? (0xF000000000000000ULL | synth++) : PurchaseKey(p);
+            if (!base)
+            {
+                if (reps.count(k) != 0) { continue; }     // its base is a branch: dominated
+                k ^= 0x5BD1E9955BD1E995ULL * static_cast<std::uint64_t>(p.bp_choice + 2);
+            }
+            const auto it = reps.find(k);
+            if (it == reps.end())
+            {
+                reps.emplace(k, &p);
+                order.push_back(k);
+                if (base) { ++base_keys; }
+                continue;
+            }
+            if (better_rep(p, *it->second)) { it->second = &p; }
         }
-        const int c_new = CastCount(p), c_old = CastCount(*it->second);
-        if (c_new > c_old || (c_new == c_old && p.value > it->second->value)) { it->second = &p; }
     }
     if (order.empty()) { return 0; }
-    // Try the biggest payload first: it only changes WHICH win is found first and how fast, never
-    // whether one is found, because every purchase below the width bound is tried.
+    // Try the biggest payload first. At an unlimited budget this only changes WHICH win is found
+    // first and how fast (every purchase is tried); under the shipped width bound it is
+    // load-bearing, because a branch ranked past `width` is not tried at all.
     std::sort(order.begin(), order.end(),
               [&](std::uint64_t a, std::uint64_t b) {
                   const TurnSolver::Plan* pa = reps[a];
@@ -23840,11 +24090,16 @@ static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
                   if (ca != cb) { return ca > cb; }
                   return pa->value > pb->value;
               });
-    const int width = std::min<int>(SearchWidth(), static_cast<int>(order.size()));
+    // NO WIDTH BOUND: a branch past a width is a line the search never looks at, which is the one
+    // thing neither an unlimited nor a large finite budget may do. The budget bounds the walk.
+    const int width = static_cast<int>(order.size());
     if (Trace())
     {
-        std::fprintf(stderr, "[equip-route]   dfs d%d nplans=%d purchases=%d width=%d nodes=%d\n",
-                     iters_left, (int)plans.size(), (int)order.size(), width, nodes);
+        std::fprintf(stderr, "[equip-route]   dfs d%d nplans=%d branches=%d links_so_far=%d budget_left=%s\n",
+                     iters_left, (int)plans.size(), (int)order.size(), b.nodes_used,
+                     b.budget != nullptr ? std::to_string(b.budget->Remaining()).c_str()
+                                         : (b.nodes_left < std::numeric_limits<int>::max()
+                                                ? std::to_string(b.nodes_left).c_str() : "unlimited"));
         // The two things a missing purchase could blame: the HAND (the card is not there) and the
         // enumerator (it is there and never offered). Print both so the next step is not a guess.
         std::string hand;
@@ -23873,24 +24128,52 @@ static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
         // definition prototype), which hashed every paid cast alike and collapsed six purchases
         // into four -- silently deleting the only one that wins. A mismatch here means the KEY is
         // wrong, not the enumeration.
+        // SORTED, exactly as PurchaseKey sorts `bought`. Appending in ACTION order instead made this
+        // check fire on every frame where two plans buy the same set in a different cast order
+        // ("A+B" vs "B+A"): on claude_s5_gi4 t3 it reported `keys=22 distinct purchases=28`, six
+        // phantom purchases, and sent an investigation after a key bug that was not there. A
+        // self-check must model the key it is checking.
+        // ...and it must model ALL of the key's axes (the land's searched sub-decisions included),
+        // or a check that folds one reads every honest widening as a mismatch.
         std::set<std::string> direct;
         for (const TurnSolver::Plan& p : plans)
         {
             if (CastCount(p) <= 0) { continue; }
-            std::string b = !p.land_decided ? "?" : p.land_to_play;
+            std::vector<std::string> names;
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
                 if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }
-                b += "+" + a.def->card.m_name.str();
+                names.push_back(a.def->card.m_name.str());
             }
+            std::sort(names.begin(), names.end());
+            std::string b = !p.land_decided ? "?" : p.land_to_play;
+            b += "/" + p.land_face + "/" + p.fetch_target + "/" + std::to_string(p.rad_mode);
+            for (const std::string& n : names) { b += "+" + n; }
             direct.insert(b);
         }
-        if (static_cast<int>(direct.size()) != static_cast<int>(order.size()))
+        // Search frames only: a human-menu frame enumerates ~130k plans on the same board the search
+        // sees 54 on, and printing them is ten minutes of I/O that says nothing about the search.
+        if (TracePlans() && iters_left == kDfsMaxLinks && !HumanPlayActive())
+        {
+            for (int i = 0; i < static_cast<int>(plans.size()); ++i)
+            {
+                const TurnSolver::Plan& p = plans[i];
+                std::fprintf(stderr, "[equip-route]     plan[%d] val=%d win=%d key=%016llx %s\n",
+                             i, p.value, p.wins_this_turn ? 1 : 0,
+                             static_cast<unsigned long long>(
+                                 all_plans ? 0ULL : PurchaseKey(p)),
+                             PlanText(p).c_str());
+            }
+            std::fprintf(stderr, "[equip-route]     root board: %s\n", BoardText(s, me).c_str());
+        }
+        // Inert under SearchAllPlans, where one key PER PLAN is the point and a "mismatch" is the
+        // expected state rather than a defect.
+        if (!all_plans && static_cast<int>(direct.size()) != base_keys)
         {
             std::fprintf(stderr,
-                "[equip-route]     !! DEDUP MISMATCH: keys=%d distinct purchases=%d\n",
-                (int)order.size(), (int)direct.size());
+                "[equip-route]     !! DEDUP MISMATCH: base keys=%d distinct purchases=%d (branches %d)\n",
+                base_keys, (int)direct.size(), (int)order.size());
         }
         for (int i = 0; i < width; ++i)
         {
@@ -23909,13 +24192,66 @@ static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
                          i, buy.empty() ? "(free casts only)" : buy.c_str());
         }
     }
-    for (int i = 0; i < width && nodes > 0; ++i)
+    for (int i = 0; i < width; ++i)
     {
-        --nodes;
+        // THE BOUND, checked and charged per link BEFORE the apply (the apply is the work).
+        if (b.budget != nullptr && (b.budget->Exhausted() || b.budget->Overrun())) { b.cut = true; break; }
+        if (b.nodes_left <= 0) { b.cut = true; break; }
+        --b.nodes_left;
+        ++b.nodes_used;
+        TurnSolver::ChargeDecisionUnits(b.budget, NodeUnits());
         GameState next = s;
         TurnSolver::ApplyPlan(next, *reps[order[i]], /*is_pre_combat=*/true);
-        if (RunSearchRec(next, me, iters_left - 1, nodes) == 1)
+        if (Trace() && TracePlans() && iters_left == kDfsMaxLinks && !HumanPlayActive())
         {
+            // The plan the branch APPLIED and the board it PRODUCED, side by side.
+            std::fprintf(stderr, "[equip-route]     branch[%d] applied %s\n", i,
+                         PlanText(*reps[order[i]]).c_str());
+            std::fprintf(stderr, "[equip-route]       -> %s\n", BoardText(next, me).c_str());
+        }
+        std::uint64_t sk = 0;
+        if (TransposeEnabled())
+        {
+            // Same board, already searched winless with at least as many links left: nothing new
+            // below it. (The link that discovered the duplicate was charged -- its apply was real.)
+            sk = RouteStateKey(next, me);
+            ++DSeen().visits;
+            const Seen::const_iterator it = seen.find(sk);
+            if (it != seen.end() && it->second >= iters_left - 1)
+            {
+                ++DSeen().hits;
+                if (Trace() && iters_left == kDfsMaxLinks)
+                { std::fprintf(stderr, "[equip-route]     branch[%d] = transposition, skipped\n", i); }
+                continue;
+            }
+        }
+        const int sub = RunSearchRec(next, me, iters_left - 1, b, seen);
+        if (sub == 0 && TransposeEnabled() && !b.cut && !b.partial)
+        {
+            // Fully searched (no bound cut it, no tranche withheld) and winless: remember it here.
+            int& rec = seen[sk];
+            rec = std::max(rec, iters_left - 1);
+        }
+        if (sub == 1)
+        {
+            // WHICH branch won, and what it casts -- INCLUDING the free casts, which `buy[]` above
+            // deliberately omits. This is the line that says whether the dedup's premise holds: if a
+            // winning branch differs from its purchase's kept representative only in free casts, then
+            // "two plans differing only in their free casts advance the chain identically" is false
+            // and the purchase key is the wrong unit of branching.
+            if (Trace())
+            {
+                std::string cast;
+                for (const Action& a : reps[order[i]]->actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                    if (!cast.empty()) { cast += ", "; }
+                    cast += a.def->card.m_name.str();
+                    if (a.def->card.m_mana_cost.ManaValue() == 0) { cast += "(free)"; }
+                }
+                std::fprintf(stderr, "[equip-route]   WON d%d branch %d/%d :: %s\n",
+                             iters_left, i, width, cast.empty() ? "(no casts)" : cast.c_str());
+            }
             s = next;
             return 1;
         }
@@ -23923,15 +24259,57 @@ static int RunSearchRec(GameState& s, int me, int iters_left, int& nodes)
     return 0;
 }
 
-static int RunSearch(GameState& s, int me)
+// Trial = the detector asking whether a kill exists (bounded by the regime below). Apply = replaying
+// a verdict the trial already proved on this very board: UNBOUNDED, because the trial may have spent
+// the budget finding it and a replay that then came back empty would refute its own certificate.
+enum class RunMode { Trial, Apply };
+static int RunSearch(GameState& s, int me, RunMode mode)
 {
     Scope _guard;                       // no nested route emission for the whole search
-    int nodes = SearchNodes();
-    const int r = RunSearchRec(s, me, MaxIter(), nodes);
+    DfsBounds   b;
+    const char* regime = "apply";
+    if (mode == RunMode::Trial)
+    {
+        if (TurnSolver::InRolloutPlayout())
+        {
+            // BEYOND THE HORIZON: the certificate alone unless the rollout lever is armed.
+            if (RolloutDfsNodes() <= 0)
+            {
+                if (Trace()) { std::fprintf(stderr, "[equip-route] t%d SEARCH skipped (rollout)\n", s.turn_number); }
+                return 0;
+            }
+            b.nodes_left = RolloutDfsNodes();
+            regime = "rollout";
+        }
+        else if (HumanPlayActive())
+        {
+            b.nodes_left = ViewerDfsNodes();
+            regime = "viewer";
+        }
+        else
+        {
+            // IN THE WINDOW: the decision's own budget, and nothing else. nullptr = unlimited.
+            b.budget = TurnSolver::DecisionBudget();
+            regime   = b.budget != nullptr ? "budget" : "unlimited";
+        }
+    }
+    Seen& seen = SeenForThisDecision();
+    const std::uint64_t hits0 = DSeen().hits;
+    const int r = RunSearchRec(s, me, kDfsMaxLinks, b, seen);
     if (Trace())
     {
-        std::fprintf(stderr, "[equip-route] t%d SEARCH %s (nodes left %d/%d)\n",
-                     s.turn_number, r == 1 ? "LETHAL" : "no win", nodes, SearchNodes());
+        std::fprintf(stderr,
+                     "[equip-route] t%d SEARCH %s (%s%s; %d links applied, tt hits %llu, tt boards %zu)\n",
+                     s.turn_number, r == 1 ? "LETHAL" : (b.cut ? "CUT" : (b.partial ? "PARTIAL" : "no win")), regime,
+                     b.budget != nullptr
+                         ? (" " + std::to_string(b.budget->Remaining()) + " units left").c_str() : "",
+                     b.nodes_used, (unsigned long long)(DSeen().hits - hits0), seen.size());
+    }
+    if (mode == RunMode::Apply && r != 1)
+    {
+        // Must not happen: the board carried a proven verdict and the replay is unbounded.
+        std::fprintf(stderr, "[equip-route] !! t%d APPLY replay found no kill on a board the trial proved (links %d)\n",
+                     s.turn_number, b.nodes_used);
     }
     return r;
 }
@@ -23939,9 +24317,9 @@ static int RunSearch(GameState& s, int me)
 // Play the turn out. Returns 1 iff the realised board is lethal this turn, else 0. `s` is mutated,
 // so the caller decides whether it is a copy (trial) or the live state (apply) -- the two paths run
 // THIS function and nothing else, which is the lockstep guarantee.
-static int Run(GameState& s, int me, Adv adv)
+static int Run(GameState& s, int me, Adv adv, RunMode mode)
 {
-    if (adv == Adv::Search) { return RunSearch(s, me); }
+    if (adv == Adv::Search) { return RunSearch(s, me, mode); }
     Scope _guard;                       // no nested route emission for the whole playout
     int iters = 0, links = 0;
     for (; iters < MaxIter(); ++iters)
@@ -24079,10 +24457,15 @@ bool EquipRoutePiecesInPlace(const GameState& s, int me)
     static const bool s_topmain = EnvOn("MTG_EQUIP_ROUTE_TOPMAIN");   // DEFAULT OFF -- measuring
     if (s_topmain && s.spells_cast_this_turn != 0) { return false; }
     // THE CHEAP GATE, and it is deliberately a board-inventory conjunction rather than a score --
-    // the same discipline ComboOffPossible is held to. Three things have to be true for the chain
-    // to exist at all: a DRAW watcher so a cast refills the hand, a creature to carry the pile, and
-    // at least one free Equipment to start it. Without all three there is nothing to play out, so
-    // the frame pays only this scan.
+    // the same discipline ComboOffPossible is held to. It is a NECESSARY condition only (USER
+    // 2026-10-04: the search must be ABLE to find any line, so a gate may refuse only a frame on
+    // which the chain cannot exist). Three things have to be true: a DRAW watcher so a cast refills
+    // the hand -- on the battlefield OR in hand, since casting the Paladin first and chaining after
+    // is a line; a creature already on the battlefield to carry the pile (one cast this turn cannot
+    // attack, there is no haste in the archetype); and an artifact in hand to start the draws --
+    // free OR paid, since a paid Equipment that draws into the free ones is a line too. The
+    // earlier gate required the watcher on the battlefield and a FREE artifact, and both of those
+    // refusals could hide a kill no budget would then find.
     bool draw_watcher = false, host = false;
     for (const Permanent& p : s.battlefield)
     {
@@ -24093,33 +24476,36 @@ bool EquipRoutePiecesInPlace(const GameState& s, int me)
         { draw_watcher = true; }
         if (p.card.IsCreature()) { host = true; }
     }
-    bool free_art = false;
-    if ((draw_watcher && host) || equiproute::Trace())   // short-circuit kept off the trace path
+    bool watcher_in_hand = false, art_in_hand = false;
+    if (host || equiproute::Trace())   // short-circuit kept off the trace path
     {
         for (const Card& c : s.players[me].hand)
         {
             const CardDefinition* d = comboroute::DefOf(c);
-            if (d != nullptr && d->card.HasType(CardType::Artifact)
-                && d->card.m_mana_cost.ManaValue() == 0)
-            { free_art = true; break; }
+            if (d == nullptr) { continue; }
+            if (d->params.draw_on_equipment_etb || !d->params.draw_on_cast_subtypes.empty())
+            { watcher_in_hand = true; }
+            if (d->card.HasType(CardType::Artifact)) { art_in_hand = true; }
         }
     }
+    const bool watcher = draw_watcher || watcher_in_hand;
     // GATE CENSUS (diagnostic). Bounded, because this site is reached once per frame per rollout:
     // without it a missing turn in the playout trace is unattributable -- gate false, or reached
     // and memo-hit. Counts per turn and prints only when a turn's verdict pattern CHANGES.
     if (equiproute::Trace())
     {
         static thread_local int last_turn = -1, last_code = -1;
-        const int code = (draw_watcher ? 4 : 0) | (host ? 2 : 0) | (free_art ? 1 : 0);
+        const int code = (draw_watcher ? 8 : 0) | (watcher_in_hand ? 4 : 0) | (host ? 2 : 0) | (art_in_hand ? 1 : 0);
         if (s.turn_number != last_turn || code != last_code)
         {
-            std::fprintf(stderr, "[equip-route] gate t%d watcher=%d host=%d free_art=%d\n",
-                         s.turn_number, draw_watcher ? 1 : 0, host ? 1 : 0, free_art ? 1 : 0);
+            std::fprintf(stderr, "[equip-route] gate t%d watcher=%d(hand %d) host=%d artifact_in_hand=%d\n",
+                         s.turn_number, draw_watcher ? 1 : 0, watcher_in_hand ? 1 : 0, host ? 1 : 0,
+                         art_in_hand ? 1 : 0);
             last_turn = s.turn_number;
             last_code = code;
         }
     }
-    return draw_watcher && host && free_art;
+    return watcher && host && art_in_hand;
 }
 
 int EquipRouteTrial(const GameState& s, int me)
@@ -24145,11 +24531,21 @@ namespace equiproute
 // PayloadFirst retry was built with.
 int TrialPolicy(const GameState& s, int me)
 {
-    static thread_local std::unordered_map<std::uint64_t, int> memo;
+    // SCOPED TO THE DECISION (TurnSolver::DecisionEpoch), keyed on RouteStateKey. A verdict is a
+    // function of the board AND the library below it, and only within one decision does "same
+    // key" imply "same library": across decisions (and across the games a batch worker plays) the
+    // same hand and battlefield can sit on a different deck order, and a cached "no" would then
+    // suppress a kill that is there. Within a decision a budget-cut "no" may be reused too -- the
+    // budget only shrinks, so a re-run could not do better.
+    struct DecisionMemo { std::uint64_t epoch = ~0ULL; std::unordered_map<std::uint64_t, int> memo; };
+    static thread_local DecisionMemo dm;
     const bool use_memo = MemoEnabled();
-    const std::uint64_t key = comboroute::BoardKey(s, me);
+    const std::uint64_t key = RouteStateKey(s, me);
+    std::unordered_map<std::uint64_t, int>& memo = dm.memo;
     if (use_memo)
     {
+        const std::uint64_t ep = TurnSolver::DecisionEpoch();
+        if (dm.epoch != ep || memo.size() > (1u << 20)) { memo.clear(); dm.epoch = ep; }
         const std::unordered_map<std::uint64_t, int>::const_iterator it = memo.find(key);
         if (it != memo.end()) { return it->second; }
     }
@@ -24157,14 +24553,14 @@ int TrialPolicy(const GameState& s, int me)
     {
         RevealLogPause _rlp;            // a trial must leak no reveal/draw events into the game log
         GameState probe = s;
-        if (Run(probe, me, Adv::MostCasts) == 1) { r = 1; }
+        if (Run(probe, me, Adv::MostCasts, RunMode::Trial) == 1) { r = 1; }
     }
     // Each retry gets a FRESH copy -- the previous attempt mutated its own.
     const auto retry = [&](Adv adv, int code, const char* label) {
         if (r != 0) { return; }
         RevealLogPause _rlp;
         GameState probe = s;
-        if (Run(probe, me, adv) != 1) { return; }
+        if (Run(probe, me, adv, RunMode::Trial) != 1) { return; }
         r = code;
         if (Trace())
         { std::fprintf(stderr, "[equip-route] t%d %s won where most-casts did not\n",
@@ -24197,7 +24593,7 @@ int EquipRouteApply(GameState& s, int me)
                               : pol == 3 ? equiproute::Adv::ChainFirst
                               : pol == 2 ? equiproute::Adv::PayloadFirst
                                          : equiproute::Adv::MostCasts;
-    return equiproute::Run(s, me, adv);
+    return equiproute::Run(s, me, adv, equiproute::RunMode::Apply);
 }
 
 

@@ -2806,3 +2806,4 @@ bool EquipRoutePiecesInPlace(const GameState& s, int controller);
 int  EquipRouteTrial(const GameState& s, int controller);     // 0 no, 1 WIN (lethal this turn)
 int  EquipRouteApply(GameState& s, int controller);           // same codes; live run on `s`
 bool EquipRouteTraceOn();                                     // MTG_EQUIP_ROUTE_TRACE (diagnostic)
+bool EquipRouteInProgress();                                  // true inside a route playout (trial or apply)
