@@ -17984,7 +17984,13 @@ static FadeBoardRead ReadFadeBoard(const GameState& state)
             if (i < 8 && i < r.src_n)
             {
                 ++r.src_tokens[i];
-                if (CanAttackFull(p, state.battlefield, me)) { ++r.src_ready[i]; }
+                // Prefiltered: `bs` is already gathered above for ComputeLordBonus, and bs.haste is
+                // exactly the list CanAttackFull's scans would re-derive. Without it this loop is
+                // O(N^2) in board size -- see the HasteSources note in SpellEffects.h, which names
+                // this very case (a Mycoloth devour under Doubling Season enters dozens of bodies at
+                // once, every one of them entered_this_turn, so every one falls past the cheap exit
+                // into two full battlefield walks). Byte-identical by construction.
+                if (CanAttackFull(p, state.battlefield, me, &bs.haste)) { ++r.src_ready[i]; }
             }
         }
         if (!p.card.IsCreature() && !p.is_animated) { continue; }
@@ -17997,7 +18003,7 @@ static FadeBoardRead ReadFadeBoard(const GameState& state)
         // is an attacker -- including the 0-power ones, which still add an Ascension quest counter.
         r.next_power += pw;
         ++r.next_attackers;
-        if (CanAttackFull(p, state.battlefield, me)) { r.ready_power += pw; ++r.ready_attackers; }
+        if (CanAttackFull(p, state.battlefield, me, &bs.haste)) { r.ready_power += pw; ++r.ready_attackers; }
     }
 
     // Mana the turn can already produce, for the "is that hand card actually castable" tests below.
@@ -42783,10 +42789,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (heurarm::Flag(heurarm::PD_QUAKE_TOP_X, s_topx_env) && !s_human_play_sig
             && !DecisionUnpruned(UnprunedGate::XSpell))
         {
+            // THE BOARD WALK BELOW IS DEAD WORK UNLESS SOME PLAN ACTUALLY CASTS A QUAKE.
+            // `board_ceil` is read only through `ceil`, and `ceil` is consulted only AFTER
+            // `if (qi < 0) { continue; }` -- so with no x_damage_each_creature_and_player cast
+            // anywhere in `deduped`, nothing this loop computes can change a single verdict.
+            // Skipping it is byte-identical by construction, not by measurement.
+            //
+            // It is emphatically not cheap. It calls LethalToughness per creature, and
+            // LethalToughness walks the whole battlefield TWICE (ComputeLordBonus +
+            // EquipBonusFor), so this is O(board^2) per enumeration call -- the same
+            // board-level-scan-per-creature family as the haste scans and DoublerShift. It ran on
+            // EVERY deck, including the great majority (Fungus among them) that play no X sweeper
+            // at all. Measured on the candidate-b degenerate keep rollout, after the ReadFadeBoard
+            // haste prefilter landed: EnumeratePlans -> LethalToughness -> {ComputeLordBonus,
+            // EquipBonusFor} was 95.6% of all remaining samples.
+            bool any_quake = false;
+            for (const TurnSolver::Plan& qp : deduped)
+            {
+                for (const Action& qa : qp.actions)
+                {
+                    if (qa.kind == Action::Kind::CastFromHand && qa.def != nullptr
+                        && qa.def->params.x_damage_each_creature_and_player)
+                    { any_quake = true; break; }
+                }
+                if (any_quake) { break; }
+            }
             const int me = state.active_player_index;
             int board_ceil = 1 << 20;
             for (const Permanent& q : state.battlefield)
             {
+                if (!any_quake) { break; }
                 if (q.controller_index != me || !q.card.IsCreature()) { continue; }
                 if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
                 board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
