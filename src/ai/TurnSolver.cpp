@@ -36881,7 +36881,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Skateboard, the held mana gone, and the win unreachable at ANY node budget. Human-play
         // route trials never had this (s_human_play suppresses the arming), so this also makes the
         // search-side trial and the human-side trial the same procedure.
-        if (!resolved && !EquipRouteInProgress()
+        // ...INSIDE THE DFS. The route's greedy CERTIFICATE keeps the canon: it is a one-pass playout
+        // whose job is to finish the chain inside one apply, and without the continuation it stopped
+        // short of kills it had always found (five depth-0 smoke games, T4 -> T6, 2026-10-04).
+        if (!resolved && !EquipRouteDfsActive()
             && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
         { resolved = true; canon_used = true; }
         // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is

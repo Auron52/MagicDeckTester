@@ -22770,6 +22770,20 @@ int TrialPolicy(const GameState& s, int me);
 
 // Suppresses the emission site for the duration of a playout (see RE-ENTRY above).
 inline bool& InRouteFlag() { static thread_local bool v = false; return v; }
+// Inside the DFS specifically (RunSearch), as opposed to the greedy certificate playout. The two
+// differ in what a draw breakpoint's continuation should be: the DFS re-enumerates after every
+// link and must see the base plan (EMPTY continuation -- see the BpUnbranchedCanon gate in
+// TurnSolver.cpp), while the certificate is a one-pass greedy playout whose whole value is in
+// finishing the chain inside one apply, which is exactly what the canon continuation does for it.
+// Gating the canon off for BOTH cost the certificate the kills it used to find: five depth-0 smoke
+// games (no DFS at depth 0) went e.g. T4 -> T6 with the certificate reporting "no win: 2 links".
+inline bool& InRouteDfsFlag() { static thread_local bool v = false; return v; }
+struct DfsScope
+{
+    const bool prev;
+    DfsScope()  : prev(InRouteDfsFlag()) { InRouteDfsFlag() = true; }
+    ~DfsScope() { InRouteDfsFlag() = prev; }
+};
 struct Scope
 {
     // SAVE/RESTORE, not set/clear: there are two playout entry points now (Run and RunSearch), and
@@ -23469,6 +23483,7 @@ enum class RunMode { Trial, Apply };
 static int RunSearch(GameState& s, int me, RunMode mode)
 {
     Scope _guard;                       // no nested route emission for the whole search
+    DfsScope _dfs;                      // EMPTY breakpoint continuations inside the DFS (not the certificate)
     DfsBounds   b;
     const char* regime = "apply";
     // The regime is decided by WHERE the call sits, for both modes, because the apply must walk the
@@ -23695,6 +23710,7 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
 }   // namespace equiproute
 
 bool EquipRouteInProgress() { return equiproute::InRouteFlag(); }
+bool EquipRouteDfsActive()  { return equiproute::InRouteDfsFlag(); }
 bool EquipRouteTraceOn()    { return equiproute::Trace(); }
 
 bool EquipRoutePiecesInPlace(const GameState& s, int me)
