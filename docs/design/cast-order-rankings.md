@@ -1193,3 +1193,139 @@ Removal: `EquipmentProvider::NeverCast` (template Removal), never enumerated. A 
 continuation's activations (e.g. equips after a Puresteel draw) queue into the phase's trailing pass,
 never mid-phase. Supersedes the 2026-08-25 class order (Equipment before hosts, with ties) and the
 agent-filled 17-position `MTG_KE_ORDER_FULL` (left in code, off; delete on request).
+
+## Soldiers -- PROPOSED total order (USER QUESTION, 2026-10-04; `MTG_SOLDIERS_ORDER`, default OFF)
+
+**Question for the user: adopt this total cast order for Soldiers (land first; Thalia after the
+noncreature spell)?** It is implemented in `SoldiersProvider::CastOrderRank` behind
+`MTG_SOLDIERS_ORDER` (default OFF, per-job `heurarm` lever) and has NOT been adopted -- cast order,
+range and main-split are user-owned. Main split: everything Main 1 (`uses_second_main=no`, so the
+m2 labels below are inert); no ranges proposed (no draw/ritual in the deck -- every rank is a fixed
+position).
+
+Today's order (generic): every creature TIED at rank 10 (ties keep plan order), Aether Vial 20:
+
+```
+# Cast order -- decks/Soldiers/soldiers.cod
+# provider: Soldiers   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [10] CREATURE: before noncreature spells (prowess catches later casts)
+  10     -   m1    4  1  Champion of the Parish
+  10     -   m2    4  1  Esper Sentinel
+  10     -   m1    2  1  Recruitment Officer
+  10     -   m2    1  2  Cathar Commando
+  10     -   m1    4  2  Coppercoat Vanguard
+  10     -   m1    2  2  Harbin, Vanguard Aviator
+  10     -   m1    1  2  Jirina, Dauntless General
+  10     -   m1    4  2  Thalia's Lieutenant
+  10     -   m2    2  2  Thalia, Guardian of Thraben
+  10     -   m1    1  3  Brutal Cathar
+  10     -   m1    4  3  Field Marshal
+  10     -   m1    2  3  General Kudro of Drannith
+  10     -   m1    1  3  King Darien XLVIII
+  10     -   m1    1  3  Ranger-Captain of Eos
+  10     -   m1    1  3  Recruiter of the Guard
+  10     -   m1    2  4  Rick, Steadfast Leader
+#
+# [20] other noncreature spell
+  20     -   m1    4  1  Aether Vial
+```
+
+Proposed (TOTAL: no two distinct cards share a rank):
+
+```
+# Cast order -- decks/Soldiers/soldiers.cod
+# provider: Soldiers   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [1] HUMAN-ENTERS WATCHER (Champion): first -- every later Human this turn is a counter
+  1     -   m1    4  1  Champion of the Parish
+#
+# [2] CREATURE TUTOR (toughness<=2): early, the fetched card can still be cast
+  2     -   m1    1  3  Recruiter of the Guard
+#
+# [3] CREATURE TUTOR (mv<=1): early, after Champion
+  3     -   m1    1  3  Ranger-Captain of Eos
+#
+# [4] AETHER VIAL: the only noncreature spell -- before Thalia taxes it
+  4     -   m1    4  1  Aether Vial
+#
+# [5] ACTIVATED-DIG BODY (Officer): cheap, its {3}{W} dig comes after the casts
+  5     -   m1    2  1  Recruitment Officer
+#
+# [6] VANILLA 1-DROP
+  6     -   m2    4  1  Esper Sentinel
+#
+# [7] THALIA (noncreature tax): AFTER every noncreature spell this turn
+  7     -   m2    2  2  Thalia, Guardian of Thraben
+#
+# [8] BODY: cheapest/simplest first
+  8     -   m1    4  2  Coppercoat Vanguard
+#
+# [9] BODY: cheapest/simplest first
+  9     -   m2    1  2  Cathar Commando
+#
+# [10] BODY: cheapest/simplest first
+  10     -   m1    1  2  Jirina, Dauntless General
+#
+# [11] BODY: cheapest/simplest first
+  11     -   m1    2  2  Harbin, Vanguard Aviator
+#
+# [12] BODY: cheapest/simplest first
+  12     -   m1    1  3  Brutal Cathar
+#
+# [13] LORD/ANTHEM: static, order-free -- late
+  13     -   m1    4  3  Field Marshal
+#
+# [14] LORD/ANTHEM: static, order-free -- late
+  14     -   m1    2  3  General Kudro of Drannith
+#
+# [15] LORD/ANTHEM: static, order-free -- late
+  15     -   m1    1  3  King Darien XLVIII
+#
+# [16] LORD/ANTHEM: static, order-free -- late
+  16     -   m1    2  4  Rick, Steadfast Leader
+#
+# [17] ETB-COUNTERS-EACH-OTHER-HUMAN (Lieutenant): LAST -- counters this turn's Humans too
+  17     -   m1    4  2  Thalia's Lieutenant
+```
+
+Rationale, card by card: Champion of the Parish first (every later Human this turn is a +1/+1
+counter on it); the two creature tutors next (the fetched card can still be cast this turn; after
+Champion because they are Humans); Aether Vial -- the deck's ONLY noncreature spell -- before Thalia
+(her `noncreature_spell_tax` binds our own Vial: {1} -> {2}); Recruitment Officer (its {3}{W} dig wants
+the casts done); bodies cheapest/simplest first; lords late (static anthems are order-free); Thalia's
+Lieutenant LAST (its ETB puts a counter on every OTHER Human, including this turn's casts).
+
+**Measured (held-out seed block 8,800,000, paired, ONE pooled batch, both arms per job flag):**
+
+| cell | games | net (turns/game) | t | better | worse | units |
+|---|---|---|---|---|---|---|
+| d0 | 4000 | -0.00350 | -3.30 | 16 | 2 (greedy d0 churn) | -- |
+| d3 b10 | 2000 | -0.00350 | -2.65 | 7 | 0 | -0.2% |
+| **d5 b20 (PLAY)** | 2000 | **-0.00300** | -2.45 | 6 | **0** | +0.006% |
+
+**Why it matters beyond the average -- today's order is a hard PRUNE on this deck.** Against the
+unpruned oracle (`MTG_UNPRUNED=1`, first 1000 games) the shipped search misses a T4 kill in gi10, 302,
+308 that it cannot find even at **depth 8, budget 0** (full depth, unbudgeted): the generic rank fixes
+the sequence. `MTG_UNPRUNE=searchorder` alone recovers all three -- and so does the proposed order, at
+d5b20 and at d8b0. Opening the ordering search instead (measured, 2000 games d5b20) recovers the same
+6 games but loses gi1583 (4->5) to budget dilution and costs **+10.5% units**; the proposed order gets
+the identical recovery for **+0.006%**. Recommendation: adopt the order (default ON with `=0` off
+switch). Until then, ~3 games per 1000 at play settings are inexpressible under the shipped default.
+
+The one oracle game the order does not recover (gi170) is the generic provider's user-ruled
+clairvoyant-dig exclusion (Silent Clearing cracked the turn it is played), not an ordering question.

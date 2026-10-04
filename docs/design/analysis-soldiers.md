@@ -249,3 +249,121 @@ anything otherwise."**
   disclosed deferrals remain.
 - Still open for Rick: the provider's autonomous keyword pair (Vigilance+Lifelink) is a one-option
   default awaiting sign-off (open question 2), and first strike has no reader (PROVISIONAL).
+
+## Stage 4 / 5 (2026-10-04, worktree /tmp/soldiers-wt, rebased on bcbf29df; autonomous run)
+
+### Stage 4a -- provider routing
+- `provider_audit.py`: once the profile existed Soldiers would SHARE `Vial` with slivers_vial (a
+  `--check` failure). NEW `SoldiersProvider : VialProvider` -- an EMPTY derivation of what the deck
+  actually rode (VialProvider's `MTG_KNIGHTS_ORDER` clauses key on `cast_trigger_creates_tokens` /
+  `etb_dig_requires_subtypes`, which no Soldiers card carries, so its cast order is the generic one).
+  Certificate: NotAssessed (Vial instant-speed puts, Commando flash, Beachhead/Harbin pumps, Rick's
+  mid-turn anthem must be priced first). Routing pin updated (`Soldiers -> Soldiers`).
+  `provider_audit.py --check` rc 0. Commit 8465d838.
+- Hooks added since (both per-job overridable via `heurarm`):
+  * `MTG_SOLDIERS_ORDER` -- PROPOSED total cast order, **default OFF** (USER question; see
+    `docs/design/cast-order-rankings.md` "Soldiers").
+  * `MTG_SOLDIERS_BUCKET_DISCARD` -- authored discard buckets, **default ON** per the authoring
+    brief's contract (`EnvOn(..., true)`, `=0` -> generic). PROVISIONAL, user review.
+    Proposal: `docs/design/soldiers-discard-policy-proposal.md`. Commit f7818b30.
+
+### Stage 4 -- baseline profile
+- `analyze_deck.py decks/Soldiers/soldiers.cod --no-rebuild` (5m26s): card-scores-only profile
+  (1000 games d5), no hand-score gate, default land window 1..5, stop_at 4, `required_pieces []`.
+  Cost diagnostic NO_COST_INTERACTIONS. Discard evidence (400 g d3): **DISCARD_INERT -- no cleanup
+  shed reached by either caller**. Top card scores: Champion +0.39, Officer +0.21, Coppercoat +0.12.
+- Play settings: no value leaf exists yet, so play = the built-in **d5 / budget 20** (`[play]
+  source=default`); `value_play` arrives only with the (out-of-scope) value-leaf generation.
+
+### DEFECT FOUND + FIXED -- the analyzer's DISCARD_INERT was false (commit 9503b7c4)
+`analyze_deck.py`'s shed census regex was anchored on the closing `===` of the engine's
+`=== SHED STATS ...` line, which has carried two more trailing fields since 4ebb31ac (2026-08-22).
+It matched nothing, the census read (0,0,0) and the stage printed DISCARD_INERT. Measured truth for
+Soldiers (5b batch below, MTG_SHED_STATS): **real=5, rollout=467,425 sheds per 4,400 games**
+(422,705 at <4 lands; hand 8: 457,211, hand 9: 4,877). Fixed (un-anchored, and an unparseable census
+now raises). **Fleet note:** the Pirates, CritterLifegain, BreachingDragonstorm and WhiteKnights
+ledgers cite DISCARD_INERT -- every such verdict produced after 2026-08-22 is suspect and should be
+re-run (not done here: out of this deck's scope).
+
+### 5b -- multi-depth sanity (pooled batch, seed 777000, MTG_DUMP_WINS + MTG_FLAG_NONCONV)
+| cell | games | win% | avg (unwon=9) | wall core-ms/game |
+|---|---|---|---|---|
+| d0 | 2000 | 99.95 | 4.6070 | ~0 |
+| d3 b10 | 600 | 100 | 4.3733 | 571 |
+| d3 b20 | 600 | 100 | 4.3733 | 937 |
+| d5 b20 (play) | 600 | 100 | 4.3733 | 1039 |
+| d5 b40 | 600 | 100 | 4.3717 | 1490 |
+Monotone (no searched game slower than a shallower/cheaper cell; d3 vs d0 on the shared 600:
+123 faster, 0 slower). Plausible clock: T4 388 / T5 202 / T6 9 / T8 1 at play settings -- a
+1-3-drop lord deck killing on T4 two times in three. d3b20 and d5b20 share a play DIGEST (identical
+play on 600 games: depth 4-5 never binds at b20). `[nonconv]`: 0 lines.
+
+### 5c -- budget starvation (seed 777000 outliers, pooled single-game jobs)
+- gi33: T5 at d5b20 / T4 at d5b40 and at **d8 b0** and d5 b0 -> **budget starvation at b20** (1 of 600
+  games). Threshold: b40 recovers it.
+- Every other slow game (T6: gi28,128,162,308,361,376,417,448,480; T8: gi569) plays IDENTICALLY at
+  **d8 b0** (full-depth, unbudgeted: same win turn) and at d5 b0 where it finished -> legitimately slow
+  (draw/mulligan-limited), not starvation, not a search defect. (gi417 d5b0 was stopped by me after
+  >4 min -- my own probe; its d8b0 answer, T6, already settles it.)
+
+### 5a -- mismatch harnesses (pooled batch, MTG_FULL_DEPTH=1 MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1)
+Seeds 1001/2002/3003/4004 x {d3 b10, d5 b20} x 300 games = 2,400 games: **0 `[fd-diverge]`, 0
+`[nonconv]`** (plus 0 `[nonconv]` over the 4,400-game 5b batch). Clean. (Full-depth avgs: d5b20
+4.360/4.353/4.373/4.373, d3b10 4.360/4.353/4.380/4.377.)
+
+### 5c2 -- horizon-honest tie-break (`leaf_tiebreak_check.py`, PLAY settings d5/b20, 12 blocks)
+24,000 games (12,000 paired): **0 changed games, and every one of the 12 blocks has a BYTE-IDENTICAL
+play digest across the two arms** while `units` differ (the tie-break IS consulted in rollouts but
+never moves a committed decision -- the deck wins inside the horizon). The script prints "NO SIGN
+AT THIS SAMPLE / re-run at --blocks 48"; not re-run, because identical digests on 12k paired games
+already say the lever cannot change this deck's play at play settings. **Keep the default (ON).**
+Play-setting avg over the 12k: 4.358..4.397 per 1k block (~4.38).
+
+### A/B batch ab1 -- cast-order proposal + discard bound (ONE pooled batch, heurarm per-job flags)
+Held-out seed block 8,800,000 (disjoint from every suite seed), arms paired per game:
+`base` (shipped: order OFF, discard buckets ON) / `order` (MTG_SOLDIERS_ORDER=1) / `gendisc`
+(MTG_SOLDIERS_BUCKET_DISCARD=0, the generic max-MV) / `shedworst` (MTG_SHED_WORST=1, the bound).
+| cell | games | order vs base | gendisc vs base | shedworst vs base |
+|---|---|---|---|---|
+| d0 | 4000 | **-0.00350 t=-3.30** (16 better / 2 worse) | 0 changed (digest differs: real sheds move, no win turn) | 0 changed, digest IDENTICAL (no rollouts at d0) |
+| d3 b10 | 2000 | **-0.00350 t=-2.65** (7 / 0) | digest IDENTICAL | 0 changed (digest differs) |
+| d5 b20 (PLAY) | 2000 | **-0.00300 t=-2.45** (6 / 0) | digest IDENTICAL | digest IDENTICAL |
+Units at d5b20: base 115,576,724 / order 115,584,044 (+0.006%) / gendisc +0.38% / shedworst -0.63%.
+SHED STATS over the batch: real=8, rollout=2,102,646 (1,894,739 under 4 lands).
+- **Discard (5i): the BOUND is zero.** Best-vs-worst ranking (`MTG_SHED_WORST`) changes no win turn
+  at any cell and no play at all at play settings, so no ranking can be worth anything measurable on
+  this deck -- the axis is closed. The authored policy is non-inferior by construction (identical
+  play at d3/d5). Shipped default ON per the brief; adoption remains a USER review.
+- **Cast order: a measured improvement at every depth, 0 slower games at d3 and at PLAY settings.**
+  d0's two slower games (gi1379, gi3261, 4->5) are greedy d0 churn (no search; acceptable per 5e).
+  Mechanism (gi10, d5b20, read from the game logs): with the proposal the search casts Thalia's
+  Lieutenant on T2 (base: Coppercoat) and Champion+Coppercoat T3 -> T4 kill vs T5 -- the order drives
+  the rollout/leaf policy's sequencing (Champion first, Lieutenant last), which re-scores the root
+  choice. Stays DEFAULT OFF: cast order is USER-OWNED (question recorded in cast-order-rankings.md).
+- **Gate probe** (live UnprunedGates for this deck): altpayload dig xspell groupcap comboline
+  searchorder blinktarget jittemode tapreserve digchain. (`tutor` is dead: Recruiter/Ranger-Captain
+  targets are not narrowed by TutorCandidates.)
+
+### 5e / 5f -- heuristic accuracy vs the full-search oracle (MTG_UNPRUNED=1, seed 8.8M, first 1000)
+| cell | arm | shipped avg | unpruned-oracle avg | games the oracle wins earlier |
+|---|---|---|---|---|
+| d5 b20 | base (generic order) | 4.3780 | 4.3740 | gi10, 170, 302, 308 (all 5->4) |
+| d5 b20 | proposed order | 4.3750 | 4.3740 | gi170 |
+| d3 b10 | base | 4.3790 | 4.3740 | gi10, 170, 302, 308, 607 |
+| d3 b10 | proposed order | 4.3760 | 4.3740 | gi170, 607 |
+Oracle never slower. Classification (single-game repros, all pooled/short):
+- **gi10 / gi302 / gi308 -- CAST ORDER IS A HARD PRUNE.** The shipped search does NOT reach T4 even at
+  **d8 b0** (full depth, unbudgeted); `MTG_UNPRUNE=searchorder` ALONE recovers all three at d5b20, and
+  the proposed total order recovers all three at d5b20 AND at d8b0. Same class as StompySurprise's
+  2026-08-25 finding (`cast-order-rankings.md` "ADOPTION MEASUREMENT"): with the ordering search off,
+  `CastOrderRank` fixes the sequence, and today's generic rank ties every creature at 10 (plan order).
+  An inexpressible line under the shipped config = a DEFECT; its fixes are (a) the proposed order
+  (user-owned) or (b) opening the ordering search for this deck -- measured next (batch `so`).
+- **gi170 -- the user-ruled CLAIRVOYANT-DIG exclusion, not a defect.** Attributed by opening each live
+  gate alone: only `dig` recovers it. The oracle line plays Silent Clearing and cracks it the same turn
+  (`{1}, sac: draw`) while holding castables; the generic provider deliberately declines the searched
+  dig axis (docs/design/generic-dig-gate.md, USER 2026-09-29: a clairvoyant rollout digs exactly when
+  it can see a better top card). Unreachable at d8b0 under both orders, by that ruling.
+- **gi607 (d3 only) -- budget starvation**: T4 at d8b0 under both orders.
+- 5f (runtime gate): Soldiers adds **no** pruning heuristic. The existing generic gates' cost on this
+  deck: unpruned d5b20 = 65.57M units / 1000 games vs shipped 57.79M (+13%) for the 4 games above.
