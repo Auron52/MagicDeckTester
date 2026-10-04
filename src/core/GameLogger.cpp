@@ -1,5 +1,6 @@
 #include "EnvFlags.h"
 #include "GameLogger.h"
+#include "cards/CardDatabase.h"
 #include <algorithm>
 #include <fstream>
 #include <cstdio>
@@ -599,6 +600,14 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
         numbering_obj[kv.first] = nums;
     }
     root["cardNumbering"] = numbering_obj;
+    // Alternate-printing art for the replay viewer (cards.json `scryfall_image`; Rick, Steadfast
+    // Leader -> sld/143). Only for alias cards in this deck, so every other deck's log is unchanged.
+    {
+        json refs = json::object();
+        for (const auto& [name, ref] : CardDatabase::Instance().ImageRefs())
+        { if (m_numbering.count(name) != 0) { refs[name] = ref; } }
+        if (!refs.empty()) { root["imageRefs"] = refs; }
+    }
 
     // Mulligan sequence: one entry per hand drawn; last entry is the kept hand.
     json mull_arr = json::array();

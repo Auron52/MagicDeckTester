@@ -3560,6 +3560,14 @@ public:
     // face's default image is its FRONT, so it must ask for face=back. Empty without MDFC lands.
     std::vector<std::string> MdfcBackFaceNames() const;
 
+    // Alternate-printing names. CanonicalName maps an alias (an entry's `scryfall_name`, e.g.
+    // "Greymond, Avacyn's Stalwart") to the cards.json entry name ("Rick, Steadfast Leader"), and
+    // returns any other name unchanged -- so a decklist may list the card by either name.
+    // ImageRefs: entry name -> "<set>/<collector number>" (`scryfall_image`), the printing the play
+    // viewer requests art for when Scryfall has no card under the printed name.
+    std::string CanonicalName(const std::string& name) const;
+    const std::unordered_map<std::string, std::string>& ImageRefs() const { return m_image_refs; }
+
     // Look up a card's definition via its memoized pointer (Card::m_def), falling
     // back to a by-name Lookup (and caching the result) the first time. Prefer this
     // over Lookup(c.m_name) on the hot path: a card resolved once carries its def
@@ -3686,6 +3694,8 @@ private:
     CardParams BuildParamsFromJson(const nlohmann::json& params) const;
 
     std::unordered_map<std::string, CardDefinition> m_cards;
+    std::unordered_map<std::string, std::string>    m_alias_to_name;   // see CanonicalName()
+    std::unordered_map<std::string, std::string>    m_image_refs;      // see ImageRefs()
     std::unordered_map<std::string, uint64_t>       m_def_hash;   // see DefHash()
     // Canonical-interned-name-pointer -> definition index over m_cards (see LookupInterned).
     // Rebuilt at the end of every LoadFromJson/Register, so it is complete and IMMUTABLE during

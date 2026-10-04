@@ -822,6 +822,39 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         for (size_t i = 0; i < mdfc_backs.size(); ++i) { if (i) { os << ", "; } JsonStr(os, mdfc_backs[i]); }
         os << "],\n";
     }
+    // Alternate-printing art (cards.json `scryfall_image`, e.g. Rick, Steadfast Leader -> sld/143):
+    // Scryfall has no card under the printed name, so the viewer must request the PRINTING. Emitted
+    // only for alias cards present in this game (any zone, either player), so every deck without one
+    // keeps a byte-identical decision JSON.
+    {
+        const auto& refs = CardDatabase::Instance().ImageRefs();
+        if (!refs.empty())
+        {
+            std::vector<std::pair<std::string, std::string>> hit;
+            for (const auto& [name, ref] : refs)
+            {
+                bool present = false;
+                auto in = [&](const auto& z)
+                { for (const Card& c : z) { if (c.m_name.str() == name) { return true; } } return false; };
+                for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { present = true; break; } }
+                for (const Player& pl : s.players)
+                { present = present || in(pl.hand) || in(pl.graveyard) || in(pl.library); }
+                present = present || in(s.exile);
+                if (present) { hit.emplace_back(name, ref); }
+            }
+            if (!hit.empty())
+            {
+                std::sort(hit.begin(), hit.end());
+                os << "  \"image_refs\": {";
+                for (size_t i = 0; i < hit.size(); ++i)
+                {
+                    if (i) { os << ", "; }
+                    JsonStr(os, hit[i].first); os << ": "; JsonStr(os, hit[i].second);
+                }
+                os << "},\n";
+            }
+        }
+    }
     // Day / night (Brutal Cathar // Moonrage Brute, CR 726): shown so the human can see why a
     // daybound permanent is its 3/3 Werewolf face. Emitted only once the designation exists, so
     // every other deck's decision JSON is byte-identical.
@@ -6738,6 +6771,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
 //     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
 //     "expect_opponent_life": 13,    // optional: pin the exact damage a non-lethal payoff dealt
+//     "expect_exile_contains": ["X"],  // optional: X in the exile zone (and not on the battlefield)
+//                                    // at the end -- removal a passive opponent never notices
 //     "expect_active_life": 20,      // optional: pin OUR life (incidental lifegain / pain taps) --
 //                                    // the only assertion that sees a rider-only illegal cast
 //     "validate_line": "land=X;cast=A;cast=B",   // optional: run TurnSolver::CheckLine on this board
@@ -7424,6 +7459,28 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 return 1;
             }
             std::cout << "scenario: PASS (" << aura << " -> " << want << ")\n";
+        }
+    }
+
+    // Optional EXILE assertion: every listed name must be in the shared exile zone at the end, and
+    // none of them on the battlefield. Pins a removal effect against a goldfish opponent whose
+    // creatures never act -- exiling one changes neither life total nor win turn, so no assertion
+    // above can see whether Brutal Cathar's "exile target creature an opponent controls" fired.
+    if (j.contains("expect_exile_contains"))
+    {
+        for (const auto& v : j.at("expect_exile_contains"))
+        {
+            const std::string want = v.get<std::string>();
+            bool in_exile = false, on_bf = false;
+            for (const Card& c : state.exile) { if (c.m_name.str() == want) { in_exile = true; break; } }
+            for (const Permanent& p : state.battlefield) { if (p.card.m_name.str() == want) { on_bf = true; break; } }
+            if (!in_exile || on_bf)
+            {
+                std::cout << "scenario: FAIL expected " << want << " in exile (in_exile=" << in_exile
+                          << " on_battlefield=" << on_bf << ")\n";
+                return 1;
+            }
+            std::cout << "scenario: PASS (" << want << " exiled)\n";
         }
     }
 

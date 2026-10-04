@@ -645,7 +645,13 @@ const esc = (s) => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>
 // Names the engine flags as MDFC back faces (e.g. "Boulderloft Pathway"). A back face's default
 // Scryfall image is its FRONT, so we must ask for &face=back. Populated from each decision's mdfc_backs.
 const MDFC_BACKS = new Set();
-const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small')+(MDFC_BACKS.has(name)?'&face=back':'');
+// Alternate printings Scryfall does not know by the printed name (Rick, Steadfast Leader is the Secret
+// Lair printing of Greymond, Avacyn's Stalwart): name -> "<set>/<collector number>", from cards.json
+// `scryfall_image` via each decision's image_refs. Requests THAT printing's art.
+const IMAGE_REFS = {};
+const scryImg = (name, ver) => IMAGE_REFS[name]
+  ? 'https://api.scryfall.com/cards/'+IMAGE_REFS[name]+'?format=image&version='+(ver||'small')
+  : 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small')+(MDFC_BACKS.has(name)?'&face=back':'');
 
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
@@ -5409,7 +5415,7 @@ function autoResolveDecision(dec){
   pushChoice(dec, def, lab);   // appends the choice, records history, hides the panel, re-steps
   return true;
 }
-function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
+function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)); Object.assign(IMAGE_REFS, (dec&&dec.image_refs)||{});
   // freeEquipPick joins the other armed modes here: it is per-DECISION (its hosts and counts come
   // from this decision's offers), so carrying it across a new decision would leave the button
   // reading "pick a creature" over a board where nothing is a legal host -- an armed dead control.

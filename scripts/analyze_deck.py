@@ -89,6 +89,23 @@ def ParseArgs():
 # Decklist parsing — plain text and Cockatrice .cod XML
 # ---------------------------------------------------------------------------
 
+_ALIASES: dict[str, str] | None = None
+
+def CanonicalCardName(name: str) -> str:
+    """An alternate printing's ORACLE name -> the cards.json entry name (an entry's `scryfall_name`;
+    "Greymond, Avacyn's Stalwart" -> "Rick, Steadfast Leader"). Mirrors CardDatabase::CanonicalName,
+    which DeckLoader applies, so a decklist may list such a card by either name. Any other name is
+    returned unchanged."""
+    global _ALIASES
+    if _ALIASES is None:
+        _ALIASES = {}
+        if CARDS_JSON.exists():
+            with open(CARDS_JSON, encoding="utf-8") as f:
+                for c in json.load(f).get("cards", []):
+                    if c.get("scryfall_name") and c.get("name"):
+                        _ALIASES[c["scryfall_name"]] = c["name"]
+    return _ALIASES.get(name, name)
+
 def LoadDeckCounts(path: Path, board: str = "main") -> dict[str, int]:
     """Return {card_name: count} for one board, preserving insertion order.
 
@@ -124,7 +141,7 @@ def _LoadTextDeckCounts(path: Path, board: str = "main") -> dict[str, int]:
                 continue
             count = int(match.group(1))
             name  = match.group(2).strip()
-            name  = re.sub(r"\s+\([A-Z0-9]+\)\s+\d+$", "", name)
+            name  = CanonicalCardName(re.sub(r"\s+\([A-Z0-9]+\)\s+\d+$", "", name))
             if name:
                 counts[name] = counts.get(name, 0) + count
     return counts
@@ -138,7 +155,7 @@ def _LoadCockatriceDeckCounts(path: Path, board: str = "main") -> dict[str, int]
         if zone.get("name") not in wanted:
             continue
         for card in zone.findall("card"):
-            name  = card.get("name", "").strip()
+            name  = CanonicalCardName(card.get("name", "").strip())
             count = int(card.get("number", "1"))
             if name:
                 counts[name] = counts.get(name, 0) + count

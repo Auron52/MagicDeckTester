@@ -148,7 +148,9 @@ function invert(n){ const m={}; for(const k in n) for(const id of n[k]) m[id]=k;
 function nm(id){ return INV[id] || ('#'+id); }
 function cardOf(x){ return (x && typeof x==='object') ? (x.cardName||nm(x.card)) : nm(x); }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function scryImg(name,ver){ return 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small'); }
+// Alternate printings (log `imageRefs`, from cards.json scryfall_image): name -> "<set>/<number>".
+let IMAGE_REFS={};
+function scryImg(name,ver){ return IMAGE_REFS[name] ? 'https://api.scryfall.com/cards/'+IMAGE_REFS[name]+'?format=image&version='+(ver||'small') : 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small'); }
 // Land vs other-permanent classifier (name-based; rocks/dorks are NOT lands).
 const ROCK_RE=/Sol Ring|Signet|Ornithopter|Mind Stone|Talisman|Mana Crypt|Lotus|Medallion|\bMox\b|Diamond|Locket|Cluestone|Banner|Obelisk|Springleaf/i;
 const LAND_RE=/\b(Island|Mountain|Plains|Swamp|Forest|Wastes)\b|Orchard|Boilerworks|Bluffs|Monastery|Reflecting Pool|Karoo|Temple|Tower|Vivid|Lake|Snarl|Islet|Cavern|Sanctuary|Grove|Garden|Vista|Foundry|Spire|Citadel|Atoll|Reef|Heath|Mire|Delta|Tarn|Catacombs|Vents|Grave|Fountain|Hall|Verge|Strand|Crag|Field|Coast|Shore|Flats|Hollow|Pool|Nykthos|Academy|Mine|Tron|Yard|Bog|Oasis|Dunes|Ruins|Sanctum|Gate|Path|Tomb|Pit|Lair|Den|Marsh|Fen|Glade|Thicket|Plaza|Station|Outpost|Pier|Refuge|Haven/i;
@@ -326,7 +328,7 @@ function play(){ const btn=document.getElementById('play');
 }
 
 function load(d){
-  DATA=d; INV=invert(d.cardNumbering||{});
+  DATA=d; INV=invert(d.cardNumbering||{}); IMAGE_REFS=d.imageRefs||{};
   STEPS=(d.turns||[]); idx=0;
   document.getElementById('transport').style.display='flex';
   document.getElementById('slider').max=Math.max(0,STEPS.length-1);

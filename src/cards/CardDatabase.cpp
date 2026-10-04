@@ -230,9 +230,27 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             m_def_hash[bname] = CardDefHash(entry) ^ std::hash<std::string>{}(bname);
             m_cards[bname] = std::move(aura);
         }
+        // Alternate-printing names (Rick, Steadfast Leader = Greymond, Avacyn's Stalwart): the entry
+        // is keyed on the deck's PRINTED name; `scryfall_name` is the oracle name Scryfall knows, and
+        // `scryfall_image` ("<set>/<collector number>") pins the printing whose art the viewer shows.
+        // Display / import metadata only -- nothing the engine plays reads either.
+        {
+            const std::string nm = def.card.m_name.str();
+            if (entry.contains("scryfall_name") && entry["scryfall_name"].is_string())
+            { m_alias_to_name[entry["scryfall_name"].get<std::string>()] = nm; }
+            if (entry.contains("scryfall_image") && entry["scryfall_image"].is_string())
+            { m_image_refs[nm] = entry["scryfall_image"].get<std::string>(); }
+        }
         m_cards[def.card.m_name] = std::move(def);
     }
     RebuildInternedIndex();
+}
+
+std::string CardDatabase::CanonicalName(const std::string& name) const
+{
+    if (m_cards.find(name) != m_cards.end()) { return name; }
+    auto it = m_alias_to_name.find(name);
+    return it == m_alias_to_name.end() ? name : it->second;
 }
 
 // See the header: canonical-interned-pointer -> def index over m_cards. Interning here also

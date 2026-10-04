@@ -43672,13 +43672,16 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     if (pp.blink_cost.has_value() || pp.team_pump_cost.has_value()) { return true; }
     if (pp.pod_mv_delta != 0) { return true; }
     if (pp.sac_creature_outlet) { return true; }
-    // Soldiers (2026-10-04): Recruitment Officer's activated dig and King Darien's token ability are
-    // both {T}-less, so a copy CAST this turn can activate in the same phase -- both are in
-    // CollectActivationKeys' table. King Darien is keyed on his counter rider rather than on
-    // pay_token_cost alone so Slimefoot's (Fungus) marking is untouched by this change; whether
-    // Slimefoot should be marked too is recorded as an open question in analysis-soldiers.md.
+    // Soldiers (2026-10-04): Recruitment Officer's activated dig and every pay-token ability
+    // (King Darien XLVIII, Slimefoot the Stowaway) are {T}-less, so a copy CAST this turn can
+    // activate in the same phase -- both modes are in CollectActivationKeys' table. Keyed on the
+    // MODE's cost, never on a card: King Darien was first marked via his counter rider alone, which
+    // left Slimefoot's (FungusB) same-turn {4} un-fanned -- the base plan took the one-option
+    // canonical continuation and never made the Saproling (USER 2026-10-04: "if Slimefoot is
+    // missing its ability to create a token it should be added"). Guarded by
+    // test/scenarios/fungusb_slimefoot_token_same_turn.json.
     if (pp.activated_dig_cost.has_value()) { return true; }
-    if (pp.pay_token_cost.has_value() && pp.pay_token_self_counters > 0) { return true; }
+    if (pp.pay_token_cost.has_value()) { return true; }
     return false;
 }
 

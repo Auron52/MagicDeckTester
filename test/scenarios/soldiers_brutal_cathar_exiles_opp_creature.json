@@ -1,0 +1,35 @@
+{
+  "_comment": "Brutal Cathar's ETB must GENUINELY exile an opponent creature when one exists (USER 2026-10-04: 'There are actually critters for Brutal Cathar sometimes. They just don't do anything otherwise.' -- PopulateOpponentSpawns gives the goldfish bodies in most game indices). Cast T4 off 3 Plains, the opponent's Skyshroud Cutter is exiled (linked) and stays exiled while Cathar / Moonrage Brute remains; T5 is night (the passive opponent cast nothing) so the 3/3 Brute swings for 3 = lethal. expect_exile_contains is the only observable: the opponent's creatures never act, so neither win turn nor life can see the exile. Control arm: no opponent creature -> FAIL on the exile assertion.",
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Skyshroud Cutter",
+      "controller": 1
+    }
+  ],
+  "hand": [
+    "Brutal Cathar"
+  ],
+  "expect_exile_contains": [
+    "Skyshroud Cutter"
+  ],
+  "expect_win_turn": 5
+}

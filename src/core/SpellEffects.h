@@ -871,6 +871,8 @@ inline void FireEtbWatchers(GameState&, int controller, int entered_index);
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
+inline void ReturnOrphanedLinkedExiles(GameState& state);
+inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left, const CardDefinition& d);
 inline void DestroyLargestOppCreature(GameState&, int controller);
 inline void TapLargestOppCreature(GameState&, int controller);
 // Day / night (Brutal Cathar // Moonrage Brute, CR 726) -- defined beside DestroyLargestOppCreature.
@@ -8182,6 +8184,18 @@ inline void PerformReturnFromGraveyardToBattlefield(GameState& state, int contro
 inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, const Card& left)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(left);
+    // Brutal Cathar // Moonrage Brute (either face): "until this creature leaves the battlefield"
+    // ends NOW (CR 610.3) -- the linked card returns at the leave, not at the next day/night turn
+    // boundary (which stays as the backstop sweep for leave paths that bypass this hook). And a
+    // transforming DFC in any zone but the battlefield is its FRONT face (CR 711.8 / 712.8a), so a
+    // Moonrage Brute that died / was flickered is a Brutal Cathar card wherever it landed.
+    // Keyed on the two day/night params, so every other card skips it (byte-identical).
+    if (d && (d->params.etb_or_transform_exile_opp_creature_until_leaves
+              || !d->params.nightbound_front_name.empty()))
+    {
+        NormalizeLeftDayboundFace(state, controller, left, *d);
+        ReturnOrphanedLinkedExiles(state);
+    }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -15293,6 +15307,32 @@ inline void ReturnOrphanedLinkedExiles(GameState& state)
         FireCreatureEnterWatchers(state, back.controller_index,
                                   static_cast<int>(state.battlefield.size()) - 1);
     }
+}
+
+// A Moonrage Brute that LEFT the battlefield is a Brutal Cathar card in its new zone (CR 711.8 /
+// 712.8a: a transforming DFC off the battlefield has only its front face's characteristics). The
+// leave site already moved the Card (graveyard / exile) or holds it in a local (the flicker), so
+// re-face whatever copy carries the m_number in the controller's graveyard and the shared exile.
+// m_number is kept: the object identity the logs and the numbering table read is the card's.
+inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left,
+                                      const CardDefinition& d)
+{
+    if (d.params.nightbound_front_name.empty()) { return; }   // already the front face
+    const CardDefinition* fd = CardDatabase::Instance().Lookup(d.params.nightbound_front_name);
+    if (!fd) { return; }
+    auto reface = [&](std::vector<Card>& zone)
+    {
+        for (Card& c : zone)
+        {
+            if (c.m_number != left.m_number || !(c.m_name == left.m_name)) { continue; }
+            Card f = fd->card;
+            f.m_number = c.m_number;
+            c = f;
+        }
+    };
+    if (controller >= 0 && controller < static_cast<int>(state.players.size()))
+    { reface(state.players[static_cast<std::size_t>(controller)].graveyard); }
+    reface(state.exile);
 }
 
 // Change the designation, transforming every daybound / nightbound permanent (CR 726.3a). A

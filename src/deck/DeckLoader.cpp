@@ -1,4 +1,5 @@
 #include "DeckLoader.h"
+#include "cards/CardDatabase.h"
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -159,7 +160,9 @@ Decklist DeckLoader::LoadCockatrice(const std::filesystem::path& path)
 Card DeckLoader::MakePlaceholder(const std::string& name)
 {
     Card c;
-    c.m_name = name;
+    // A decklist may name an alternate printing by its oracle name (an entry's scryfall_name);
+    // resolve to the cards.json entry name. Unknown / non-alias names pass through unchanged.
+    c.m_name = CardDatabase::Instance().CanonicalName(name);
     c.RehashName();
     return c;
 }

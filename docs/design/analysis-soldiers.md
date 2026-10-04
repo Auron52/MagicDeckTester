@@ -49,13 +49,13 @@ The deck is NOT mono-W. Off-colour pips and how they are paid (nothing is uncast
 | Coppercoat Vanguard | 1 | lord_effect Human +1/+0, excludes self | ward {1} grant inert -- PROVISIONAL |
 | Esper Sentinel | 1 | vanilla 1/1 Artifact Human Soldier | opponent-cast draw trigger inert (standing decision) -- PROVISIONAL (explicit sign-off) |
 | Thalia, Guardian of Thraben | 2 | NEW noncreature_spell_tax: EffectiveSpellCost (symmetric, raw cost, also on spectacle), deck stamp GameState::deck_has_spell_tax, SubsetPayableSequential joins_for_mana, CheckLine declared-order walk; VialOrderMatters (item 4, below) | free-cast paths bypass the tax (no instance here) -- PROVISIONAL scope note |
-| Rick, Steadfast Leader | 2 + new viewer type | Secret Lair printed name of Greymond; `scryfall_name` honoured by audit_card_costs/audit_card_fields. NEW lord_min_controlled_matching (ComputeLordBonus, continuous), etb_choose_keyword_count/_menu + keyword_grant_subtypes, Permanent::chosen_keyword_mask (padding; sim/dominance/fold-census folds), CreatureHasLifelink/CreatureHasVigilance readers + BoardSources lifelink/vigilance lists, provider hook DecisionProvider::EtbChosenKeywords, viewer `choose_abilities` (all four sites) | first-strike grant has no reader -- PROVISIONAL; keyword-pair = provider one-option choice -- NEEDS USER SIGN-OFF |
+| Rick, Steadfast Leader | 2 + new viewer type | Secret Lair printed name of Greymond; `scryfall_name` honoured by audit_card_costs/audit_card_fields. NEW lord_min_controlled_matching (ComputeLordBonus, continuous), etb_choose_keyword_count/_menu + keyword_grant_subtypes, Permanent::chosen_keyword_mask (padding; sim/dominance/fold-census folds), CreatureHasLifelink/CreatureHasVigilance readers + BoardSources lifelink/vigilance lists, provider hook DecisionProvider::EtbChosenKeywords, viewer `choose_abilities` (all four sites) | first-strike grant has no reader -- PROVISIONAL; keyword-pair = provider one-option choice -- NEEDS USER SIGN-OFF (the human pick is a real `choose_abilities` decision, verified end-to-end 2026-10-04). Usability (USER 2026-10-04): `scryfall_image` sld/143 = Secret Lair art in both viewers; `scryfall_name` is also an import alias (either name in a decklist) |
 | Recruitment Officer | 3 | NEW PermAbilityMode::ActivatedDig (no {T}, appended last in all ModeSpec tables), PerformLookTakeDig (PerformEtbDig's body, MV filter), searched pick on the etbdig axis at FULL width, lossless whiff drop (autonomous), site-10 route clause + CardHasPostEntryActivation, K never > 1 (each pick searched; 2nd activation via the put-in-hand re-solve) | instant-speed timing collapsed to main phase (dominated) -- disclosed; "you may" always taken autonomously (weakly dominant) -- disclosed |
 | Jirina, Dauntless General | 1 | 2/2 legendary; self-only sac outlet (Ranger-Captain shape) | ETB graveyard exile (opponent gy always empty; ours unread; target-player not surfaced) and the hexproof/indestructible grant -- PROVISIONAL |
 | Harbin, Vanguard Aviator | 2 | NEW attack_with_n_* : ApplyAttackThresholdTeamPump (both combat worlds, declared attackers counted before the token block) + CountAttackThresholdTeamPump in PendingAttackDamage; ClassifyMainPhase / DeckFeedsCombat Main1 terms; deck stamp deck_has_attack_threshold | flying grant + own Flying inert -- PROVISIONAL |
 | General Kudro of Drannith | 1 | lord_effect Human +1/+1, excludes self | graveyard-exile ETB (no legal target) and `{2}, sac two Humans: destroy power>=4` (dominated; targets = spawns or own) -- PROVISIONAL |
 | Cathar Commando | 1 | vanilla 3/1 + Flash keyword | Flash timing (Ice-Fang Coatl precedent) and `{1}, sac: destroy artifact/enchantment` (Deconstruction Hammer precedent) -- PROVISIONAL (the cited 2026-10-04 approvals exist in git -- a038ded3, 81732983 -- but are for THOSE cards, not this one) |
-| Brutal Cathar // Moonrage Brute | 3 | Day/night: GameState::day_night (padding; folded nonzero in sim key + dominance), ApplyDayboundOnEnter at the top of FireEtbWatchers/FireOwnEtbTriggers (night entry = back face, no ETB, never a Human), SetDayNight (in-place face swap, transform-into-front trigger), DayNightTurnBoundary at the shared end-of-turn site in BOTH worlds (CR 726.3a); ExileOppCreatureUntilLeaves (loyalty-shape `target` in human play); linked exile parked in GameState::exile, returned by an orphan sweep at the turn boundary; back face = separate cards.json entry (Kaldring precedent) + MdfcBackFaceNames for the viewer image; `day_night` in the decision JSON + `--scenario` key | exile target default = largest opponent creature (payoff ~0) -- NEEDS USER SIGN-OFF; return deferred to the turn boundary and zone-change face name not restored -- disclosed, UNREACHABLE in this 60; back-face first strike + ward inert -- PROVISIONAL |
+| Brutal Cathar // Moonrage Brute | 3 | Day/night: GameState::day_night (padding; folded nonzero in sim key + dominance), ApplyDayboundOnEnter at the top of FireEtbWatchers/FireOwnEtbTriggers (night entry = back face, no ETB, never a Human), SetDayNight (in-place face swap, transform-into-front trigger), DayNightTurnBoundary at the shared end-of-turn site in BOTH worlds (CR 726.3a); ExileOppCreatureUntilLeaves (loyalty-shape `target` in human play); linked exile parked in GameState::exile, returned by an orphan sweep at the turn boundary; back face = separate cards.json entry (Kaldring precedent) + MdfcBackFaceNames for the viewer image; `day_night` in the decision JSON + `--scenario` key | exile target default = largest opponent creature -- SIGNED OFF (USER 2026-10-04, see Rulings); return-at-leave and front-face-off-battlefield -- FIXED 2026-10-04 (were disclosed gaps); back-face first strike + ward inert -- PROVISIONAL |
 | King Darien XLVIII | 2 | lord_effect all-creatures +1/+1; PayToken + NEW pay_token_self_counters; self-only sac outlet; creature-source pay scope | token hexproof/indestructible grant -- PROVISIONAL; instant-speed timing collapsed -- disclosed |
 | Fortified Beachhead | 2 | NEW etb_untap_control_subtypes (LandControlUntapMet in LandWouldEnterTapped / LandEntryHasChoice, before the provider reveal hook), team_pump_taps_source + team_pump_tough in ApplyFirebreathing (taps first, own mana excluded, atomic rollback), kActTeamPump tapped guard, land_sig `cu` + land_bonus `tp` | none (+1 toughness applied, inert) |
 | Silent Clearing | 1 | basic_land W/B, tap_self_damage 1, sacrifice_draw_cost {1} (Horizon Canopy sibling) | none |
@@ -131,18 +131,87 @@ Cross-cutting changes:
    order cannot pay, but on 4+ mana it casts Thalia first and pays {2} for the Vial. Adopt?
 2. **Provider one-option choices (no-greedy rule, need sign-off):** Rick's keyword pair
    (EtbChosenKeywords: Vigilance+Lifelink, first strike has no reader); Brutal Cathar's exile target
-   (largest opponent creature, payoff ~0); Beachhead's pump count rides the existing FirebreatheActivations
+   (largest opponent creature) -- SIGNED OFF 2026-10-04 (Rulings B); Beachhead's pump count rides the existing FirebreatheActivations
    default (already recorded COMPLIANT).
 3. **Provisional deferrals** listed in the table (Field Marshal x2, Coppercoat, Esper Sentinel, Thalia
-   scope note, Rick first strike, Jirina x2, Harbin, Kudro x2, Cathar Commando x2, Brutal Cathar x3,
+   scope note, Rick first strike, Jirina x2, Harbin, Kudro x2, Cathar Commando x2, Brutal Cathar x1 (back-face first strike + ward; the other two FIXED),
    King Darien) -- approve or reject each.
-4. **Slimefoot (Fungus):** pay_token_cost is not in CardHasPostEntryActivation, so a Slimefoot cast this
-   turn gets an un-fanned site-9 continuation. King Darien is keyed on his counter rider to leave Fungus
-   untouched; should Slimefoot be marked too (Fungus-affecting)?
+4. ~~**Slimefoot (Fungus):**~~ RESOLVED 2026-10-04 -- USER: mark it (see Rulings A).
+   NEW follow-up: same-turn Slimefoot -> token -> Utopia Mycon sac (the ping) needs a SECOND site-9
+   occurrence in one apply, which the class does not allow (see Rulings A, Finding). Worth a design
+   doc, or accept as-is?
 5. **Silent Clearing dig:** generic dig gate (VialProvider inherits it). Opt into a searched dig later?
 6. **Recruitment Officer:** pick axis = every legal hit (no width cap); one activation per action
    (picks 2..K never a ranked default). Taken as defaults.
-7. **Viewer cosmetic:** Scryfall image lookup by the printed name "Rick, Steadfast Leader" 404s, so the
-   viewer shows no art for Rick (data/audits use scryfall_name). Add an image alias?
+7. ~~**Viewer cosmetic (Rick art):**~~ RESOLVED 2026-10-04 (Rulings C).
 8. **Day-night display:** the decision JSON carries `day_night`; the GUI does not render it yet.
 
+
+## Rulings 2026-10-04 (user) and what was done
+
+**A. Slimefoot -- "Yes, if Slimefoot is missing its ability to create a token it should be added."**
+- `CardHasPostEntryActivation` (TurnSolver.cpp) now marks EVERY `pay_token_cost` card (keyed on the
+  mode's cost, not on King Darien's counter rider) -- the general form of 0f412eeb's Darien clause, so
+  a Slimefoot cast this turn gets the site-9 wave fan-out and its {4} Saproling is a searched
+  same-phase continuation instead of the one-option canonical base.
+- Fixture `test/scenarios/fungusb_slimefoot_token_same_turn.json` (FungusB list): 7 lands, cast
+  Slimefoot + {4} token on T5, swing 2+1 = 3 on T6. PASS (T6) with the fix; FAIL (T7) on the 0f412eeb
+  control binary.
+- **GT WILL MOVE -- FungusB only.** Slimefoot is in `decks/Fungus/candidate-b-2026-09/Fungus.cod`
+  (1 copy), NOT in the incumbent `decks/Fungus/Fungus.cod`, so the `fungus` cases are unaffected by
+  construction while the `fungusb` cases (all three tiers) will move. Each moved game needs a
+  per-game verdict at the next smoke/regression before any `--accept` (no suite was run here: the
+  box belongs to another batch).
+- Finding (not fixed, surfaced): a same-turn Slimefoot + token + Utopia Mycon SACRIFICE of that token
+  (the ping line) is still not found in one phase -- site 9 fires once per apply, so the continuation
+  that makes the Saproling cannot open a second site-9 occurrence for the Mycon outlet the new token
+  just armed. A Slimefoot already on the board does find it (one plan: token, then the outlet).
+  Probe: /tmp/slime/s1.json shape (7 lands, sick Mycon, hand Slimefoot, opp at 1) -> T6 not T5.
+
+**B. Brutal Cathar -- "There are actually critters for Brutal Cathar sometimes. They just don't do
+anything otherwise."**
+- That statement is the user's SIGN-OFF for the single-default exile target (largest opponent creature
+  by power): the target is immaterial because the opponent's creatures never act. The human still
+  board-clicks it (`target`) when more than one is legal.
+- In a REAL game: `audit_viewer_decisions.py --verify-card "Brutal Cathar"` -> VERIFIED (seed 1 gi 2):
+  the exile surfaced as a `target` decision over the goldfish's spawns.
+- The ETB exile genuinely fires: fixture `soldiers_brutal_cathar_exiles_opp_creature.json` (opponent
+  Skyshroud Cutter is in exile at game end, Cathar/Brute wins T5) using a NEW scenario assertion
+  `expect_exile_contains` (main.cpp RunScenario) -- the only observable, since exiling a passive body
+  moves neither life nor win turn. Control arm (no opponent creature) FAILS the assertion.
+- The two disclosed gaps were re-checked. Opponent critters make the EXILE live, but nothing in this 60
+  can make Brutal Cathar / Moonrage Brute LEAVE (every sac outlet here is self-only; Kudro's
+  sacrifice ability is deferred; the opponent never blocks), so both stay unreachable in Soldiers play.
+  They were cheap and general, so both are FIXED anyway: `FireLeavesBattlefieldTriggers` (every death
+  site via OnCreatureDies, and the flicker exile half) now, for either day/night face only,
+  (1) returns the linked card at the leave (CR 610.3; the turn-boundary sweep stays as the backstop for
+  leave paths that bypass the hook) and (2) re-faces a Moonrage Brute that left to its Brutal Cathar
+  front in the graveyard / exile (CR 711.8 / 712.8a). Keyed on the two day/night params, so every
+  other card is byte-identical. Unit tests: `test/unit/test_soldiers_cathar.cpp` (3 cases).
+
+**C. Rick, Steadfast Leader -- "Let's do whatever we can for Rick to make it most usable."**
+- Art: cards.json `scryfall_image: "sld/143"` (Scryfall's Secret Lair printing: name Greymond,
+  printed_name Rick, Steadfast Leader). The engine loads it into `CardDatabase::ImageRefs()`; the
+  decision JSON carries `image_refs` (only when an alias card is in the game, so other decks' JSON is
+  byte-identical) and the game log carries `imageRefs` (only for alias cards in the deck). Both
+  viewers (`tools/play/index.html` scryImg via IMAGE_REFS; `tools/replay/index.html`) request
+  `api.scryfall.com/cards/sld/143?format=image` -- verified 302 to the Rick art. That covers board,
+  hand, hover popover, dialogs and the choose_abilities panel (all go through scryImg).
+- Text: the viewer shows no oracle text anywhere (hover = the card image), so the SLD image IS the
+  tooltip and it prints Rick's text. The cards.json oracle_text already reads "As Rick, Steadfast
+  Leader enters..."; its bracket note was updated (it claimed the engine had no alias table).
+- Decision: `choose_abilities` verified END-TO-END through the real protocol --
+  `audit_viewer_decisions.py --verify-card "Rick, Steadfast Leader"` -> VERIFIED (seed 1 gi 3); the
+  frame offers all three pairs (First strike+Vigilance / First strike+Lifelink / Vigilance+Lifelink,
+  default 2) with `image_refs`, and answering 0 logs "Rick, Steadfast Leader -- chose first strike
+  and vigilance" (a non-default human pick is applied).
+- Import: `CardDatabase::CanonicalName` (alias = an entry's `scryfall_name`) is applied by
+  DeckLoader (.txt and .cod), and `analyze_deck.py` / `audit_viewer_decisions.py` canonicalise the same
+  way, so a decklist may say "Greymond, Avacyn's Stalwart" (Arena "(SLD) 143" suffix stripped too):
+  verified -- coverage resolves it to Rick, and an engine game loads it as Rick.
+- Audits: audit_card_costs (scryfall_name; Rick/Cathar/Slimefoot re-fetched, all match),
+  audit_card_fields rc 0, audit_viewer_decisions --no-sweep: Rick's "choose two" and Cathar's "exile
+  target" are now credited to their decisions (were regex advisories); only Kudro / Cathar Commando's
+  disclosed deferrals remain.
+- Still open for Rick: the provider's autonomous keyword pair (Vigilance+Lifelink) is a one-option
+  default awaiting sign-off (open question 2), and first strike has no reader (PROVISIONAL).

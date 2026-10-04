@@ -1356,6 +1356,9 @@ def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_s
             names.add(re.sub(r"^\s*\d+x?\s+", "", ln).strip())
     d = json.load(open(cards_json))
     cards = d if isinstance(d, list) else list(d.get("cards", d.values()))
+    # An alternate printing listed by its oracle name (an entry's scryfall_name) is the same card.
+    alias = {c["scryfall_name"]: c["name"] for c in cards if c.get("scryfall_name") and c.get("name")}
+    names = {alias.get(n, n) for n in names}
     return [c for c in cards if c.get("name") in names], names
 
 
@@ -1440,6 +1443,14 @@ def modeled_tokens(card):
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")
+    # Rick, Steadfast Leader's "choose two abilities from among ..." IS the choose_abilities
+    # decision (verified end-to-end 2026-10-04). Brutal Cathar's "exile target creature an
+    # opponent controls" IS the `target` board-click (the loyalty-shape chooser in
+    # ExileOppCreatureUntilLeaves, offered whenever more than one opponent creature is legal).
+    if p.get("etb_choose_keyword_count", 0) > 0:
+        t.add("modal")
+    if p.get("etb_or_transform_exile_opp_creature_until_leaves"):
+        t.add("target")
     return t
 
 
