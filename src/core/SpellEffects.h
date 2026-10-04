@@ -10805,24 +10805,159 @@ inline void RefreshFadeTokens(GameState& state, int source_number, int counters)
 // across a removal; anything that also ADDS a permanent (a death watcher's replacement token)
 // changes the size by more than the erase predicts and falls back to a full re-gather. Byte-
 // identical by construction either way -- the lists never decide anything, they only shorten a walk.
+// ---- MASS DEATH: remove every body in ONE pass, when no trigger can tell the difference --------
+//
+// A fading Saproling Burst's expiry kills dozens of tokens at once, and the two sweeps below erase
+// them ONE AT A TIME. `vector<Permanent>::erase` memmoves every element above the hole and
+// `sizeof(Permanent) == 296`, so a sweep costs O(deaths x board x 296 B) -- and the search re-runs
+// that end step on every line it explores. After the death-watcher prefilter landed, that single
+// memmove was ~80% of the sampled profile on the candidate-b straggler, attributed to
+// PerformUpkeepFading.
+//
+// Removing all the bodies first and only then firing the triggers is one stable compaction instead.
+// But it is NOT unconditionally identical: today each OnCreatureDies still sees the bodies that
+// have not been processed yet. So the fast path is taken only when it is a PROOF, never a hope --
+// `MassDeathBodiesAreUnobservable` is exactly that condition, derived by auditing every board read
+// reachable from OnCreatureDies:
+//
+//   (a) every dying body is `def_absent`, so every watcher loop's LookupCached returns null and
+//       skips it. That covers FireCreatureDiesWatchers, the `reactions` gather, DoublerShift (via
+//       CreateToken) and MinusCounterReplacement.
+//   (b) every dying body is a TOKEN, so the persist and Worldspine blocks (both `!dead_was_token`)
+//       stay shut and nothing carrying a definition can be PUT onto the battlefield mid-sweep.
+//   (c) every dying body has no coloured pip. DevotionTo is the one reachable walk that does NOT
+//       look a definition up -- it sums `card.m_mana_cost` directly -- so a pip-free body
+//       contributes 0 whether it is on the battlefield or not.
+//   (d) no watcher on that side can reach GainLife: `own_creature_dies_lifegain`
+//       (FireCreatureDiesWatchers) or `dies_trigger_self_gain` (the reactions loop). THIS IS THE
+//       SUBTLE ONE and it is why the guard exists at all: GainLife -> FireLifegainWatchers carries
+//       a `lifegain_each_own_creature_counters` loop that puts a +1/+1 counter on EACH own
+//       creature, which would both count the doomed bodies and actually SAVE a 0/0 token that was
+//       about to die. That is a real play difference, so any board that can reach it declines.
+//       Checking BoardSources::dwatch suffices: a `dies_trigger_self_gain` watcher with an empty
+//       dies_watch_subtype can never enter `reactions` in the first place, and a dying body cannot
+//       contribute its OWN self-watcher because (a) makes its definition lookup fail.
+//   (e) one controller, so (d) is a question about one side's watchers.
+//
+// Under (a)-(e) a doomed body is invisible to every observer, so folding the removals together is
+// identical BY CONSTRUCTION -- and the trigger order is preserved exactly (descending index, the
+// order the one-at-a-time loop used).
+inline bool MassDeathBodiesAreUnobservable(const GameState&        state,
+                                           const std::vector<int>& dying_desc,
+                                           const BoardSources*     watchers,
+                                           int                     ctrl)
+{
+    if (watchers == nullptr || ctrl < 0 || ctrl > 1) { return false; }   // cannot prove (d)/(e)
+    for (int i : dying_desc)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!q.def_absent || !q.is_token)   { return false; }           // (a), (b)
+        if (q.controller_index != ctrl)     { return false; }           // (e)
+        const ManaCost& mc = q.card.m_mana_cost;                        // (c)
+        if (mc.white || mc.blue || mc.black || mc.red || mc.green || mc.hybrid_count)
+        { return false; }
+    }
+    for (int wi : watchers->dwatch)                                     // (d)
+    {
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(
+            state.battlefield[static_cast<std::size_t>(wi)].card);
+        if (!wd) { continue; }
+        if (wd->params.own_creature_dies_lifegain > 0) { return false; }
+        if (wd->params.dies_trigger_self_gain > 0)     { return false; }
+    }
+    return true;
+}
+
+// Remove every body in `dying_desc` (DESCENDING battlefield indices) in one stable compaction, then
+// fire their death triggers in that same descending order. Only ever called behind
+// MassDeathBodiesAreUnobservable, which is what makes it byte-identical to the interleaved loop.
+inline void ApplyMassDeathBulk(GameState& state, const std::vector<int>& dying_desc,
+                               BoardSources (&bsrc)[2])
+{
+    // Snapshot what the triggers need: the bodies themselves do not survive the compaction.
+    struct Body { Card card; int ctrl; int minus; };
+    std::vector<Body> bodies;
+    bodies.reserve(dying_desc.size());
+    for (int i : dying_desc)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q) });
+    }
+    // ONE pass. `dying_desc` is descending, so walking it from the back yields ascending indices
+    // and no membership set is needed. Survivors keep their relative order, so anything elsewhere
+    // that enumerates by position sees the same sequence it would have after the N erases.
+    std::size_t k = dying_desc.size();
+    std::size_t w = 0;
+    for (std::size_t r = 0; r < state.battlefield.size(); ++r)
+    {
+        if (k > 0 && static_cast<std::size_t>(dying_desc[k - 1]) == r) { --k; continue; }
+        if (w != r) { state.battlefield[w] = std::move(state.battlefield[r]); }
+        ++w;
+    }
+    state.battlefield.resize(w);
+    // Many indices moved at once, so OnErase (which is per-index) cannot express it: re-gather.
+    bsrc[0] = GatherBoardSources(state.battlefield, 0);
+    bsrc[1] = GatherBoardSources(state.battlefield, 1);
+    for (const Body& b : bodies)
+    {
+        const std::size_t    expect = state.battlefield.size();
+        const BoardSources*  ds     = &bsrc[b.ctrl];
+        OnCreatureDies(state, b.ctrl, b.card, /*dead_was_token=*/true, b.minus, &ds->dwatch);
+        // A trigger that added or removed a permanent (a death token) invalidates the lists.
+        if (state.battlefield.size() != expect)
+        {
+            bsrc[0] = GatherBoardSources(state.battlefield, 0);
+            bsrc[1] = GatherBoardSources(state.battlefield, 1);
+        }
+    }
+}
+
 inline void SweepDeadFadeTokens(GameState& state, int source_number)
 {
     BoardSources bsrc[2] = { GatherBoardSources(state.battlefield, 0),
                              GatherBoardSources(state.battlefield, 1) };
     auto srcs = [&](int ci) -> const BoardSources*
     { return (ci == 0 || ci == 1) ? &bsrc[ci] : nullptr; };
+    // The toughness verdict, as the loop below computes it. Hoisted so the bulk pre-pass and the
+    // one-at-a-time path cannot drift apart -- the two MUST agree on who dies.
+    auto is_dead = [&](const Permanent& q) -> bool
+    {
+        const BoardSources* qs = srcs(q.controller_index);
+        return q.EffectiveToughness()
+             + ComputeLordBonus(q.card, state, q.controller_index, q.AnimatedAllTypes(), &q,
+                                qs ? &qs->lords   : nullptr,
+                                qs ? &qs->anthems : nullptr).second
+             + AuraBonusFor(q, state,  qs ? &qs->attached : nullptr).second
+             + EquipBonusFor(q, state, qs ? &qs->attached : nullptr).second <= 0;
+    };
+    // BULK PRE-PASS. Only worth it for a genuine mass death (one body is already one erase), and
+    // only sound behind the (a)-(e) proof. Pre-collecting the set is itself valid under that proof:
+    // an admitted trigger can deal damage, create vanilla tokens or exile from the library, none of
+    // which changes a surviving body's toughness, so the verdict cannot move mid-sweep.
+    {
+        std::vector<int> dying_desc;
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.created_by_number != source_number) { continue; }
+            if (is_dead(q)) { dying_desc.push_back(static_cast<int>(i)); }
+        }
+        if (dying_desc.size() > 1
+            && MassDeathBodiesAreUnobservable(
+                   state, dying_desc,
+                   srcs(state.battlefield[static_cast<std::size_t>(dying_desc.front())]
+                            .controller_index),
+                   state.battlefield[static_cast<std::size_t>(dying_desc.front())].controller_index))
+        {
+            ApplyMassDeathBulk(state, dying_desc, bsrc);
+            return;
+        }
+    }
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
         Permanent& q = state.battlefield[i];
         if (q.created_by_number != source_number) { continue; }
-        const BoardSources* qs = srcs(q.controller_index);
-        const int tough = q.EffectiveToughness()
-                        + ComputeLordBonus(q.card, state, q.controller_index, q.AnimatedAllTypes(), &q,
-                                           qs ? &qs->lords   : nullptr,
-                                           qs ? &qs->anthems : nullptr).second
-                        + AuraBonusFor(q, state,  qs ? &qs->attached : nullptr).second
-                        + EquipBonusFor(q, state, qs ? &qs->attached : nullptr).second;
-        if (tough > 0) { continue; }
+        if (!is_dead(q)) { continue; }
         const Card dead   = q.card;
         const int  ctrl   = q.controller_index;
         const bool tok    = q.is_token;
@@ -10871,6 +11006,32 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
     // per-permanent predicate, and an empty list is a proof neither loop can fire.
     BoardSources bsrc[2];
     bool gathered = false;
+    // BULK PRE-PASS -- see MassDeathBodiesAreUnobservable. This is the Burst's EXPIRY, i.e. the
+    // single biggest mass death the engine produces, so it is the main beneficiary.
+    {
+        std::vector<int> dying_desc;
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.created_by_number == source_number && q.is_token)
+            { dying_desc.push_back(static_cast<int>(i)); }
+        }
+        if (dying_desc.size() > 1)
+        {
+            bsrc[0] = GatherBoardSources(state.battlefield, 0);
+            bsrc[1] = GatherBoardSources(state.battlefield, 1);
+            gathered = true;
+            const int ctrl =
+                state.battlefield[static_cast<std::size_t>(dying_desc.front())].controller_index;
+            if (MassDeathBodiesAreUnobservable(state, dying_desc,
+                                               (ctrl == 0 || ctrl == 1) ? &bsrc[ctrl] : nullptr,
+                                               ctrl))
+            {
+                ApplyMassDeathBulk(state, dying_desc, bsrc);
+                return;
+            }
+        }
+    }
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
         Permanent& q = state.battlefield[i];
