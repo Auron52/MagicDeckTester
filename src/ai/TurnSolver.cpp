@@ -33833,6 +33833,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // apply_plan_actions(plan.actions, ...) call was moved down past the assignment for exactly
     // this reason, and that move is a pure code move (a lambda definition executes nothing).
     std::function<void(const std::vector<Action>&)> apply_trailing_activations;
+    // A CONTINUATION'S BOARD ACTIVATIONS (Scrying Sheets' look, any IsTrailingActivation kind). The
+    // continuation list is enumerated by the same CollectActions as a main plan, so it OFFERS
+    // activations -- "#0 land=Scrying Sheets: Scrying Sheets(x1)" after Ice-Fang Coatl draws the
+    // Sheets -- but the cast-only apply_plan_actions dropped them, in both worlds, at every site but
+    // 7 and 9. The offered entry therefore applied as its land-only sibling, was skipped as a
+    // post-apply duplicate, and the line was inexpressible at any budget (Snow overnight s5005
+    // gi147: T7 reachable, d8b0 settled T8). Applied AFTER the continuation's casts, the position
+    // the main plan's own trailing pass takes and the executor twins (resolve_draw_breakpoint's
+    // tail, replay_recorded's trailing dispatch) mirror. RECORDED first when this level pushed a
+    // sink -- the committed-line replay walks records, not the list -- and before the apply, so a
+    // nested breakpoint the activation opens records after it, in apply order.
+    auto apply_continuation_activations = [&](const TurnSolver::Plan& sp, bool recorded)
+    {
+        bool any = false;
+        for (const Action& a : sp.actions)
+        { if (TurnSolver::IsTrailingActivation(a.kind)) { any = true; break; } }
+        if (!any) { return; }
+        if (recorded && !sink_stack.empty())
+        {
+            for (const Action& a : sp.actions)
+            { if (TurnSolver::IsTrailingActivation(a.kind)) { sink_stack.back()->push_back(a); } }
+        }
+        apply_trailing_activations(sp.actions);
+    };
 
     // HUMAN-DECLARED ORDER, INTERLEAVED (Plan::human_action_order; MTG_HUMAN_LINE_ORDER, owned by
     // AIEngine). The human's committed line names casts and board activations in ONE sequence, and
@@ -35688,6 +35712,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
+                apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                 if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
             }
         }
@@ -35724,6 +35749,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
+                apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                 if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
             }
             // Human play: Treasure Hunt's reveal is now in hand; the chooser re-fires so the
@@ -36091,6 +36117,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // executor's breakpoint replay had the same gap) -- now the shared loop.
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
+                apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                 if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
             }
         }
@@ -36153,6 +36180,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     bp_play_searched_land(extra, my_bp_sink);
                     apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
+                    apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                     if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
                 }
             }
@@ -36354,6 +36382,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         bp_play_searched_land(extra, my_bp_sink);
                         apply_continuation_precasts(extra);
                         apply_plan_actions(extra.actions, extra.searched_order);
+                        apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
                     }
                     if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
                     // Set AFTER the continuation's own apply, so its section runs in full.
@@ -36966,91 +36995,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // action produces float (a.ritual_float > 0, which SacForMana sets), so the greedy per-cast path --
     // which spends floating first -- realises the combo. Mirrors AIEngine::TakeTurn (lockstep). Both
     // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
-    // bp_resume: the whole main-phase execution below (Lotus float, batch pre-pay, the cast loop,
-    // Krenko taps, sac outlets, the deferred Karoo) already happened inside the snapshot's state;
-    // skip straight to the deferred re-solve and re-arm the context that must resume with it.
-    if (bp_resume != nullptr)
-    {
-        bp_seen                  = bp_resume->bp_seen;
-        deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
-        deferred_cantrip_site    = bp_resume->deferred_site;
-        deferred_hand_before     = bp_resume->deferred_hand;
-        deferred_trick_armed     = bp_resume->trick_armed;
-        deferred_equip_armed     = bp_resume->equip_armed;
-        cascade_free             = bp_resume->cascade_free;
-        g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
-        g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
-        g_scripted_saga_ch1      = bp_resume->pin_sagach1;
-        g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
-        g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
-        g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
-        g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
-        if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
-    }
-    else
-    {
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind == Action::Kind::SacForMana)
-        { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                          TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
-        else if (a.kind == Action::Kind::Suspend)
-        { ApplySuspend(state, state.active_player_index, a.card_name); }
-        // Convoke (Chord of Calling): tap the chosen bodies BEFORE the batch pre-pay / casts, so
-        // AvailableManaPool no longer counts anything convoke consumed; the action's cost was
-        // reduced at enumeration by exactly their contribution. Same deterministic body order in
-        // both worlds (ApplyConvokeTaps) -> lockstep.
-        else if (a.kind == Action::Kind::CastFromHand
-                 && (a.convoke_green > 0 || a.convoke_other > 0))
-        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
-    }
-
-    // PLAN TRAITS for the payment layer (mana-order-and-reserve-overhaul.md layer 3): computed
-    // once, in scope over the prepay AND the casts below. Mirrored in AIEngine::TakeTurn through
-    // the same builder -> lockstep. Null scope (levers off) = every consumer behaves as before.
-    PlanTraits _plan_traits;
-    if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
-    // MTG_ACT_DROP_AUDIT diagnostic: per-apply record of which sources a breakpoint CONTINUATION
-    // activated, so the drop site can join on it exactly (see t_cont_act_srcs).
-    if (ActDropAuditOn()) { t_cont_act_srcs.clear(); }
-    PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
-    TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
-
-    // Whole-turn batch pre-payment: tap for the combined cost of the main hand casts and pre-load
-    // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
-    // allocated jointly, filters fed, unneeded sources left up -- instead of the stranding per-cast
-    // greedy. Declined turns leave state untouched and fall through to the identical greedy path.
-    // PREFIX-SCOPED PREPAY under a node host (MTG_BP_PREFIX_PREPAY, default OFF).
-    //
-    // The whole-turn prepay taps for EVERY cast in the plan and leaves the surplus floating. When
-    // this apply is going to STOP at a plain-cantrip partition point (bp_capture armed), the casts
-    // after that point are about to be discarded and re-derived by the node -- so the mana pre-tapped
-    // for them is float that exists only because of a tail we threw away. That float is part of the
-    // pend state, which is why the node's PREFIX dedup fails to collapse two plans whose
-    // pre-breakpoint casts are identical: `[Ponder]` fast-declines the prepay (eligible < 2) and
-    // pends with pool=0, while `[Ponder;Ornithopter]` takes it and pends with pool=2. Their children
-    // then reconverge once the float is spent -- measured as the CROSS-dupe bucket, 77% of the
-    // node's duplicate child applies (MTG_BP_DUPE_TRACE case list; see bp-node-partition.md).
-    //
-    // Scoping the prepay to the prefix makes those two pends identical so the existing dedup
-    // collapses them. Diagnostic A/B that motivated it: MTG_NO_BATCH_PAY=1 (which kills the float
-    // globally, and changes play, so it is NOT a candidate) more than doubles the prefix dedup's
-    // catch rate, 16.8% -> 37.1% of pends, and drops cross dupes 42%.
-    //
-    // SAFETY: the prepay is an optimization of PAYMENT, not a gate on it. Covering fewer casts
-    // routes the rest to the per-cast fallback that already runs on every declined turn, so a
-    // mis-scoped prefix costs payment quality, never payability. Gated on bp_capture, so it can
-    // only ever affect a search-internal node pend -- the executor's committed apply passes no
-    // capture and is untouched by construction.
-    if (bp_capture != nullptr && BpPrefixPrepayEnabled())
-    {
-        TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan));
-    }
-    else
-    {
-        TurnSolver::BatchPrepayMainCasts(state, plan.actions);
-    }
-
+    // ASSIGNED AHEAD OF THE bp_resume BRANCH: a node-resumed apply skips the whole main-phase block
+    // below, yet its deferred continuation still dispatches board activations through this
+    // (apply_continuation_activations). It captures nothing that block declares.
     // Costed sac outlets (Siege-Gang / Pashalik) + Twinshot channel: pay the mana cost from the pool
     // left after the main casts (TapForCostDirect, the rollout pay path), then realise the effect.
     // If the cost can't be paid (mana stranded), the outlet is a no-op -- the leaf/executor share this
@@ -37754,6 +37701,92 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
     };
 
+    // bp_resume: the whole main-phase execution below (Lotus float, batch pre-pay, the cast loop,
+    // Krenko taps, sac outlets, the deferred Karoo) already happened inside the snapshot's state;
+    // skip straight to the deferred re-solve and re-arm the context that must resume with it.
+    if (bp_resume != nullptr)
+    {
+        bp_seen                  = bp_resume->bp_seen;
+        deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
+        deferred_cantrip_site    = bp_resume->deferred_site;
+        deferred_hand_before     = bp_resume->deferred_hand;
+        deferred_trick_armed     = bp_resume->trick_armed;
+        deferred_equip_armed     = bp_resume->equip_armed;
+        cascade_free             = bp_resume->cascade_free;
+        g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
+        g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
+        g_scripted_saga_ch1      = bp_resume->pin_sagach1;
+        g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
+        g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
+        g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
+        g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
+        if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
+    }
+    else
+    {
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacForMana)
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                          TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
+        else if (a.kind == Action::Kind::Suspend)
+        { ApplySuspend(state, state.active_player_index, a.card_name); }
+        // Convoke (Chord of Calling): tap the chosen bodies BEFORE the batch pre-pay / casts, so
+        // AvailableManaPool no longer counts anything convoke consumed; the action's cost was
+        // reduced at enumeration by exactly their contribution. Same deterministic body order in
+        // both worlds (ApplyConvokeTaps) -> lockstep.
+        else if (a.kind == Action::Kind::CastFromHand
+                 && (a.convoke_green > 0 || a.convoke_other > 0))
+        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
+    }
+
+    // PLAN TRAITS for the payment layer (mana-order-and-reserve-overhaul.md layer 3): computed
+    // once, in scope over the prepay AND the casts below. Mirrored in AIEngine::TakeTurn through
+    // the same builder -> lockstep. Null scope (levers off) = every consumer behaves as before.
+    PlanTraits _plan_traits;
+    if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
+    // MTG_ACT_DROP_AUDIT diagnostic: per-apply record of which sources a breakpoint CONTINUATION
+    // activated, so the drop site can join on it exactly (see t_cont_act_srcs).
+    if (ActDropAuditOn()) { t_cont_act_srcs.clear(); }
+    PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
+    TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
+
+    // Whole-turn batch pre-payment: tap for the combined cost of the main hand casts and pre-load
+    // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
+    // allocated jointly, filters fed, unneeded sources left up -- instead of the stranding per-cast
+    // greedy. Declined turns leave state untouched and fall through to the identical greedy path.
+    // PREFIX-SCOPED PREPAY under a node host (MTG_BP_PREFIX_PREPAY, default OFF).
+    //
+    // The whole-turn prepay taps for EVERY cast in the plan and leaves the surplus floating. When
+    // this apply is going to STOP at a plain-cantrip partition point (bp_capture armed), the casts
+    // after that point are about to be discarded and re-derived by the node -- so the mana pre-tapped
+    // for them is float that exists only because of a tail we threw away. That float is part of the
+    // pend state, which is why the node's PREFIX dedup fails to collapse two plans whose
+    // pre-breakpoint casts are identical: `[Ponder]` fast-declines the prepay (eligible < 2) and
+    // pends with pool=0, while `[Ponder;Ornithopter]` takes it and pends with pool=2. Their children
+    // then reconverge once the float is spent -- measured as the CROSS-dupe bucket, 77% of the
+    // node's duplicate child applies (MTG_BP_DUPE_TRACE case list; see bp-node-partition.md).
+    //
+    // Scoping the prepay to the prefix makes those two pends identical so the existing dedup
+    // collapses them. Diagnostic A/B that motivated it: MTG_NO_BATCH_PAY=1 (which kills the float
+    // globally, and changes play, so it is NOT a candidate) more than doubles the prefix dedup's
+    // catch rate, 16.8% -> 37.1% of pends, and drops cross dupes 42%.
+    //
+    // SAFETY: the prepay is an optimization of PAYMENT, not a gate on it. Covering fewer casts
+    // routes the rest to the per-cast fallback that already runs on every declined turn, so a
+    // mis-scoped prefix costs payment quality, never payability. Gated on bp_capture, so it can
+    // only ever affect a search-internal node pend -- the executor's committed apply passes no
+    // capture and is untouched by construction.
+    if (bp_capture != nullptr && BpPrefixPrepayEnabled())
+    {
+        TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan));
+    }
+    else
+    {
+        TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+    }
+
+
     // ---- The main-phase apply, in the order the two passes above define ------------------------
     // (Moved down from just after the batch pre-pay; see the note on the lambda above. Nothing
     // between the old and new positions executes, so this is a code move, not a sequence change.)
@@ -38113,6 +38146,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // its crack-less sibling (gi69 probe, 2026-08-13).
         apply_continuation_precasts(extra);
         apply_plan_actions(extra.actions, extra.searched_order);
+        apply_continuation_activations(extra, out_breakpoint != nullptr);
         if (out_breakpoint) { bp_sink_pop(); }
     }
 
@@ -38263,6 +38297,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
+                apply_continuation_activations(extra, out_breakpoint != nullptr && my_bp_sink != nullptr);
                 if (out_breakpoint) { bp_sink_pop(); }
                 // Legacy stops here ("once we have action we are no longer stuck"). A deck whose
                 // cycling IS the wincon must keep going: the re-solve just DEPLOYED a payoff (a
@@ -52611,6 +52646,29 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 // not yet played; EnumeratePlansWithLand folds the land choice). Returns the best
 // line (min win turn) fully searching `depth` complete turns from here, prefixed
 // with the chosen pre-combat phase.
+// DIG INSTRUMENT (MTG_FSW_TRACE, print-only): one line per BREAKPOINT-NODE child at turn
+// MTG_FSW_TURN, and one per plan the main loop DECLINES before its own [fsw] print (`what` names the
+// exit: node child, node-child dupe, post-apply dupe, wave-0 collapse, stillborn). Without it a
+// declined variant is invisible -- which is how Snow gi147's dropped Sheets look hid (2026-10-04).
+// `after` is pre-combat for the declined exits. tail is -1 where nothing was scored.
+static void FswDeclinedTrace(const GameState& state, int depth, const TurnSolver::Plan& p,
+                              const char* what, const std::vector<Action>& bp, const GameState& s3,
+                              int tail, int best)
+{
+    static const bool s_fsw = EnvOn("MTG_FSW_TRACE");
+    static const int  s_fsw_turn = EnvInt("MTG_FSW_TURN", 2);
+    if (!s_fsw || state.turn_number != s_fsw_turn) { return; }
+    std::string sum, cont, hand;
+    if (p.land_decided) { sum += "land=" + p.land_to_play + ";"; }
+    for (const Action& a : p.actions) { sum += a.card_name; sum += ","; }
+    for (const Action& a : bp) { cont += "k" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name + ","; }
+    for (const Card& c : s3.ActivePlayer().hand) { hand += c.m_name.str(); hand += ","; }
+    std::fprintf(stderr, "[fsw-skip] T%d d%d oppL=%d p=%s %s bp=%d@%d cont=[%s] after=%d tail=%d best=%d hand=[%s]\n",
+                 state.turn_number, depth, state.players[1 - state.active_player_index].life,
+                 sum.c_str(), what, p.bp_choice, p.bp_at, cont.c_str(), s3.players[1 - s3.active_player_index].life,
+                 tail, best, hand.c_str());
+}
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
@@ -53520,6 +53578,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     }
                     if (rec_vals) { node_vals.push_back(max_turns + 1); }
                     if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                    FswDeclinedTrace(state, depth, p, "stillborn", {}, state, -1, best.win_turn);
                     continue;
                 }
             }
@@ -53547,6 +53606,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 { g_fsw_unif_collapsed.fetch_add(1, std::memory_order_relaxed); }
                 else
                 { g_w0_chain_collapsed.fetch_add(1, std::memory_order_relaxed); }
+                FswDeclinedTrace(state, depth, p, "w0-collapse", {}, state, -1, best.win_turn);
                 continue;
             }
         }
@@ -53766,6 +53826,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     const TranspositionTable::Key child_key = BuildDedupKey(s3);
                     if (!bp_seen_states.insert(child_key).second)
                     {
+                        FswDeclinedTrace(state, depth, v, "node-dupe", bp3, s3, -1, best.win_turn);
                         if (s_rollout_stats)
                         {
                             bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed);
@@ -53801,6 +53862,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                    second_main, tt, lc, budget, nullptr, eot_ptr);
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
+                    FswDeclinedTrace(state, depth, v, "node-child", bp3, s3, tail.win_turn, best.win_turn);
                     if (tail.win_turn < node_best_val) { node_best_val = tail.win_turn; }
                     if (tail.win_turn < best.win_turn)
                     {
@@ -53891,6 +53953,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 && (PlanIsAxisVariant(p) || FsPreStateSkipOn());
             if (skip_dup)
             {
+                FswDeclinedTrace(state, depth, p, "post-apply-dupe", bp, s, -1, best.win_turn);
                 if (p.bp_choice < 0 && PlanIsAxisVariant(p))
                 { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
                 else if (p.bp_choice < 0)

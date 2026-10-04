@@ -4233,6 +4233,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // script keeps the real game in lockstep with the committed line. Recurses on each
     // recorded cast's own nested breakpoint_casts (a recorded draw engine that revealed
     // further cards). See project-full-depth-search (TH oracle class).
+    // Forward-declared (assigned with the trailing pass below) so both continuation replays can
+    // dispatch a continuation's BOARD ACTIVATIONS -- lockstep twins of ApplyPlanDirect's
+    // apply_continuation_activations, which records them and applies them after the casts.
+    std::function<void(const std::vector<Action>&)> exec_trailing_activations;
     std::function<void(const std::vector<Action>&)> replay_recorded =
         [&](const std::vector<Action>& recs)
     {
@@ -4300,6 +4304,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // empty tag is how a later pin-less continuation stops an earlier one's pins leaking forward.
         std::optional<ContPinScope> rec_pins;
         int rec_scry = -1;
+        std::vector<Action> rec_acts;   // board activations, dispatched after the casts (below)
         for (const Action& a : recs)
         {
             if (a.cont_pins)
@@ -4341,9 +4346,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
             { PerformDig(state, a.card_name, a.dig_sacrifice); }
+            // A continuation's board activation: the rollout applied it AFTER the continuation's
+            // casts, so it is dispatched as one trailing pass once the casts are replayed.
+            else if (TurnSolver::IsTrailingActivation(a.kind)) { rec_acts.push_back(a); }
             // Nested breakpoint casts this recorded draw engine (or dug Treasure Hunt) revealed.
             if (!a.breakpoint_casts.empty()) { replay_recorded(a.breakpoint_casts); }
         }
+        if (!rec_acts.empty()) { exec_trailing_activations(rec_acts); }
     };
 
     // Fallback draw breakpoint for the NON-committed full-depth plan (the develop-when-
@@ -4708,6 +4717,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
         }
+        // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
+        // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw
+        // offers: Snow s5005 gi147). The trailing pass is a no-op on a cast-only continuation.
+        exec_trailing_activations(extra.actions);
         // Flood-keep (fallback path): if the draw overfilled the hand and the land drop is
         // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as
@@ -4736,595 +4749,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
     };
 
-    // Canonical execution order: Vial deployments first (lords live before spell casts),
-    // then regular spells (their lands tap first), then sacrifice-land spells, then
-    // graveyard (Retrace) casts last. Each cast is resolved before the next (when a
-    // resolver was supplied) so same-phase interactions (prowess, lords, spectacle,
-    // on-cast triggers) see the up-to-date board/life, matching the lookahead rollout.
-    // Set once a staging draw spell is cast: defer the rest of the plan to the second
-    // pass (which re-solves from the post-draw state with the remaining mana), so the
-    // real game executes the same draw-breakpoint line the rollout searches.
-    bool staged_break = false;
-    bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed (first segment)
-    // Per-segment replay (Action::rec_bp_ord): the i-th main-level breakpoint replays the records
-    // stamped i. When every record is stamped 0 -- the common case -- the first trigger replays
-    // the whole list and the later ones replay nothing, exactly the historical behaviour.
-    int  rec_seg_next = 0;
-    auto replay_segment = [&]()
-    {
-        const int ord = rec_seg_next++;
-        std::vector<Action> seg;
-        for (const Action& r : plan.breakpoint_actions) { if (r.rec_bp_ord == ord) { seg.push_back(r); } }
-        if (!seg.empty()) { replay_recorded(seg); }
-        bp_replayed = true;
-    };
-    // The no-commit fallback's half of acq_deferred: remember the arming cast (the LAST one wins,
-    // like ApplyPlanDirect's deferred_cantrip_site; the hand snapshot follows deferred_hand_before
-    // -- tutor-to-top keeps it EMPTY) and re-solve once, after the main casts, beside the catch-all.
-    bool                  acq_pending = false;
-    const CardDefinition* acq_site    = nullptr;
-    std::vector<int>      acq_hand;
-    auto arm_acq_deferred = [&](const std::string& name)
-    {
-        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
-        acq_pending = true;
-        acq_site    = d;
-        pin_rdb_hand();
-        if (d != nullptr && TopResolveEnabled() && d->params.tutor_to_top
-            && !(AcqResolveEnabled() && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)))
-        { acq_hand.clear(); }
-        else { acq_hand = rdb_hand; }
-    };
-    // PARTITION truncation (MTG_EQUIP_DRAW_BP_INLINE) -- executor twin of ApplyPlanDirect's
-    // bp_truncate. Once a site-6 continuation has run at the cast that drew, the rest of this
-    // plan's casts belong to that continuation's section and the rollout did NOT apply them here;
-    // executing them anyway would realise a turn the search never scored. Separate from
-    // staged_break on purpose: that flag also suppresses the alt-payload auto-fire and the
-    // end-of-turn catch-all replay, and borrowing it would silently change those too.
-    bool bp_trunc_exec = false;
-    // Does casting `nm` end our section? Same predicate the rollout arms on, so the two worlds
-    // truncate at exactly the same cast. Evaluated post-resolution, where the Equipment and the
-    // watcher are both on the battlefield.
-    auto equip_bp_truncates = [&](const std::string& nm) -> bool
-    {
-        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-        if (d == nullptr) { return false; }
-        // THE PARTITION SHAPE for plain cantrips (MTG_BP_PARTITION_CANTRIP) -- the executor half.
-        // ApplyPlanDirect truncates its section the moment a plain cantrip's continuation has run;
-        // if the executor kept casting the plan's tail here it would realise a turn the search
-        // never scored, which is the divergence the deferred shape was originally chosen to avoid.
-        // EXACT mirror of the rollout's `plain_cantrip`, and all three clauses are load-bearing.
-        // The rollout reaches that branch only inside `def.tmpl == CardTemplate::DrawSpell`; an
-        // earlier version of this predicate dropped that clause and so returned true for EVERY
-        // cast, because equip_bp_truncates is consulted for every action in the executor's cast
-        // loop rather than only for draws. The executor then truncated after the FIRST cast of any
-        // kind: measured on hold gi=18, T1 cast Sol Ring and dropped Ornithopter, T2 cast Preordain
-        // and dropped Hinata, turning a turn-3 win into a turn-6 one, with 46 of 60 games worse.
-        // MTG_BP_NODE truncates the SAME cast, but only for a plan CARRYING a continuation
-        // choice (bp_choice >= 0, incl. the empty sentinel) -- the exact mirror of the rollout's
-        // shape-(2) condition. A committed plan WITHOUT a choice (a tranche/group-wave plan the
-        // search scored full-tail-greedy) must execute its tail, and a non-committed greedy plan
-        // (bp_choice < 0 always) is untouched.
-        if ((TurnSolver::PartitionCantrip() || (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0))
-            && d->tmpl == CardTemplate::DrawSpell
-            && !d->params.expressive_iteration && !d->params.stages_cards)
-        { return true; }
-        // MTG_BP_NODE_D56: the node hosts the other two DEFERRED classes too, and each one's
-        // partition needs its executor twin here for exactly the reason the cantrip clause above
-        // spells out -- a committed plan carrying a continuation choice was SCORED with its tail
-        // truncated at this cast, so executing that tail realises a turn the search never scored.
-        // Both clauses mirror ApplyPlanDirect's arming conditions cast-for-cast; the PUT-armed
-        // site-6 case is deliberately absent on BOTH sides (see the note at that arming point).
-        if (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0)
-        {
-            const int hosted = TurnSolver::BpNodeHostedSites();
-            // Site 5 -- solo-target trick with a draw or Treasure payload (Gold Rush, Mirrorwing).
-            if ((hosted & (1 << 5)) != 0 && d->params.solo_target_trick
-                && (d->params.cast_draw > 0
-                    || (d->params.creates_treasures > 0 && MintPayloadOpensBreakpoint())))
-            { return true; }
-            // Site 6 -- an Equipment cast under a live ETB-draw watcher. Only the DEFERRED shape
-            // is new here; the inline one already truncates through the clause below.
-            if ((hosted & (1 << 6)) != 0 && !TurnSolver::EquipmentDrawBreakpointInline()
-                && TurnSolver::EquipmentDrawBreakpoint(state, *d))
-            { return true; }
-        }
-        if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }
-        return TurnSolver::EquipmentDrawBreakpoint(state, *d);
-    };
-
-    // Order trace (MTG_ORDER_TRACE, inert by default): print the committed hand-cast
-    // sequence per pre-combat main, tagged with searched_order, so a heuristic-vs-search
-    // (MTG_SEARCH_ORDER) A/B can see WHICH reorder the search chose. The skill's
-    // heuristic-accuracy process uses this to author a provider ordering heuristic that
-    // reproduces the search's pick. Single-thread + --game-index N for a clean per-game read.
-    static const bool s_order_trace = EnvOn("MTG_ORDER_TRACE");
-    if (s_order_trace && is_pre_combat_main && !m_in_rollout)
-    {
-        // Print the ACTUAL executed order of non-sacrifice hand casts: rank-sorted for a
-        // clean set, plan order for an opaque (draw/staging) set or a searched_order plan.
-        std::vector<int> ns;
-        bool opaque = false;
-        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
-        {
-            const Action& a = plan.actions[i];
-            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-            ns.push_back(i);
-            if (OrderingOpaque(a.card_name)) { opaque = true; }
-        }
-        if (!opaque && !plan.searched_order)
-        {
-            std::stable_sort(ns.begin(), ns.end(), [&](int x, int y)
-            { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
-        }
-        std::string seq;
-        for (int i : ns)
-        {
-            if (!seq.empty()) { seq += ", "; }
-            seq += plan.actions[i].card_name;
-            if (plan.actions[i].alt_cost) { seq += "(alt)"; }
-        }
-        std::fprintf(stderr, "[ord] turn=%d searched=%d opaque=%d casts: %s\n",
-                     state.turn_number, plan.searched_order ? 1 : 0, opaque ? 1 : 0,
-                     seq.empty() ? "(none)" : seq.c_str());
-    }
-
-    // Audit-only: a fresh per-plan dropped-cast list, so the stranded-equip detector below cannot
-    // see a drop from an earlier plan on this worker thread. No-op unless the audit is on.
-    if (AffordAuditOn()) { ResetDroppedCastNumbers(); }
-
-    // Plan::vial_after_casts (lockstep twin of ApplyPlanDirect's vial_after_armed): this plan's Vial
-    // puts are deployed after its graveyard casts instead of here. Top-level plan only -- the
-    // continuation and recorded-script replays above deploy theirs first, as always.
-    const bool vial_after = plan.vial_after_casts;
-    if (!vial_after)
-    {
-        for (const Action& a : plan.actions)
-        {
-            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
-        }
-    }
-    // Lotus Bloom: apply SacForMana (float the chosen colour) and Suspend BEFORE the batch pre-pay /
-    // casts, exactly as the rollout's ApplyPlanDirect does at this same logical point -> lockstep. Both
-    // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind == Action::Kind::SacForMana)
-        { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                          TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
-        else if (a.kind == Action::Kind::Suspend)
-        { ApplySuspend(state, state.active_player_index, a.card_name); }
-        // Convoke (Chord of Calling): tap the chosen bodies BEFORE the batch pre-pay / casts, so
-        // AvailableManaPool no longer counts anything convoke consumed; the action's cost was
-        // reduced at enumeration by exactly their contribution. Same deterministic body order in
-        // both worlds (ApplyConvokeTaps) -> lockstep.
-        else if (a.kind == Action::Kind::CastFromHand
-                 && (a.convoke_green > 0 || a.convoke_other > 0))
-        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
-    }
-    // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan chosen,
-    // nothing paid -- so the executor's payments and the rollout's read the identical hold. Each
-    // cast decrements it as it pays (CastSpellFromHand). Zero for every plan with no hand cast.
-    // FUNCTION SCOPE, deliberately: it must outlive the prepay and every cast below. Its first
-    // home was inside the lookahead branch above, where the RAII scope closed before any payment
-    // ran, so the executor paid every line with an empty hold (2026-09-15; see the note there).
-    // Under the shipped flags no autonomous payment reads the hold -- its readers are human-play
-    // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
-    // every default-flag game; it is what makes that lever's executor half exist at all.
-    LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
-    // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
-    // prepay and every cast payment below. Null scope (levers off) changes nothing.
-    PlanTraits _plan_traits;
-    if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
-    PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
-    TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
-    // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
-    // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
-    // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
-    // logical point (after the land drop + Vial deploys) -> identical prepay. Declined -> greedy.
-    TurnSolver::BatchPrepayMainCasts(state, plan.actions);
-    // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
-    // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
-    // enabler is hoisted below.
-    std::set<size_t> spec_hoisted_sac;
-    // MANA-UNLOCK equip -- executor mirror of ApplyPlanDirect (lockstep, same two functions): a
-    // haste-granting Equipment onto a still-locked mana dork is what pays for a later cast in this
-    // plan, so it fires the moment both pieces are on the battlefield rather than in the trailing
-    // equip pass below. Once up front (both pieces may already be out) and once after each cast.
-    // The reserve scope is the other half -- it stops the enabler casts from spending the payoff's
-    // scarce colour before the unlock lands. Both no-ops for every plan without that pairing.
-    // See TurnSolver::ApplyManaUnlockEquips / ::ManaUnlockColorReserve.
-    PlanSourceReserveScope _unlock_reserve(TurnSolver::PlanReserveSources(state, plan.actions));
-    auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, plan.actions); };
-    fire_unlock();
-    // Cast-ordering search (C): a committed plan with searched_order set carries an
-    // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
-    // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
-    // realises the same line ApplyPlanDirect's explicit-order path produced. Without this
-    // the executor would re-bucket enabler-first and diverge from the committed ordering.
-    if (plan.searched_order)
-    {
-        for (const Action& a : plan.actions)
-        {
-            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-            if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-            const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
-            // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
-            // second pass, which `s_full_depth &&` would short-circuit away.
-            const bool put_armed = put_in_hand_armed(a.card_name);
-            if (s_full_depth && acq_deferred(a.card_name))
-            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
-            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
-            {
-                if (fd_plan_committed)
-                { if (cast_paid) { replay_segment(); } }
-                else
-                {
-                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                    pin_rdb_hand();
-                    rdb_site_activated = false;   // a CAST-armed site
-                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
-                    {
-                        rdb_plan_casts.clear();
-                        for (const Action& pa : plan.actions)
-                        {
-                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
-                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
-                        }
-                    }
-                    resolve_draw_breakpoint(0);
-                }
-            }
-            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
-            // PARTITION truncation: the continuation just decided the rest of this phase, so the
-            // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
-        }
-    }
-    else
-    {
-    // Reorder by CastOrderRank, EXCEPT when the set has a re-solve breakpoint card
-    // (draw/staging/cascade): its ordering is search-owned, so keep the canonical
-    // enabler-first + plan order (with the breakpoint/staging handling). Mirrors
-    // ApplyPlanDirect's gate (lockstep).
-    bool opaque = false;
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
-            && OrderingOpaque(a.card_name)) { opaque = true; break; }
-    }
-    if (opaque)
-    {
-    // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
-    // other hand cast so a same-turn payload fires with the enabler active. Then the rest in
-    // plan order, with the draw-engine breakpoint / staging handling.
-    // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order -- byte-
-    // identical unless a provider ranks its enablers apart). Mirror of ApplyPlanDirect's
-    // opaque path: Mirrorwing needs magnet(5) -> Twinflame(8) -> pump tricks.
-    // MTG_MINT_CREDIT_EXACT: a minter the late slots cannot pay joins the hoist right after the
-    // magnets (MintHoistAfterMagnets; rollout twin in ApplyPlanDirect -- lockstep).
-    const bool mint_hoist = MintHoistAfterMagnets(state, plan.actions);
-    auto is_hoisted_minter = [&](const Action& a)
-    {
-        if (!mint_hoist || a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        return d != nullptr && d->params.creates_treasures > 0;
-    };
-    {
-        std::vector<int> ena;
-        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
-        {
-            const Action& a = plan.actions[i];
-            if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-                 && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
-                || is_hoisted_minter(a))
-            { ena.push_back(i); }
-        }
-        std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
-        {
-            if (mint_hoist)
-            { return HoistSortKey(state, plan.actions[x], true) < HoistSortKey(state, plan.actions[y], true); }
-            const CardDefinition* dx = CardDatabase::Instance().Lookup(plan.actions[x].card_name);
-            const CardDefinition* dy = CardDatabase::Instance().Lookup(plan.actions[y].card_name);
-            if (!dx || !dy) { return false; }
-            return ResolveProvider(state).CastOrderRank(state, *dx)
-                 < ResolveProvider(state).CastOrderRank(state, *dy);
-        });
-        // ...and the hoisted minter waits for every body the base pool still pays before it
-        // (PlaceHoistedMinters; rollout twin in ApplyPlanDirect -- lockstep).
-        if (mint_hoist) { PlaceHoistedMinters(state, plan.actions, ena); }
-        // ...and the base pool's share of the line -- the hoist up to and including that minter --
-        // is paid JOINTLY (BatchPrepayMintPrefix; rollout twin in ApplyPlanDirect -- lockstep).
-        if (mint_hoist) { TurnSolver::BatchPrepayMintPrefix(state, plan.actions, ena); }
-        for (int i : ena)
-        {
-            const Action& a = plan.actions[i];
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-        }
-    }
-    // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
-    // otherwise be cast in the trailing sac loop AFTER the non-sac Spectacle spell (Light Up),
-    // leaving Spectacle un-triggered. When the set holds a not-yet-active Spectacle spell, cast
-    // such sac-land damage enablers here so Light Up unlocks its reduced cost. Only the 2-card
-    // {burn, Light Up} spectacle plans pair a sac-land burn with Light Up, so this touches no
-    // other line. Inert unless a Spectacle spell is present -> non-burn byte-identical.
-    bool spec_needed = !state.opponent_lost_life_this_turn;
-    if (spec_needed)
-    {
-        bool has_spec = false;
-        for (const Action& a : plan.actions)
-        { if (a.kind == Action::Kind::CastFromHand && a.has_spectacle) { has_spec = true; break; } }
-        spec_needed = has_spec;
-    }
-    for (size_t ai = 0; spec_needed && ai < plan.actions.size(); ++ai)
-    {
-        const Action& a = plan.actions[ai];
-        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
-        {
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-            spec_hoisted_sac.insert(ai);
-        }
-    }
-    // ORDER within the opaque set (MTG_ORDER_OPAQUE, step 3 of cast-order-ideal-with-ranges.md):
-    // the bail-out's premise is that a re-solve breakpoint makes the order situation-dependent, but
-    // USER principle 1 answers the situation -- the draw goes FIRST, so the land drop and the rest
-    // of the line are chosen with what it found. The breakpoint / staging handling in the body is
-    // untouched; only the sequence changes, and the range ladder decides how far the promotion
-    // survives payment. Off -> `ord` is plan order -> byte-identical. Mirrored in ApplyPlanDirect.
-    std::vector<int> ord;
-    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
-    {
-        const Action& a = plan.actions[i];
-        // MTG_GARTH_ORDERED: the activation IS the copy's cast, so it joins the ordered
-        // sequence at the copy's rank (mirrors ApplyPlanDirect -- lockstep).
-        if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
-        { ord.push_back(i); continue; }
-        if (a.kind != Action::Kind::CastFromHand) { continue; }
-        if (!a.alt_cost && (a.sacrifice_land
-                            || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
-        { continue; }
-        if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
-        ord.push_back(i);
-    }
-    if (OpaqueCastOrderActive(state))
-    {
-        std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
-        { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
-        ApplyCastOrderRangeLadder(state, plan.actions, ord);
-        ApplyEnablerWipeRecheck(state, plan.actions, ord);
-    }
-    // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
-    // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's opaque branch (lockstep).
-    ApplyPayableCastOrder(state, plan.actions, ord);
-    for (int oi : ord)
-    {
-        const Action& a = plan.actions[oi];
-        if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
-        {
-            ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-            {
-                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
-                // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
-                // script): Braingeyser's draws / Regrowth's return are same-turn castable.
-                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
-                { cast_draw_engine = true; }
-                if (m_logger)
-                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                       "conjure + cast " + a.tutor_target.str()
-                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
-            }
-        }
-        else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
-        {
-            cast_alt(a.card_name, a.alt_lifegain); resolve_now();
-        }
-        else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
-                 && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
-        {
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-            const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
-            // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
-            // second pass, which `s_full_depth &&` would short-circuit away.
-            const bool put_armed = put_in_hand_armed(a.card_name);
-            if (s_full_depth && acq_deferred(a.card_name))
-            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
-            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
-            {
-                if (fd_plan_committed)
-                { if (cast_paid) { replay_segment(); } }
-                else
-                {
-                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                    pin_rdb_hand();
-                    rdb_site_activated = false;   // a CAST-armed site
-                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
-                    {
-                        rdb_plan_casts.clear();
-                        for (const Action& pa : plan.actions)
-                        {
-                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
-                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
-                        }
-                    }
-                    resolve_draw_breakpoint(0);
-                }
-            }
-            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
-            // PARTITION truncation: the continuation just decided the rest of this phase, so the
-            // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
-        }
-    }
-    }
-    else
-    {
-    // Clean set: stable-sort the non-sacrifice hand casts by DecisionProvider::CastOrderRank
-    // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
-    // sources last). Stable => plan order breaks ties. Mirrors ApplyPlanDirect's canonical
-    // branch (the shared CastOrderLess in ManaPayment.cpp) so the executor realises the same line
-    // the rollout scored. No draw engine here, so no breakpoint handling is needed.
-    std::vector<int> order;
-    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
-    {
-        const Action& a = plan.actions[i];
-        if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
-            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate))
-        { order.push_back(i); }
-    }
-    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
-    // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end and walk them
-    // back only as far as paying for the line requires. Inert with the lever off / no ranged spell
-    // in the set. Mirrored in ApplyPlanDirect (lockstep).
-    ApplyCastOrderRangeLadder(state, plan.actions, order);
-    ApplyEnablerWipeRecheck(state, plan.actions, order);
-    // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
-    // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's clean branch (lockstep).
-    ApplyPayableCastOrder(state, plan.actions, order);
-    for (int oi : order)
-    {
-        const Action& a = plan.actions[oi];
-        if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
-        {
-            ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-            {
-                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
-                // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
-                // script): Braingeyser's draws / Regrowth's return are same-turn castable.
-                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
-                { cast_draw_engine = true; }
-                if (m_logger)
-                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                       "conjure + cast " + a.tutor_target.str()
-                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
-            }
-            continue;
-        }
-        if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-        const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
-        // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
-        // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
-        // needed") held only because every other class carries an OrderingOpaque param and an
-        // Equipment cast carries none -- the draw belongs to the watcher. Without this the rollout
-        // would search a continuation the executor never plays. Inert in every other config.
-        //
-        // Gated on equip_bp_truncates (site 6 + inline mode) and NOT on is_draw_engine, which was
-        // measured: is_draw_engine also covers the MTG_ACQ_RESOLVE tutor family, and tutor_to_hand
-        // is NOT one of OrderingOpaque's params -- so a tutor set reaches this CLEAN branch, and
-        // hooking the broad predicate here armed breakpoints those decks never had (smoke went
-        // 26/36 with 2 searched slower and 26 play-changed). Site 6 is the only class that both
-        // lands in a clean set and has a rollout twin arming at the cast.
-        if (s_full_depth && equip_bp_truncates(a.card_name))
-        {
-            if (fd_plan_committed)
-            { if (cast_paid) { replay_segment(); } }
-            else
-            {
-                rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                pin_rdb_hand();
-                rdb_site_activated = false;   // a CAST-armed site
-                if (TurnSolver::BreakpointHandSnapshotWanted(state))
-                {
-                    rdb_plan_casts.clear();
-                    for (const Action& pa : plan.actions)
-                    {
-                        if (pa.kind != Action::Kind::CastFromHand) { continue; }
-                        rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
-                    }
-                }
-                resolve_draw_breakpoint(0);
-            }
-        }
-        if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
-    }
-    }
-    }
-    for (size_t ai = 0; ai < plan.actions.size(); ++ai)
-    {
-        if (staged_break || bp_trunc_exec) { break; }
-        if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
-        const Action& a = plan.actions[ai];
-        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); }
-    }
-    for (const Action& a : plan.actions)
-    {
-        if (staged_break || bp_trunc_exec) { break; }
-        if (a.kind == Action::Kind::CastFromGraveyard)
-        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
-    }
-    // Plan::vial_after_casts: the deferred Vial puts, at the point ApplyPlanDirect's apply_plan_actions
-    // deploys them (after its graveyard casts). Unguarded by staged_break / bp_trunc_exec on purpose,
-    // like the rollout's apply_vial: the variant is only ever emitted for plans that open no
-    // breakpoint (AppendVialOrderVariants), so neither flag can be set here.
-    if (vial_after)
-    {
-        for (const Action& a : plan.actions)
-        {
-            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
-        }
-    }
-
-    // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
-    // block held the drop so a hand-land tutor (Sylvan Scrying) could resolve first; play it now
-    // with the fetched land (Forbidden Orchard) in hand. In-main1, NOT the second-main pass -- a
-    // uses_second_main=no deck never runs one, and losing the drop outright measured d0 +0.32 on
-    // the first CG arm. Consume-and-clear so the flag never leaks across turns.
-    // ALWAYS request the second pass after playing a held drop: this pass's plan was solved
-    // WITHOUT the land's mana, so a re-solve must pick up what it could not afford (gi40: a T2
-    // Enlightened Tutor silently dropped because the defer fired but Scrying was not in the
-    // plan, so no tutor second pass ever ran -- the pass-1-plans-short residual).
-    if (m_tutor_deferred_drop)
-    {
-        m_tutor_deferred_drop = false;
-        if (m_lookahead_depth == 0
-            && state.ActivePlayer().lands_played_this_turn
-                   < state.ActivePlayer().LandDropsAvailable())
-        {
-            TryPlayLand(state);
-            cast_draw_engine = true;
-        }
-    }
-
-    // Auto-fire safe alt payloads (Invigorate / Skyshroud) deterministically once a Remedy is
-    // live -> free face damage. Mirrors the rollout's FireSafeAltPayloads pass (so the realised
-    // turn matches the searched line without any recording). Re-scan after each cast because it
-    // mutates the hand. No-op for decks without alt-cost cards. SUPPRESSED under
-    // MTG_UNPRUNE=altpayload exactly like the rollout's twin (ApplyPlanDirect): there the safe alt
-    // is a searched cast, and auto-firing it here too was a lockstep hole (the realised game fired
-    // what the scored line had left to the search).
-    if (!staged_break && !DecisionUnpruned(UnprunedGate::AltPayload))
-    {
-        for (;;)
-        {
-            Player& rp2 = state.ActivePlayer();
-            int target = -1; int amt = 0;
-            for (int i = 0; i < static_cast<int>(rp2.hand.size()); ++i)
-            {
-                auto d = CardDatabase::Instance().LookupCached(rp2.hand[i]);
-                if (d && ResolveProvider(state).CanAutoFireAltPayload(state, state.active_player_index, *d))
-                { target = i; amt = d->params.alt_lifegain_cost; break; }
-            }
-            if (target < 0) { break; }
-            std::string nm = rp2.hand[target].m_name;
-            size_t before = rp2.hand.size();
-            cast_alt(nm, amt); resolve_now();
-            if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
-        }
-    }
-
-    // Krenko, Mob Boss taps AFTER the main casts (executor mirror of ApplyPlanDirect's trailing
-    // TapForTokens pass): X = Goblins you control counts this turn's developed board. Free ({T}).
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind == Action::Kind::TapForTokens)
-        { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
-    }
-
+    // The trailing-activation pass is DEFINED here, ahead of the main cast loop, because the loop's
+    // inline breakpoints (resolve_draw_breakpoint / replay_recorded) dispatch a continuation's board
+    // activations through it. It still RUNS where it always did: the call after the cast loop.
     // Costed sac outlets (Siege-Gang / Pashalik) + Twinshot channel: executor mirror of the rollout
     // trailing pass. Pay the mana from the pool left after casts (BuildAvailableMana + TapForCost,
     // the byte-identical mirror of TapForCostDirect), then realise the effect; a stranded outlet is
@@ -5354,7 +4781,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // dispatcher -- the chain itself -- and a continuation Pod activation re-enters the site
     // (bounded: every activation taps a Pod). Called with plan.actions exactly where the loop
     // stood -- byte-identical for every plan that opens no pod site.
-    std::function<void(const std::vector<Action>&)> exec_trailing_activations =
+    exec_trailing_activations =
         [&](const std::vector<Action>& trailing_acts_in)
     {
     // EXECUTOR TWIN of ApplyPlanDirect's provider-declared activation order. This MUST mirror the
@@ -6091,6 +5518,596 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
     }
     };
+
+    // Canonical execution order: Vial deployments first (lords live before spell casts),
+    // then regular spells (their lands tap first), then sacrifice-land spells, then
+    // graveyard (Retrace) casts last. Each cast is resolved before the next (when a
+    // resolver was supplied) so same-phase interactions (prowess, lords, spectacle,
+    // on-cast triggers) see the up-to-date board/life, matching the lookahead rollout.
+    // Set once a staging draw spell is cast: defer the rest of the plan to the second
+    // pass (which re-solves from the post-draw state with the remaining mana), so the
+    // real game executes the same draw-breakpoint line the rollout searches.
+    bool staged_break = false;
+    bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed (first segment)
+    // Per-segment replay (Action::rec_bp_ord): the i-th main-level breakpoint replays the records
+    // stamped i. When every record is stamped 0 -- the common case -- the first trigger replays
+    // the whole list and the later ones replay nothing, exactly the historical behaviour.
+    int  rec_seg_next = 0;
+    auto replay_segment = [&]()
+    {
+        const int ord = rec_seg_next++;
+        std::vector<Action> seg;
+        for (const Action& r : plan.breakpoint_actions) { if (r.rec_bp_ord == ord) { seg.push_back(r); } }
+        if (!seg.empty()) { replay_recorded(seg); }
+        bp_replayed = true;
+    };
+    // The no-commit fallback's half of acq_deferred: remember the arming cast (the LAST one wins,
+    // like ApplyPlanDirect's deferred_cantrip_site; the hand snapshot follows deferred_hand_before
+    // -- tutor-to-top keeps it EMPTY) and re-solve once, after the main casts, beside the catch-all.
+    bool                  acq_pending = false;
+    const CardDefinition* acq_site    = nullptr;
+    std::vector<int>      acq_hand;
+    auto arm_acq_deferred = [&](const std::string& name)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        acq_pending = true;
+        acq_site    = d;
+        pin_rdb_hand();
+        if (d != nullptr && TopResolveEnabled() && d->params.tutor_to_top
+            && !(AcqResolveEnabled() && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)))
+        { acq_hand.clear(); }
+        else { acq_hand = rdb_hand; }
+    };
+    // PARTITION truncation (MTG_EQUIP_DRAW_BP_INLINE) -- executor twin of ApplyPlanDirect's
+    // bp_truncate. Once a site-6 continuation has run at the cast that drew, the rest of this
+    // plan's casts belong to that continuation's section and the rollout did NOT apply them here;
+    // executing them anyway would realise a turn the search never scored. Separate from
+    // staged_break on purpose: that flag also suppresses the alt-payload auto-fire and the
+    // end-of-turn catch-all replay, and borrowing it would silently change those too.
+    bool bp_trunc_exec = false;
+    // Does casting `nm` end our section? Same predicate the rollout arms on, so the two worlds
+    // truncate at exactly the same cast. Evaluated post-resolution, where the Equipment and the
+    // watcher are both on the battlefield.
+    auto equip_bp_truncates = [&](const std::string& nm) -> bool
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { return false; }
+        // THE PARTITION SHAPE for plain cantrips (MTG_BP_PARTITION_CANTRIP) -- the executor half.
+        // ApplyPlanDirect truncates its section the moment a plain cantrip's continuation has run;
+        // if the executor kept casting the plan's tail here it would realise a turn the search
+        // never scored, which is the divergence the deferred shape was originally chosen to avoid.
+        // EXACT mirror of the rollout's `plain_cantrip`, and all three clauses are load-bearing.
+        // The rollout reaches that branch only inside `def.tmpl == CardTemplate::DrawSpell`; an
+        // earlier version of this predicate dropped that clause and so returned true for EVERY
+        // cast, because equip_bp_truncates is consulted for every action in the executor's cast
+        // loop rather than only for draws. The executor then truncated after the FIRST cast of any
+        // kind: measured on hold gi=18, T1 cast Sol Ring and dropped Ornithopter, T2 cast Preordain
+        // and dropped Hinata, turning a turn-3 win into a turn-6 one, with 46 of 60 games worse.
+        // MTG_BP_NODE truncates the SAME cast, but only for a plan CARRYING a continuation
+        // choice (bp_choice >= 0, incl. the empty sentinel) -- the exact mirror of the rollout's
+        // shape-(2) condition. A committed plan WITHOUT a choice (a tranche/group-wave plan the
+        // search scored full-tail-greedy) must execute its tail, and a non-committed greedy plan
+        // (bp_choice < 0 always) is untouched.
+        if ((TurnSolver::PartitionCantrip() || (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0))
+            && d->tmpl == CardTemplate::DrawSpell
+            && !d->params.expressive_iteration && !d->params.stages_cards)
+        { return true; }
+        // MTG_BP_NODE_D56: the node hosts the other two DEFERRED classes too, and each one's
+        // partition needs its executor twin here for exactly the reason the cantrip clause above
+        // spells out -- a committed plan carrying a continuation choice was SCORED with its tail
+        // truncated at this cast, so executing that tail realises a turn the search never scored.
+        // Both clauses mirror ApplyPlanDirect's arming conditions cast-for-cast; the PUT-armed
+        // site-6 case is deliberately absent on BOTH sides (see the note at that arming point).
+        if (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0)
+        {
+            const int hosted = TurnSolver::BpNodeHostedSites();
+            // Site 5 -- solo-target trick with a draw or Treasure payload (Gold Rush, Mirrorwing).
+            if ((hosted & (1 << 5)) != 0 && d->params.solo_target_trick
+                && (d->params.cast_draw > 0
+                    || (d->params.creates_treasures > 0 && MintPayloadOpensBreakpoint())))
+            { return true; }
+            // Site 6 -- an Equipment cast under a live ETB-draw watcher. Only the DEFERRED shape
+            // is new here; the inline one already truncates through the clause below.
+            if ((hosted & (1 << 6)) != 0 && !TurnSolver::EquipmentDrawBreakpointInline()
+                && TurnSolver::EquipmentDrawBreakpoint(state, *d))
+            { return true; }
+        }
+        if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }
+        return TurnSolver::EquipmentDrawBreakpoint(state, *d);
+    };
+
+    // Order trace (MTG_ORDER_TRACE, inert by default): print the committed hand-cast
+    // sequence per pre-combat main, tagged with searched_order, so a heuristic-vs-search
+    // (MTG_SEARCH_ORDER) A/B can see WHICH reorder the search chose. The skill's
+    // heuristic-accuracy process uses this to author a provider ordering heuristic that
+    // reproduces the search's pick. Single-thread + --game-index N for a clean per-game read.
+    static const bool s_order_trace = EnvOn("MTG_ORDER_TRACE");
+    if (s_order_trace && is_pre_combat_main && !m_in_rollout)
+    {
+        // Print the ACTUAL executed order of non-sacrifice hand casts: rank-sorted for a
+        // clean set, plan order for an opaque (draw/staging) set or a searched_order plan.
+        std::vector<int> ns;
+        bool opaque = false;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+        {
+            const Action& a = plan.actions[i];
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+            ns.push_back(i);
+            if (OrderingOpaque(a.card_name)) { opaque = true; }
+        }
+        if (!opaque && !plan.searched_order)
+        {
+            std::stable_sort(ns.begin(), ns.end(), [&](int x, int y)
+            { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+        }
+        std::string seq;
+        for (int i : ns)
+        {
+            if (!seq.empty()) { seq += ", "; }
+            seq += plan.actions[i].card_name;
+            if (plan.actions[i].alt_cost) { seq += "(alt)"; }
+        }
+        std::fprintf(stderr, "[ord] turn=%d searched=%d opaque=%d casts: %s\n",
+                     state.turn_number, plan.searched_order ? 1 : 0, opaque ? 1 : 0,
+                     seq.empty() ? "(none)" : seq.c_str());
+    }
+
+    // Audit-only: a fresh per-plan dropped-cast list, so the stranded-equip detector below cannot
+    // see a drop from an earlier plan on this worker thread. No-op unless the audit is on.
+    if (AffordAuditOn()) { ResetDroppedCastNumbers(); }
+
+    // Plan::vial_after_casts (lockstep twin of ApplyPlanDirect's vial_after_armed): this plan's Vial
+    // puts are deployed after its graveyard casts instead of here. Top-level plan only -- the
+    // continuation and recorded-script replays above deploy theirs first, as always.
+    const bool vial_after = plan.vial_after_casts;
+    if (!vial_after)
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
+        }
+    }
+    // Lotus Bloom: apply SacForMana (float the chosen colour) and Suspend BEFORE the batch pre-pay /
+    // casts, exactly as the rollout's ApplyPlanDirect does at this same logical point -> lockstep. Both
+    // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacForMana)
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                          TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
+        else if (a.kind == Action::Kind::Suspend)
+        { ApplySuspend(state, state.active_player_index, a.card_name); }
+        // Convoke (Chord of Calling): tap the chosen bodies BEFORE the batch pre-pay / casts, so
+        // AvailableManaPool no longer counts anything convoke consumed; the action's cost was
+        // reduced at enumeration by exactly their contribution. Same deterministic body order in
+        // both worlds (ApplyConvokeTaps) -> lockstep.
+        else if (a.kind == Action::Kind::CastFromHand
+                 && (a.convoke_green > 0 || a.convoke_other > 0))
+        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
+    }
+    // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan chosen,
+    // nothing paid -- so the executor's payments and the rollout's read the identical hold. Each
+    // cast decrements it as it pays (CastSpellFromHand). Zero for every plan with no hand cast.
+    // FUNCTION SCOPE, deliberately: it must outlive the prepay and every cast below. Its first
+    // home was inside the lookahead branch above, where the RAII scope closed before any payment
+    // ran, so the executor paid every line with an empty hold (2026-09-15; see the note there).
+    // Under the shipped flags no autonomous payment reads the hold -- its readers are human-play
+    // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
+    // every default-flag game; it is what makes that lever's executor half exist at all.
+    LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
+    // prepay and every cast payment below. Null scope (levers off) changes nothing.
+    PlanTraits _plan_traits;
+    if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
+    PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
+    TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
+    // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
+    // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
+    // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
+    // logical point (after the land drop + Vial deploys) -> identical prepay. Declined -> greedy.
+    TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+    // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
+    // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
+    // enabler is hoisted below.
+    std::set<size_t> spec_hoisted_sac;
+    // MANA-UNLOCK equip -- executor mirror of ApplyPlanDirect (lockstep, same two functions): a
+    // haste-granting Equipment onto a still-locked mana dork is what pays for a later cast in this
+    // plan, so it fires the moment both pieces are on the battlefield rather than in the trailing
+    // equip pass below. Once up front (both pieces may already be out) and once after each cast.
+    // The reserve scope is the other half -- it stops the enabler casts from spending the payoff's
+    // scarce colour before the unlock lands. Both no-ops for every plan without that pairing.
+    // See TurnSolver::ApplyManaUnlockEquips / ::ManaUnlockColorReserve.
+    PlanSourceReserveScope _unlock_reserve(TurnSolver::PlanReserveSources(state, plan.actions));
+    auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, plan.actions); };
+    fire_unlock();
+    // Cast-ordering search (C): a committed plan with searched_order set carries an
+    // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
+    // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
+    // realises the same line ApplyPlanDirect's explicit-order path produced. Without this
+    // the executor would re-bucket enabler-first and diverge from the committed ordering.
+    if (plan.searched_order)
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+            if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
+            // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
+            // second pass, which `s_full_depth &&` would short-circuit away.
+            const bool put_armed = put_in_hand_armed(a.card_name);
+            if (s_full_depth && acq_deferred(a.card_name))
+            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
+            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
+            {
+                if (fd_plan_committed)
+                { if (cast_paid) { replay_segment(); } }
+                else
+                {
+                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    pin_rdb_hand();
+                    rdb_site_activated = false;   // a CAST-armed site
+                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
+                    {
+                        rdb_plan_casts.clear();
+                        for (const Action& pa : plan.actions)
+                        {
+                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                        }
+                    }
+                    resolve_draw_breakpoint(0);
+                }
+            }
+            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            // PARTITION truncation: the continuation just decided the rest of this phase, so the
+            // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
+            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+        }
+    }
+    else
+    {
+    // Reorder by CastOrderRank, EXCEPT when the set has a re-solve breakpoint card
+    // (draw/staging/cascade): its ordering is search-owned, so keep the canonical
+    // enabler-first + plan order (with the breakpoint/staging handling). Mirrors
+    // ApplyPlanDirect's gate (lockstep).
+    bool opaque = false;
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
+            && OrderingOpaque(a.card_name)) { opaque = true; break; }
+    }
+    if (opaque)
+    {
+    // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
+    // other hand cast so a same-turn payload fires with the enabler active. Then the rest in
+    // plan order, with the draw-engine breakpoint / staging handling.
+    // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order -- byte-
+    // identical unless a provider ranks its enablers apart). Mirror of ApplyPlanDirect's
+    // opaque path: Mirrorwing needs magnet(5) -> Twinflame(8) -> pump tricks.
+    // MTG_MINT_CREDIT_EXACT: a minter the late slots cannot pay joins the hoist right after the
+    // magnets (MintHoistAfterMagnets; rollout twin in ApplyPlanDirect -- lockstep).
+    const bool mint_hoist = MintHoistAfterMagnets(state, plan.actions);
+    auto is_hoisted_minter = [&](const Action& a)
+    {
+        if (!mint_hoist || a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return d != nullptr && d->params.creates_treasures > 0;
+    };
+    {
+        std::vector<int> ena;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+        {
+            const Action& a = plan.actions[i];
+            if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+                 && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+                || is_hoisted_minter(a))
+            { ena.push_back(i); }
+        }
+        std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
+        {
+            if (mint_hoist)
+            { return HoistSortKey(state, plan.actions[x], true) < HoistSortKey(state, plan.actions[y], true); }
+            const CardDefinition* dx = CardDatabase::Instance().Lookup(plan.actions[x].card_name);
+            const CardDefinition* dy = CardDatabase::Instance().Lookup(plan.actions[y].card_name);
+            if (!dx || !dy) { return false; }
+            return ResolveProvider(state).CastOrderRank(state, *dx)
+                 < ResolveProvider(state).CastOrderRank(state, *dy);
+        });
+        // ...and the hoisted minter waits for every body the base pool still pays before it
+        // (PlaceHoistedMinters; rollout twin in ApplyPlanDirect -- lockstep).
+        if (mint_hoist) { PlaceHoistedMinters(state, plan.actions, ena); }
+        // ...and the base pool's share of the line -- the hoist up to and including that minter --
+        // is paid JOINTLY (BatchPrepayMintPrefix; rollout twin in ApplyPlanDirect -- lockstep).
+        if (mint_hoist) { TurnSolver::BatchPrepayMintPrefix(state, plan.actions, ena); }
+        for (int i : ena)
+        {
+            const Action& a = plan.actions[i];
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        }
+    }
+    // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
+    // otherwise be cast in the trailing sac loop AFTER the non-sac Spectacle spell (Light Up),
+    // leaving Spectacle un-triggered. When the set holds a not-yet-active Spectacle spell, cast
+    // such sac-land damage enablers here so Light Up unlocks its reduced cost. Only the 2-card
+    // {burn, Light Up} spectacle plans pair a sac-land burn with Light Up, so this touches no
+    // other line. Inert unless a Spectacle spell is present -> non-burn byte-identical.
+    bool spec_needed = !state.opponent_lost_life_this_turn;
+    if (spec_needed)
+    {
+        bool has_spec = false;
+        for (const Action& a : plan.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.has_spectacle) { has_spec = true; break; } }
+        spec_needed = has_spec;
+    }
+    for (size_t ai = 0; spec_needed && ai < plan.actions.size(); ++ai)
+    {
+        const Action& a = plan.actions[ai];
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
+        {
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            spec_hoisted_sac.insert(ai);
+        }
+    }
+    // ORDER within the opaque set (MTG_ORDER_OPAQUE, step 3 of cast-order-ideal-with-ranges.md):
+    // the bail-out's premise is that a re-solve breakpoint makes the order situation-dependent, but
+    // USER principle 1 answers the situation -- the draw goes FIRST, so the land drop and the rest
+    // of the line are chosen with what it found. The breakpoint / staging handling in the body is
+    // untouched; only the sequence changes, and the range ladder decides how far the promotion
+    // survives payment. Off -> `ord` is plan order -> byte-identical. Mirrored in ApplyPlanDirect.
+    std::vector<int> ord;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+    {
+        const Action& a = plan.actions[i];
+        // MTG_GARTH_ORDERED: the activation IS the copy's cast, so it joins the ordered
+        // sequence at the copy's rank (mirrors ApplyPlanDirect -- lockstep).
+        if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
+        { ord.push_back(i); continue; }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (!a.alt_cost && (a.sacrifice_land
+                            || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
+        { continue; }
+        if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
+        ord.push_back(i);
+    }
+    if (OpaqueCastOrderActive(state))
+    {
+        std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+        { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+        ApplyCastOrderRangeLadder(state, plan.actions, ord);
+        ApplyEnablerWipeRecheck(state, plan.actions, ord);
+    }
+    // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
+    // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's opaque branch (lockstep).
+    ApplyPayableCastOrder(state, plan.actions, ord);
+    for (int oi : ord)
+    {
+        const Action& a = plan.actions[oi];
+        if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
+        {
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+            {
+                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
+                // script): Braingeyser's draws / Regrowth's return are same-turn castable.
+                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                { cast_draw_engine = true; }
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                       "conjure + cast " + a.tutor_target.str()
+                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+            }
+        }
+        else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
+        {
+            cast_alt(a.card_name, a.alt_lifegain); resolve_now();
+        }
+        else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
+                 && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+        {
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
+            // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
+            // second pass, which `s_full_depth &&` would short-circuit away.
+            const bool put_armed = put_in_hand_armed(a.card_name);
+            if (s_full_depth && acq_deferred(a.card_name))
+            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
+            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
+            {
+                if (fd_plan_committed)
+                { if (cast_paid) { replay_segment(); } }
+                else
+                {
+                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    pin_rdb_hand();
+                    rdb_site_activated = false;   // a CAST-armed site
+                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
+                    {
+                        rdb_plan_casts.clear();
+                        for (const Action& pa : plan.actions)
+                        {
+                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                        }
+                    }
+                    resolve_draw_breakpoint(0);
+                }
+            }
+            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            // PARTITION truncation: the continuation just decided the rest of this phase, so the
+            // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
+            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+        }
+    }
+    }
+    else
+    {
+    // Clean set: stable-sort the non-sacrifice hand casts by DecisionProvider::CastOrderRank
+    // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
+    // sources last). Stable => plan order breaks ties. Mirrors ApplyPlanDirect's canonical
+    // branch (the shared CastOrderLess in ManaPayment.cpp) so the executor realises the same line
+    // the rollout scored. No draw engine here, so no breakpoint handling is needed.
+    std::vector<int> order;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate))
+        { order.push_back(i); }
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+    // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end and walk them
+    // back only as far as paying for the line requires. Inert with the lever off / no ranged spell
+    // in the set. Mirrored in ApplyPlanDirect (lockstep).
+    ApplyCastOrderRangeLadder(state, plan.actions, order);
+    ApplyEnablerWipeRecheck(state, plan.actions, order);
+    // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
+    // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's clean branch (lockstep).
+    ApplyPayableCastOrder(state, plan.actions, order);
+    for (int oi : order)
+    {
+        const Action& a = plan.actions[oi];
+        if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
+        {
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+            {
+                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
+                // script): Braingeyser's draws / Regrowth's return are same-turn castable.
+                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                { cast_draw_engine = true; }
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                       "conjure + cast " + a.tutor_target.str()
+                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+            }
+            continue;
+        }
+        if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+        m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
+        // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
+        // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
+        // needed") held only because every other class carries an OrderingOpaque param and an
+        // Equipment cast carries none -- the draw belongs to the watcher. Without this the rollout
+        // would search a continuation the executor never plays. Inert in every other config.
+        //
+        // Gated on equip_bp_truncates (site 6 + inline mode) and NOT on is_draw_engine, which was
+        // measured: is_draw_engine also covers the MTG_ACQ_RESOLVE tutor family, and tutor_to_hand
+        // is NOT one of OrderingOpaque's params -- so a tutor set reaches this CLEAN branch, and
+        // hooking the broad predicate here armed breakpoints those decks never had (smoke went
+        // 26/36 with 2 searched slower and 26 play-changed). Site 6 is the only class that both
+        // lands in a clean set and has a rollout twin arming at the cast.
+        if (s_full_depth && equip_bp_truncates(a.card_name))
+        {
+            if (fd_plan_committed)
+            { if (cast_paid) { replay_segment(); } }
+            else
+            {
+                rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                pin_rdb_hand();
+                rdb_site_activated = false;   // a CAST-armed site
+                if (TurnSolver::BreakpointHandSnapshotWanted(state))
+                {
+                    rdb_plan_casts.clear();
+                    for (const Action& pa : plan.actions)
+                    {
+                        if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                        rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                    }
+                }
+                resolve_draw_breakpoint(0);
+            }
+        }
+        if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+    }
+    }
+    }
+    for (size_t ai = 0; ai < plan.actions.size(); ++ai)
+    {
+        if (staged_break || bp_trunc_exec) { break; }
+        if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
+        const Action& a = plan.actions[ai];
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
+        { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); }
+    }
+    for (const Action& a : plan.actions)
+    {
+        if (staged_break || bp_trunc_exec) { break; }
+        if (a.kind == Action::Kind::CastFromGraveyard)
+        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
+    }
+    // Plan::vial_after_casts: the deferred Vial puts, at the point ApplyPlanDirect's apply_plan_actions
+    // deploys them (after its graveyard casts). Unguarded by staged_break / bp_trunc_exec on purpose,
+    // like the rollout's apply_vial: the variant is only ever emitted for plans that open no
+    // breakpoint (AppendVialOrderVariants), so neither flag can be set here.
+    if (vial_after)
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
+        }
+    }
+
+    // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
+    // block held the drop so a hand-land tutor (Sylvan Scrying) could resolve first; play it now
+    // with the fetched land (Forbidden Orchard) in hand. In-main1, NOT the second-main pass -- a
+    // uses_second_main=no deck never runs one, and losing the drop outright measured d0 +0.32 on
+    // the first CG arm. Consume-and-clear so the flag never leaks across turns.
+    // ALWAYS request the second pass after playing a held drop: this pass's plan was solved
+    // WITHOUT the land's mana, so a re-solve must pick up what it could not afford (gi40: a T2
+    // Enlightened Tutor silently dropped because the defer fired but Scrying was not in the
+    // plan, so no tutor second pass ever ran -- the pass-1-plans-short residual).
+    if (m_tutor_deferred_drop)
+    {
+        m_tutor_deferred_drop = false;
+        if (m_lookahead_depth == 0
+            && state.ActivePlayer().lands_played_this_turn
+                   < state.ActivePlayer().LandDropsAvailable())
+        {
+            TryPlayLand(state);
+            cast_draw_engine = true;
+        }
+    }
+
+    // Auto-fire safe alt payloads (Invigorate / Skyshroud) deterministically once a Remedy is
+    // live -> free face damage. Mirrors the rollout's FireSafeAltPayloads pass (so the realised
+    // turn matches the searched line without any recording). Re-scan after each cast because it
+    // mutates the hand. No-op for decks without alt-cost cards. SUPPRESSED under
+    // MTG_UNPRUNE=altpayload exactly like the rollout's twin (ApplyPlanDirect): there the safe alt
+    // is a searched cast, and auto-firing it here too was a lockstep hole (the realised game fired
+    // what the scored line had left to the search).
+    if (!staged_break && !DecisionUnpruned(UnprunedGate::AltPayload))
+    {
+        for (;;)
+        {
+            Player& rp2 = state.ActivePlayer();
+            int target = -1; int amt = 0;
+            for (int i = 0; i < static_cast<int>(rp2.hand.size()); ++i)
+            {
+                auto d = CardDatabase::Instance().LookupCached(rp2.hand[i]);
+                if (d && ResolveProvider(state).CanAutoFireAltPayload(state, state.active_player_index, *d))
+                { target = i; amt = d->params.alt_lifegain_cost; break; }
+            }
+            if (target < 0) { break; }
+            std::string nm = rp2.hand[target].m_name;
+            size_t before = rp2.hand.size();
+            cast_alt(nm, amt); resolve_now();
+            if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
+        }
+    }
+
+    // Krenko, Mob Boss taps AFTER the main casts (executor mirror of ApplyPlanDirect's trailing
+    // TapForTokens pass): X = Goblins you control counts this turn's developed board. Free ({T}).
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::TapForTokens)
+        { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
+    }
+
     exec_trailing_activations(plan.actions);
 
     // BREAKPOINT SITE 9 executor twin -- POST-ENTRY ACTIVATION (lockstep pair of ApplyPlanDirect's

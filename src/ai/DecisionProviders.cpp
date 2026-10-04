@@ -2811,6 +2811,14 @@ inline bool SnowOrderSplitOn()
     static const bool env = EnvOn("MTG_SNOW_ORDER_SPLIT", true);
     return heurarm::Flag(heurarm::SNOW_ORDER_SPLIT, env);
 }
+// The fixer + enter-watcher slots (USER 2026-10-04; see CastOrderRank): Arcum's Astrolabe, then
+// Marit Lage's Slumber, ahead of the snow permanents the Slumber scries on. Default ON, in the
+// shipped generic order and in the (measured-off) Snow order alike; off restores both placements.
+inline bool SnowOrderWatcherOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_ORDER_WATCHER", true);
+    return heurarm::Flag(heurarm::SNOW_ORDER_WATCHER, env);
+}
 inline bool SnowActOrderOn()
 {
     static const bool env = EnvOn("MTG_SNOW_ACT_ORDER", true);
@@ -2864,8 +2872,26 @@ inline bool SnowTapDrawEarlyOn()
 
 int SnowProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    if (!SnowCastOrderOn()) { return GenericProvider::CastOrderRank(s, def); }
     const CardParams& p  = def.params;
+    if (!SnowCastOrderOn())
+    {
+        // THE SHIPPED ORDER is the generic one (MTG_SNOW_CAST_ORDER measured worse, 2026-09-25), with
+        // ONE amendment (USER 2026-10-04, s4004 gi28): Marit Lage's Slumber scries on every snow
+        // permanent that enters after it, and the generic tiers put the deck's other cheap snow
+        // permanents AHEAD of it -- Boreal Druid as a creature (10), Coldsteel Heart as a rock (5) --
+        // so a same-phase Slumber never saw them enter. Neither gains anything by going first: the
+        // Druid is summoning-sick and the Heart enters tapped, so neither funds the turn (USER:
+        // "Boreal Druid can't have haste anyway"). The one card that does is the fixer, Arcum's
+        // Astrolabe ("only Arcum's Astrolabe is relevant there"), which therefore stays first: fixer
+        // 3, watcher 4, ahead of every generic tier but the lifegain enabler (0) and the cantrip
+        // promotion (2). Param-derived (any_color_filter / snow_enter_scry), not named.
+        if (SnowOrderWatcherOn())
+        {
+            if (p.any_color_filter)    { return 3; }
+            if (p.snow_enter_scry > 0) { return 4; }
+        }
+        return GenericProvider::CastOrderRank(s, def);
+    }
     const int         mv = def.card.m_mana_cost.ManaValue();
 
     // [1] THE FIXER, immediately after the land drop. USER 2026-09-15: *"Arcum's Astrolabe is the
@@ -2874,6 +2900,16 @@ int SnowProvider::CastOrderRank(const GameState& s, const CardDefinition& def) c
     // colours it fixes are demanded, so banishing it to the draw band with the other cantrip would
     // strand the very casts it exists to enable. Param-derived (any_color_filter), not named.
     if (p.any_color_filter && SnowOrderFixerOn()) { return 1; }
+
+    // [1b] THE ENTER-WATCHER, ahead of everything it watches. USER 2026-10-04 (s4004 gi28): Marit
+    // Lage's Slumber scries on EVERY snow permanent entering after it, and nearly everything this
+    // deck casts is a snow permanent -- so a Slumber cast in the same phase as a Boreal Druid has to
+    // go FIRST or the Druid's scry is simply lost. Cheapest-first put the Druid (mv 1) ahead, and the
+    // only way the search could buy the scry was to split the two across main phases (the every-
+    // turn main-2 arm: T6 vs T7). Nothing is given up by going first: the one card that must
+    // precede it (the fixer, above) still does, and the deck's other mana sources cannot fund the
+    // turn anyway (Druid summoning-sick, Heart enters tapped). Param-derived, not named.
+    if (p.snow_enter_scry > 0 && SnowOrderWatcherOn()) { return 2; }
 
     // [3] THE DRAWS, last -- everything else has reached its slot by the time they resolve.
     // Cast-time draw only (ETB / on-cast): Frost Augur and Scrying Sheets draw from an ACTIVATED

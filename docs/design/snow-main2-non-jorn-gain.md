@@ -1,7 +1,6 @@
 # Snow: where did the every-turn second main's extra gain come from?
 
-Status: **deferred, partly answered** (2026-10-04). A real main-1 defect is localised to one repro; see
-"Measured 2026-10-04" at the end.
+Status: **RESOLVED (2026-10-04)** -- all four main-1 gaps closed; see "Resolved 2026-10-04" at the end.
 
 ## Background
 
@@ -90,3 +89,47 @@ dedup collapse merging the look variant with the no-look one; (c) order-condemna
 
 Next step: `MTG_BP_TRACE=1 MTG_BP_CONT_TRACE=6` on the per-turn job, find the T6 node that applies
 continuation #0 and dump its post-apply hand (does Frost Augur arrive?) and its scored win turn.
+
+## Resolved 2026-10-04
+
+### The defect: a continuation's board activations were never applied (gi147, gi33, smoke gi2)
+
+`MTG_FSW_TRACE` (with the new `[fsw-skip]` lines -- one per plan the frontier loop declines before
+its own `[fsw]` print) showed the T6 node the committed line passes through scoring the Coatl
+continuation variants #0 and #1 as the SAME state: `cont=[k4:Scrying Sheets]`, land only, and #0
+skipped as a post-apply duplicate. The continuation list is built by `CollectActions`, so it offers
+board activations ("play the drawn Sheets and look"), but every continuation site except 7 and 9
+applied it through the cast-only `apply_plan_actions` -- and the executor's two continuation paths
+(`resolve_draw_breakpoint`, `replay_recorded`) likewise ran casts only. Lockstep, so no
+`[fd-diverge]` ever fired; the entry was simply inexpressible at any budget. Main 2 "fixed" it by
+running the look as an ordinary plan action.
+
+Fix (both worlds): `apply_continuation_activations` runs a continuation's trailing activations after
+its casts and records them into the breakpoint script; the executor dispatches them at the same
+point in `resolve_draw_breakpoint` and as one trailing pass in `replay_recorded`. Two definitions
+moved so the dispatchers exist when first reached (a lambda definition executes nothing): the
+rollout's `apply_trailing_activations` ahead of the `bp_resume` branch (a node-resumed apply skips
+the main-phase block), the executor's `exec_trailing_activations` ahead of the main cast loop.
+
+At d8b0, shipped (per-turn) arm: gi147 8 -> **7**, s6006 gi33 7 -> **6**, smoke s1001 gi2 8 -> **6**
+(the "unlimited worse than budgeted" anomaly was the same defect).
+
+### s4004 gi110: not a gap
+
+With the fix, the every-turn arm at d8b0 realises 7 too -- the 6 it showed was at d3/b10 and no
+unlimited search reproduces it in either arm.
+
+### s4004 gi28: the cast order lost Slumber's scry -- changed (USER 2026-10-04)
+
+The every-turn line's T3 is m1 `Forest; Marit Lage's Slumber`, m2 `Boreal Druid` (tail 6). Main 1
+`Slumber, Druid` scored 9 in BOTH arms: Snow ships the GENERIC order (MTG_SNOW_CAST_ORDER was measured
+worse and stays off), which ranks a creature (10) and a rock (5) ahead of an enchantment (20), so in one
+phase the Druid and Coldsteel Heart always entered before Slumber and its "another snow permanent
+enters -> scry 1" never saw them. Splitting the casts across mains was the only way to buy the scry.
+
+USER: *"we should change that. Boreal Druid can't have haste anyway"* / *"only Arcum's Astrolabe is
+relevant there"* / *"it's probably okay just to stick it first"*. The Druid is summoning-sick and the
+Heart enters tapped, so neither funds the turn by going first; the fixer does. `SnowProvider::
+CastOrderRank` now amends the generic order with Arcum's Astrolabe at 3 and the enter-watcher (Slumber,
+`snow_enter_scry`) at 4 -- `MTG_SNOW_ORDER_WATCHER`, default ON (the measured-off Snow order carries the
+same watcher slot). gi28 d8b0: 7 -> **6**.
