@@ -1045,21 +1045,28 @@ std::vector<std::vector<int>> DecisionProvider::BrunaGatherCandidates(
     return out;
 }
 
-// Arcanum Wings' swap pick (see the DecisionProvider.h note): rank the legal hand Auras by the
-// DAMAGE the swap host deals, computed by actually performing the swap on a copy (so Almost
-// Perfect's base set, a lost Aura's grant, Kor-style self-buffs and double strike are all priced
-// exactly as combat will realise them):
-//   key 1: damage THIS combat -- the host's combat power after the swap if it can still attack
-//          (always, when it is already attacking: a Colossification tap is then free, CR 506.4; in a
-//          main phase a Colossification tap -- deferred or not -- means it cannot attack), else 0;
-//   key 2: the host's power after the swap (next turn's damage);
+// Arcanum Wings' swap pick (see the DecisionProvider.h note): rank the legal hand Auras by DAMAGE,
+// computed by actually performing the swap on a copy (so Almost Perfect's base set, a lost Aura's
+// grant, Kor-style self-buffs and double strike are all priced exactly as combat realises them):
+//   key 1: LETHAL THIS TURN -- the team's attack this turn (every creature that can still attack,
+//          the host included only if it still can; an already-attacking host always counts -- a
+//          Colossification tap is then free, CR 506.4) reaches the opponent's life;
+//   key 2: if lethal, this turn's team damage; otherwise the host's damage over THIS turn and the
+//          NEXT (this-turn damage if it can still attack, plus its power next turn);
 //   key 3: lower hand index (deterministic).
+// ROOT-CAUSED REFINEMENT (2026-10-05 proof run): the first version ranked on this-turn damage
+// alone, so in a main phase it preferred Indrik Umbra (+4 now, the host still attacks) over
+// Colossification (the ETB tap costs this turn's attack, +20 next turn); the fully-branched control
+// arm committed Colossification there. When nothing is lethal this turn, +20 next turn is worth
+// more than +4 now -- the two-turn sum prices exactly that, and the lethal key keeps "+4 now" when
+// +4 now wins the game.
 std::vector<int> DecisionProvider::AuraSwapRanking(
     const GameState& s, int controller, int wings_number, int host_number,
     bool host_attacking, const std::vector<int>& legal) const
 {
-    struct Scored { int idx; int now; int later; };
+    struct Scored { int idx; bool lethal; int key; };
     std::vector<Scored> sc;
+    const int opp_life = s.players[1 - controller].life;
     for (int hi : legal)
     {
         GameState t = s;
@@ -1070,12 +1077,26 @@ std::vector<int> DecisionProvider::AuraSwapRanking(
         const int mult = CreatureHasDoubleStrike(*h, t) ? 2 : 1;
         const int pw = std::max(0, CombatPowerOf(*h, t)) * mult;
         const bool attacks = host_attacking || CanAttackFull(*h, t.battlefield, controller);
-        sc.push_back({ hi, attacks ? pw : 0, pw });
+        // The team's attack this turn on the post-swap board (main phase: every creature that can
+        // still attack; in combat the host is known to be attacking and the rest already declared,
+        // so the host's own gain is the whole difference between options).
+        int team = attacks ? pw : 0;
+        if (!host_attacking)
+        {
+            for (const Permanent& q : t.battlefield)
+            {
+                if (q.controller_index != controller || q.card.m_number == host_number) { continue; }
+                if (!CanAttackFull(q, t.battlefield, controller)) { continue; }
+                team += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
+            }
+        }
+        const bool lethal = team >= opp_life;
+        sc.push_back({ hi, lethal, lethal ? team : (attacks ? pw : 0) + pw });
     }
     std::stable_sort(sc.begin(), sc.end(), [](const Scored& a, const Scored& b)
     {
-        if (a.now != b.now) { return a.now > b.now; }
-        if (a.later != b.later) { return a.later > b.later; }
+        if (a.lethal != b.lethal) { return a.lethal; }
+        if (a.key != b.key) { return a.key > b.key; }
         return a.idx < b.idx;
     });
     std::vector<int> out;

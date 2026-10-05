@@ -5471,7 +5471,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (hi >= 0 && TRACE_ON("swapproof"))
             {
                 const int top = AuraSwapPick(state, state.active_player_index, a.sac_source_id, false);
-                TRACE("swapproof", "T%d main took=%s top=%s", state.turn_number, hh[static_cast<std::size_t>(hi)].m_name.str().c_str(),
+                TRACE("swapproof", "seed=%llu T%d main took=%s top=%s",
+                      static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                      hh[static_cast<std::size_t>(hi)].m_name.str().c_str(),
                       top >= 0 ? hh[static_cast<std::size_t>(top)].m_name.str().c_str() : "-");
             }
             if (hi >= 0 && TapForCost(state, a.cost, avail, /*for_creature=*/false))

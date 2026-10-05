@@ -248,11 +248,20 @@ TEST_CASE("Bruna: Arcanum Wings' swap -- simultaneous exchange, damage-max pick,
     const int k = AuraSwapPick(b.s, 0, wings, /*host_attacking=*/true);
     REQUIRE(k >= 0);
     CHECK(b.s.players[0].hand[static_cast<std::size_t>(k)].m_name.str() == "Colossification");
-    // Main phase, ready attacker: Colossification's tap would cost this turn's attack, so the
-    // damage ranking prefers Unflinching Courage (+2 now).
+    // Main phase, ready attacker, nothing lethal this turn: Colossification's tap costs this turn's
+    // attack, but +20 next turn outweighs Unflinching Courage's +2 over both turns (the two-turn key
+    // -- root-caused from the proof run's one branched-arm divergence).
+    b.s.players[1].life = 20;
     const int km = AuraSwapPick(b.s, 0, wings, /*host_attacking=*/false);
     REQUIRE(km >= 0);
-    CHECK(b.s.players[0].hand[static_cast<std::size_t>(km)].m_name.str() == "Unflinching Courage");
+    CHECK(b.s.players[0].hand[static_cast<std::size_t>(km)].m_name.str() == "Colossification");
+    // ...but when Courage's +2 makes THIS turn's attack lethal (opponent at 3, Mother 1 + 2), the
+    // lethal key keeps the hasty kill.
+    b.s.players[1].life = 3;
+    const int kl = AuraSwapPick(b.s, 0, wings, /*host_attacking=*/false);
+    REQUIRE(kl >= 0);
+    CHECK(b.s.players[0].hand[static_cast<std::size_t>(kl)].m_name.str() == "Unflinching Courage");
+    b.s.players[1].life = 20;
     REQUIRE(ApplyAuraSwap(b.s, 0, wings, k, /*respond_window=*/false));
     CHECK(b.ByNum(wings) == nullptr);   // Wings back in hand
     bool wings_in_hand = false;

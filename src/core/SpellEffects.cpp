@@ -1380,7 +1380,8 @@ void FireAttackGatherAuras(GameState& state, int controller, const std::vector<i
             const int k = (state.scripted_bruna_gather >= 0
                            && state.scripted_bruna_gather < static_cast<int>(ranked.size()))
                         ? state.scripted_bruna_gather : 0;
-            TRACE("gatherproof", "T%d k=%d n=%zu took={%s} top={%s}", state.turn_number, k, ranked.size(),
+            TRACE("gatherproof", "seed=%llu T%d k=%d n=%zu took={%s} top={%s}",
+                  static_cast<unsigned long long>(state.game_seed), state.turn_number, k, ranked.size(),
                   names(chosen).c_str(), ranked.empty() ? "" : names(ranked.front()).c_str());
         }
         state.scripted_bruna_gather = -1;   // consumed by the first gather (the Tectonic convention)
@@ -1660,7 +1661,8 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         {
             const int top = AuraSwapPick(state, controller, wnum, host_attacking);
             const std::vector<Card>& hh = state.players[controller].hand;
-            TRACE("swapproof", "T%d combat rank=%d took=%s top=%s attacking=%d", state.turn_number,
+            TRACE("swapproof", "seed=%llu T%d combat rank=%d took=%s top=%s attacking=%d",
+                  static_cast<unsigned long long>(state.game_seed), state.turn_number,
                   pin / kAuraSwapRankStride, hh[static_cast<std::size_t>(pick)].m_name.str().c_str(),
                   top >= 0 ? hh[static_cast<std::size_t>(top)].m_name.str().c_str() : "-",
                   host_attacking ? 1 : 0);
