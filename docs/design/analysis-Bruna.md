@@ -906,3 +906,64 @@ Add a key to `## Approved deferrals` to sign one off (only if it is a genuine, u
 - claude_sweep SKIPPED -- no '## Claude-play sweep' section in docs/design/analysis-Bruna.md. Run the Claude-driven sweep (.claude/skills/claude-play.md, analyze-deck 5d; fan game-indices out with the Workflow engine), verify any flags against cards.json + the rules skill, then record `commit:` / `seeds:` / `games:` / `flags: N unresolved` under that heading. play_invariants (above) already guards the protocol mechanically.
 
 <!-- verify_deck:end -->
+
+## Suite verdicts -- smoke + regression on the rebased branch (2026-10-05)
+
+Full smoke + regression ran on the rebased branch (results kept, NOT re-run: `logs/suite_results_2026-10-05/`).
+Two defects were found and fixed, and only the decks they move were re-run (`--deck=`, one invocation per
+mode: `rerun_G_fix/` angels+angels2hg+bruna+bruna2hg, `rerun_fungusb_boundfix/` fungusb). The merged
+per-tier result -- full run + per-deck overlays -- is `final/` and is staged in `test/results/<mode>.env`
++ `test/logs/<mode>/wins/` for the accept. Metric: loss-penalized avg turn-to-win (loss = 9). Recovery
+check is two-stage: stage 1 `--depth <GT win turn> --budget-ms 100`, stage 2 `d8b0` only for stage-1
+failures. d0 = greedy, light touch per the regression skill (attributed, not root-caused one by one).
+
+### Fixes
+* **8570c689 -- G follow-up (creature-only-first skips an attack-capable source).** 4e14d50c ranked every
+  `creature_mana_only` source first on a creature payment ("never worse spent now"). False for a creature
+  that could attack: Giada, Font of Hope (2/2 flying vigilance) paid Righteous Valkyrie pre-combat and sat
+  out combat (smoke gi4 T3: 2 damage short, T4 -> T5). Angels: 146 slower regression games / +144 turns,
+  all back to GT with the rank off. The rule was under-specified, not deck-specific: it now applies only
+  when the tap costs no attack (`SacPayFodderCostsAttack`). Sage (0/1) and Ziggurat (a land) keep it, so
+  Bruna 77019 is unchanged (unit test G passes; Bruna rows byte-identical to the full run). **Angels and
+  angels2hg are now byte-identical to GT** (turns AND play digests, every case).
+* **b5b47d54 -- the search's mana bound credits Brightcap Badger's grant on DEFINED Fungi.** fungusb
+  s2002 gi40 (d3 + d5, T5 -> T6, still T6 at d8b0): `UntappedManaUpperBound` credited the grant only on
+  token bodies, so `PaymentManaCovers` (search side only) "proved" Saproling Burst unpayable on T4 (bound
+  4 vs real 7); the committed line was scored without Burst (attack 6, T5) while the executor cast it by
+  tapping the attackers (attack 3, T6). Pre-existing since the Badger grant; exposed by 787fefdd (Wild
+  Growth now resolves T2, so T4 can afford Burst). `MTG_PAY_BOUND=0` restored T5; with the fix gi40 = T5
+  at d3b10, d5 play settings and d8b0. Inert without a mana grant (only fungusb carries the Badger).
+
+### Per-deck net (final, vs committed GT)
+| Tier | Deck | net turns | better | worse | play-changed |
+|---|---|---|---|---|---|
+| smoke | angels / angels2hg | 0 / 0 | 0 | 0 | 0 (byte-identical) |
+| smoke | fungus | -13 | 20 | 6 (all d0) | 225 |
+| smoke | fungusb | -14 | 15 | 2 (all d0) | 66 |
+| smoke | fivecolour / fivecolour2hg | -4 / -1 | 5 / 1 | 1 (d0) / 0 | 20 / 3 |
+| smoke | slivers | 0 | 0 | 0 | 2 |
+| regression | angels / angels2hg | 0 / 0 | 0 | 0 | 0 (byte-identical) |
+| regression | fungus | -26 | 25 | 2 (d0) | 280 |
+| regression | fungusb | -21 | 23 | 5 (3 d0, 2 d3) | 127 |
+| regression | fivecolour / fivecolour2hg | 0 / 0 | 3 / 0 | 3 (2 d0, 1 d3) / 0 | 41 / 2 |
+| regression | slivers | 0 | 0 | 0 | 5 |
+Every deck is net <= 0. Bruna / bruna2hg are new keys (no GT): smoke d0 6.6130, d3 4.9400, d5 5.0000,
+2hg 5.5000; regression d0 6.5960, d3s2002 5.1800, d3s3003 5.1000, d5s2002 5.0667, d5s3003 5.1733.
+
+### Every worse game
+| Game | GT -> now | Verdict |
+|---|---|---|
+| fivecolour reg d3 s3003 gi126 | 5 -> 6 | budget churn: stage 1 (d5 b100) wins T5 |
+| fungusb reg d3 s3003 gi78 | 5 -> 6 | budget churn: stage 1 (d5 b100) wins T5 (subagent: different T1 land at d3b10; d3b0 and d5b0 both T5) |
+| fungusb reg d3 s3003 gi44 | 4 -> 5 | budget churn: stage 1 (d4 b100) wins T4 (appeared with b5b47d54; F-off arm also 5 at d3b10) |
+| fungusb reg d3/d5 s2002 gi40 | 5 -> 6 | DEFECT -> fixed by b5b47d54; now 5 (no longer worse) |
+| fungus smoke d0 gi65/82/382/442/793/988, reg d0 gi226/715 | +1..+2 | d0 greedy churn, attributed to 787fefdd (each returns to GT with `MTG_LAND_AURA_RAMP_FIRST=0`); deck net -13 / -26 |
+| fungusb smoke d0 gi336, reg d0 gi249/296(7 -> loss)/431 | +1..+2 | d0 greedy churn, 787fefdd (each returns with the F hatch off); deck net better |
+| fungusb smoke d0 gi239 | 6 -> 8 | d0 greedy churn from b5b47d54 (F-off arm still 8) |
+| fivecolour smoke d0 gi188, reg d0 gi445/953 | +1 | d0 greedy churn; not F/G/shroud/host-sig/swap-chain/retarget (all hatches leave it); deck net -4 / 0 |
+| angels + angels2hg (245 slower: smoke 92+3, reg 146+4) | +1 each typ. | DEFECT (G) -> fixed by 8570c689; all back to GT |
+
+### Not caused by this branch (blocker for a clean regression run, not for the accept)
+* Reference reproducibility `--strict`: **Hinata2/claude_s1_gi0 ENUM-GAP** (Soulfire Eruption target
+  label). Reproduces identically on the base build of origin `c7487fb9` (`logs/basewt`) -- pre-existing.
+* Overnight was not run (out of scope for this pass) -- Bruna's overnight GT is still owed (`regression_tiers`).
