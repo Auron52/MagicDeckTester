@@ -15542,7 +15542,7 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
 }
 
 // ---- BrunaProvider::CastOrderRank (MTG_BRUNA_ORDER, PROPOSED, default OFF) ----------------
-// A USER QUESTION, not an adoption (docs/design/analysis-bruna.md, Stage 4). Off =>
+// A USER QUESTION, not an adoption (docs/design/analysis-Bruna.md, Stage 4). Off =>
 // GenericProvider::CastOrderRank, i.e. Sol Ring 5, creatures 10, every other spell 20 (the tutors, the
 // payload Auras, Wild Growth, Arcanum Wings and Lightning Greaves all tied, plan order).
 // Role classes are read from PARAMS only:

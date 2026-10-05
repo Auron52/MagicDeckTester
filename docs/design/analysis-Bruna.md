@@ -1,5 +1,9 @@
 # Analysis ledger — Bruna
 
+> **Path:** this ledger is `docs/design/analysis-Bruna.md` (renamed 2026-10-05 from `analysis-bruna.md`):
+> `verify_deck.py` resolves the ledger as `analysis-<decklist stem>.md` = `analysis-Bruna.md`, so under
+> the old name its `## Approved deferrals` and `## Claude-play sweep` sections were invisible to the gate.
+
 Deck: `decks/Bruna/Bruna.cod` (Bant Auras/Equipment voltron around Bruna, Light of Alabaster;
 Glittering Wish into an 8-card sideboard). Branch/worktree: `bruna-analysis` @ `/home/vscode/wt/bruna`
 (cut from origin c34312e8). Worktrees live OUTSIDE /tmp (a /tmp wipe lost work on 2026-10-05).

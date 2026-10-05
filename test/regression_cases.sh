@@ -417,7 +417,7 @@ SMOKE_CASES=(
   "soldiers 5 1001   75 20"
   # bruna: Bant voltron-ramp around Bruna, Light of Alabaster (attack-trigger Aura gather from hand +
   # graveyard, Arcanum Wings' aura swap, Colossification's ETB tap, Glittering Wish into a multicoloured
-  # sideboard). ADDED 2026-10-05 (analysis-bruna.md) at PIRATES'/SOLDIERS' counts. Measured in ONE pooled
+  # sideboard). ADDED 2026-10-05 (analysis-Bruna.md) at PIRATES'/SOLDIERS' counts. Measured in ONE pooled
   # 20-thread batch (seed 8900000, 400 games/cell): d3 b10 1.56 s/game, d5 b20 2.63 s/game, d5 b40
   # 4.33 s/game (core-ms per game under 20-way contention, the suite's own conditions); slowest game
   # 56 s (d5 b40). d5 b20 2.63 s is inside the 3x rule's 3.10 s budget (3x fivecolour). 2HG: smoke

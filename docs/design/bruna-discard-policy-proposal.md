@@ -123,5 +123,5 @@ and Colossification's tap-host timing (a cast-order / combat question).
    is somehow unable to attack (goldfish: never).
 3. Tutors at 70 (below Colossification 80, above every other payload).
 4. Second payload only when there is no gather path.
-5. Real-play shed rate: see the measurement in `docs/design/analysis-bruna.md` (Stage 5i). The rollout
+5. Real-play shed rate: see the measurement in `docs/design/analysis-Bruna.md` (Stage 5i). The rollout
    sheds far more often than real play (Dragons: 10,020x), so `real ~ 0` does not make the rule inert.

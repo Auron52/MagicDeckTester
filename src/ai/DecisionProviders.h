@@ -454,7 +454,7 @@ public:
     // fully searched.
     int TutorSearchWidth() const override { return 8; }
     // MTG_BRUNA_ORDER -- a PROPOSED cast order (analyze-deck Stage 4, 2026-10-05), DEFAULT OFF: cast
-    // order is USER-OWNED (docs/design/analysis-bruna.md, "Stage 4 -- proposed cast order"). Off =>
+    // order is USER-OWNED (docs/design/analysis-Bruna.md, "Stage 4 -- proposed cast order"). Off =>
     // DeckProvider (Generic) byte-for-byte.
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
