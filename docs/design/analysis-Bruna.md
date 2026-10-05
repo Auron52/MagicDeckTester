@@ -249,6 +249,17 @@ Colossification). No single `MTG_UNPRUNE=<gate>` reproduces it (30 gates tried);
 which moves the clairvoyant-bottoming playouts. Belongs to the mulligan stage (exhaustive keep/bottom
 table), not to a play prune. **No prune counterexample.**
 
+### 5c2 -- horizon-honest tie-break (`leaf_tiebreak_check.py`, PLAY settings d5/b20) -- KEEP THE DEFAULT (ON)
+Two independent 6-block runs (taskset 20 cpus): seeds 1.0M-1.5M -> +5 turns over 6,000 paired (13 worse
+/ 9 better; the script printed OPT OUT); fresh seeds 1.6M-2.1M -> -2 turns (13 / 12; KEEP). **Pooled
+12,000 paired: +3 turns (26 worse / 21 better) = +0.00025/game, half-signs +3/+2/-2/0 -- no sign.**
+Binding rate 0.4%. Not opting out on a sign that flips between two samples.
+Gate 2 ("does the tie-break DELETE a win?"), every one of the 26 tie-break-worse games re-run with the
+tie-break ON: 17 recover at d<win turn> b100; of the 8 others, 7 recover with budget alone (b400/b1600;
+gi112 even goes T5 -> T4); gi421 (s1.8M) won T4 only in the OFF arm at b20 -- the OFF arm itself plays
+T5 at d5 b100/b400 and d8 b400, so that T4 is a budget accident of the off arm, not a line the tie-break
+removes. **No structural deletion -> default ON stands; no provider override added.**
+
 ### Slow games -- characterised (MTG_TURN_CENSUS, d5 b20, 200 games, seeds 8,950,000+, single-threaded)
 * **The 30-60 s games are MULLIGAN games, not Wings/Bruna branching.** 48 of 200 games mulliganed;
   for each, the clairvoyant lookahead bottoming plays EVERY candidate bottom out as a full d5/b20 game
