@@ -47042,6 +47042,46 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
 // and the deferred puts would have to be threaded through both -- EXCEPT a plan marked only for site
 // 9 (post-entry activation), which a base plan never opens (see the body). Base plans only (every other axis pin
 // at its default), so the axis stays additive. Byte-identical for every deck without a Vial.
+// The PRE-0cb72937 VialOrderMatters predicate, verbatim in effect (param terms only): kept as the
+// rollout-side gate for the Vial-order twin (see AppendVialOrderVariants).
+static bool LegacyVialOrderClass(const TurnSolver::Plan& plan)
+{
+    const auto def_of = [](const Action& a) -> const CardDefinition*
+    { return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name); };
+    bool any_put = false, tax_put = false, noncreature_cast = false;
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::ActivateVial)
+        {
+            any_put = true;
+            const CardDefinition* d = def_of(a);
+            if (d != nullptr && d->params.noncreature_spell_tax > 0) { tax_put = true; }
+            continue;
+        }
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+        const CardDefinition* d = def_of(a);
+        if (d == nullptr) { continue; }
+        if (!d->card.IsCreature()) { noncreature_cast = true; }
+    }
+    if (!any_put) { return false; }
+    if (tax_put && noncreature_cast) { return true; }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+        const CardDefinition* d = def_of(a);
+        if (d == nullptr) { continue; }
+        if (d->params.other_chosen_subtype_enters_counters > 0
+            || d->params.own_creature_enters_opp_life_loss > 0
+            || d->params.reveal_or_pay_cost.has_value())
+        { return true; }
+    }
+    return false;
+}
+static bool VialTwinRolloutLegacyOn()
+{
+    static const bool v = EnvOn("MTG_VIAL_TWIN_ROLLOUT_LEGACY", true);
+    return heurarm::Flag(heurarm::VIAL_TWIN_ROLLOUT_LEGACY, v);
+}
 static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolver::Plan>& all,
                                     bool is_pre_combat)
 {
@@ -47093,6 +47133,20 @@ static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolv
                 if (cast_mv > supply) { continue; }
             }
         }
+        // INSIDE A LEAF ROLLOUT (g_rollout_nest > 0) the twin keeps its PRE-0cb72937 gate: the
+        // param-predicted classes only (LegacyVialOrderClass -- Thalia's tax on a put, a cast Mimic /
+        // Forerunner / Buccaneer), no breakpoint-opening plan, no continuation list. A rollout is the
+        // leaf ESTIMATOR, not the search window (greedy is permitted there by the USER's scope ruling),
+        // and the structural gate's extra twins there are pure leaf cost: Soldiers s3003 gi72's T2
+        // pass-1 cost rose 2536 -> 2935 units (+16%), which tipped the start gate into skipping pass 2
+        // (T4 -> T5 at d5/b20; T4 at 4x and d8 b0). Every searched decision -- the root, FSLineWin's
+        // interior, breakpoint continuations -- keeps the full structural + outcome gate, so no line
+        // the search window can choose is lost. MTG_VIAL_TWIN_ROLLOUT_LEGACY=0 restores the
+        // structural gate everywhere (A/B lever).
+        if (g_rollout_nest > 0 && VialTwinRolloutLegacyOn()
+            && (g_bp_enum_depth != 0 || !LegacyVialOrderClass(p)
+                || PlanOpensBreakpoint(state, p) != 0))
+        { continue; }
         // Last, because it is the only test that applies anything: do the two orders differ at all?
         if (!TurnSolver::VialOrderChangesOutcome(state, p, is_pre_combat)) { continue; }
         TurnSolver::Plan v = p;
