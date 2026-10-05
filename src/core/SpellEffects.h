@@ -28821,6 +28821,20 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
             if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
             d = &GrantedManaFace(grant.color);
         }
+        else if (!IsBaselineManaSource(*d) && GrantReaches(grant, p) && GrantedBodyCanTap(grant, p))
+        {
+            // THE GRANT'S SECOND POPULATION (see ManaDefOf): a Fungus WITH a definition but no mana
+            // ability of its own (Psychotrope / Vitaspore Thallid; the Badger itself is a Badger
+            // Druid and is not reached). Crediting only definition-less tokens made this bound
+            // UNDER-count, and PaymentManaCovers reads a
+            // short bound as a PROOF of unpayability -- on the search side only (the executor's
+            // TapForCost never consults it). fungusb s2002 gi40 T4: the search's apply "proved"
+            // Saproling Burst unpayable (bound 4 < 5; real supply 7), scored the line without it,
+            // and the executor then cast it by tapping the attackers -- T5 predicted, T6 realised.
+            // Over-counting is this bound's licence, so fall through with the REAL definition too:
+            // the body keeps any credit of its own (e.g. a sacrifice-for-mana face).
+            total += SourceMaxNetLive(state, p, GrantedManaFace(grant.color), aura_fold);
+        }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                          || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                          || d->params.mana_rock

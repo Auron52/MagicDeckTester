@@ -1421,6 +1421,19 @@ TEST_CASE("Brightcap Badger: granted Saprolings are REAL mana, through the payer
         CHECK(UntappedManaUpperBound(s, false, 0) == 3);
     }
 
+    SUBCASE("a DEFINED Fungus with no mana ability of its own counts in the BOUND too")
+    {
+        // fungusb s2002 gi40 T4 (2026-10-05): the bound credited only definition-less tokens, so
+        // PaymentManaCovers "proved" a payable Saproling Burst unpayable on the search side while
+        // the executor paid it by tapping the Thallids -- T5 predicted, T6 realised.
+        GameState s = board_with(true, 2, false, false);
+        Put(s, "Psychotrope Thallid", 0, 60);
+        Put(s, "Vitaspore Thallid", 0, 61);
+        CHECK(AvailableManaPool(s).green == 4);
+        CHECK(UntappedManaUpperBound(s, false, 0) >= 4);
+        CHECK(PaymentManaCovers(s, false, 4));
+    }
+
     SUBCASE("the Badger itself is NOT a source -- it is a Badger Druid, not a Fungus")
     {
         GameState s = board_with(true, 0, false, false);
