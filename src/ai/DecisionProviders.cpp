@@ -24016,6 +24016,43 @@ static std::string BoardText(const GameState& s, int me)
          + " hand[" + std::to_string(s.players[me].hand.size()) + "]: " + h;
 }
 
+// DIAGNOSTIC (MTG_EQUIP_ROUTE_TRACE only): everything a route verdict can depend on, printed at the
+// verdict memo's write and hit sites, so two boards that share a RouteStateKey can be diffed by eye.
+// Written 2026-10-05 to find which un-keyed field let a memoised LETHAL replay on a winless board.
+static std::string StateDump(const GameState& s, int me)
+{
+    const Player& ap = s.players[me];
+    std::string o = "t" + std::to_string(s.turn_number) + " phase=" + std::to_string(static_cast<int>(s.phase))
+                  + " life=" + std::to_string(ap.life) + " opp=" + std::to_string(s.players[1 - me].life)
+                  + " float=" + std::to_string(s.floating_mana.Total())
+                  + " drops=" + std::to_string(ap.lands_played_this_turn)
+                  + " spells=" + std::to_string(s.spells_cast_this_turn)
+                  + " exile=" + std::to_string(s.exile.size()) + " | hand:";
+    for (const Card& c : ap.hand) { o += " " + c.m_name.str(); }
+    o += " | bf:";
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        o += " " + p.card.m_name.str() + "#" + std::to_string(p.card.m_number)
+           + (p.tapped ? "[T]" : "") + (p.entered_this_turn ? "[sick]" : "")
+           + (p.equipped_to != 0 ? "->" + std::to_string(p.equipped_to) : "")
+           + (p.aura_attached_to != 0 ? "~>" + std::to_string(p.aura_attached_to) : "")
+           + (p.charge_counters != 0 ? "{ch" + std::to_string(p.charge_counters) + "}" : "")
+           + (p.hone_counters != 0 ? "{hone" + std::to_string(p.hone_counters) + "}" : "")
+           + (p.quest_counters != 0 ? "{q" + std::to_string(p.quest_counters) + "}" : "");
+        for (std::size_t i = 0; i < p.counters.size(); ++i)
+        {
+            o += "{c" + std::to_string(static_cast<int>(p.counters[i].type)) + ":"
+               + std::to_string(p.counters[i].count) + "}";
+        }
+    }
+    o += " | gy:";
+    for (const Card& c : ap.graveyard) { o += " " + c.m_name.str(); }
+    o += " | lib[" + std::to_string(ap.library.size()) + "]:";
+    for (std::size_t i = 0; i < ap.library.size() && i < 12; ++i) { o += " " + ap.library[i].m_name.str(); }
+    return o;
+}
+
 // Does this card WATCH equipment -- i.e. does putting it on the battlefield make every later
 // Equipment cast draw? Sram draws on Equipment CAST, Puresteel Paladin on Equipment ETB. This is
 // the resource the cast-count rule cannot see: a second watcher DOUBLES the chain's draw rate, so
@@ -24156,6 +24193,17 @@ static std::uint64_t RouteStateKey(const GameState& s, int me)
     // What BoardKey leaves out and the chain's verdict depends on: SUMMONING SICKNESS (the host cast
     // this turn cannot attack, so the same hand+battlefield is lethal on one board and not on the
     // other) and COUNTERS (a Remote Farm's depletion counters decide whether it pays for the Hammer).
+    //
+    // ALL the counters, not just the generic vector. Several counter kinds live in DEDICATED ints on
+    // Permanent (the sim key folds them one by one; this key did not): Umezawa's Jitte's
+    // charge_counters are +2/+2 per counter at combat, Dwalin's hone_counters +1/+0 per Equipment,
+    // quest counters a whole Beastmaster pump. Omitting them let a board with two Jitte counters and
+    // the same board with none share one key -- the verdict memo then replayed a LETHAL proven with
+    // the counters on the board without them (2026-10-05, the swap screen's card-scores run: 2,000+
+    // "APPLY replay found no kill on a board the trial proved", every one of them gone with Jitte
+    // out of the list), and the mirror image, a memoised "no" from the counterless board
+    // suppressing the kill the counters made, was silent. Folded unconditionally (a zero folds the
+    // same way on every board, so counterless decks keep one key per board exactly as before).
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -24165,8 +24213,15 @@ static std::uint64_t RouteStateKey(const GameState& s, int me)
             v = v * 31 + (static_cast<std::uint64_t>(p.counters[i].type) + 1) * 101
                 + static_cast<std::uint64_t>(p.counters[i].count);
         }
+        const int dedicated[] = { p.charge_counters, p.verse_counters, p.lore_counters, p.storage_counters,
+                                  p.loyalty, p.ice_counters, p.age_counters, p.spore_counters,
+                                  p.fade_counters, p.quest_counters, p.hone_counters };
+        for (const int c : dedicated) { v = v * 37 + static_cast<std::uint64_t>(c + 1); }
         comboroute::Mix(h, v);
     }
+    // The PHASE: the route projects THIS turn's attack, so the same board before combat (lethal) and
+    // after it (nothing left to attack with) must not share a verdict.
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.phase) + 0x9E3779B9ULL);
     return h;
 }
 // Winless boards of the current decision: board key -> the most remaining links it was searched
@@ -24834,7 +24889,15 @@ int TrialPolicy(const GameState& s, int me)
         const std::uint64_t ep = TurnSolver::DecisionEpoch();
         if (dm.epoch != ep || memo.size() > (1u << 20)) { memo.clear(); dm.epoch = ep; }
         const std::unordered_map<std::uint64_t, int>::const_iterator it = memo.find(key);
-        if (it != memo.end()) { return it->second; }
+        if (it != memo.end())
+        {
+            if (Trace())
+            {
+                std::fprintf(stderr, "[equip-route] MEMO-HIT t%d key=%016llx r=%d :: %s\n", s.turn_number,
+                             (unsigned long long)key, it->second, StateDump(s, me).c_str());
+            }
+            return it->second;
+        }
     }
     int r = 0;
     {
@@ -24857,9 +24920,16 @@ int TrialPolicy(const GameState& s, int me)
     if (ChainRetryEnabled())   { retry(Adv::ChainFirst,   3, "CHAIN-FIRST");   }
     if (SearchRetryEnabled())  { retry(Adv::Search,       4, "SEARCH");        }
     if (use_memo) { memo[key] = r; }
+    if (Trace())
+    {
+        std::fprintf(stderr, "[equip-route] MEMO-WRITE t%d key=%016llx r=%d :: %s\n", s.turn_number,
+                     (unsigned long long)key, r, StateDump(s, me).c_str());
+    }
     return r;
 }
 }   // namespace equiproute
+
+std::uint64_t EquipRouteStateKey(const GameState& s, int me) { return equiproute::RouteStateKey(s, me); }
 
 int EquipRouteApply(GameState& s, int me)
 {
