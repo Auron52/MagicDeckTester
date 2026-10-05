@@ -881,6 +881,16 @@ public:
         // other deck is byte-identical, and the search, not a rule, picks the order.
         bool vial_after_casts = false;
 
+        // UNBRANCHED-CANON CONTINUATION (set only by TurnSolver::BpUnbranchedCanon, the shared
+        // canonical default at a breakpoint the plan does not branch on). Such a continuation is an
+        // UNCHALLENGEABLE default -- cands.front(), with no EMPTY sibling at that occurrence -- so its
+        // board ACTIVATIONS (trade-offs: sacrifice into an outlet, a Pod, an equip) are not applied by
+        // the continuation-activation dispatch (ApplyPlanDirect's apply_continuation_activations and
+        // AIEngine's committed-line mirror, lockstep); its casts still are, exactly as before 97dec4b3.
+        // A searched pick (bp_choice variant / node child) never carries the flag. See
+        // docs/design/combined-gt-2026-10-04.md (minotaur s5005 gi971).
+        bool cont_canon = false;
+
         // HUMAN-DECLARED ACTION ORDER (viewer only; MTG_HUMAN_LINE_ORDER). searched_order pins the
         // order of the hand CASTS only -- board activations still run in ApplyPlanDirect's trailing
         // pass, i.e. after every cast and among themselves in whatever order the ENUMERATOR emitted

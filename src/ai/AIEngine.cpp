@@ -4747,7 +4747,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
         // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw
         // offers: Snow s5005 gi147). The trailing pass is a no-op on a cast-only continuation.
-        exec_continuation_activations(extra.actions);
+        if (!extra.cont_canon) { exec_continuation_activations(extra.actions); }   // Plan::cont_canon (lockstep)
         // Flood-keep (fallback path): if the draw overfilled the hand and the land drop is
         // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as

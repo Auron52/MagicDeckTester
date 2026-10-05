@@ -14617,6 +14617,22 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
         || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
         || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0;
 }
+// SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above) AND every searched Vial-put
+// ORDER twin (Plan::vial_after_casts). The twin is gated on the two orders of ITS OWN plan reaching
+// different positions (VialOrderChangesOutcome), which says nothing about the REST of the candidate
+// list: puts-last realises the casts before a Vial-put cost reducer / enabler lands, so the apply
+// often DROPS a cast the puts-first pricing afforded, and the twin then lands on exactly the state
+// another candidate (usually another plan's twin) already reached. Measured on minotaur s2002 gi295
+// (2026-10-05): those duplicates are what thinned the d3/b10 search from T4 to T5. A node's value is
+// a function of its STATE, so skipping a later identical arrival is the same identity relation the
+// axis-variant dedup already stakes itself on (BuildDedupKey is order-exact), not a dominance prune.
+// Twins are appended AFTER every base plan (AppendVialOrderVariants), so the base / earlier plan is
+// always the one kept. MTG_VIAL_TWIN_DEDUP=0 restores the old behaviour (A/B lever).
+static bool PlanDupSkippable(const TurnSolver::Plan& p)
+{
+    static const bool s_vt_dedup = EnvOn("MTG_VIAL_TWIN_DEDUP", true);
+    return PlanIsAxisVariant(p) || (p.vial_after_casts && heurarm::Flag(heurarm::VIAL_TWIN_DEDUP, s_vt_dedup));
+}
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
 // cands list contains an apply-empty entry, so the host's explicit EMPTY arm (kBpEmptyChoice)
 // would reach a state that cands child's apply already reached -- the post-apply dedup kills it
@@ -34040,6 +34056,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool                main_trailing_done = false;
     auto apply_continuation_activations = [&](const TurnSolver::Plan& sp, bool recorded)
     {
+        if (sp.cont_canon) { return; }   // an unbranched canon default applies its casts only (Plan::cont_canon)
         bool any = false;
         for (const Action& a : sp.actions)
         { if (TurnSolver::IsTrailingActivation(a.kind)) { any = true; break; } }
@@ -53719,7 +53736,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // carries a bp_choice: ordinary plans are never deduped, so a deck with no variants (and any
     // run with MTG_BP_SEARCH=0) is byte-identical. Reuses the apply already done below.
     bool bp_variants_here = false;
-    for (const TurnSolver::Plan& p : pre) { if (PlanIsAxisVariant(p)) { bp_variants_here = true; break; } }
+    for (const TurnSolver::Plan& p : pre) { if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
     // MTG_BP_WAVE_PROBE only: which wave SLOT first reached each key, for the dup_self/dup_cross
     // split. Left empty (never inserted into) when the probe is off.
@@ -54303,11 +54320,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // It is a `continue`, not an erase, so bp_base / bp_self -- which ARE positional indices
             // into `pre` and are explicitly remapped after MoveOrderPlans sorts -- are untouched.
             const bool skip_dup = !fresh
-                && (PlanIsAxisVariant(p) || FsPreStateSkipOn());
+                && (PlanDupSkippable(p) || FsPreStateSkipOn());
             if (skip_dup)
             {
                 FswDeclinedTrace(state, depth, p, "post-apply-dupe", bp, s, -1, best.win_turn);
-                if (p.bp_choice < 0 && PlanIsAxisVariant(p))
+                if (p.bp_choice < 0 && PlanDupSkippable(p))
                 { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
                 else if (p.bp_choice < 0)
                 { g_fs_pre_state_skips.fetch_add(1, std::memory_order_relaxed); }
@@ -59039,7 +59056,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
         bool bp_variants_here = false;
-        for (const Plan& p : candidates) { if (PlanIsAxisVariant(p)) { bp_variants_here = true; break; } }
+        for (const Plan& p : candidates) { if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
@@ -59413,7 +59430,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 { ++candidates_done; continue; }
                 if (bp_variants_here
                     && !bp_seen_states.insert(BuildDedupKey(copy)).second
-                    && PlanIsAxisVariant(plan))
+                    && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
                     ++candidates_done; continue;
@@ -59584,7 +59601,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 { ++candidates_done; continue; }
                 if (bp_variants_here
                     && !bp_seen_states.insert(BuildDedupKey(copy)).second
-                    && PlanIsAxisVariant(plan))
+                    && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
                     ++candidates_done; continue;
@@ -65624,6 +65641,12 @@ void TurnSolver::PlanDumpAt(const GameState& state, bool is_pre_combat, int dept
 // The apply's canon default at a breakpoint the plan does not branch on (nested canon, enum/base canon),
 // moved verbatim out of ApplyPlanDirect's bp_searched_plan so the executor can mirror it on a committed
 // line instead of re-solving (USER 2026-10-03: "We should not search again"). False = EMPTY.
+// MTG_CANON_CONT_NOACTS (default ON; =0 restores 97dec4b3's behaviour): see Plan::cont_canon.
+static bool CanonContNoActsOn()
+{
+    static const bool v = EnvOn("MTG_CANON_CONT_NOACTS", true);
+    return heurarm::Flag(heurarm::CANON_CONT_NOACTS, v);
+}
 bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, const Plan& plan,
                                    int seen_before, bool class_on, Plan& out)
 {
@@ -65634,7 +65657,7 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
         // By reference: read immediately, one Plan copied out, no re-entry between.
         const std::vector<TurnSolver::Plan>& ncands =
             TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-        if (!ncands.empty()) { out = ncands.front(); return true; }
+        if (!ncands.empty()) { out = ncands.front(); out.cont_canon = CanonContNoActsOn(); return true; }
     }
     if (class_on && g_rollout_nest == 0)
     {
@@ -65648,7 +65671,7 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
         {
             const std::vector<TurnSolver::Plan>& ncands =
                 TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-            if (!ncands.empty()) { out = ncands.front(); return true; }
+            if (!ncands.empty()) { out = ncands.front(); out.cont_canon = CanonContNoActsOn(); return true; }
         }
     }
     return false;

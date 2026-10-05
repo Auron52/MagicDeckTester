@@ -306,6 +306,8 @@ enum Slot : int
     SOLDIERS_ORDER,           // MTG_SOLDIERS_ORDER        Soldiers PROPOSED total cast order (USER question, default OFF)
     SOLDIERS_BUCKET_DISCARD,  // MTG_SOLDIERS_BUCKET_DISCARD Soldiers authored cleanup-discard buckets (=0 -> generic max-MV)
     PD_M2_ROOT_ONLY,          // MTG_PD_M2_ROOT_ONLY       Prevent Damage (with MTG_PD_ALL_M2): the main-phase split applies at the ROOT turn only; projected future turns keep every cast in main 1 (PhaseFilterRootTurnOnly). Diagnostic arm for the ALL_M2 regression, default OFF
+    VIAL_TWIN_DEDUP,          // MTG_VIAL_TWIN_DEDUP      a Vial-put ORDER twin (Plan::vial_after_casts) joins the post-apply EXACT-duplicate skip (PlanDupSkippable). Default ON
+    CANON_CONT_NOACTS,        // MTG_CANON_CONT_NOACTS    an UNBRANCHED canon continuation (BpUnbranchedCanon) applies its casts only, not its board activations (Plan::cont_canon). Default ON
     COUNT
 };
 
@@ -573,6 +575,8 @@ inline const char* Name(int slot)
         "MTG_SOLDIERS_ORDER",
         "MTG_SOLDIERS_BUCKET_DISCARD",
         "MTG_PD_M2_ROOT_ONLY",
+        "MTG_VIAL_TWIN_DEDUP",
+        "MTG_CANON_CONT_NOACTS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
