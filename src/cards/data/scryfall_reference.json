@@ -300,6 +300,17 @@
     "toughness": null,
     "type_line": "Snow Artifact"
   },
+  "Ardenn, Intrepid Archaeologist": {
+    "cmc": 3.0,
+    "keywords": [
+      "Partner"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "At the beginning of combat on your turn, you may attach any number of Auras and Equipment you control to target permanent or player.\nPartner (You can have two commanders if both have partner.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Kor Scout"
+  },
   "Aria of Flame": {
     "cmc": 3.0,
     "keywords": [],

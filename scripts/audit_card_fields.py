@@ -119,6 +119,11 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # combat legality by itself (its PAYLOAD is a separate param), so stripping the tag cannot mask
     # a missing combat keyword.
     "soulbond",
+    # Partner (CR 702.124, Ardenn, Intrepid Archaeologist): a COMMANDER-format deck-construction
+    # ability with no rules meaning in a 60-card game, so the engine has no Keyword enumerator for
+    # it (KeywordFromString THROWS on an unmapped tag, and the enum is over its 32-bit mask anyway).
+    # Not a combat/evasion keyword, so stripping it cannot mask a missing one.
+    "partner",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing:
 # Basic-ness is derived from the card name; the World rule never fires (one

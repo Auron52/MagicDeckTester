@@ -1106,6 +1106,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attach_equipment_on_etb   = params.value("attach_equipment_on_etb", false);
     p.hone_counters_on_enter_or_attack =
         params.value("hone_counters_on_enter_or_attack", 0);
+    p.begin_combat_attach_all   = params.value("begin_combat_attach_all", false);
     p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
     p.upkeep_tokens_per_equipment = params.value("upkeep_tokens_per_equipment", false);
     p.attack_dig_attach_count   = params.value("attack_dig_attach_count", 0);
