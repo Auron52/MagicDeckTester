@@ -229,3 +229,43 @@ regression, then ONE overnight, accept.
 4. **Selesnya overnight d3 s4004** flips run-to-run (batch nondeterminism). [Default: nothing accepted from it.]
 5. **Pirates claude_s4_gi3** is now `repaired` (indices only, win turn 5 unchanged). [Default: left; re-save
    via the viewer when convenient -- references are user-owned.]
+
+## Follow-up 2026-10-05 -- Dwalin after the Equipment (45c3c66a): smoke + regression ACCEPTED, overnight NOT
+
+**User ruling (final):** "Dwalin should be after equipment, but can be before equips" -- the Kitty order
+in 45c3c66a (Dwalin, Weaponmaster after the Equipment casts; Equip activations unconstrained relative to
+him). This resolves open question 1 above: kittyv2 overnight gi136 / gi92 recover (4 / 5 at stage 1 and
+d8 b0 on 45c3c66a).
+
+Smoke + regression run on the 45c3c66a binary (`mtg.run.meta` git_hash=45c3c66a, clean), against the
+0303292c GT. Only kittyv2 moves:
+
+| tier | kittyv2 searched | kittyv2 d0 | slower / faster | digest-only games |
+|---|---:|---:|---|---:|
+| smoke | 0 | -4 | 0 / 0 | 90 |
+| regression | **+1** | -2 | 1 / 0 | 120 |
+
+Every other cell (both tiers) is identical to GT; reference gate unchanged (the same 4 pre-existing
+failures, tally 73 ok / 365 repaired). Deck net: kittyv2 regression -1 (<= 0).
+
+**kittyv2 regression d3 s2002 gi55 (GT 4 -> 5) -- ACCEPTED as a consequence of the user's order.** It does
+not recover at d8 b0: its T4 line needs Dwalin cast BEFORE Spidersilk Net, so that Sigarda's Aid's free
+attach lands the Net on him; with Dwalin after the Equipment that line is inexpressible. The user's
+ruling places Dwalin after Equipment deliberately (his ETB hones Equipment already in play, which
+recovered gi136 / gi92), so this game is the recorded cost of that order, not a defect.
+
+**Overnight: NOT accepted on this commit.** The overnight run was started and then stopped at the user's
+request ("Let's not run overnight for the time being") before it finished; no overnight result exists for
+45c3c66a. Overnight GT is therefore STALE: its last accept (3de66a1f, 2026-10-03) predates the combined
+branch (0303292c), the kittyv2 / fungusb keep-profile adoptions, and the Dwalin order. It is to be
+re-accepted at the next overnight the user chooses to run (expect kittyv2 to move heavily -- see the
+"vs origin arm" row above -- and the gi136 / gi92 pair to recover).
+
+**Selesnya / Soldiers game counts (user follow-up: "If Selesnya and Soldiers have longer counts than
+other decks then they can be reduced"): NOT changed -- the condition does not hold.** Both already use
+the most common per-tier shape in `test/regression_cases.sh`: smoke d0/d3/d5 = 1000/150/75 (the modal
+shape, 16 decks); regression 1000/150+150/75+75 (below the modal 1000/300/250 used by 13 decks);
+overnight d0 4x2000, d3 b20 4x1000, d5 b40 4x500 (the modal shape, 12 decks). Neither is above any
+standard count, so there was nothing to reduce. If overnight wall time is the concern, the large shares
+are elsewhere (partial pre-stop run: hinata ~25% of core time, th / fivecolour2hg / creature_giving /
+fivecolour ~9-10% each).
