@@ -1184,7 +1184,7 @@ Absent: never cast (goldfish-irrelevant).
 | step | what |
 |---|---|
 | 0 | land drop (`LandDropCastOrderRank`) |
-| casts | Sol Ring -> Sigarda's Aid -> Puresteel Paladin -> Sram -> Cid -> Stoneforge Mystic -> other creatures -> Equipment; inside the last two classes cheapest mana value first, then name hash (deterministic, no ties) |
+| casts | Sol Ring -> Sigarda's Aid -> Puresteel Paladin -> Sram -> Cid -> Stoneforge Mystic -> other creatures -> Equipment -> Dwalin, Weaponmaster (class 9, USER 2026-10-05, below) -> anything else (class 10); inside each class cheapest mana value first, then name hash (deterministic, no ties) |
 | trailing 10 | every other activation (Stoneforge's put) |
 | trailing 20 | equip / attach abilities (`ActivationOrderRankFor`) |
 | trailing 30 | Umezawa's Jitte counter modes, after the equips (USER: "Jitte's ability ... needs to go after the other abilities") |
@@ -1193,6 +1193,17 @@ Removal: `EquipmentProvider::NeverCast` (template Removal), never enumerated. A 
 continuation's activations (e.g. equips after a Puresteel draw) queue into the phase's trailing pass,
 never mid-phase. Supersedes the 2026-08-25 class order (Equipment before hosts, with ties) and the
 agent-filled 17-position `MTG_KE_ORDER_FULL` (left in code, off; delete on request).
+
+**Amendment -- USER ruling 2026-10-05: Dwalin after the Equipment.** USER: *"Dwalin is the one creature
+that should go after equipment, but before equip abilities."* Dwalin, Weaponmaster's ENTERS trigger puts a
+hone counter on each Equipment you ALREADY control, so casting him ahead of a same-turn Equipment forfeits
+that Equipment's counter. Under the 10-04 order (creatures before Equipment) that line was inexpressible at
+any budget: kittyv2 overnight s4004 gi136 (GT 4 -> 5) and s5005 gi92 (GT 5 -> 6) did not recover even at
+d8 b0 (`docs/design/combined-gt-2026-10-04.md`). Implemented in `EquipmentProvider::CastOrderRank` as class
+9 (`cls*4096 + (mv&0xF)*256 + (name_hash&0xFF)`), strictly after Equipment (8) and before the catch-all
+(now 10), keyed on the `hone_counters_on_enter_or_attack` parameter, not the name, and tested before the
+generic creature class (7). Equip / Jitte activations are unchanged -- still the trailing pass, i.e. after
+Dwalin's cast, so a just-honed Equipment is equipped afterwards.
 
 ## Soldiers -- PROPOSED total order (USER QUESTION, 2026-10-04; `MTG_SOLDIERS_ORDER`, default OFF)
 

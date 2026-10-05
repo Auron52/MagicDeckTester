@@ -17005,6 +17005,7 @@ int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& d
     //   5  Cid (discounts every Equipment cast after it), 6 Stoneforge Mystic.
     //   7  every other creature (the hosts).
     //   8  every Equipment.
+    //   9  Dwalin, Weaponmaster (hone counters on ENTER onto Equipment already in play; USER 2026-10-05).
     // Inside 7 and 8 the order is the USER's "does not matter" -- so it is a deterministic total
     // order rather than a tie: cheapest mana value first, then the name hash. The scale leaves room
     // for both keys, so no two distinct cards share a rank (checked on both lists with
@@ -17028,10 +17029,19 @@ int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& d
         || (p.tutor_to_hand
             && std::find(p.tutor_types.begin(), p.tutor_types.end(),
                          std::string("Equipment")) != p.tutor_types.end())) { return total(6); }
+    // 9: Dwalin, Weaponmaster -- AFTER the Equipment, BEFORE the equip abilities (USER 2026-10-05:
+    // *"Dwalin is the one creature that should go after equipment, but before equip abilities."*).
+    // His ENTERS trigger puts a hone counter on each Equipment you ALREADY control, so casting him
+    // ahead of an Equipment forfeits that Equipment's counter (kittyv2 overnight s4004 gi136 and
+    // s5005 gi92 each lost a turn this way, unrecoverable even at d8b0). Keyed on the card's
+    // hone-on-enter param, not its name. Checked before the generic creature class (7) so it wins.
+    // Equip activations still run in the phase's trailing pass (ActivationOrderRankFor), i.e. after
+    // this cast, so a just-honed Equipment is equipped afterwards.
+    if (p.hone_counters_on_enter_or_attack > 0)                  { return total(9); }
     if (def.card.IsCreature())                                   { return total(7); }
     if (p.is_equipment)                                          { return total(8); }
-    // Anything else (none on either list today) after the Equipment, still totally ordered.
-    return total(9);
+    // Anything else (none on either list today) after the Equipment and Dwalin, still totally ordered.
+    return total(10);
 }
 
 int EquipmentProvider::LandDropCastOrderRank() const { return KittyOrderEnabled() ? 0 : -1; }
