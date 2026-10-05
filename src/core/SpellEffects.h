@@ -3192,6 +3192,41 @@ inline bool CreatureHasShroud(const Permanent& creature, const GameState& state,
     return false;
 }
 
+// Can an Aura SPELL cast by `controller` TARGET this creature? (CR 303.4a: an Aura spell targets the
+// object it will enchant; CR 702.18a: shroud forbids targeting by ANY player, the controller included;
+// hexproof only forbids an OPPONENT's spells.) The ONE predicate the cast-time Aura legality reads --
+// LegalEnchantTargets' creature arm (enumeration) and ResolveEnchantTarget's creature arm (resolution)
+// -- so executor and rollout cannot drift. Before 2026-10-05 the creature arm checked neither: a
+// Lightning Greaves-equipped creature was a legal host for a CAST Aura (Bruna deck: Colossification
+// onto a Greaves'd Bruna). NOT the predicate for a non-targeting put/attach (Bruna's attack trigger,
+// Arcanum Wings' aura swap, CR 303.4f) -- that is AuraCouldEnchant below.
+// MTG_LEGACY_SHROUD=1 restores the old unenforced behaviour (the same hatch the equip-target rule uses).
+inline bool CreatureTargetableByAuraSpell(const Permanent& creature, const GameState& state, int controller)
+{
+    static const bool legacy = EnvOn("MTG_LEGACY_SHROUD");
+    if (legacy) { return true; }
+    if (CreatureHasShroud(creature, state)) { return false; }
+    if (creature.controller_index != controller && creature.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+
+// "An Aura card that COULD enchant it" (Bruna, Light of Alabaster) / the swapped-in half of an Aura
+// swap (Arcanum Wings): the NON-TARGETING legality of attaching an Aura with params `pp` to `host`
+// (CR 303.4f: an Aura put onto the battlefield without being cast does not target, so shroud and
+// hexproof are irrelevant; CR 701.3b: an attach to an object it could not enchant does nothing).
+// Honours the Enchant restriction (creature vs land) and the aura_enchant_requires casting gates.
+// Protection is not modelled anywhere in the engine (Mother of Runes' activation is a disclosed
+// deferral), so it has no clause here.
+inline bool AuraCouldEnchant(const GameState& state, const CardParams& pp, const Permanent& host)
+{
+    if (!pp.is_aura) { return false; }
+    if (pp.is_land_aura) { return host.card.IsLand(); }
+    if (!host.card.IsCreature()) { return false; }
+    if (pp.aura_enchant_requires == "another_aura" && !CreatureHasAura(host, state)) { return false; }
+    if (pp.aura_enchant_requires == "modified"     && !CreatureIsModified(host, state)) { return false; }
+    return true;
+}
+
 // Does a chosen-keyword GRANT (Rick, Steadfast Leader: "Humans you control have ...") reach this
 // creature? keyword_grant_subtypes OR-filter on the LIVE subtypes; an all-creature-types animation
 // matches any typed grant (the lord rule). Empty list -> nothing (a grant must name its recipients).
@@ -3339,6 +3374,9 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
         if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
         if (pp.aura_enchant_requires == "another_aura" && !CreatureHasAura(p, state)) { continue; }
         if (pp.aura_enchant_requires == "modified"     && !CreatureIsModified(p, state)) { continue; }
+        // An Aura spell TARGETS its host (CR 303.4a): a shrouded creature (Lightning Greaves) is not
+        // a legal one -- the land arm above has always enforced this; the creature arm did not.
+        if (!CreatureTargetableByAuraSpell(p, state, controller)) { continue; }
         out.push_back(p.card.m_number);
     }
     return out;
@@ -3379,14 +3417,17 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
         }
         return lbest;
     }
+    // Shroud re-checked on BOTH arms, exactly like the land arm: the searched target must still be a
+    // legal TARGET as the Aura spell resolves (CR 608.2b), and the fallback must not pick one either.
     for (const Permanent& p : state.battlefield)
         if (p.controller_index == controller && p.card.IsCreature()
-            && p.card.m_number == enchant_target)
+            && p.card.m_number == enchant_target && CreatureTargetableByAuraSpell(p, state, controller))
         { return enchant_target; }
     int best = 0, best_score = -1;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+        if (!CreatureTargetableByAuraSpell(p, state, controller)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         int auras = 0;
         for (const Permanent& a : state.battlefield)
