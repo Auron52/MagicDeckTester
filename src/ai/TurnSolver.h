@@ -1715,6 +1715,10 @@ public:
                                            const std::vector<uint64_t>& pre_plan_keys);
     static std::vector<uint64_t> SnapshotActivatableAbilities(const GameState& state);
     static bool PostEntryBreakpointClassOn();
+    // MTG_SITE9_TRACE=<turn> (diagnostic, print-only): the board and continuation list at an
+    // ELIGIBLE site-9 occurrence, in either world (rollout "ro" / executor "ex").
+    static void Site9Trace(const char* world, const GameState& state, const Plan& plan,
+                           bool is_pre_combat);
     // MTG_BP_ABILITY_DELTA=0 reverts site 9 to the entered-this-turn proxy.
     static bool BpAbilityDeltaOn();
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the

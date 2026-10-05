@@ -1,0 +1,31 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 14,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Sol Ring", "controller": 0, "tapped": false },
+    { "name": "Avacyn's Pilgrim", "controller": 0, "tapped": false },
+    { "name": "Azorius Chancery", "controller": 0, "tapped": false },
+    { "name": "Avacyn's Pilgrim", "controller": 0, "tapped": false },
+    { "name": "Indrik Umbra", "controller": 0, "tapped": false, "equips": "Avacyn's Pilgrim" },
+    { "name": "Azorius Chancery", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Glittering Wish",
+    "Forest",
+    "Razorverge Thicket",
+    "Arcanum Wings",
+    "Botanical Sanctum",
+    "Lightning Greaves"
+  ],
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "expect_win_turn": 5,
+  "comment": "SITE-9 / BP-NODE CHILD NUMBERING (docs/design/site9-continuation-index-mismatch.md; Bruna seed 4205 gi201 T5). Seven non-creature mana (Sol Ring, two Chanceries, the Thicket drop) pays Glittering Wish (-> Almost Perfect), Arcanum Wings on the Umbra'd Pilgrim and the {2}{U} swap to Almost Perfect, leaving both Pilgrims to attack: 9+4 + 1 = 14. The search finds it as a BP-NODE child at the wish's deferred site; the base plan walked past site 9 (Wings' new swap ability) uncounted, so the child was stamped bp_at=0 and the executor's from-scratch apply spent bp_choice on SITE 9 (Lightning Greaves), tapping both Pilgrims -- realised T6. Control: MTG_BP_NODE_SHADOW=0 must realise T6."
+}

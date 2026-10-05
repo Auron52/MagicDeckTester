@@ -6944,6 +6944,26 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
     if (p.scry_choice >= 0)   { land += "[scry" + std::to_string(p.scry_choice) + "]"; }
     return "land=" + land + ": " + s;
 }
+void TurnSolver::Site9Trace(const char* world, const GameState& state, const Plan& plan,
+                            bool is_pre_combat)
+{
+    static const int s_turn = EnvInt("MTG_SITE9_TRACE", 0);
+    if (s_turn <= 0 || state.turn_number != s_turn) { return; }
+    std::string bf;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        bf += p.card.m_name.str() + "#" + std::to_string(p.card.m_number) + (p.tapped ? "(T)" : "") + ",";
+    }
+    std::string hs;
+    for (const Card& hc : state.ActivePlayer().hand) { hs += hc.m_name.str() + ","; }
+    std::fprintf(stderr, "[site9] %s T%d nest=%d plan{bp=%d@%d %s} float=%d bf=[%s] hand=[%s]\n", world,
+                 state.turn_number, g_rollout_nest, plan.bp_choice, plan.bp_at, FsPlanText(plan).c_str(),
+                 state.floating_mana.Total(), bf.c_str(), hs.c_str());
+    const std::vector<Plan>& cands = EnumerateBreakpointPlansRef(state, is_pre_combat);
+    for (std::size_t ci = 0; ci < cands.size() && ci < 6; ++ci)
+    { std::fprintf(stderr, "[site9]   #%zu %s\n", ci, FsPlanText(cands[ci]).c_str()); }
+}
 static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
 {
     std::fprintf(stderr, "[fs-root] %s win=%d bp=%d pc=%d val=%d %s\n",
@@ -34732,6 +34752,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // costs spare budget rather than being a horizon. An apply still resolves at most ONE of them --
     // a line needing two simultaneous non-greedy continuations is the deliberate L*W-not-W^L trade.
     int  bp_seen = 0;
+    // THE NUMBERING A CHOICE-CARRYING PLAN WOULD HAVE (BASE PLANS ONLY; site9-continuation-index-
+    // mismatch.md). A base plan (bp_choice < 0) never advances bp_seen, and site 9 is not even
+    // COUNTED for it (its gate short-circuits on bp_choice >= 0). So when the BP-NODE pends a base
+    // plan at a deferred site and stamps its children `bp_at = bp_seen`, the children are numbered
+    // in the base's count -- but every from-scratch apply of a child (the EXECUTOR, the fd-pred
+    // replay, any re-score) counts in the variant's count, where a site-9 occurrence the base
+    // walked past is index 0. The child's bp_choice then lands on SITE 9 instead of the deferred
+    // site it was scored at: Bruna seed 4205 gi201 scored "Wish, Wings, swap(Almost Perfect)" at the
+    // node (T5 kill, Pilgrims untapped) and the executor applied site-9 candidate 1 (Lightning
+    // Greaves) first, tapping both Pilgrims for the swap -- realised T6. This counter mirrors the
+    // variant's numbering exactly (every class-on occurrence, plus site 9 under the variant's own
+    // bp_seen == 0 condition) and is what the node capture records. Play-neutral for everything else.
+    int  bp_seen_shadow = 0;
+    // MTG_BP_NODE_SHADOW=0 reverts the capture to the base's own count (the pre-fix numbering).
+    static const bool s_bp_node_shadow = EnvOn("MTG_BP_NODE_SHADOW", true);
     // MTG_BP_CANON_AUDIT only: the card whose arming produced the breakpoint about to resolve.
     // Carried separately because the deferred dispatch NULLS deferred_cantrip_site before calling
     // bp_searched_plan (CantripOrderScope has already taken it), and the arming CARD is the whole
@@ -34760,6 +34795,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         if (class_on) { ++g_bp_classon_last; }   // monotonic; delta-read by the uniform collapse
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
+        if (plan.bp_choice < 0 && class_on) { ++bp_seen_shadow; }   // the variant's count (see decl)
         // bp_all: the deviation is a POLICY for the whole apply, so every breakpoint is eligible,
         // not just the one at bp_at. See Plan::bp_all for why a uniform repeat is the slice of the
         // cross product worth buying back.
@@ -38570,6 +38606,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         main_trailing_done = true;   // the snapshot already ran the phase's trailing pass
         bp_seen                  = bp_resume->bp_seen;
+        bp_seen_shadow           = bp_resume->bp_seen;
         deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
         deferred_cantrip_site    = bp_resume->deferred_site;
         deferred_hand_before     = bp_resume->deferred_hand;
@@ -38778,9 +38815,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         && g_bp_enum_depth == 0 && g_rollout_nest == 0
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     { ++g_bp_latent9_last; }
+    // The base plan's half of site 9's NUMBERING (bp_seen_shadow): a variant of this plan would
+    // count this occurrence (the block below, under bp_seen == 0), so the shadow does too -- under
+    // the same class bit bp_searched_plan tests.
+    // Only a node-hosting apply (bp_capture) ever reads the shadow, so only it pays the gate's scan.
+    if (bp_capture != nullptr && !s_human_play && plan.bp_choice < 0 && bp_seen_shadow == 0
+        && (BpSiteMask() & (1 << 9)) != 0
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
+    { ++bp_seen_shadow; }
     if (!s_human_play && plan.bp_choice >= 0 && bp_seen == 0
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
+        TurnSolver::Site9Trace("ro", state, plan, is_pre_combat);
         TurnSolver::Plan extra;
         if (bp_searched_plan(9, extra))
         {
@@ -38910,7 +38956,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pending      = true;
             bp_capture->state        = state;
             bp_capture->sink         = out_breakpoint ? *out_breakpoint : std::vector<Action>{};
-            bp_capture->bp_seen      = bp_seen;
+            // The CHILDREN's numbering, not the base's (see bp_seen_shadow): every child is
+            // re-applied from scratch by the executor, which counts as a variant does.
+            bp_capture->bp_seen      = heurarm::Flag(heurarm::BP_NODE_SHADOW, s_bp_node_shadow) ? bp_seen_shadow : bp_seen;
             bp_capture->trick_armed  = deferred_trick_armed;
             bp_capture->equip_armed  = deferred_equip_armed;
             bp_capture->cascade_free = cascade_free;

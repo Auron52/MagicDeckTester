@@ -6289,6 +6289,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const int pe_idx = bp_seen_exec++;
         if (pe_idx >= 0 && (plan.bp_all || pe_idx == plan.bp_at))
         {
+            TurnSolver::Site9Trace("ex", state, plan, is_pre_combat_main);
             const std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
             if (plan.bp_choice < static_cast<int>(cands.size()))
