@@ -100,3 +100,17 @@ whose work diverges, then that game alone at `--threads 1` vs inside the 8-threa
 * The 2026-10-03 adoption notes for the route ("all three kittyv2 configs better") rest on an
   average difference larger than the +-0.01 seen here, but their **digests** should not be treated as
   reproducible.
+
+## 2026-10-05 addendum: a SECOND deck shows the same signature (selesnya d3)
+
+The byte-identity smoke for the Ardenn change (`2f66f29c`, param-gated, no suite deck holds the
+card) came back 109/110 rows identical to the bf67c6fa freeze. The one mover was NOT a kitty row:
+`selesnya_smoke_d3_s1001` went `5.4467/7b7d9cfae5c5d0ec` (freeze AND committed GT) ->
+`5.4533/c93175813744d40a` in the pooled 32-thread run. A 2x2 at `--threads 1` -- {bf67c6fa, 2f66f29c}
+binary x {without, with Ardenn} `cards.json`, the selesnya job alone -- produced
+`5.4467/7b7d9cfae5c5d0ec` in all four cells. So neither the code nor the data moved it: it is the
+pooled run's draw, and SelesnyaLifegain (its own provider; no equip route) is now a second deck on
+which the pooled digest is not reproducible. The candidate list above is unchanged, but the
+equip-route-specific guesses are weakened: whatever it is, it is reachable from a deck that never
+enters that route. The same test (job alone at `--threads 1` under both binaries) is the cheap
+identity proof to reach for whenever a single searched row moves in a pooled tier.
