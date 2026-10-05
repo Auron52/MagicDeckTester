@@ -2269,6 +2269,35 @@ inline bool DorkTapLastEnabled()
     return v;
 }
 
+// Is an untap-land's BURST (Wirewood Lodge: pay {G}, untap a 2+ scaled Elf, re-tap it) actually
+// needed by what THIS TURN still has to pay? Compares the still-unpaid bill against the plain
+// supply, i.e. the untapped sources' ordinary yields with the Lodge counted as its own "{T}: Add
+// {C}" (SpareUntappedMana credits the burst net IN PLACE of that {C} when a live target exists, so
+// the net is taken back out and the {C} put back). The bill is:
+//   * this payment's pips still owed (g_pay_remaining_mv, live inside TapForCostSharedOnce);
+//   * the line's LATER casts: g_line_unpaid_cost still includes the cast being paid, so that one's
+//     full value (g_pay_full_mv) comes back out -- 0 during a trailing activation's own payment;
+//   * the plan's activations (PlanTraits act_pips + act_c_pips; their generic pips are not tracked,
+//     which errs toward "not needed", i.e. toward spending the Lodge like a land).
+// True when the plain supply falls short -- the burst is then what makes the line payable and the
+// hold keeps it available. Outside any payment (g_pay_need_live false) the bill is the line's casts
+// and activations and the supply is the board as it stands.
+static bool UntapBurstNeededByLine(const GameState& s, int active, const CardDefinition& def)
+{
+    static const bool s_on = EnvOn("MTG_LODGE_HOLD_NEEDED", true);
+    if (!s_on) { return true; }
+    int bill = g_pay_need_live ? g_pay_remaining_mv : 0;
+    const int later = g_line_unpaid_cost.ManaValue() - (g_pay_need_live ? g_pay_full_mv : 0);
+    if (later > 0) { bill += later; }
+    if (const PlanTraits* pt = CurrentPlanTraits())
+    {
+        for (int c = 0; c < 5; ++c) { bill += pt->act_pips[c]; }
+        bill += pt->act_c_pips;
+    }
+    const int spare = SpareUntappedMana(s, active) - UntapLandBurstNet(s, active, def) + 1;
+    return spare < bill;
+}
+
 int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
 {
     const int r = ManaSourceRankBase(s, def);
@@ -2425,8 +2454,22 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // Lodge tapped before the Priest, its at-fire-time yield read an UNTAPPED board, and the burst
     // died (10 uniform 4->5 losses on held-out stompy; the {Priest, Symbiosis} pair became
     // unpayable). The burst land must out-rank the whole band; 63 is unchanged with the band off.
+    // ...AND ONLY WHEN THE BURST IS NEEDED (USER 2026-10-05, SelesnyaLifegain viewer seed 4 T5:
+    // "Wirewood Lodge should not be kept over creatures"). Ageless Entity's {3}{G}{G} on Sands,
+    // Brushland, Lodge, Llanowar Elves and a 2-Elf Archdruid: the unconditional hold ranked the Lodge
+    // past the whole creature band, so the payment tapped BOTH creatures (and Brushland for pain)
+    // and left the Lodge's {C} unspent for a burst nothing in the turn could use -- no attacker and
+    // a stranded land. The 2026-08-20 ruling that built this tier ("allow using it for colourless
+    // early if there are no scaling sources at 2+ elves. Otherwise the colourless could be stranded")
+    // was about keeping the burst AVAILABLE for a line that needs it; this asks whether the line
+    // does. UntapBurstNeededByLine compares the turn's still-unpaid bill (this payment's remaining
+    // pips + the plan's later casts + its activations) with what the untapped sources make WITHOUT
+    // the burst; when the plain supply covers the bill the Lodge takes its ordinary {C}-land rank and
+    // pays a generic pip before any creature does. MTG_LODGE_HOLD_NEEDED=0 restores the
+    // unconditional hold (one-binary A/B).
     if (def.params.untap_creature_cost.has_value()
-        && UntapLandBurstNet(s, active, def) > 0)
+        && UntapLandBurstNet(s, active, def) > 0
+        && UntapBurstNeededByLine(s, active, def))
     // +3 not +2 since the fuel tier (kFuelManaCreatureTapRank, 67) joined the band: the burst land
     // must stay past EVERY band member. Behaviour-identical for every existing deck (no deck holds
     // both a Lodge and a fuel dork; nothing else occupies 67/68).

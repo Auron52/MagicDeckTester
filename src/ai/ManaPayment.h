@@ -391,6 +391,45 @@ std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost
 // pre-payment as well as the per-cast greedy. See ActLineHoldEnabled for the measured drop rates.
 std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost);
 
+// ACTIVATION LINE PAY STATE -- what ActLineHoldMask must NOT hold for. The mask's colour half is
+// built from PlanTraits::act_pips, the SUMMED pips of every activation the plan carries, and that
+// sum is static for the whole apply. Two things make it over-hold:
+//   * the activation being paid RIGHT NOW: its pips are this payment's own, so holding a provider
+//     back for them forces the pip onto a worse source while the held one sits untapped
+//     (SelesnyaLifegain viewer seed 9 T5: Blighted Steppe's {3}{W} held the second Brushland for its
+//     own {W}, paid the pip off the first and the last generic off the Archdruid -- the lord tapped
+//     and a land left up; seed 12 T5: the Sanctuary held for the Steppe's {W}, the Alchemist paid
+//     it instead. USER 2026-10-05: "It should tap all lands rather than the lord", "the Alchemist
+//     should not be tapped");
+//   * activations that have ALREADY fired this trailing pass: their {T} source is tapped and drops
+//     out of the mask's (a) half by itself, but their pips stayed in the colour half.
+// Both twins of the trailing pass (AIEngine executor, TurnSolver apply_one) bracket each activation's
+// own payment in ActLinePayScope and the pass in ActLinePassScope, so the mask reads the PENDING
+// demand only. Nested applies (a rollout inside an executor apply) restore the outer values.
+void AddManaCost(ManaCost& dst, const ManaCost& add);   // declared again below; needed by Paid()
+extern thread_local ManaCost g_act_line_paid;      // pips of this pass's activations already paid
+extern thread_local ManaCost g_act_line_current;   // the activation whose own cost is being paid
+class ActLinePassScope
+{
+public:
+    ActLinePassScope() : m_paid(g_act_line_paid), m_cur(g_act_line_current)
+    { g_act_line_paid = ManaCost{}; g_act_line_current = ManaCost{}; }
+    ~ActLinePassScope() { g_act_line_paid = m_paid; g_act_line_current = m_cur; }
+private:
+    ManaCost m_paid, m_cur;
+};
+class ActLinePayScope
+{
+public:
+    explicit ActLinePayScope(const ManaCost& c) : m_prev(g_act_line_current), m_cost(c)
+    { g_act_line_current = c; }
+    ~ActLinePayScope() { g_act_line_current = m_prev; }
+    // The mana half landed: from here on this activation is PAID, not pending.
+    void Paid() { AddManaCost(g_act_line_paid, m_cost); }
+private:
+    ManaCost m_prev, m_cost;
+};
+
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
 // value on scope exit (nested plan applications -- a rollout inside an apply -- restore correctly).
 // Release() drops the reservation early, which the unlock hoist calls the moment the dork is hasted:

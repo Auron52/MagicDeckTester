@@ -988,6 +988,19 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // pip and every candidate's key, real payments only (the [tapdbg]/[paydbg] contract).
             static const bool s_nddbg = EnvOn("MTG_TAPDBG");
             const bool nddbg = s_nddbg && nd_live && g_real_resolution;
+            if (nddbg && reserved_mask)
+            {
+                std::fprintf(stderr, "[nddbg] reserved:");
+                for (std::size_t ri = 0; ri < state.battlefield.size() && ri < 64; ++ri)
+                {
+                    if (!(reserved_mask & (1ull << ri))) { continue; }
+                    const CardDefinition* rd = state.battlefield[ri].def_absent ? nullptr
+                        : CardDatabase::Instance().LookupCached(state.battlefield[ri].card);
+                    std::fprintf(stderr, " %s#%d", rd ? rd->card.m_name.str().c_str() : "?",
+                                 static_cast<int>(state.battlefield[ri].card.m_number));
+                }
+                std::fprintf(stderr, "\n");
+            }
             if (nddbg)
             { std::fprintf(stderr, "[nddbg] pip=%s D=[%d %d %d %d %d %d] S=[%d %d %d %d %d %d]\n",
                            any ? "any" : std::to_string(static_cast<int>(needed)).c_str(),
@@ -3606,6 +3619,8 @@ thread_local std::vector<int> g_plan_reserved_sources;
 
 // Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
 thread_local ManaCost g_line_unpaid_cost;
+thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
+thread_local ManaCost g_act_line_current;
 
 void AddManaCost(ManaCost& dst, const ManaCost& add)
 {
@@ -4143,11 +4158,18 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     const int fl[5]  = { state.floating_mana.white, state.floating_mana.blue,
                          state.floating_mana.black, state.floating_mana.red,
                          state.floating_mana.green };
+    // PENDING demand only: the pass's already-paid activations and the one being paid right now
+    // are not demand this hold protects (see g_act_line_paid / g_act_line_current in ManaPayment.h).
+    const int paid[5] = { g_act_line_paid.white + g_act_line_current.white,
+                          g_act_line_paid.blue  + g_act_line_current.blue,
+                          g_act_line_paid.black + g_act_line_current.black,
+                          g_act_line_paid.red   + g_act_line_current.red,
+                          g_act_line_paid.green + g_act_line_current.green };
     int need[5]; bool any_pip = false;
     for (int c = 0; c < 5; ++c)
     {
         const int float_left = fl[c] > cur[c] ? fl[c] - cur[c] : 0;
-        need[c] = pt->act_pips[c] - float_left;
+        need[c] = pt->act_pips[c] - paid[c] - float_left;
         if (need[c] < 0) { need[c] = 0; }
         if (need[c] > 0) { any_pip = true; }
     }

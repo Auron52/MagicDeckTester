@@ -4848,6 +4848,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the other would make the played turn differ from the scored one, which is the whole reason this
     // reserve has a single shared producer. Installed only when non-empty -- see the rollout twin for
     // why an empty scope is not a no-op.
+    ActLinePassScope _act_line_pass;   // pending-only activation hold (ManaPayment.h); rollout twin too
     std::optional<PlanSourceReserveScope> _act_reserve;
     {
         std::vector<int> _act_hold = TurnSolver::ActivationTapReserveUnion(state, trailing_acts);
@@ -5178,6 +5179,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
                 { creature_ability_scope.emplace(); }
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
+                ActLinePayScope _act_line_pay(a.cost);   // this activation's pips are NOT hold demand
                 ManaPool avail = AvailableManaPool(state);
                 if (!TapForCost(state, a.cost, avail, /*for_creature=*/false))
                 {
@@ -5189,6 +5191,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 else
                 {
+                    _act_line_pay.Paid();
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input (lockstep twin of the rollout's): did the gated
                     // look-at-top (Scrying Sheets / Frost Augur) move a card into hand?

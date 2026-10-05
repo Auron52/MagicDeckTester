@@ -37301,6 +37301,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // the union is non-empty: an empty scope would CLEAR the cast section's reserve for an activation
     // dispatched inline from inside it (the human-order interleave), which is a behaviour change with
     // the lever off.
+    ActLinePassScope _act_line_pass;   // pending-only activation hold (ManaPayment.h); executor twin too
     std::optional<PlanSourceReserveScope> _act_reserve;
     {
         std::vector<int> _act_hold = TurnSolver::ActivationTapReserveUnion(state, trailing_acts);
@@ -37466,8 +37467,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
                 { creature_ability_scope.emplace(); }
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
+                ActLinePayScope _act_line_pay(a.cost);   // this activation's pips are NOT hold demand
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
                 {
+                    _act_line_pay.Paid();
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input: did the gated look-at-top (Scrying Sheets / Frost
                     // Augur) actually move a card into hand? Hand size is the observable -- the

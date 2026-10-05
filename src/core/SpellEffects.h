@@ -24195,25 +24195,34 @@ inline thread_local bool g_pay_need_live       = false;
 // Reset to the full value when the greedy fails, so the backtracker's rank reads see the whole
 // payment again. 0 when !g_pay_need_live.
 inline thread_local int  g_pay_remaining_mv    = 0;
+// ...and its FULL mana value (what g_pay_remaining_mv started at), for a consumer that must take
+// THIS payment's cost back out of a line-level total that still includes it (g_line_unpaid_cost
+// includes the cast being paid until the payment lands -- see TurnSolver's cast site). 0 when
+// !g_pay_need_live.
+inline thread_local int  g_pay_full_mv         = 0;
 struct PayNeedScope
 {
     int  prev[5];
     int  prev_mv;
+    int  prev_full;
     bool prev_live;
     PayNeedScope(int w, int u, int b, int r, int g, int remaining_mv)
     {
         for (int i = 0; i < 5; ++i) { prev[i] = g_pay_colored_need[i]; }
         prev_mv   = g_pay_remaining_mv;
+        prev_full = g_pay_full_mv;
         prev_live = g_pay_need_live;
         g_pay_colored_need[0] = w; g_pay_colored_need[1] = u; g_pay_colored_need[2] = b;
         g_pay_colored_need[3] = r; g_pay_colored_need[4] = g;
         g_pay_remaining_mv = remaining_mv;
+        g_pay_full_mv      = remaining_mv;
         g_pay_need_live = true;
     }
     ~PayNeedScope()
     {
         for (int i = 0; i < 5; ++i) { g_pay_colored_need[i] = prev[i]; }
         g_pay_remaining_mv = prev_mv;
+        g_pay_full_mv      = prev_full;
         g_pay_need_live = prev_live;
     }
     PayNeedScope(const PayNeedScope&)            = delete;
