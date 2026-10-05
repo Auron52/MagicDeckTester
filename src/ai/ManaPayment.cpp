@@ -211,6 +211,12 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
 // MTG_FLOAT_TRACE (see the two print sites below). Namespace scope, not a function-local static:
 // this is read on every payment, and a magic static would add a guard check to each.
 static const bool g_float_trace = EnvOn("MTG_FLOAT_TRACE");
+// MTG_CREATURE_ONLY_FIRST (DEFAULT ON; =0 restores the old rank) -- see the payer's rank site.
+static bool CreatureOnlyFirstEnabled()
+{
+    static const bool on = EnvOn("MTG_CREATURE_ONLY_FIRST", true);
+    return on;
+}
 
 // ---- COMPACT PAYMENT SNAPSHOT (2026-09-08) ---------------------------------------------------
 //
@@ -1184,6 +1190,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // about to sacrifice pays before everything -- its body is already spent, so its
                 // mana is the one truly free source on the board.
                 if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { rank = -1000; }
+                // CREATURE-ONLY MANA PAYS A CREATURE SPELL FIRST (Bruna sweep G, seed 77019 T4).
+                // Somberwald Sage's three units can pay nothing but creature spells, so spending
+                // them on this creature and leaving GENERAL sources up is never worse for the rest
+                // of the turn -- the combat Arcanum Wings swap, main 2's noncreature casts and
+                // activations can only use the general ones. Ranked last before, the greedy tapped
+                // five lands/dorks for Bruna's {3}{W}{W}{U} and then the Sage for the final generic
+                // pip: eight mana for a six-cost spell, two of them stranded as creature-only float.
+                // Shared payer -> executor and rollout alike. No creature_mana_only source on the
+                // board -> unreachable (byte-identical).
+                if (for_creature && def->params.creature_mana_only && kind == 1
+                    && CreatureOnlyFirstEnabled()) { rank = -500; }
                 // Reference-replay tap preference (--tap-pref; nulled by RevealLogPause -> real
                 // payments only): a source the RECORDING tapped in this same (turn, phase)
                 // outranks every unpinned source. Order bias only -- never legality; among

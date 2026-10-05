@@ -440,3 +440,28 @@ TEST_CASE("Bruna sweep E: Wings swap chain -- swap, recast, swap -- is one searc
     CHECK(conscriptions_on_mother == 2);
 }
 
+// ---- G: the payer spends Somberwald Sage's creature-only mana on a creature spell first -----------
+// Seed 77019 T4: Bruna {3}{W}{W}{U} off Birds, Sanctum, Thicket, Citadel, Forest and an old Sage. The
+// Sage was ranked LAST: five general sources tapped, then the Sage for the last generic pip -- eight
+// mana for a six-cost spell. Now Sage + three lands pay it and two general sources stay up.
+TEST_CASE("Bruna sweep G: a creature spell taps the creature-only Sage before general sources")
+{
+    BoardBs b;
+    b.Put("Birds of Paradise");
+    b.Put("Botanical Sanctum");
+    b.Put("Razorverge Thicket");
+    b.Put("Seaside Citadel");
+    b.Put("Forest");
+    const int sage = b.Put("Somberwald Sage");
+    const CardDefinition& bruna = DefBs("Bruna, Light of Alabaster");
+    REQUIRE(TapForCostShared(b.s, bruna.card.m_mana_cost, /*for_creature=*/true, nullptr, true));
+    int untapped = 0; bool sage_tapped = false;
+    for (const Permanent& p : b.s.battlefield)
+    {
+        if (p.card.m_number == sage) { sage_tapped = p.tapped; continue; }
+        if (!p.tapped) { ++untapped; }
+    }
+    CHECK(sage_tapped);
+    CHECK_MESSAGE(untapped == 2, "general sources wasted on a creature spell the Sage could pay");
+}
+
