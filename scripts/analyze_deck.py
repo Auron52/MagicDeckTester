@@ -80,6 +80,10 @@ def ParseArgs():
                    help="Evidence-run games (searched trial tables, d3, single-thread; default 400)")
     p.add_argument("--discard-ab-games", type=int, default=4000,
                    help="Outcome-A/B games per arm at d0 (default 4000); play-config arm uses 1/5th")
+    p.add_argument("--offline", action="store_true",
+                   help="Never touch the network: a sideboard card whose colours/types are not "
+                        "knowable locally (cards.json, scryfall_reference.json, the logs/ "
+                        "scryfall cache) stays CONSERVATIVELY reachable by a restricted wish.")
     p.add_argument("--discard-ab-threads", type=int, default=0,
                    help="Threads for the outcome-A/B batch (0 = all cores). Lower this when "
                         "running several decks' analyses concurrently.")
@@ -173,15 +177,108 @@ def LoadDeckNames(path: Path) -> list[str]:
 # just a cards.json lookup, because the whole point is to work BEFORE the card is implemented --
 # on a wish deck the wish itself is typically one of the missing cards, so a param-based test
 # would answer "no sideboard access" precisely when the answer matters most.
-WISH_CARD_NAMES = frozenset({
-    "Living Wish", "Burning Wish", "Cunning Wish", "Death Wish", "Golden Wish",
-    "Glittering Wish", "Fae of Wishes // Awaken the Ancient", "Fae of Wishes",
-    "Wish", "Mastermind's Acquisition", "Spawnsire of Ulamog", "Ring of Ma'ruf",
-    "Ring of Ma'rûf", "Karn, the Great Creator", "Garth One-Eye",
-})
+# The wish's RESTRICTION, for the name-list detector (an unimplemented wish has no params to read).
+# {} = unrestricted; 'multicolored' = two or more colours (CR 105.2c); 'types' = any overlap with the
+# card's types. Applied only where the sideboard card's characteristics are KNOWABLE (see
+# _SideCharacteristics); an unknowable card stays conservatively reachable.
+WISH_RESTRICTIONS: dict[str, dict] = {
+    "Living Wish": {"types": ["Creature", "Land"]},
+    "Burning Wish": {"types": ["Sorcery"]},
+    "Cunning Wish": {"types": ["Instant"]},
+    "Death Wish": {},
+    "Golden Wish": {"types": ["Artifact", "Enchantment"]},
+    "Glittering Wish": {"multicolored": True},
+    "Fae of Wishes // Awaken the Ancient": {}, "Fae of Wishes": {},
+    "Wish": {}, "Mastermind's Acquisition": {}, "Spawnsire of Ulamog": {},
+    "Ring of Ma'ruf": {}, "Ring of Ma'rûf": {},
+    "Karn, the Great Creator": {"types": ["Artifact"]},
+    "Garth One-Eye": {},
+}
+WISH_CARD_NAMES = frozenset(WISH_RESTRICTIONS)
+
+_SCRYFALL_CACHE_DIR = Path(__file__).resolve().parent.parent / "logs" / "scryfall_cache"
+
+def _ColorsFromCost(mana_cost: str) -> set:
+    """WUBRG letters in a mana cost's pips; a hybrid pip ({G/W}) contributes both (CR 105.2c)."""
+    out = set()
+    for sym in re.findall(r'\{([^}]+)\}', mana_cost or ""):
+        for part in sym.split("/"):
+            if part in ("W", "U", "B", "R", "G"):
+                out.add(part)
+    return out
+
+def _TypesFromTypeLine(type_line: str) -> set:
+    front = (type_line or "").split("//")[0].split("\u2014")[0].split("—")[0]
+    return {t for t in front.split() if t and t[0].isupper()}
+
+def _ScryfallFetch(name: str, offline: bool):
+    """Scryfall's card JSON for `name`, cached under logs/scryfall_cache/ (gitignored). None when
+    offline or unreachable -- the caller then stays conservative. Retries slowly on HTTP 429."""
+    import urllib.parse, urllib.request, urllib.error, time
+    _SCRYFALL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r'[^A-Za-z0-9_.-]+', '_', name)
+    path = _SCRYFALL_CACHE_DIR / f"{safe}.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    if offline:
+        return None
+    url = "https://api.scryfall.com/cards/named?exact=" + urllib.parse.quote(name)
+    for attempt in range(6):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "MagicDeckTester/1.0",
+                                                       "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            path.write_text(json.dumps(data), encoding="utf-8")
+            time.sleep(0.15)
+            return data
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(2.0 * (attempt + 1))
+                continue
+            return None
+        except Exception:
+            return None
+    return None
+
+def _SideCharacteristics(name: str, all_entries: dict, reference: dict, offline: bool):
+    """{'colors': set, 'types': set} for a sideboard card, or None if unknowable. cards.json first
+    (explicit `colors`, else its cost's pips; `types`), then scryfall_reference.json, then the
+    Scryfall API through the logs/ cache (skipped with --offline)."""
+    e = all_entries.get(name)
+    if e is not None:
+        colors = set(e.get("colors") or []) or _ColorsFromCost(e.get("mana_cost", ""))
+        return {"colors": colors, "types": set(e.get("types") or [])}
+    r = reference.get(name)
+    if r is not None:
+        colors = set(r.get("colors") or []) or _ColorsFromCost(r.get("mana_cost", ""))
+        return {"colors": colors, "types": _TypesFromTypeLine(r.get("type_line", ""))}
+    sf = _ScryfallFetch(name, offline)
+    if sf is not None:
+        colors = set(sf.get("colors") or [])
+        if not colors and sf.get("card_faces"):
+            for face in sf["card_faces"]:
+                colors |= set(face.get("colors") or []) or _ColorsFromCost(face.get("mana_cost", ""))
+        return {"colors": colors, "types": _TypesFromTypeLine(sf.get("type_line", ""))}
+    return None
+
+def _WishAllows(restriction: dict, chars):
+    """True / False, or None when the restriction is non-empty but the characteristics unknown."""
+    if not restriction:
+        return True
+    if chars is None:
+        return None
+    if restriction.get("multicolored") and len(chars["colors"]) < 2:
+        return False
+    if restriction.get("types") and not (set(restriction["types"]) & chars["types"]):
+        return False
+    return True
 
 def SideboardReachability(main_names: list[str], side_names: list[str],
-                          cards_json: Path) -> dict:
+                          cards_json: Path, offline: bool = False) -> dict:
     """Can anything in the mainboard fetch a sideboard card during a game?
 
     In this simulator there is no game 2 and no sideboarding, so a sideboard is reachable
@@ -205,12 +302,37 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
     knowable, so they stay conservative and contribute the whole sideboard.
     """
     entries = {}
+    all_entries = {}
     if cards_json.exists():
         with open(cards_json, encoding="utf-8") as f:
             data = json.load(f)
         for card in data.get("cards", []):
+            all_entries[card.get("name")] = card
             if card.get("name") in main_names:
                 entries[card["name"]] = card
+    reference = {}
+    ref_path = cards_json.parent / "scryfall_reference.json"
+    if ref_path.exists():
+        try:
+            with open(ref_path, encoding="utf-8") as f:
+                reference = json.load(f)
+        except Exception:
+            reference = {}
+    unverified: list[str] = []
+
+    def _restricted(restriction: dict) -> list[str]:
+        """The sideboard names a restricted wish can reach: allowed, or unknowable (conservative)."""
+        out = []
+        for n in side_names:
+            verdict = _WishAllows(restriction, _SideCharacteristics(n, all_entries, reference, offline)
+                                  if restriction else None)
+            if verdict is None:
+                if n not in unverified:
+                    unverified.append(n)
+                out.append(n)
+            elif verdict:
+                out.append(n)
+        return out
 
     via: list[dict] = []
     reachable_names: list[str] = []          # order-preserving union over every detector
@@ -234,17 +356,34 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
                             "names": hits})
                 _contribute(hits)
             else:
-                via.append({"card": name, "detected_by": "wish_from_sideboard parameter",
-                            "names": list(side_names)})
-                _contribute(side_names)
+                # RESTRICTION-AWARE (2026-10-05, Bruna's Glittering Wish: "a MULTICOLORED card").
+                # The scan used to hand every unrestricted-NAME wish the whole sideboard, which
+                # made coverage demand Elgaud Shieldmate and Worldfire -- mono-coloured cards the
+                # wish can never fetch. The restriction is applied wherever a card's colours /
+                # types are knowable and stays conservative (reachable) where they are not.
+                restriction = {}
+                if params.get("wish_requires_multicolored"):
+                    restriction["multicolored"] = True
+                if params.get("tutor_types"):
+                    restriction["types"] = list(params["tutor_types"])
+                hits = _restricted(restriction)
+                via.append({"card": name,
+                            "detected_by": "wish_from_sideboard parameter"
+                                           + (f" (restricted: {restriction})" if restriction else ""),
+                            "names": hits})
+                _contribute(hits)
         elif entry and "outside the game" in entry.get("oracle_text", "").lower():
             via.append({"card": name, "detected_by": "oracle text 'outside the game'",
                         "names": list(side_names)})
             _contribute(side_names)
         elif name in WISH_CARD_NAMES:
-            via.append({"card": name, "detected_by": "known wish card (not yet implemented)",
-                        "names": list(side_names)})
-            _contribute(side_names)
+            restriction = WISH_RESTRICTIONS.get(name, {})
+            hits = _restricted(restriction)
+            via.append({"card": name,
+                        "detected_by": "known wish card (not yet implemented)"
+                                       + (f" (restricted: {restriction})" if restriction else ""),
+                        "names": hits})
+            _contribute(hits)
 
     unreachable = [n for n in side_names if n not in reachable_names]
     if not side_names:
@@ -252,7 +391,7 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
     elif via and unreachable:
         reason = (f"{len(reachable_names)} of {len(side_names)} sideboard card(s) reachable via "
                   + ", ".join(v["card"] for v in via)
-                  + "; NOT reachable (no wish names them): " + ", ".join(sorted(set(unreachable))))
+                  + "; NOT reachable (no wish can fetch them): " + ", ".join(sorted(set(unreachable))))
     elif via:
         reason = (f"{len(side_names)} sideboard card(s) reachable via "
                   + ", ".join(v["card"] for v in via))
@@ -260,8 +399,12 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
         reason = ("no mainboard card fetches from outside the game -- sideboard is unreachable "
                   "in this simulator (no game 2, no sideboarding) and is NOT scanned")
 
+    if unverified:
+        reason += (f"; {len(unverified)} contributed conservatively (characteristics unknown"
+                   + (" offline" if offline else "") + "): " + ", ".join(unverified))
     return {"reachable": bool(reachable_names), "via": via,
-            "names": reachable_names, "unreachable": unreachable, "reason": reason}
+            "names": reachable_names, "unreachable": unreachable, "reason": reason,
+            "restriction_unverified": unverified}
 
 # ---------------------------------------------------------------------------
 # Vial target computation
@@ -992,7 +1135,8 @@ def Main():
     # A wish deck's sideboard is not optional colour: on EldraziDisplacerFlicker both win
     # conditions (Essence Depleter, Dimensional Infiltrator) live there, and scanning the
     # mainboard alone reported a clean two-card gap while staying silent on them.
-    reach       = SideboardReachability(card_names, side_names, cards_json)
+    reach       = SideboardReachability(card_names, side_names, cards_json,
+                                        offline=getattr(args, "offline", False))
     # Only the REACHABLE sideboard names are held to a mainboard card's standard. For an
     # unrestricted wish that is the whole sideboard (unchanged); for a name-restricted one
     # (Legion Angel) it is just the copies it can name, so the cards sitting beside them are not
