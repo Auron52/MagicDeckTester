@@ -1649,7 +1649,11 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
                 state, controller,
                 w.card.m_name.str() + " \xE2\x80\x94 aura swap " + wd->params.aura_swap_cost->ToString()
                     + " in combat (on " + hp->card.m_name.str() + "): bring in which Aura? (decline = no swap)",
-                hand, legal, /*heuristic_pick=*/-1);
+                hand, legal,
+                // The AI's own pick for this window (Bruna sweep H): the damage-max Aura the
+                // searched pin brings in -- the human default must show what the engine would swap,
+                // not -1 ("no swap"), which read as the engine declining.
+                /*heuristic_pick=*/AuraSwapPick(state, controller, wnum, host_attacking));
             if (c < 0 || std::find(legal.begin(), legal.end(), c) == legal.end()) { continue; }
             pick = c;
         }

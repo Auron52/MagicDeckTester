@@ -3015,6 +3015,15 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
                "next decision), or -1 to take nothing. Default = the AI's pick.");
     }
+    else if (source.find("aura swap") != std::string::npos)
+    {
+        // Arcanum Wings' in-combat swap reuses this modal (Bruna sweep H): the pick goes ONTO THE
+        // BATTLEFIELD attached to the Wings' host and the Wings returns to HAND -- not "into your
+        // hand" as the generic dig note said.
+        d.Note("reply a hand index to swap that Aura onto the battlefield attached to the Wings' host "
+               "(Arcanum Wings returns to your hand; the {2}{U} is paid now), or -1 for no swap. "
+               "Default = the AI's pick (the damage-max Aura).");
+    }
     else if (source.find("(put)") != std::string::npos)
     {
         d.Note("reply an examined index to put that card onto the battlefield, or -1 to put "
