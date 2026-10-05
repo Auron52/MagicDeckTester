@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Birds of Paradise", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossification"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_no_win": true,
+  "comment": "A MAIN-PHASE COLOSSIFICATION CAST ON A READY ATTACKER COSTS THAT ATTACK. Seven Forests pay {5}{G}{G}; the only creature is a non-sick Birds of Paradise. If 'When this Aura enters, tap enchanted creature' were missing anywhere (executor, rollout, or the pre-combat attack projection), Birds would swing for 20 = lethal this turn -- a fake turn-early win. With the tap modelled (responded to with Birds' own mana ability, Permanent::etb_tap_pending: still a mana source this phase, never an attacker), no line wins this turn."
+}

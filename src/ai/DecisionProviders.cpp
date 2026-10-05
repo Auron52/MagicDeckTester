@@ -991,6 +991,98 @@ std::vector<int> DecisionProvider::AttackDigPutCandidates(
     return ranked;
 }
 
+// Bruna, Light of Alabaster's gather subset (see the DecisionProvider.h note). THE EXACT GOLDFISH
+// DOMINANCE COLLAPSE, and why it is exact (provider-owned one-option narrowing per the user's
+// 2026-09-30 rule, PROVEN by the MTG_BRUNA_GATHER_FULL control arm -- see the Bruna ledger):
+//   (i)   a GRAVEYARD Aura card has no other use in this deck (no recursion; Open the Armory hits the
+//         library, Glittering Wish the sideboard) -- putting it onto an attacking Bruna is pure gain;
+//   (ii)  a HAND Aura put now adds its full bonus THIS combat and keeps adding it every later turn
+//         (Bruna attacks every turn -- flying, vigilance, nothing blocks), and saves its mana; no
+//         card in the list triggers on an Aura being CAST; Arcanum Wings' swap is a PAID version of
+//         the same put; a smaller hand never forces a discard. Colossification's ETB tap lands on an
+//         ATTACKING Bruna and costs nothing (CR 506.4);
+//   (iii) a BATTLEFIELD Aura moved from a NON-attacking host is a strict gain this combat and neutral
+//         after (Bruna re-gathers every attack); from an ATTACKING host it is a zero-sum transfer
+//         (no blockers: trample / flying / first strike are moot), never a loss;
+//   (iv)  the counter-example is a HOST-DEPENDENT Aura -- Almost Perfect sets BASE 9/10, worth +4 on
+//         Bruna (5/5) but +9 on a 0/1 dork, and moving it off an attacking dork LOSES power. So every
+//         Aura carrying aura_set_base_power branches take/skip (2^m subsets, take-first; m <= 4, any
+//         excess is taken), everything else is always taken.
+// MTG_BRUNA_GATHER_FULL=1 is the PROOF's control arm only: the full powerset (n <= 10), take-all first.
+std::vector<std::vector<int>> DecisionProvider::BrunaGatherCandidates(
+    const GameState& /*s*/, int /*controller*/, const Permanent& /*bruna*/,
+    const std::vector<AuraGatherCand>& cands) const
+{
+    const int n = static_cast<int>(cands.size());
+    std::vector<std::vector<int>> out;
+    static const bool full = EnvOn("MTG_BRUNA_GATHER_FULL");   // proof control arm; DEFAULT OFF
+    if (full && n <= 10)
+    {
+        for (int mask = (1 << n) - 1; mask >= 0; --mask)
+        {
+            std::vector<int> sub;
+            for (int i = 0; i < n; ++i) { if (mask & (1 << i)) { sub.push_back(i); } }
+            out.push_back(std::move(sub));
+        }
+        return out;
+    }
+    std::vector<int> fixed, dep;
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(cands[static_cast<std::size_t>(i)].name);
+        const bool host_dependent = d != nullptr && d->params.aura_set_base_power >= 0;
+        if (host_dependent && dep.size() < 4) { dep.push_back(i); }
+        else                                  { fixed.push_back(i); }
+    }
+    const int m = static_cast<int>(dep.size());
+    for (int mask = (1 << m) - 1; mask >= 0; --mask)
+    {
+        std::vector<int> sub = fixed;
+        for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sub.push_back(dep[static_cast<std::size_t>(j)]); } }
+        std::sort(sub.begin(), sub.end());
+        out.push_back(std::move(sub));
+    }
+    return out;
+}
+
+// Arcanum Wings' swap pick (see the DecisionProvider.h note): rank the legal hand Auras by the
+// DAMAGE the swap host deals, computed by actually performing the swap on a copy (so Almost
+// Perfect's base set, a lost Aura's grant, Kor-style self-buffs and double strike are all priced
+// exactly as combat will realise them):
+//   key 1: damage THIS combat -- the host's combat power after the swap if it can still attack
+//          (always, when it is already attacking: a Colossification tap is then free, CR 506.4; in a
+//          main phase a Colossification tap -- deferred or not -- means it cannot attack), else 0;
+//   key 2: the host's power after the swap (next turn's damage);
+//   key 3: lower hand index (deterministic).
+std::vector<int> DecisionProvider::AuraSwapRanking(
+    const GameState& s, int controller, int wings_number, int host_number,
+    bool host_attacking, const std::vector<int>& legal) const
+{
+    struct Scored { int idx; int now; int later; };
+    std::vector<Scored> sc;
+    for (int hi : legal)
+    {
+        GameState t = s;
+        if (!ApplyAuraSwap(t, controller, wings_number, hi, /*respond_window=*/!host_attacking)) { continue; }
+        const Permanent* h = nullptr;
+        for (const Permanent& p : t.battlefield) { if (p.card.m_number == host_number) { h = &p; break; } }
+        if (h == nullptr) { continue; }
+        const int mult = CreatureHasDoubleStrike(*h, t) ? 2 : 1;
+        const int pw = std::max(0, CombatPowerOf(*h, t)) * mult;
+        const bool attacks = host_attacking || CanAttackFull(*h, t.battlefield, controller);
+        sc.push_back({ hi, attacks ? pw : 0, pw });
+    }
+    std::stable_sort(sc.begin(), sc.end(), [](const Scored& a, const Scored& b)
+    {
+        if (a.now != b.now) { return a.now > b.now; }
+        if (a.later != b.later) { return a.later > b.later; }
+        return a.idx < b.idx;
+    });
+    std::vector<int> out;
+    for (const Scored& x : sc) { out.push_back(x.idx); }
+    return out;
+}
+
 // Armored Skyhunter attach-host pick (see the DecisionProvider.h note): the ATTACKER whose
 // realized damage this combat rises the most once the equipment lands on it. ds_after counts
 // the incoming equipment (a bare Kor Duelist flips to double strike; Balan may cross his 2-

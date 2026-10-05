@@ -248,6 +248,16 @@ struct Action
                              // (AUTO-EQUIP, which itself stands down under human play), so the
                              // human-play gate keeps the search byte-identical BY CONSTRUCTION
                              // rather than by measurement.
+        AuraSwap,            // Arcanum Wings "Aura swap {2}{U}: Exchange this Aura with an Aura card in
+                             // your hand" -- the MAIN-PHASE window (the in-combat one is the
+                             // Plan::combat_aura_swap_choice pin). sac_source_id = the swap
+                             // permanent's card.m_number; card_name = the hand Aura brought in
+                             // (hand_index -1, resolved by name at apply); cost = aura_swap_cost.
+                             // Resolved by the shared ApplyAuraSwap (executor + rollout). One per
+                             // swap permanent per plan (a swapped Wings is back in hand), mutually
+                             // exclusive via sac_source_id. WHICH Aura: the provider's damage-max
+                             // pick (USER ruling 2026-10-05, proven against MTG_AURA_SWAP_BRANCH);
+                             // human play offers every legal Aura. Appended LAST.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -1091,6 +1101,19 @@ public:
         // Motivated by a concrete cost -- sweep GI=7 had the ranked default take Fire Diamond when
         // Mountain was strictly better and would have been the search's fourth land.
         int tectonic_keep_choice = -1;
+
+        // BRUNA, LIGHT OF ALABASTER attack-trigger gather: which entry of the provider's ranked
+        // BrunaGatherCandidates SUBSET list the trigger takes. -1 (default) == the front (the
+        // provider's exact dominance collapse: take every additive Aura), byte-identical to no
+        // branch. Copied onto GameState::scripted_bruna_gather (decided in main, consumed at
+        // declare-attackers -- the tectonic_mode_choice route).
+        int bruna_gather_choice = -1;
+
+        // ARCANUM WINGS in-combat aura swap: the CARD NUMBER of the Aura-swap permanent to activate
+        // after attackers are declared, -1 (default) = no combat swap. The Aura it brings in is the
+        // provider's damage-max pick at resolution (USER ruling 2026-10-05). Copied onto
+        // GameState::scripted_combat_aura_swap, same route as above.
+        int combat_aura_swap_choice = -1;
 
         // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
         // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set

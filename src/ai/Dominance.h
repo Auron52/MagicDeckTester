@@ -349,7 +349,15 @@ static_assert(sizeof(Player) == 200,
 // the moment a new turn starts, and this comparator only ever compares END-OF-TURN states (mid-turn
 // state is refused outright, see the boundary assertion), where the ledger's content has no effect on
 // any future line. With MTG_PAY_ROLLBACK off it is never written at all. Nothing to fold.
-static_assert(sizeof(GameState) == 968,
+// +48 bytes (2026-10-05, Bruna): `floating_creature_mana` (a ManaPool, the creature-only float --
+// Somberwald Sage) plus two ints, `scripted_bruna_gather` and `scripted_combat_aura_swap`.
+// Classification: the creature-only float is MID-TURN state exactly like floating_mana -- a BOUNDARY
+// ASSERTION in AtCleanBoundary (it is emptied at every phase/turn reset). Both pins are
+// FUTURE-DETERMINING (the Tectonic pins' class) and are folded in Build(), value-gated. Permanent
+// gained `etb_tap_pending` (Colossification's responded-to ETB tap) in existing padding (size
+// unchanged) -- a mid-turn deferral cleared by the beginning of combat and the untap step, folded
+// beside skip_next_untap in the sim keys and asserted absent at the boundary below.
+static_assert(sizeof(GameState) == 1016,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -548,6 +556,7 @@ inline bool AtCleanBoundary(const GameState& s)
 {
     if (!s.stack.empty())                     { return false; }
     if (s.floating_mana.Total() > 0)          { return false; }
+    if (s.floating_creature_mana.Total() > 0) { return false; }   // creature-only float: same class
     // NOTE the line that is NOT here: `spells_cast_this_turn != 0`. It was an assertion at first
     // and cost dragonstorm 26.5% of its siblings, because CastOffSuspend counts a Lotus Bloom
     // arriving at THIS upkeep as a cast (CR 702.62e) -- so storm is legitimately 1 at a perfectly
@@ -564,6 +573,7 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.temp_haste || p.is_animated || p.exile_at_end)        { return false; }
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
+        if (p.etb_tap_pending)                                      { return false; }   // Colossification deferral (mid-turn only)
         if (p.marked_for_destruction)                               { return false; }
         if (p.mana_tap_mark != 0)                                   { return false; }   // Prevent Damage: an unflushed tap trigger
     }
@@ -643,6 +653,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // regression sweep. The +1 keeps a pinned keep index 0 distinguishable from "no pin".
     if (s.scripted_tectonic_keep >= 0)
     { fold(static_cast<std::uint64_t>(s.scripted_tectonic_keep) + 1u); }
+    // Bruna's gather-subset pin and Arcanum Wings' combat-swap pin: the same FUTURE-DETERMINING
+    // classification as the Tectonic pins, folded VALUE-GATED so every deck without either card
+    // keeps its exact key.
+    if (s.scripted_bruna_gather >= 0)
+    { fold(0xB2C0ull + static_cast<std::uint64_t>(s.scripted_bruna_gather)); }
+    if (s.scripted_combat_aura_swap >= 0)
+    { fold(0xA5A0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap)); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.
@@ -983,6 +1000,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // liability, but an exerted creature has already bought something with the tap, so no
         // direction can be declared. Nonzero-gated -> every deck with no exert source is unchanged.
         if (p.skip_next_untap) { mfold(0xE7E27ull); }
+        // Colossification's responded-to ETB tap (Permanent::etb_tap_pending): the body will be
+        // tapped at phase end and cannot attack, so it is NOT fungible with an unflagged twin.
+        // Exact-match, gated on set -> every deck without the param keeps its exact key.
+        if (p.etb_tap_pending) { mfold(0xC0105ull); }
         // Nykthos Paragon's "Do this only once each turn" (PER PERMANENT). An EXACT-MATCH field, the
         // colored_cast_lifegain_used_this_turn classification directly above the axes -- but folded
         // GATED ON SET rather than unconditionally, so every deck without a Paragon keeps its exact

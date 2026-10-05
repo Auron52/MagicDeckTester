@@ -1,0 +1,22 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "battlefield": [
+    { "name": "Mother of Runes", "controller": 0, "tapped": false },
+    { "name": "Arcanum Wings", "controller": 0, "tapped": false, "equips": "Mother of Runes" },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossification"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "expect_win_turn": 5,
+  "comment": "ARCANUM WINGS' AURA SWAP IN COMBAT (USER 2026-10-05: 'this is actually important here'). Mother of Runes (1/1) wears Arcanum Wings; three untapped Seaside Citadels pay the {2}{U} swap; Colossification is in hand; the opponent is at 21. A MAIN-PHASE swap taps Mother (Colossification's ETB) and she cannot attack. The only kill: attack with Mother, then swap Colossification in AFTER attackers are declared -- the tap is then free (CR 506.4) and the +20 counts this combat: 1 + 20 = 21. Needs the searched Plan::combat_aura_swap_choice pin, the shared ApplyCombatAuraSwap in both combat worlds, and the damage-max swap pick choosing Colossification for an attacking host."
+}

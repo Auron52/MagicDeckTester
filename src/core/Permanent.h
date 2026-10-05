@@ -350,6 +350,17 @@ struct Permanent
     // same shape (a per-permanent reason not to untap). Read only at untap steps, so it lives in
     // the cold bool run of the 2026-09-25 cache layout, not beside `tapped` in the hot block.
     bool      skip_next_untap      = false;
+    // COLOSSIFICATION'S ETB TAP, RESPONDED TO WITH THE HOST'S OWN MANA ABILITY (CR 605.3a / 117.1d:
+    // with "tap enchanted creature" on the stack the controller may activate the host's {T} mana
+    // ability in response; the mana floats until the end of the PHASE, CR 106.4). Modelled as a
+    // deferred tap: ResolveAuraEnterTapHost leaves an untapped, able-to-tap mana-dork host UNTAPPED
+    // with this flag set, so the payer may still tap it for mana for the rest of this main phase
+    // (choosing its colour -- and honouring a creature-only restriction -- at payment time, which a
+    // pre-floated colour could not). It is NOT a legal attacker (CanAttackFull refuses it), and
+    // ApplyPendingEtbTaps taps it at the end of the phase (beginning of combat, both worlds) if the
+    // payer never did. Cleared by the untap step. Folded into every sim key / dominance fold beside
+    // skip_next_untap (gated on set -> byte-identical for every deck without the param).
+    bool      etb_tap_pending      = false;
     bool      exile_at_end         = false; // Twinflame token: "exile those tokens at the beginning
                                             // of the next end step." Swept (battlefield -> exile) at
                                             // BOTH end-of-turn sites in lockstep; folded into the

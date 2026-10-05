@@ -402,6 +402,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         // flag, so a divergence here is the most likely of any field in the list -- one world exerting
         // and the other not is a whole attack of difference next turn.
         if (a.skip_next_untap != b.skip_next_untap)   { fail(i, "skip_next_untap"); }
+        if (a.etb_tap_pending != b.etb_tap_pending)   { fail(i, "etb_tap_pending"); }
     }
 }
 
@@ -811,7 +812,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
     const ManaPool reserve_pre = state.floating_mana;
+    const ManaPool cre_reserve_pre = state.floating_creature_mana;
     ManaCost cost = cost_in;
+    // A CREATURE spell spends the creature-only reserve FIRST (it can pay nothing else, so using it
+    // first is never worse); a noncreature payment never touches it. Empty for every deck without a
+    // multi-yield creature_mana_only source -> byte-identical.
+    if (for_creature && state.floating_creature_mana.Total() > 0)
+    { SpendFloatingTowardCost(state.floating_creature_mana, cost); }
     SpendFloatingTowardCost(state.floating_mana, cost);
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
@@ -868,9 +875,19 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     };
 
 
+    // CREATURE-ONLY MANA NEVER FEEDS A FILTER (Somberwald Sage + Skycloud Expanse). A filter's {1}
+    // is the activation cost of a mana ability, not a creature spell, so restricted mana cannot pay
+    // it (CR 106.6 + the card's restriction) -- even when the filter's output then pays a creature
+    // spell. `feeding` marks the recursive feed call (usable() refuses a creature_mana_only source
+    // there), and `restricted_in_float` marks that this payment's local float may already hold
+    // restricted units, which the fed steps (3)-(5) below would otherwise consume as the feed. Both
+    // false for any payment that never touches such a source -> byte-identical.
+    bool feeding = false;
+    bool restricted_in_float = false;
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
         if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
+        if (feeding && def.params.creature_mana_only) { return false; }
         if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
         {
             const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
@@ -891,7 +908,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // Tap one non-filter source: THE shared mechanic (TapSourceIntoFloat above), which the
     // human pre-tap calls too so the two can never drift.
     auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
-    { TapSourceIntoFloat(state, active, p, def, col, floating, available, for_creature); };
+    { if (def.params.creature_mana_only) { restricted_in_float = true; }
+      TapSourceIntoFloat(state, active, p, def, col, floating, available, for_creature); };
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour
     // `needed`. Taps at most one producing source (a filter may also tap one feeder).
@@ -1373,6 +1391,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (s.controller_index != active || s.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
+                        if (sd->params.creature_mana_only) { continue; }   // never a filter's feed
                         bool m = false;
                         for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                         { for (Color ic : fd->params.produces) { if (pc == ic) { m = true; break; } } if (m) { break; } }
@@ -1494,6 +1513,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // kind 2: filter coloured mode -- feed one of its colours (least-flexible feeder), yield 2.
             const Color out = needed;
             bool have_input = false;
+            // Creature-only units in the float may not feed the filter (see `feeding` above).
+            if (!restricted_in_float)
             for (Color c : bdef->params.produces)
             { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { have_input = true; break; } }
             if (!have_input)
@@ -1505,6 +1526,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (s.controller_index != active || s.tapped) { continue; }
                     const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                     if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
+                    if (sd->params.creature_mana_only) { continue; }   // never a filter's feed
                     bool m = false; Color match = Color::Colorless;
                     for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
@@ -1589,6 +1611,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
+            if (restricted_in_float) { continue; }   // its feed would consume creature-only units
             Color out;
             if (any)
             {
@@ -1619,6 +1642,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (s.controller_index != active || s.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
+                        if (sd->params.creature_mana_only) { continue; }   // never a filter's feed
                         bool m = false;
                         for (Color c : EffectiveProducesFor(state, active, *sd, &s)) { if (c == ic) { m = true; break; } }  // RP feeder
                         if (!m) { continue; }
@@ -1655,13 +1679,38 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 }
                 else if (def->params.produces.empty()) { continue; }
                 // Pay the {1}: use floating if any, else feed one mana from a non-ramp source.
-                if (floating.Total() == 0 && !self(self, Color::Colorless, true, false)) { continue; }
+                if (restricted_in_float) { continue; }   // the float may hold creature-only units
+                if (floating.Total() == 0)
+                {
+                    feeding = true;
+                    const bool fed_ok = self(self, Color::Colorless, true, false);
+                    feeding = false;
+                    if (!fed_ok) { continue; }
+                }
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
                 p.tapped = true;
                 dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
                 for (Color c : def->params.produces) { floating.Add(c, 1); }
                 if (available && available->wild > 0) { --available->wild; }  // ramp filter counted as 1 wild
+                // A land Aura on the ramp filter (Wild Growth on Skycloud Expanse): the land WAS
+                // tapped for mana, so the aura's additional mana arrives here too -- exactly as
+                // TapSourceIntoFloat and the backtracker's activate() credit it. This branch was
+                // the one payer site without it (no deck had ever paired the two). AddSourceToPool
+                // credited the same units, so retire them from `available` likewise.
+                if (LandAuraBonus(state, p) > 0)
+                {
+                    ManaPool bonus;
+                    LandAuraAddToPool(bonus, state, p);
+                    floating.AddPool(bonus);
+                    if (available)
+                    {
+                        available->white -= bonus.white; available->blue      -= bonus.blue;
+                        available->black -= bonus.black; available->red       -= bonus.red;
+                        available->green -= bonus.green; available->colorless -= bonus.colorless;
+                        available->wild  -= bonus.wild;
+                    }
+                }
                 return true;
             }
         }
@@ -1681,7 +1730,14 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 bool match = false;
                 for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
                 if (!match) { continue; }
-                if (floating.Total() == 0 && !self(self, Color::Colorless, true, false)) { continue; }
+                if (restricted_in_float) { continue; }   // the float may hold creature-only units
+                if (floating.Total() == 0)
+                {
+                    feeding = true;
+                    const bool fed_ok = self(self, Color::Colorless, true, false);
+                    feeding = false;
+                    if (!fed_ok) { continue; }
+                }
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
                 p.tapped = true;
@@ -1750,8 +1806,52 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // assignments are made -- the greedy's tap-by-tap view (below) misses them entirely.
     // Restricted to real play (AllPlayHooksNull is false only there), so the search's millions of
     // speculative payments stay silent.
-    auto commit_leftover = [&](const ManaPool& lo)
-    { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
+    auto commit_leftover = [&](const ManaPool& lo_in)
+    { ManaPool lo = lo_in;
+      // CREATURE-ONLY PROVENANCE of the leftover. Mana a creature_mana_only source produced keeps
+      // its restriction after the payment (Somberwald Sage tapped for Mother of Runes' {W} leaves
+      // {W}{W} spendable only on creature spells). Within THIS payment every unit was usable (it is
+      // a creature spell), so which units count as spent is our attribution to make -- and spending
+      // the restricted ones first is never worse. So the restricted leftover is
+      // min(restricted produced, leftover), routed to floating_creature_mana; the rest is general.
+      // Restricted production is read off the payment's own tap diff (bf_pre), which holds for the
+      // greedy and both backtracker paths alike. Inert unless a creature payment tapped such a
+      // source AND left mana over.
+      if (for_creature && lo.Total() > 0)
+      {
+          int restricted = 0;
+          const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
+          for (int bi = 0; bi < nb; ++bi)
+          {
+              const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+              if (!bp.tapped || bf_pre[static_cast<std::size_t>(bi)].tapped) { continue; }
+              if (bp.controller_index != active || bp.def_absent) { continue; }
+              const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+              if (bd == nullptr || !bd->params.creature_mana_only) { continue; }
+              const int y = PermanentManaYield(state, bp, *bd);
+              restricted += (y >= 0 ? y : ManaProducedPerTap(*bd));
+          }
+          restricted = std::min(restricted, lo.Total());
+          if (restricted > 0)
+          {
+              // Take the restricted units from the colour holding the MOST leftover first: a
+              // one-colour burst (three of one colour) is that colour whenever the leftover is
+              // mostly its own. Ambiguous only when a general source was ALSO over-tapped in the
+              // same payment -- a disclosed approximation (the Bruna ledger).
+              ManaPool r;
+              int* src[7] = { &lo.white, &lo.blue, &lo.black, &lo.red, &lo.green, &lo.colorless, &lo.wild };
+              int* dst[7] = { &r.white,  &r.blue,  &r.black,  &r.red,  &r.green,  &r.colorless,  &r.wild };
+              for (int k = 0; k < restricted; ++k)
+              {
+                  int best = -1;
+                  for (int c = 0; c < 7; ++c) { if (*src[c] > 0 && (best < 0 || *src[c] > *src[best])) { best = c; } }
+                  if (best < 0) { break; }
+                  --*src[best]; ++*dst[best];
+              }
+              if (FloatLeftoverManaEnabled()) { state.floating_creature_mana.AddPool(r); }
+          }
+      }
+      if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
       // NO GENERIC MANA IN A HUMAN-PLAY POOL (see ConcretiseHumanFloat). This is the REQUEST site,
       // not necessarily the commit: while a plan is still being applied, ConcreteDeferScope drops it
       // and the commitment happens once at the decision boundary instead -- committing between the
@@ -1857,6 +1957,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                 &bt2_leftover, /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
         {
             state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
+            state.floating_creature_mana = cre_reserve_pre;   // ...which paid the FULL cost_in from it
             commit_leftover(bt2_leftover);
             CommitPaySacSacrifices(state, active);
             return true;
@@ -1875,6 +1976,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.opponent_lost_life_this_turn = oll_pre;
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
+    state.floating_creature_mana       = cre_reserve_pre;
     if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }
@@ -3126,6 +3228,9 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
     AddSacPayFodderToPool(pool, state, state.active_player_index,
                           LiveSacPayOutlet(state, state.active_player_index), skip);
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+    // The creature-only reserve is supply for the CREATURE side of the split (this pool is the total
+    // pool; BuildNonCreaturePool never credits it, exactly as it drops creature_mana_only sources).
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_creature_mana); }
     return pool;
 }
 
@@ -3170,6 +3275,7 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
     AddSacPayFodderToPool(pool, state, active, LiveSacPayOutlet(state, active),
                           /*skip=*/nullptr, /*no_attackers=*/true);
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_creature_mana); }   // see AvailableManaPool
     return pool;
 }
 
@@ -3358,6 +3464,18 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             const int ci = static_cast<int>(c);
             if (ci >= 0 && ci < 5) { mask |= (1 << ci); }
         }
+        // ONE-COLOUR BURST (Somberwald Sage): amt units of ONE chosen colour -- recorded for
+        // Payable's exact colour choice instead of being credited as amt free choices (see the
+        // ColorFeasibility note). Still generic supply in `total`. Overflow keeps the old credit.
+        if (IsSingleColorBurstSource(*def) && prod.size() > 1 && f.nburst < ColorFeasibility::kMaxBurst)
+        {
+            f.total += amt;
+            if ((mask & (mask - 1)) != 0) { has_multi = true; }
+            f.burst_mask[f.nburst] = mask;
+            f.burst_amt[f.nburst]  = amt;
+            ++f.nburst;
+            continue;
+        }
         // Domain source (Faeburrow Elder / Bloom Tender): one mana of EACH colour among your
         // permanents -- a fixed bundle, not a free choice. Under MTG_DOMAIN_WIDEN a permanent cast
         // earlier in the SAME plan can widen the set, so open the BUNDLE to all five colours: still
@@ -3413,6 +3531,15 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         add(1 << 0, fl.white); add(1 << 1, fl.blue);  add(1 << 2, fl.black);
         add(1 << 3, fl.red);   add(1 << 4, fl.green);
         add(0x1F,   fl.wild);
+        // The creature-only reserve pays creature spells only: credited to the CREATURE-side test
+        // (noncreature == false), never to the noncreature one (mirrors BuildNonCreaturePool).
+        if (!noncreature)
+        {
+            const ManaPool& fc = state.floating_creature_mana;
+            add(1 << 0, fc.white); add(1 << 1, fc.blue);  add(1 << 2, fc.black);
+            add(1 << 3, fc.red);   add(1 << 4, fc.green);
+            add(0x1F,   fc.wild);  add(0,    fc.colorless);
+        }
     }
     // With no multi-colour source the flat pool holds no `wild` from the board and CanPayFlat is
     // already exact per colour -- running the matching could only reach the same verdict.
@@ -3496,6 +3623,8 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
         if (need < 2) { return true; }          // also covers mono_mask == 0 (nothing coloured cast)
         const unsigned s = idx->mono_mask;
         int have = cover[s] + credit.wild;
+        // One demanded colour: a one-colour burst simply picks it (exact).
+        for (int b = 0; b < nburst; ++b) { if (static_cast<unsigned>(burst_mask[b]) & s) { have += burst_amt[b]; } }
         const int cred_u[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
         for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred_u[i]; } }
         if (prod > 0) { have -= std::max(0, prod - (total - cover[s])); }
@@ -3594,20 +3723,51 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
         }
     }
     const int nsets = nscan ? nscan : 31;
-    for (int k = 0; k < nsets; ++k)
+    // One Hall scan for a FIXED colour choice of the one-colour bursts (`pick[b]` = the colour index
+    // burst b makes, -1 = none demanded). With no burst this is the historical scan verbatim.
+    int pick[ColorFeasibility::kMaxBurst];
+    auto hall = [&]() -> bool
     {
-        const unsigned s = nscan ? scan[k] : static_cast<unsigned>(k + 1);
-        int need = 0;
-        for (int i = 0; i < ndm; ++i)
-        { if ((static_cast<unsigned>(masks[i]) & ~s) == 0) { need += counts[i]; } }   // payable only from s
-        if (need == 0) { continue; }
-        int have = cover[s] + credit.wild;
-        for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
-        // What the producers must draw out of S itself (see the note above).
-        if (prod_cost > 0) { have -= std::max(0, prod_cost - (total - cover[s])); }
-        if (need > have) { return false; }
+        for (int k = 0; k < nsets; ++k)
+        {
+            const unsigned s = nscan ? scan[k] : static_cast<unsigned>(k + 1);
+            int need = 0;
+            for (int i = 0; i < ndm; ++i)
+            { if ((static_cast<unsigned>(masks[i]) & ~s) == 0) { need += counts[i]; } }   // payable only from s
+            if (need == 0) { continue; }
+            int cov = cover[s];
+            for (int b = 0; b < nburst; ++b) { if (pick[b] >= 0 && (s & (1u << pick[b]))) { cov += burst_amt[b]; } }
+            int have = cov + credit.wild;
+            for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
+            // What the producers must draw out of S itself (see the note above).
+            if (prod_cost > 0) { have -= std::max(0, prod_cost - (total - cov)); }
+            if (need > have) { return false; }
+        }
+        return true;
+    };
+    if (nburst == 0) { return hall(); }
+    // ONE-COLOUR BURSTS: the subset is payable iff SOME choice of one colour per burst passes Hall.
+    // Only colours the subset actually demands can help (a burst into an undemanded colour adds only
+    // generic supply, already in `total`), so each burst's options are mask & demanded, or {none}.
+    unsigned demanded = 0;
+    for (int i = 0; i < ndm; ++i) { demanded |= static_cast<unsigned>(masks[i]); }
+    int opts[ColorFeasibility::kMaxBurst][5]; int nopt[ColorFeasibility::kMaxBurst];
+    for (int b = 0; b < nburst; ++b)
+    {
+        nopt[b] = 0;
+        for (int c = 0; c < 5; ++c)
+        { if ((static_cast<unsigned>(burst_mask[b]) & demanded) & (1u << c)) { opts[b][nopt[b]++] = c; } }
+        if (nopt[b] == 0) { opts[b][0] = -1; nopt[b] = 1; }
     }
-    return true;
+    int odo[ColorFeasibility::kMaxBurst] = {0};
+    for (;;)
+    {
+        for (int b = 0; b < nburst; ++b) { pick[b] = opts[b][odo[b]]; }
+        if (hall()) { return true; }
+        int b = 0;
+        while (b < nburst && ++odo[b] >= nopt[b]) { odo[b] = 0; ++b; }
+        if (b == nburst) { return false; }
+    }
 }
 
 // Plan-scoped source reservation (see g_plan_reserved_sources). Stored as CARD NUMBERS, not
@@ -4240,8 +4400,11 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const bool pb = PayBoundEnabled();
         if (pb || tapstats::Enabled())
         {
+            // The creature-only reserve is supply for a creature payment (spent first, see
+            // TapForCostSharedOnce), never for anything else.
+            const int creature_float = for_creature ? static_cast<int>(state.floating_creature_mana.Total()) : 0;
             if (!PaymentManaCovers(state, for_creature,
-                                   cost_in.ManaValue() - state.floating_mana.Total()))
+                                   cost_in.ManaValue() - state.floating_mana.Total() - creature_float))
             {
                 if (tapstats::Enabled())
                 { (pb ? tapstats::g_bound_prune : tapstats::g_bound_probe)
@@ -4268,6 +4431,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         std::vector<Permanent> bf_snap_full;
         if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap = state.floating_mana;
+        const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               av_snap = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -4281,6 +4445,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             if (g_pay_snap_verify)
             { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.hybrid"); }
             state.floating_mana                = fm_snap;
+            state.floating_creature_mana       = fcm_snap;
             if (available) { *available = av_snap; }
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
@@ -4333,6 +4498,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         std::vector<Permanent> bf_snap_full;
         if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap  = state.floating_mana;
+        const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               av_snap  = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -4346,6 +4512,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         if (g_pay_snap_verify)
         { VerifyPaySnapRestore(state.battlefield, bf_snap_full, tag); }
         state.floating_mana                = fm_snap;
+        state.floating_creature_mana       = fcm_snap;
         if (available) { *available = av_snap; }
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;

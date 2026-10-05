@@ -239,6 +239,7 @@ void GameEngine::UntapStep(GameState& state)
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
+    state.floating_creature_mana = ManaPool{};   // ...and the creature-only reserve with it (lockstep)
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
@@ -251,6 +252,8 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_tectonic_keep = -1;  // ...and its mode-B keep pin (same lockstep)
+    state.scripted_bruna_gather = -1;   // searched Bruna gather subset is per-turn (same lockstep)
+    state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
@@ -287,6 +290,9 @@ void GameEngine::UntapStep(GameState& state)
             // or not it actually held anything tapped -- an exerted permanent that somehow untapped
             // by other means must not stay flagged. Checked alongside the Rimescale ice lock: both
             // are per-permanent reasons not to untap. Lockstep pair; see Permanent::skip_next_untap.
+            // A main-2 Colossification tap that was responded to (etb_tap_pending) is realised
+            // here first, so the untap below treats it exactly like a real tap (exert included).
+            if (p.etb_tap_pending) { p.tapped = true; p.etb_tap_pending = false; }
             const bool exert_holds = p.skip_next_untap;
             p.skip_next_untap = false;
             if (!exert_holds && !(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
@@ -612,7 +618,10 @@ void GameEngine::CombatPhase(GameState& state)
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase. Mirrors TurnSolver::SimulateCombat (lockstep). Off
     // (MTG_NO_FLOAT_LEFTOVER) -> no-op; byte-identical for non-floating decks regardless.
-    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; }
+    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{}; }
+    // ...and a Colossification ETB tap responded to with the host's mana ability lands now, at the
+    // end of the phase (Permanent::etb_tap_pending). Lockstep with TurnSolver::SimulateCombat.
+    ApplyPendingEtbTaps(state);
     state.phase = Phase::Combat;
 
     state.step = Step::BeginCombat;
@@ -709,6 +718,16 @@ void GameEngine::CombatPhase(GameState& state)
     // DECLARED attackers (declared_n, captured before the token block), pump applied after it.
     // Mirrors TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
     ApplyAttackThresholdTeamPump(state, state.active_player_index, atk_idx, declared_n);
+
+    // Bruna, Light of Alabaster's attack trigger (gather Auras from the battlefield / put Aura cards
+    // from hand and graveyard onto her), then Arcanum Wings' IN-COMBAT aura swap window -- both
+    // AFTER the attack pumps above and BEFORE anything reads power, so the Auras swing THIS combat;
+    // the swap after the gather, so every attack trigger has resolved (the swap window opens once
+    // they have). BEFORE Firebreathe so a greedy leftover-mana sink can never eat the swap's mana.
+    // Mirrors TurnSolver::SimulateCombat (lockstep; ONE shared helper each). Both inert unless a
+    // Bruna / an Aura-swap pin is present.
+    FireAttackGatherAuras(state, state.active_player_index, atk_idx);
+    ApplyCombatAuraSwap(state, state.active_player_index, atk_idx);
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the

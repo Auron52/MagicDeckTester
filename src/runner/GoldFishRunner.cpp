@@ -70,6 +70,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
+        // ARCANUM WINGS (2026-10-05, Bruna). An IN-COMBAT aura swap returns the Wings to HAND during
+        // combat; recasting it ({1}{U}, a sorcery-speed Aura) is a play combat itself enables (the
+        // 2c-bis "resources generated during combat" bucket), and a main-2 swap can use mana combat
+        // did not need. Without the second main that recast line is inexpressible.
+        if (def->params.aura_swap_cost.has_value()) { return true; }
         // MELIRA POD (2026-09-04). Birthing Pod (pod_mv_delta): the classic line is "attack with
         // Kitchen Finks / Murderous Redcap, THEN sac the attacker to Pod post-combat" -- banking
         // the combat damage AND the ladder climb off one body; a single main forces the trade.
@@ -409,7 +414,8 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         // Luxurious Libation) and a permanent +1/+1 counter -- all attack-feeding, all in the
         // stated WIDE direction (a false positive only keeps casts pre-combat).
         if (p.aura_power_bonus > 0 || p.aura_tough_bonus > 0
-            || p.aura_scale_power > 0 || p.aura_scale_tough > 0)             { return true; }
+            || p.aura_scale_power > 0 || p.aura_scale_tough > 0
+            || p.aura_set_base_power >= 0)                                   { return true; }   // Almost Perfect's base 9/10
         if (p.pump_per_cards_drawn_power > 0 || p.pump_per_treasure_power > 0
             || p.pump_per_life_gained_power > 0 || p.pump_per_x_power > 0
             || p.counters_on_target > 0)                                     { return true; }

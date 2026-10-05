@@ -1,0 +1,19 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 25,
+  "battlefield": [
+    { "name": "Bruna, Light of Alabaster", "controller": 0, "tapped": false },
+    { "name": "Lightning Greaves", "controller": 0, "tapped": false, "equips": "Bruna, Light of Alabaster" }
+  ],
+  "hand": ["Colossification"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 5,
+  "comment": "BRUNA'S ATTACK TRIGGER PUTS AN AURA FROM HAND ONTO HER, AND IT COUNTS THIS COMBAT. No mana to cast anything (one drawn Forest): the only route to 25 is Bruna attacking (5) and her gather putting Colossification (+20) onto her from HAND. Three rules ride on it: the put does not TARGET (CR 303.4f), so Lightning Greaves' shroud does not stop it; Colossification ENTERS (CR 603.6a) and its 'tap enchanted creature' taps Bruna, which does not remove an attacker from combat (CR 506.4); and FireAttackGatherAuras runs before the damage loop reads power in both worlds. Fails if any of the three is wrong."
+}

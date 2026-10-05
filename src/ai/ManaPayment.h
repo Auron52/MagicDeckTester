@@ -310,6 +310,16 @@ struct ColorFeasibility
     // no source is multi-colour (then the flat pool is already exact per colour and this adds
     // nothing). Callers MUST skip the check -- never prune -- when this is false.
     bool usable    = false;
+    // ONE-COLOUR BURST sources (IsSingleColorBurstSource: Somberwald Sage "three mana of any ONE
+    // color", Accomplished Alchemist): `amt` units that must ALL be one colour from `mask`. Hall's
+    // condition over cover[] would let the three units split across colours (Sage paying {W}{W}{U}
+    // of Bruna) -- impossible -- so they are kept OUT of cover[] (still in `total`) and Payable
+    // brute-forces the colour choice per source (exact; k <= kMaxBurst, colours limited to the
+    // subset's demanded ones). Overflow falls back to the free-choice credit (permissive).
+    static constexpr int kMaxBurst = 6;
+    int  nburst = 0;
+    int  burst_mask[kMaxBurst] = {0};
+    int  burst_amt[kMaxBurst]  = {0};
 
     // False only when NO assignment of the available mana to this subset's coloured pips exists.
     // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).

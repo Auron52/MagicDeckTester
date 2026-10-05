@@ -534,6 +534,10 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
         perm.entered_this_turn = true;
         perm.aura_attached_to  = lp.card.m_number;   // attached to Light-Paws
         state.battlefield.push_back(perm);
+        // An entering Aura's own ETB (Colossification: tap enchanted creature). Main-phase cast
+        // trigger -> the respond window applies. No-op for every Aura without aura_etb_tap_host.
+        ResolveAuraEnterTapHost(state, static_cast<int>(state.battlefield.size()) - 1,
+                                /*respond_window=*/true);
         ShuffleAfterSearch(state, controller);
         if (lp_trace)
         {
@@ -1197,7 +1201,7 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
             if (d == nullptr) { continue; }
             if (d->params.is_equipment) { legal.push_back(i); continue; }
             if (d->params.is_aura
-                && !LegalEnchantTargets(state, controller, d->params).empty())
+                && !AuraCouldEnchantHosts(state, controller, d->params).empty())   // a put: no target
             { legal.push_back(i); }
         }
         const std::vector<int> ranked = ResolveProvider(state).AttackDigPutCandidates(
@@ -1261,8 +1265,15 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
             }
             else if (d != nullptr && d->params.is_aura)
             {
-                std::vector<int> tg = LegalEnchantTargets(state, controller, d->params);
-                if (!tg.empty()) { state.battlefield[slot].aura_attached_to = tg.front(); }
+                // A PUT does not target (CR 303.4f), so a shrouded (Lightning Greaves) creature is
+                // a legal host here -- the non-targeting host list, not LegalEnchantTargets.
+                std::vector<int> tg = AuraCouldEnchantHosts(state, controller, d->params);
+                if (!tg.empty())
+                {
+                    state.battlefield[slot].aura_attached_to = tg.front();
+                    // Combat-time put: Colossification's ETB tap just taps (CR 506.4).
+                    ResolveAuraEnterTapHost(state, slot, /*respond_window=*/false);
+                }
             }
             FireEtbWatchers(state, controller, slot);   // universal cascade: Puresteel draw fires here
             FireOwnEtbTriggers(state, controller, slot);
@@ -1276,6 +1287,380 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
         }
     }
 }
+
+// ---- Bruna, Light of Alabaster: "Whenever Bruna attacks ..., you may attach to it any number of
+// Auras on the battlefield and you may put onto the battlefield attached to it any number of Aura
+// cards that could enchant it from your graveyard and/or hand." ----------------------------------
+//
+// RULES (mtg-rules review, 2026-10-05):
+//   * The attach and the put do NOT target (CR 701.3 / 303.4f), so Lightning Greaves' shroud does
+//     not stop either; the enchant restriction does ("could enchant it" -> AuraCouldEnchant, which
+//     excludes Wild Growth -- enchant land -- in every zone).
+//   * Attaching an Aura already on the battlefield is not an enter: no ETB, no Colossification tap.
+//   * A PUT Aura enters (CR 603.6a): its ETB fires -- Colossification taps Bruna, harmless on an
+//     attacker (CR 506.4: a tapped attacker stays in combat and deals damage). It is not CAST: no
+//     cast triggers.
+//   * Both halves resolve in oracle order (attach first, then put) within the trigger's resolution.
+//   * Orphaned Auras are already in the graveyard here (SweepOrphanedAuras at beginning of combat,
+//     CR 704.5m), so the graveyard half sees them as cards -- no special case.
+// WHICH Auras is the provider's ranked SUBSET list (BrunaGatherCandidates); the entry taken is the
+// searched pin GameState::scripted_bruna_gather (Plan::bruna_gather_choice), consumed by the first
+// gather. A human at the viewer picks each zone's subset with the reused `dragon` multi-pick.
+// The "or blocks" half is goldfish-inert (the opponent never attacks) -- signed off 2026-10-05.
+void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx)
+{
+    // Snapshot the gathering attackers by card number first: the puts below append to the
+    // battlefield (indices stay valid) but a watcher cascade could reorder nothing else.
+    std::vector<int> brunas;
+    for (int ai : atk_idx)
+    {
+        if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.attack_gather_auras) { brunas.push_back(p.card.m_number); }
+    }
+    for (const int bnum : brunas)
+    {
+        int bi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == bnum) { bi = i; break; } }
+        if (bi < 0) { continue; }
+        const std::string bname = state.battlefield[static_cast<std::size_t>(bi)].card.m_name.str();
+
+        // ---- candidates, in a fixed zone order (battlefield, hand, graveyard) ----
+        using Cand = DecisionProvider::AuraGatherCand;
+        std::vector<Cand> cands;
+        for (const Permanent& a : state.battlefield)
+        {
+            if (a.controller_index != controller || a.def_absent) { continue; }
+            if (a.aura_attached_to == bnum) { continue; }   // already on Bruna
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+            if (ad == nullptr || !ad->params.is_aura) { continue; }
+            if (!AuraCouldEnchant(state, ad->params, state.battlefield[static_cast<std::size_t>(bi)])) { continue; }
+            cands.push_back({ 0, a.card.m_number, a.card.m_name.str() });
+        }
+        for (const Card& c : state.players[controller].hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (cd == nullptr || !cd->params.is_aura) { continue; }
+            if (!AuraCouldEnchant(state, cd->params, state.battlefield[static_cast<std::size_t>(bi)])) { continue; }
+            cands.push_back({ 1, c.m_number, c.m_name.str() });
+        }
+        for (const Card& c : state.players[controller].graveyard)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (cd == nullptr || !cd->params.is_aura) { continue; }
+            if (!AuraCouldEnchant(state, cd->params, state.battlefield[static_cast<std::size_t>(bi)])) { continue; }
+            cands.push_back({ 2, c.m_number, c.m_name.str() });
+        }
+        if (cands.empty()) { continue; }
+
+        // ---- which subset: the provider's ranked list, the searched pin, the human ----
+        const std::vector<std::vector<int>> ranked = ResolveProvider(state).BrunaGatherCandidates(
+            state, controller, state.battlefield[static_cast<std::size_t>(bi)], cands);
+        std::vector<int> chosen;
+        if (!ranked.empty())
+        {
+            int k = 0;
+            if (state.scripted_bruna_gather >= 0
+                && state.scripted_bruna_gather < static_cast<int>(ranked.size()))
+            { k = state.scripted_bruna_gather; }
+            chosen = ranked[static_cast<std::size_t>(k)];
+        }
+        state.scripted_bruna_gather = -1;   // consumed by the first gather (the Tectonic convention)
+        if (g_play_dragon_chooser != nullptr)
+        {
+            // Human play: one multi-pick per zone, the provider's subset preselected. The `dragon`
+            // decision shows card IMAGES; a battlefield Aura's current host is named in the source
+            // line so two same-named Auras on different creatures stay distinguishable.
+            static const char* kZone[3] = { "attach Auras from the battlefield",
+                                            "put Aura cards from your hand",
+                                            "put Aura cards from your graveyard" };
+            std::vector<int> picked;
+            for (int z = 0; z < 3; ++z)
+            {
+                std::vector<int> zi;              // indices into cands
+                std::vector<Card> shown;
+                std::vector<int> heur;
+                std::string hosts;
+                for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+                {
+                    if (cands[static_cast<std::size_t>(i)].zone != z) { continue; }
+                    if (std::find(chosen.begin(), chosen.end(), i) != chosen.end())
+                    { heur.push_back(static_cast<int>(zi.size())); }
+                    zi.push_back(i);
+                    Card c; c.m_name = InternedName(cands[static_cast<std::size_t>(i)].name);
+                    c.RehashName(); c.m_number = cands[static_cast<std::size_t>(i)].number;
+                    shown.push_back(c);
+                    if (z == 0)
+                    {
+                        for (const Permanent& a : state.battlefield)
+                        {
+                            if (a.card.m_number != c.m_number) { continue; }
+                            for (const Permanent& h : state.battlefield)
+                            {
+                                if (h.card.m_number != a.aura_attached_to) { continue; }
+                                hosts += (hosts.empty() ? " (" : "; ") + c.m_name.str() + " on "
+                                       + h.card.m_name.str();
+                            }
+                        }
+                    }
+                }
+                if (zi.empty()) { continue; }
+                if (!hosts.empty()) { hosts += ")"; }
+                const std::vector<int> got = (*g_play_dragon_chooser)(
+                    state, controller, bname + " \xE2\x80\x94 " + kZone[z] + hosts, shown,
+                    static_cast<int>(shown.size()), heur);
+                for (int g : got)
+                { if (g >= 0 && g < static_cast<int>(zi.size())) { picked.push_back(zi[static_cast<std::size_t>(g)]); } }
+            }
+            chosen = picked;
+        }
+        if (chosen.empty()) { continue; }
+        std::sort(chosen.begin(), chosen.end());
+
+        // ---- resolve: attach first (no enter), then put (enters) ----
+        std::string moved, entered;
+        for (int ci : chosen)
+        {
+            const Cand& c = cands[static_cast<std::size_t>(ci)];
+            if (c.zone != 0) { continue; }
+            for (Permanent& a : state.battlefield)
+            {
+                if (a.card.m_number != c.number || a.controller_index != controller) { continue; }
+                a.aura_attached_to = bnum;
+                moved += (moved.empty() ? "" : ", ") + c.name;
+                break;
+            }
+        }
+        for (int ci : chosen)
+        {
+            const Cand& c = cands[static_cast<std::size_t>(ci)];
+            if (c.zone == 0) { continue; }
+            std::vector<Card>& zone = (c.zone == 1) ? state.players[controller].hand
+                                                    : state.players[controller].graveyard;
+            int zi = -1;
+            for (int i = 0; i < static_cast<int>(zone.size()); ++i)
+            { if (zone[static_cast<std::size_t>(i)].m_number == c.number) { zi = i; break; } }
+            if (zi < 0) { continue; }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(zone[static_cast<std::size_t>(zi)]);
+            int hb = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == bnum) { hb = i; break; } }
+            if (cd == nullptr || hb < 0) { continue; }
+            // Re-checked AT THIS MOMENT (an earlier put may have changed what could enchant it).
+            if (!AuraCouldEnchant(state, cd->params, state.battlefield[static_cast<std::size_t>(hb)])) { continue; }
+            Permanent perm;
+            perm.card              = cd->card;
+            perm.card.m_number     = c.number;
+            perm.controller_index  = controller;
+            perm.owner_index       = controller;
+            perm.entered_this_turn = true;
+            perm.aura_attached_to  = bnum;
+            zone.erase(zone.begin() + zi);
+            state.battlefield.push_back(perm);
+            const int slot = static_cast<int>(state.battlefield.size()) - 1;
+            // Its own ETB (Colossification: tap enchanted creature) -- in combat, no respond window.
+            ResolveAuraEnterTapHost(state, slot, /*respond_window=*/false);
+            FireEtbWatchers(state, controller, slot);
+            FireOwnEtbTriggers(state, controller, slot);
+            entered += (entered.empty() ? "" : ", ") + c.name
+                     + (c.zone == 1 ? " (from hand)" : " (from graveyard)");
+        }
+        if (g_play_event_sink != nullptr && (!moved.empty() || !entered.empty()))
+        {
+            std::string t = bname + ": ";
+            if (!moved.empty())   { t += "attaches " + moved; }
+            if (!entered.empty()) { t += (moved.empty() ? "" : "; ") + std::string("puts ") + entered + " onto it"; }
+            EmitPlayEvent(state.turn_number, "trigger", t);
+        }
+    }
+}
+
+// ---- Arcanum Wings: "Aura swap {2}{U} ({2}{U}: Exchange this Aura with an Aura card in your hand.)"
+bool ApplyAuraSwap(GameState& state, int controller, int wings_number, int hand_index,
+                   bool respond_window)
+{
+    int wi = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.card.m_number == wings_number && p.controller_index == controller) { wi = i; break; }
+    }
+    if (wi < 0) { return false; }
+    const int host = state.battlefield[static_cast<std::size_t>(wi)].aura_attached_to;
+    if (host == 0) { return false; }
+    int hi = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == host) { hi = i; break; } }
+    std::vector<Card>& hand = state.players[controller].hand;
+    if (hi < 0 || hand_index < 0 || hand_index >= static_cast<int>(hand.size())) { return false; }
+    const CardDefinition* cd = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(hand_index)]);
+    // Ruling: "If ... half the exchange can't be completed (such as if the only Aura in your hand
+    // can't enchant the permanent), nothing happens."
+    if (cd == nullptr || !cd->params.is_aura
+        || !AuraCouldEnchant(state, cd->params, state.battlefield[static_cast<std::size_t>(hi)]))
+    { return false; }
+    const std::string wname = state.battlefield[static_cast<std::size_t>(wi)].card.m_name.str();
+    const std::string hname = state.battlefield[static_cast<std::size_t>(hi)].card.m_name.str();
+    // Simultaneous exchange. The incoming Aura leaves the hand first (index stable), then the swap
+    // permanent leaves the battlefield and returns to hand as a NEW object (same per-copy number).
+    const int in_number = hand[static_cast<std::size_t>(hand_index)].m_number;
+    hand.erase(hand.begin() + hand_index);
+    Card back = state.battlefield[static_cast<std::size_t>(wi)].card;
+    back.m_is_staged = false;
+    back.m_def = nullptr;
+    state.battlefield.erase(state.battlefield.begin() + wi);
+    EnterHand(state, controller, std::move(back), HandEntryReason::Bounce);
+    Permanent perm;
+    perm.card              = cd->card;
+    perm.card.m_number     = in_number;
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    perm.aura_attached_to  = host;
+    state.battlefield.push_back(perm);
+    const int slot = static_cast<int>(state.battlefield.size()) - 1;
+    ResolveAuraEnterTapHost(state, slot, respond_window);
+    FireEtbWatchers(state, controller, slot);
+    FireOwnEtbTriggers(state, controller, slot);
+    if (g_play_event_sink != nullptr)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      wname + " \xE2\x87\x84 " + cd->card.m_name.str() + " on " + hname + " (aura swap)");
+    }
+    return true;
+}
+
+int AuraSwapPick(const GameState& state, int controller, int wings_number, bool host_attacking)
+{
+    int host = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.m_number == wings_number && p.controller_index == controller) { host = p.aura_attached_to; break; } }
+    if (host == 0) { return -1; }
+    const Permanent* hp = nullptr;
+    for (const Permanent& p : state.battlefield) { if (p.card.m_number == host) { hp = &p; break; } }
+    if (hp == nullptr) { return -1; }
+    std::vector<int> legal;
+    const std::vector<Card>& hand = state.players[controller].hand;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        if (hand[static_cast<std::size_t>(i)].m_is_staged) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
+        if (cd == nullptr || !cd->params.is_aura) { continue; }
+        if (!AuraCouldEnchant(state, cd->params, *hp)) { continue; }
+        legal.push_back(i);
+    }
+    if (legal.empty()) { return -1; }
+    const std::vector<int> ranked = ResolveProvider(state).AuraSwapRanking(
+        state, controller, wings_number, host, host_attacking, legal);
+    return ranked.empty() ? -1 : ranked.front();
+}
+
+// The in-combat Aura swap window (see the declaration).
+void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk_idx)
+{
+    const int pin = state.scripted_combat_aura_swap;
+    state.scripted_combat_aura_swap = -1;   // consumed whether or not it fires
+    const bool human = g_play_dig_chooser != nullptr;
+    if (pin < 0 && !human) { return; }
+    // Which swap permanents to consider: the pinned one, or (human) every one we control.
+    std::vector<int> wings_list;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent || p.aura_attached_to == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.aura_swap_cost.has_value()) { continue; }
+        if (human || p.card.m_number == pin % kAuraSwapRankStride) { wings_list.push_back(p.card.m_number); }
+    }
+    for (const int wnum : wings_list)
+    {
+        int wi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == wnum) { wi = i; break; } }
+        if (wi < 0) { continue; }
+        const Permanent& w = state.battlefield[static_cast<std::size_t>(wi)];
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd == nullptr || !wd->params.aura_swap_cost.has_value()) { continue; }
+        const int host = w.aura_attached_to;
+        bool host_attacking = false;
+        for (int ai : atk_idx)
+        {
+            if (ai >= 0 && ai < static_cast<int>(state.battlefield.size())
+                && state.battlefield[static_cast<std::size_t>(ai)].card.m_number == host) { host_attacking = true; }
+        }
+        int pick = -1;
+        if (!human)
+        {
+            const int rank = pin / kAuraSwapRankStride;
+            if (rank == 0) { pick = AuraSwapPick(state, controller, wnum, host_attacking); }
+            else
+            {
+                // Proof control arm (MTG_AURA_SWAP_BRANCH): the rank-th Aura of the same ranking.
+                std::vector<int> legal;
+                const Permanent* hp = nullptr;
+                for (const Permanent& p : state.battlefield) { if (p.card.m_number == host) { hp = &p; break; } }
+                const std::vector<Card>& hand = state.players[controller].hand;
+                for (int i = 0; hp && i < static_cast<int>(hand.size()); ++i)
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
+                    if (cd && cd->params.is_aura && !hand[static_cast<std::size_t>(i)].m_is_staged
+                        && AuraCouldEnchant(state, cd->params, *hp)) { legal.push_back(i); }
+                }
+                const std::vector<int> ranked = ResolveProvider(state).AuraSwapRanking(
+                    state, controller, wnum, host, host_attacking, legal);
+                if (rank < static_cast<int>(ranked.size())) { pick = ranked[static_cast<std::size_t>(rank)]; }
+            }
+        }
+        else
+        {
+            // Human: offer the hand, legal = the Auras that could enchant the host, -1 declines.
+            const Permanent* hp = nullptr;
+            for (const Permanent& p : state.battlefield) { if (p.card.m_number == host) { hp = &p; break; } }
+            const std::vector<Card>& hand = state.players[controller].hand;
+            std::vector<int> legal;
+            for (int i = 0; hp && i < static_cast<int>(hand.size()); ++i)
+            {
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
+                if (cd && cd->params.is_aura && !hand[static_cast<std::size_t>(i)].m_is_staged
+                    && AuraCouldEnchant(state, cd->params, *hp)) { legal.push_back(i); }
+            }
+            if (legal.empty() || hp == nullptr) { continue; }
+            { GameState probe = state;   // only ask when the swap is affordable right now
+              if (!TapForCostDirect(probe, *wd->params.aura_swap_cost, /*for_creature=*/false)) { continue; } }
+            const int c = (*g_play_dig_chooser)(
+                state, controller,
+                w.card.m_name.str() + " \xE2\x80\x94 aura swap " + wd->params.aura_swap_cost->ToString()
+                    + " in combat (on " + hp->card.m_name.str() + "): bring in which Aura? (decline = no swap)",
+                hand, legal, /*heuristic_pick=*/-1);
+            if (c < 0 || std::find(legal.begin(), legal.end(), c) == legal.end()) { continue; }
+            pick = c;
+        }
+        if (pick < 0) { continue; }
+        // Pay {2}{U} from what is untapped now (the plan left it up). A swap that cannot be paid
+        // does not happen -- the variant then scores like declining it.
+        if (!TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false)) { continue; }
+        std::vector<int> atk_nums;
+        for (int ai : atk_idx)
+        {
+            atk_nums.push_back((ai >= 0 && ai < static_cast<int>(state.battlefield.size()))
+                               ? state.battlefield[static_cast<std::size_t>(ai)].card.m_number : -1);
+        }
+        ApplyAuraSwap(state, controller, wnum, pick, /*respond_window=*/false);
+        // REPAIR atk_idx: the swap erased the Wings permanent (the fb-paysac index-shift class).
+        std::vector<int> fixed;
+        for (int num : atk_nums)
+        {
+            if (num < 0) { continue; }
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { fixed.push_back(i); break; } }
+        }
+        atk_idx = fixed;
+    }
+}
+
 
 // Expressive Iteration {U}{R}: "Look at the top three cards of your library. Put one into your hand,
 // put one on the bottom of your library, and exile one. You may play the exiled card this turn."
@@ -1995,6 +2380,13 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
 // invariant within a payment by construction (see dmgev::PaymentPainSafe) -- so the DFS does not
 // re-ask the provider per node, and so the mana cache can key it. False for every unarmed board.
 static thread_local bool g_bt_pay_with_pain = false;
+// CREATURE-ONLY UNITS IN THE DFS FLOAT (Somberwald Sage). Count of creature_mana_only sources tapped
+// on the current DFS path. While > 0 the path's `floating` may hold restricted units, and a filter's
+// feed is an activation cost of a MANA ABILITY, not a creature spell -- restricted mana may not pay it
+// (CR 106.6 + the card's own restriction). The DFS cannot tell which units are restricted, so the
+// fed-filter branches are skipped on such a path (conservative: the DFS still explores the orders
+// that feed the filter BEFORE tapping the restricted source). Reset per top-level solve.
+static thread_local int g_bt_restricted = 0;
 
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
@@ -2854,6 +3246,14 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         auto activate = [&](const ManaPool& next, bool drip_ok = true, int storage_burn = 0,
                             int energy_spend = 0, bool painless = false) -> bool
         {
+            // Creature-only source on this path (see g_bt_restricted). Restored on every failed
+            // return below; a success unwinds straight out and the top-level solve resets it.
+            struct RestrictedPath
+            {
+                bool on;
+                explicit RestrictedPath(bool o) : on(o) { if (on) { ++g_bt_restricted; } }
+                ~RestrictedPath() { if (on) { --g_bt_restricted; } }
+            } _restricted_path(def->params.creature_mana_only);
             state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
             // CRACK FLAG on the BACKTRACKER path (see CommitPaySacSacrifices). A pay-sac source is
@@ -2985,7 +3385,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (def->params.is_filter)
         {
             { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }  // {T}: Add {C}
-            if (floating.Total() >= 1 && !produces.empty())                                            // feed 1, Add 2
+            if (floating.Total() >= 1 && !produces.empty() && !(for_creature && g_bt_restricted > 0))                                            // feed 1, Add 2
             {
                 if (FilterFeedStrictOn())
                 {
@@ -3044,7 +3444,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
         else if (def->params.ramp_filter)
         {
-            if (floating.Total() >= 1 && !produces.empty())   // {1},{T}: feed 1, Add one of each colour
+            if (floating.Total() >= 1 && !produces.empty() && !(for_creature && g_bt_restricted > 0))   // {1},{T}: feed 1, Add one of each colour
             {
                 ManaPool f = floating; Color took;
                 if (ConsumeFloatingAny(f, took))
@@ -3061,7 +3461,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             // Astrolabe (filter_no_free_colorless) has NO free mode -- fed branch only.
             if (!def->params.filter_no_free_colorless)
             { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }
-            if (floating.Total() >= 1 && !produces.empty())
+            if (floating.Total() >= 1 && !produces.empty() && !(for_creature && g_bt_restricted > 0))
             {
                 // Branch over BOTH the feed unit and the output colour. The feed is GENERIC (any
                 // float pays it, as for ramp_filter), but unlike ramp_filter the output is a
@@ -3328,7 +3728,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             {
                 const int feeder = def->params.mana_per_creature_feeder_generic;
                 const int give   = ScaledManaCreatureCount(state);        // N of the chosen colour
-                if (give >= 1 && floating.Total() >= feeder)
+                if (give >= 1 && floating.Total() >= feeder && !(for_creature && g_bt_restricted > 0))
                 {
                     const Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
                     for (Color c : cols)

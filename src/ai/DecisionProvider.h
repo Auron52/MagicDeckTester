@@ -479,6 +479,32 @@ public:
         const GameState& s, int controller,
         const std::vector<Card>& examined, const std::vector<int>& legal) const;
 
+    // BrunaGatherCandidates -- Bruna, Light of Alabaster's attack trigger: "you may attach to it any
+    // number of Auras on the battlefield and ... put onto the battlefield attached to it any number
+    // of Aura cards that could enchant it from your graveyard and/or hand". `cands` are the legal
+    // candidates (zone 0 = battlefield Aura, 1 = hand card, 2 = graveyard card; `number` = m_number).
+    // Returns a RANKED list of SUBSETS (each a list of indices into `cands`); the trigger takes
+    // entry Plan::bruna_gather_choice (default 0) -- the searched axis. Base rule (out-of-line) is
+    // the EXACT goldfish dominance collapse, proof in DecisionProviders.cpp and pinned by
+    // test_bruna.cpp: every Aura whose effect on Bruna is ADDITIVE is always taken; only a
+    // host-dependent base-setter (Almost Perfect) branches take/skip. MTG_BRUNA_GATHER_FULL=1 (the
+    // proof's CONTROL arm only) returns the full powerset instead.
+    struct AuraGatherCand { int zone; int number; std::string name; };
+    virtual std::vector<std::vector<int>> BrunaGatherCandidates(
+        const GameState& s, int controller, const Permanent& bruna,
+        const std::vector<AuraGatherCand>& cands) const;
+
+    // AuraSwapRanking -- Arcanum Wings' "Aura swap: exchange this Aura with an Aura card in your
+    // hand". WHICH hand Aura to bring in, as hand INDICES ranked best-first, among `legal` (hand
+    // indices that could enchant the swap host). USER RULING 2026-10-05: rank on the resulting
+    // damage and take the top one -- a provider-owned one-option prune, PROVEN against the fully
+    // branched control arm (MTG_AURA_SWAP_BRANCH=1) in the Bruna ledger. `host_attacking` = the
+    // host is already an attacker this combat (a Colossification tap is then free); in a main
+    // phase the tap costs the host's attack this turn, which the ranking prices.
+    virtual std::vector<int> AuraSwapRanking(
+        const GameState& s, int controller, int wings_number, int host_number,
+        bool host_attacking, const std::vector<int>& legal) const;
+
     // AttackDigAttachHost -- the same trigger's second choice: WHICH controlled creature the put
     // Equipment attaches to (0 = leave unattached). Base rule (out-of-line): the host whose
     // realized damage THIS combat rises the most -- delta = (power+bonus)*(ds_after?2:1)

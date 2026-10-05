@@ -2891,6 +2891,8 @@ inline int CountAuraScaleUnits(const std::string& kind, const Permanent& aura,
 // re-walk the whole battlefield to discover there are no attachments on it at all. Byte-identical:
 // the list is a superset of what this loop's own filter keeps and the per-permanent body below is
 // applied unchanged. nullptr => walk the whole battlefield (original behaviour).
+inline int DynamicBasePower(const CardDefinition& def, const GameState& state, int controller_index);
+inline int DynamicBaseToughness(const CardDefinition& def, const GameState& state, int controller_index);
 inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameState& state,
                                        const std::vector<int>* attached_idx = nullptr)
 {
@@ -2898,6 +2900,9 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
     const int num  = creature.card.m_number;
     const int ctrl = creature.controller_index;
     int pw = 0, tb = 0, aura_count = 0;
+    // Almost Perfect's "has base power and toughness 9/10" (layer 7b, CR 613.4b). The LATEST such
+    // Aura wins (timestamp order = battlefield order, later index = more recent); -1 = none.
+    int set_p = -1, set_t = -1;
     auto consider = [&](const Permanent& a)
     {
         if (a.aura_attached_to != num || a.controller_index != ctrl) { return; }
@@ -2907,6 +2912,8 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
         ++aura_count;
         pw += d->params.aura_power_bonus;
         tb += d->params.aura_tough_bonus;
+        if (d->params.aura_set_base_power >= 0)
+        { set_p = d->params.aura_set_base_power; set_t = d->params.aura_set_base_toughness; }
         if (!d->params.aura_scale_kind.empty())
         {
             int units = CountAuraScaleUnits(d->params.aura_scale_kind, a, state, ctrl);
@@ -2921,6 +2928,27 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
     {
         pw += cd->params.aura_self_buff_power * aura_count;
         tb += cd->params.aura_self_buff_tough * aura_count;
+    }
+    // Layer 7b base SET, expressed as a DELTA that cancels the creature's current base (printed +
+    // characteristic-defining + animation) so that every combat site -- which sums EffectivePower()
+    // (printed + temp + counters) + lords + DynamicBasePower + AuraBonusFor + EquipBonusFor -- reads
+    // exactly set + all layer-7c modifiers with no call-site edits (Somberwald Sage 0/1 + Almost
+    // Perfect + Eldrazi Conscription = 19/20). The delta may be negative (a base above 9) and is not
+    // clamped. Executor, rollout and projection all read this one function -> lockstep.
+    if (set_p >= 0)
+    {
+        int cur_p = creature.card.m_power.value_or(0);
+        int cur_t = creature.card.m_toughness.value_or(0);
+        if (cd)
+        {
+            cur_p += DynamicBasePower(*cd, state, ctrl);
+            cur_t += DynamicBaseToughness(*cd, state, ctrl);
+            // Animation's power is added at the combat sites; its toughness is read nowhere (see
+            // the Gideon note), so only the power half is cancelled here.
+            if (creature.is_animated) { cur_p += cd->params.animate_power; }
+        }
+        pw += set_p - cur_p;
+        tb += set_t - cur_t;
     }
     return {pw, tb};
 }
@@ -3232,6 +3260,21 @@ inline bool AuraCouldEnchant(const GameState& state, const CardParams& pp, const
     return true;
 }
 
+// The m_numbers of `controller`'s permanents an Aura with params `pp` could be PUT onto / attached to
+// without targeting (AuraCouldEnchant over the battlefield, battlefield order). The put-path twin of
+// LegalEnchantTargets: Armored Skyhunter's dig-put, Bruna's gather and Arcanum Wings' swap use THIS,
+// so the cast-only shroud filter never removes a legal put host.
+inline std::vector<int> AuraCouldEnchantHosts(const GameState& state, int controller, const CardParams& pp)
+{
+    std::vector<int> out;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (AuraCouldEnchant(state, pp, p)) { out.push_back(p.card.m_number); }
+    }
+    return out;
+}
+
 // Does a chosen-keyword GRANT (Rick, Steadfast Leader: "Humans you control have ...") reach this
 // creature? keyword_grant_subtypes OR-filter on the LIVE subtypes; an all-creature-types animation
 // matches any typed grant (the lord rule). Empty list -> nothing (a grant must name its recipients).
@@ -3454,6 +3497,34 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 // provider-owned (AttackDigPutCandidates / AttackDigAttachHost, human-overridable via the dig /
 // attach-host choosers). Rest bottomed in examined order (approved deterministic collapse).
 void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx);
+// Bruna, Light of Alabaster's attack trigger (attack_gather_auras). Fired at declare-attackers in
+// BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat) after the attack pumps and
+// BEFORE the damage loop reads power, so the gathered Auras swing THIS combat. Only APPENDS to the
+// battlefield (put Auras), so `atk_idx` stays valid. See the definition for the full rules note.
+void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx);
+// Arcanum Wings' Aura swap (aura_swap_cost): exchange the Aura-swap permanent `wings_number` with
+// the hand Aura at `hand_index` -- simultaneous, on resolution; the hand Aura is PUT (not cast, does
+// not target, CR 303.4f) onto the same host and ENTERS (its ETB fires: Colossification taps the
+// host -- respond_window per ResolveAuraEnterTapHost). If either half cannot complete (the swap
+// permanent is gone / unattached, the hand card is gone or could not enchant the host) nothing
+// happens (the card's ruling). Does NOT pay the cost. ERASES the swap permanent from the
+// battlefield, so battlefield indices after it shift -- callers re-find by card number.
+// Returns true iff the exchange happened.
+bool ApplyAuraSwap(GameState& state, int controller, int wings_number, int hand_index,
+                   bool respond_window);
+// The provider-ranked damage-max hand Aura for an Aura swap of `wings_number` (hand index), or -1
+// when no hand Aura could enchant its host. Shared by the main-phase enumeration and the combat
+// window so both bring in the same Aura.
+int AuraSwapPick(const GameState& state, int controller, int wings_number, bool host_attacking);
+// Arcanum Wings' IN-COMBAT swap window: after attackers are declared and every attack trigger
+// (Bruna's gather included) has resolved, BEFORE the damage loop reads power. Consumes the searched
+// pin GameState::scripted_combat_aura_swap (Plan::combat_aura_swap_choice); a human at the viewer is
+// asked instead (the reused `dig` shape). Pays aura_swap_cost through TapForCostDirect in BOTH worlds
+// (lockstep by construction), then ApplyAuraSwap with no respond window, and REPAIRS `atk_idx` (the
+// swap erases a battlefield entry). The pin encodes the swap permanent's card number plus, under the
+// MTG_AURA_SWAP_BRANCH proof arm only, a rank: pin = number + kAuraSwapRankStride * rank.
+constexpr int kAuraSwapRankStride = 1 << 20;
+void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk_idx);
 
 // ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
 // control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on
@@ -4617,6 +4688,7 @@ inline bool CanAttackFull(
 {
     if (!p.card.IsCreature() && !p.is_animated) { return false; }
     if (p.tapped)                               { return false; }
+    if (p.etb_tap_pending)                      { return false; }   // Colossification: tapped at phase end
     if (p.card.HasKeyword(Keyword::Defender))   { return false; }
     if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
@@ -4634,6 +4706,7 @@ inline bool CanAttackFull(
 {
     if (!p.card.IsCreature() && !p.is_animated) { return false; }
     if (p.tapped)                               { return false; }
+    if (p.etb_tap_pending)                      { return false; }   // Colossification: tapped at phase end
     if (p.card.HasKeyword(Keyword::Defender))   { return false; }
     // Summoning sickness applies to animated lands too: an animated Mutavault may attack
     // only if the LAND has been controlled since before this turn (entered_this_turn is
@@ -4648,6 +4721,66 @@ inline bool CanAttackFull(
     if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }
     if (HasHasteFromLords(p.card, battlefield, controller_index, p.AnimatedAllTypes())) { return true; }
     return HasHasteFromEquip(p, battlefield, controller_index);
+}
+
+// Colossification: "When this Aura enters, tap enchanted creature." Resolved by EVERY aura-ENTER
+// site right AFTER aura_attached_to is set -- the executor's cast resolution, the rollout's
+// apply_one, Bruna, Light of Alabaster's put, Arcanum Wings' aura swap, the dig/tutor-attach puts --
+// never by FireOwnEtbTriggers, whose executor and rollout call points straddle the attach (the
+// executor fires it BEFORE EffectHandler sets the host, which would read 0). An ETB triggers on ANY
+// entry (CR 603.6a): a PUT fires it just like a cast. Re-attaching an Aura already on the
+// battlefield is not an enter and must NOT call this.
+//
+// Tapping an ATTACKING host does not remove it from combat (CR 506.4), so a combat-time put/swap
+// (respond_window=false) just taps it. In a MAIN PHASE (respond_window=true) the controller may
+// respond to the trigger by tapping the host for mana (CR 605.3a) -- modelled as a deferred tap
+// (Permanent::etb_tap_pending, see there) for an untapped mana dork that can tap now; anything else
+// is tapped immediately. A tapped host is a no-op. Emits a sink-guarded play event.
+inline void ResolveAuraEnterTapHost(GameState& state, int aura_slot, bool respond_window)
+{
+    if (aura_slot < 0 || aura_slot >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent& a = state.battlefield[static_cast<std::size_t>(aura_slot)];
+    if (a.aura_attached_to == 0 || a.def_absent) { return; }
+    const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+    if (ad == nullptr || !ad->params.aura_etb_tap_host) { return; }
+    const std::string aura_name = a.card.m_name.str();
+    const int aura_ctrl = a.controller_index;
+    for (Permanent& h : state.battlefield)
+    {
+        if (h.card.m_number != a.aura_attached_to) { continue; }
+        if (h.tapped || h.etb_tap_pending) { return; }
+        bool deferred = false;
+        if (respond_window && h.controller_index == aura_ctrl && !h.def_absent)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+            if (hd != nullptr && hd->tmpl == CardTemplate::ManaDork && CanTapNow(h, state.battlefield))
+            { deferred = true; }
+        }
+        if (deferred) { h.etb_tap_pending = true; }
+        else          { h.tapped = true; }
+        if (g_play_event_sink != nullptr)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          aura_name + ": taps " + h.card.m_name.str()
+                          + (deferred ? " (its mana ability may still be used this phase)" : ""));
+        }
+        return;
+    }
+}
+
+// End of the phase in which a Colossification ETB tap was RESPONDED to (see
+// Permanent::etb_tap_pending): the host is tapped now if the payer never tapped it for mana. Called
+// at the beginning of combat in BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat,
+// beside the floating-mana empty), so it can never attack that combat. The untap step clears the
+// flag (a main-2 deferral then untaps exactly as a real tap would). No-op without the flag.
+inline void ApplyPendingEtbTaps(GameState& state)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        if (!p.etb_tap_pending) { continue; }
+        p.tapped = true;
+        p.etb_tap_pending = false;
+    }
 }
 
 // Returns the total LIFE the opponent LOSES from attack triggers (e.g. Leeching Sliver:
@@ -15263,6 +15396,24 @@ inline int DynamicBaseToughness(const CardDefinition& def, const GameState& stat
     return 0;
 }
 
+// The power a creature deals in combat, summed exactly as ResolveCombatDamage / PendingAttackDamage
+// sum it (printed + temp + counters + lords + animation + CDA + Auras + Equipment), WITHOUT the
+// double-strike doubling. Used by the Bruna gather projection and Arcanum Wings' damage ranking so
+// both price an Aura move exactly as combat will realise it.
+inline int CombatPowerOf(const Permanent& p, const GameState& state)
+{
+    int pw = EquipGatePowerOf(p, state);
+    if (!p.def_absent)
+    {
+        if (const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card))
+        {
+            if (p.is_animated) { pw += d->params.animate_power; }
+            pw += DynamicBasePower(*d, state, p.controller_index);
+        }
+    }
+    return pw;
+}
+
 // The toughness a LETHAL-DAMAGE state-based action must compare against (CR 704.5g).
 //
 // `Permanent::EffectiveToughness()` is printed + temp bonus + counters ONLY. THREE static sources
@@ -16547,7 +16698,8 @@ inline bool IsScaledManaDork(const CardDefinition& def)
 // Both payers' one-of-each bundle rule must skip such a source -- the Three Tree City precedent.
 inline bool IsSingleColorBurstSource(const CardDefinition& def)
 {
-    return def.params.mana_per_life_gained;
+    // Somberwald Sage ("Add three mana of any ONE color") is the same shape at a fixed amount.
+    return def.params.mana_per_life_gained || def.params.produces_one_color;
 }
 
 // Live yield of one scaled-dork tap: creatures matching the subtype, own side only by default,
@@ -25433,6 +25585,9 @@ inline bool HasUntappedRampFeeder(const GameState& state)
                    || def->params.mana_rock;
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
+        // Creature-only mana (Somberwald Sage, Ancient Ziggurat) cannot pay a mana ability's {1}
+        // (CR 106.6 + the card's restriction) -- not a feeder. Inert for every other source.
+        if (def->params.creature_mana_only) { continue; }
         return true;
     }
     return false;
@@ -25577,7 +25732,14 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // so crediting it again from that override would invent mana that does not exist. Zero, and
     // therefore inert, for every source with no land aura attached.
     const int aura_bonus = (perm != nullptr) ? LandAuraBonus(state, *perm) : 0;
-    if (aura_bonus > 0) { LandAuraAddToPool(pool, state, *perm); }
+    // ...EXCEPT on a ramp filter that cannot be activated (Wild Growth on Skycloud Expanse with no
+    // feeder): it is then never "tapped for mana", so the aura adds nothing either. The fed test is
+    // the ramp_filter branch's own, below. Ramp filter + land aura appears only in the Bruna list,
+    // so every other deck is byte-identical.
+    const bool ramp_unfed = aura_bonus > 0 && def.params.ramp_filter
+        && !HasUntappedRampFeeder(state)
+        && !(FloatFeedsRampFilterEnabled() && FloatLeftoverManaEnabled() && state.floating_mana.Total() > 0);
+    if (aura_bonus > 0 && !ramp_unfed) { LandAuraAddToPool(pool, state, *perm); }
     if (def.params.is_filter)
     {
         if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }

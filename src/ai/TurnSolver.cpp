@@ -548,7 +548,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.temp_double_strike ? 8192ull : 0ull)     // Valiant Knight until-EOT team grant
          | (p.skip_next_untap ? 16384ull : 0ull)       // EXERT (CR 701.38): will miss its next untap
          | (p.animated_printed_types ? 32768ull : 0ull)   // typed animation, NOT all creature types
-         | (p.lifegain_counters_used_this_turn ? 65536ull : 0ull));  // Nykthos Paragon once-each-turn
+         | (p.lifegain_counters_used_this_turn ? 65536ull : 0ull)   // Nykthos Paragon once-each-turn
+         | (p.etb_tap_pending ? 131072ull : 0ull));  // Colossification's deferred ETB tap
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -7541,6 +7542,50 @@ static int AttackTapDiscount(const std::vector<AttackingManaSource>& srcs, int n
     return lost;
 }
 
+// Projection twin of Bruna's gather + Arcanum Wings' in-combat swap (FireAttackGatherAuras /
+// ApplyCombatAuraSwap): the extra damage THIS combat, computed by running the very same two helpers
+// on a COPY with the projection's attacker set and summing each attacker's combat power after minus
+// before (doubled for double strike). Same provider call and same pins as the real combat, so the
+// search cannot credit a gather the combat will not perform (the overshoot / fd-diverge class) --
+// and without it the search under-rates attacking with Bruna by up to +20/+20 (Colossification).
+// Free unless an attacker carries attack_gather_auras or the combat-swap pin is set.
+static int CountAttackGatherPump(const GameState& state, int active,
+                                 const std::vector<const Permanent*>& attackers)
+{
+    bool live = state.scripted_combat_aura_swap >= 0;
+    for (const Permanent* p : attackers)
+    {
+        if (live) { break; }
+        if (p->def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p->card);
+        if (d != nullptr && d->params.attack_gather_auras) { live = true; }
+    }
+    if (!live || attackers.empty()) { return 0; }
+    std::vector<int> atk_idx;
+    std::vector<int> nums;
+    int before = 0;
+    for (const Permanent* p : attackers)
+    {
+        atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
+        nums.push_back(p->card.m_number);
+        before += std::max(0, CombatPowerOf(*p, state)) * (CreatureHasDoubleStrike(*p, state) ? 2 : 1);
+    }
+    GameState t = state;
+    FireAttackGatherAuras(t, active, atk_idx);
+    ApplyCombatAuraSwap(t, active, atk_idx);
+    int after = 0;
+    for (int num : nums)
+    {
+        for (const Permanent& q : t.battlefield)
+        {
+            if (q.card.m_number != num) { continue; }
+            after += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
+            break;
+        }
+    }
+    return after - before;
+}
+
 static int PendingAttackDamage(const GameState& state)
 {
     int dmg = 0;
@@ -7606,6 +7651,8 @@ static int PendingAttackDamage(const GameState& state)
     // Dwalin: the hone trigger resolves IN the declare-attackers step, so the +1/+0 per
     // counter applies to THIS combat. Without this the search reads the pre-trigger power.
     dmg += CountAttackHonePump(state, active, attackers);
+    // Bruna's gather + Arcanum Wings' in-combat swap: the Auras land on attackers THIS combat.
+    dmg += CountAttackGatherPump(state, active, attackers);
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
     // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
     // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
@@ -14341,6 +14388,10 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // ...and its mode-B keep index -- same must-fold rule. Two variants differing ONLY in which
     // exiled card they stage are distinct plans; collapsing them re-steals the decision.
     fold(static_cast<uint64_t>(p.tectonic_keep_choice + 2) * 73);
+    // Bruna gather subset / Arcanum Wings combat swap -- same must-fold rule; value-gated so every
+    // deck without either card keeps its exact signature value.
+    if (p.bruna_gather_choice != -1) { fold(static_cast<uint64_t>(p.bruna_gather_choice + 2) * 79); }
+    if (p.combat_aura_swap_choice != -1) { fold(static_cast<uint64_t>(p.combat_aura_swap_choice + 2) * 83); }
     return h;
 }
 // DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
@@ -14603,6 +14654,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
+        && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && !p.vial_after_casts && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
@@ -15112,7 +15164,9 @@ namespace {
 // unique per-card-instance number, so two copies of a card never collide.
 enum : uint64_t {
     kActLoyalty = 1, kActSpore, kActBlink, kActTeamPump, kActPod, kActSacOutlet,
-    kActModeBase                     // PermAbilityMode i -> kActModeBase + i
+    kActModeBase,                    // PermAbilityMode i -> kActModeBase + i
+    // Out-of-band slot (NOT kActModeBase-relative, so no existing key moves): Arcanum Wings' swap.
+    kActAuraSwap = 200
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -15192,6 +15246,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
 
     if (ActAffordable(state, ctrl, p.card, pp.blink_cost, total_cache))
     { out.push_back(ActKey(num, kActBlink)); }
+    // Arcanum Wings' Aura swap (SITE 9): an ATTACHED swap permanent with its {2}{U} affordable. A
+    // plan that CASTS Wings makes the swap newly activatable mid-plan -- without this key the
+    // continuation that swaps it the same main phase is unreachable at any budget (activations are
+    // enumerated against the plan-START battlefield).
+    if (p.aura_attached_to != 0 && ActAffordable(state, ctrl, p.card, pp.aura_swap_cost, total_cache))
+    { out.push_back(ActKey(num, kActAuraSwap)); }
     // A {T}-in-cost team pump (Fortified Beachhead) has no activation on a tapped source.
     if ((!pp.team_pump_taps_source || (!p.tapped && p.CanTap()))
         && ActAffordable(state, ctrl, p.card, pp.team_pump_cost, total_cache))
@@ -23175,6 +23235,62 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // Arcanum Wings' Aura swap, MAIN-PHASE window ("{2}{U}: Exchange this Aura with an Aura card in
+        // your hand"). One action per attached swap permanent, bringing in the provider's damage-max
+        // hand Aura (AuraSwapPick -- USER ruling 2026-10-05: rank on damage, take the top one; the
+        // proof control arm MTG_AURA_SWAP_BRANCH=1 emits every legal Aura instead). Human play never
+        // narrows: one variant per DISTINCT legal hand Aura name. The swap is legal onto a shrouded
+        // (Lightning Greaves) host -- the put does not target (CR 303.4f). Whether to swap at all,
+        // here or in combat (the Plan::combat_aura_swap_choice pin), is the search's.
+        {
+            static const bool s_swap_branch = EnvOn("MTG_AURA_SWAP_BRANCH");   // proof control arm only
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.aura_attached_to == 0
+                    || p.def_absent) { continue; }
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (!pd || !pd->params.aura_swap_cost.has_value()) { continue; }
+                const Permanent* hp = nullptr;
+                for (const Permanent& q : state.battlefield)
+                { if (q.card.m_number == p.aura_attached_to) { hp = &q; break; } }
+                if (hp == nullptr) { continue; }
+                std::vector<int> picks;
+                if (HumanPlayActive() || s_swap_branch)
+                {
+                    std::unordered_set<std::string> seen_swap;
+                    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+                    {
+                        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+                        if (c.m_is_staged) { continue; }
+                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                        if (!cd || !cd->params.is_aura || !AuraCouldEnchant(state, cd->params, *hp)) { continue; }
+                        if (seen_swap.insert(c.m_name.str()).second) { picks.push_back(i); }
+                    }
+                }
+                else
+                {
+                    const int k = AuraSwapPick(state, state.active_player_index, p.card.m_number,
+                                               /*host_attacking=*/false);
+                    if (k >= 0) { picks.push_back(k); }
+                }
+                for (int k : picks)
+                {
+                    const Card& hc = ap.hand[static_cast<std::size_t>(k)];
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(hc);
+                    Action a;
+                    a.kind           = Action::Kind::AuraSwap;
+                    a.card_name      = hc.m_name;         // the Aura brought IN; the swap source rides sac_source_id
+                    a.hand_index     = -1;                // resolved by name at apply (hand shifts)
+                    a.cost           = *pd->params.aura_swap_cost;
+                    a.sac_source_id  = p.card.m_number;
+                    a.eval           = std::max(1, (cd ? cd->card.m_mana_cost.ManaValue() : 0)
+                                                   - a.cost.ManaValue());
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+        }
+
         // Umezawa's Jitte non-combat modes (user-directed 2026-08-13: implemented, not deferred).
         // "Remove a charge counter: target creature gets -1/-1 until end of turn" -- one variant
         // per OPPONENT creature (own-creature targets are strictly bad and pruned; human play
@@ -26117,6 +26233,7 @@ static int ActivationFamilyKey(const Action& a)
         case Action::Kind::GraveyardPlayAbility:     // shared {T}: one gy-play per Kaldring
         case Action::Kind::AttachAllEquipment:
         case Action::Kind::PutFromHandAbility:   // shared {T}: one put per Stoneforge
+        case Action::Kind::AuraSwap:             // one swap per Wings (a swapped Wings is in hand)
         case Action::Kind::JitteModeAbility:     // one counter-spend variant per Jitte per plan
         // Blink: one outlet fans out over (every legal target) x (every candidate count), so its
         // variants are the widest family here -- exactly the 2^k odometer blowup this grouping
@@ -29526,6 +29643,8 @@ namespace solvememo
             || a.fling_victim_choice != b.fling_victim_choice
             || a.tectonic_mode_choice != b.tectonic_mode_choice
             || a.tectonic_keep_choice != b.tectonic_keep_choice
+            || a.bruna_gather_choice != b.bruna_gather_choice
+            || a.combat_aura_swap_choice != b.combat_aura_swap_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
@@ -33172,6 +33291,30 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         { g_wild_prepay_excess.fetch_add(pool.wild - combined.generic, std::memory_order_relaxed); }
     }
     state.floating_mana = pool;
+    // CREATURE-ONLY PROVENANCE (see GameState::floating_creature_mana). An all-creature batch may tap
+    // a creature_mana_only source (Somberwald Sage), and its output must not survive the batch as
+    // GENERAL float -- a mid-phase draw could then spend it on a noncreature spell. Every cast in an
+    // all_creatures batch IS a creature spell, so booking the whole pre-paid pool as creature-only is
+    // legal for every cast it funds; any surplus stays restricted (conservative: a general source's
+    // over-tap is under-credited, never laundered). A mixed batch cannot tap such a source at all
+    // (RestrictedManaUsable refuses it for for_creature=false). No-op unless one was tapped.
+    if (all_creatures)
+    {
+        bool restricted_tapped = false;
+        const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+        for (int bi = 0; bi < nb && !restricted_tapped; ++bi)
+        {
+            const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+            if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+            if (bd != nullptr && bd->params.creature_mana_only) { restricted_tapped = true; }
+        }
+        if (restricted_tapped)
+        {
+            state.floating_creature_mana.AddPool(state.floating_mana);
+            state.floating_mana = ManaPool{};
+        }
+    }
     // PREVENT DAMAGE (armed only): the batch prepay is a payment that bypasses TapForCostShared, so
     // it resolves its own tap triggers here, once the whole-turn solve has committed.
     dmgev::FlushDamageEvents(state);
@@ -33469,6 +33612,7 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
         case Action::Kind::AttachAllEquipment:
         case Action::Kind::AttachAllFreeEquipment:
         case Action::Kind::PutFromHandAbility:
+        case Action::Kind::AuraSwap:
         case Action::Kind::JitteModeAbility:
         case Action::Kind::Equip:
         case Action::Kind::ActivateLoyalty:
@@ -33663,6 +33807,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Searched Tectonic Giant mode: same reasoning -- the trigger fires at declare-attackers.
     if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
     if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
+    if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
+    if (plan.combat_aura_swap_choice >= 0) { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; }
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard.
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
@@ -36508,6 +36654,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 state.battlefield.back().aura_attached_to =
                     ResolveEnchantTarget(state, state.active_player_index, enchant_target,
                                          def.params.is_land_aura);
+                // Colossification's ETB tap -- lockstep with EffectHandler's executor attach.
+                ResolveAuraEnterTapHost(state, static_cast<int>(state.battlefield.size()) - 1,
+                                        /*respond_window=*/true);
                 PerformLightPawsAttach(state, state.active_player_index,
                                        def.card.m_mana_cost.ManaValue(),
                                        g_bp_trace_arm ? "APPLY" : "rollout");
@@ -37922,6 +38071,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
+        else if (a.kind == Action::Kind::AuraSwap)
+        {
+            // Arcanum Wings' main-phase swap: pay {2}{U}, then the shared ApplyAuraSwap (the hand
+            // Aura is resolved BY NAME here -- the hand shifts across a plan). Main phase -> the
+            // Colossification respond window applies. Executor twin: AIEngine's AuraSwap branch.
+            int hi = -1;
+            const std::vector<Card>& hh = state.players[state.active_player_index].hand;
+            for (int i = 0; i < static_cast<int>(hh.size()); ++i)
+            { if (!hh[static_cast<std::size_t>(i)].m_is_staged && hh[static_cast<std::size_t>(i)].m_name == a.card_name) { hi = i; break; } }
+            if (hi >= 0 && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyAuraSwap(state, state.active_player_index, a.sac_source_id, hi, /*respond_window=*/true); }
+        }
         else if (a.kind == Action::Kind::JitteModeAbility)
         {
             // Jitte -1/-1 / lifegain / +N/+N: the cost is the counter, spent inside the apply.
@@ -38702,7 +38863,8 @@ static void SimulateCombat(GameState& state)
     // floated this main phase so it cannot fund combat or the post-combat main. Mirrors
     // GameEngine::CombatPhase. Off (MTG_NO_FLOAT_LEFTOVER) -> no-op (pool only ever held
     // ritual float, which was already spent this main phase -> byte-identical regardless).
-    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; }
+    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{}; }
+    ApplyPendingEtbTaps(state);   // Colossification's responded-to ETB tap (lockstep w/ GameEngine::CombatPhase)
     int active  = state.active_player_index;
 
     // Stamp the post-combat productivity markers BEFORE anything in combat can move a card
@@ -38771,6 +38933,11 @@ static void SimulateCombat(GameState& state)
     ApplyAttackLifegainTeamPump(state, active, atk_idx);
     // Harbin's attack-threshold pump. Mirrors GameEngine::CombatPhase (lockstep, ONE shared helper).
     ApplyAttackThresholdTeamPump(state, active, atk_idx, declared_n);
+
+    // Bruna's gather, then Arcanum Wings' in-combat aura swap. Mirrors GameEngine::CombatPhase
+    // (lockstep, same position relative to every power read; see the note there).
+    FireAttackGatherAuras(state, active, atk_idx);
+    ApplyCombatAuraSwap(state, active, atk_idx);
 
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
@@ -39020,6 +39187,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ++state.turn_number;
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
+    state.floating_creature_mana   = ManaPool{};   // creature-only reserve too (lockstep w/ UntapStep)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
@@ -39032,6 +39200,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_fling_victim   = -1;            // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode  = -1;            // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_tectonic_keep  = -1;            // ...and its mode-B keep pin (same lockstep)
+    state.scripted_bruna_gather   = -1;            // searched Bruna gather subset (same lockstep)
+    state.scripted_combat_aura_swap = -1;          // searched Arcanum Wings combat swap (same lockstep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
@@ -39064,6 +39234,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             // or not it actually held anything tapped -- an exerted permanent that somehow untapped
             // by other means must not stay flagged. Checked alongside the Rimescale ice lock: both
             // are per-permanent reasons not to untap. Lockstep pair; see Permanent::skip_next_untap.
+            // A main-2 Colossification tap that was responded to (etb_tap_pending) is realised
+            // here first, so the untap below treats it exactly like a real tap (exert included).
+            if (p.etb_tap_pending) { p.tapped = true; p.etb_tap_pending = false; }
             const bool exert_holds = p.skip_next_untap;
             p.skip_next_untap = false;
             if (!exert_holds && !(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
@@ -42956,6 +43129,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::PutFromHandAbility:
                     msf.push_back("SFPUT#" + std::to_string(act.sac_source_id)
                                   + "#" + act.card_name); break;
+                // Arcanum Wings' swap: which Wings AND which Aura (the same dedup lesson).
+                case Action::Kind::AuraSwap:
+                    msf.push_back("AURASWAP#" + std::to_string(act.sac_source_id)
+                                  + "#" + act.card_name); break;
                 // Jitte mode: which Jitte, which mode, which target.
                 case Action::Kind::JitteModeAbility:
                     msf.push_back("JITTE#" + std::to_string(act.sac_source_id)
@@ -43858,6 +44035,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     if (pp.sac_lifegain_per_creature_cost.has_value() || pp.tap_lifegain_cost.has_value())
     { return true; }
     if (pp.blink_cost.has_value() || pp.team_pump_cost.has_value()) { return true; }
+    // Arcanum Wings (2026-10-05): a Wings CAST this plan is an attached Aura whose {2}{U} swap the
+    // continuation can activate in the same phase (CollectActivationKeys' kActAuraSwap).
+    if (pp.aura_swap_cost.has_value()) { return true; }
     if (pp.pod_mv_delta != 0) { return true; }
     if (pp.sac_creature_outlet) { return true; }
     // Soldiers (2026-10-04): Recruitment Officer's activated dig and every pay-token ability
@@ -44360,6 +44540,10 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (a.kind == Action::Kind::ActivatePermAbility
                 && a.ability_mode == Action::AbilityMode::ActivatedDig)
             { mask |= 1 << 10; continue; }
+            // Arcanum Wings' main-phase swap RETURNS the Wings to hand -- a non-cast hand entry the
+            // section-level window arms site 10 for, so the continuation can recast it (and swap
+            // again in combat). Mark the route so it is fanned.
+            if (a.kind == Action::Kind::AuraSwap) { mask |= 1 << 10; continue; }
         }
     }
     return mask;
@@ -46270,6 +46454,130 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED BRUNA GATHER SUBSET + ARCANUM WINGS IN-COMBAT SWAP -- two post-dedup fan-outs on the
+    // tectonic pattern (base plans only, one axis at a time, so cost stays additive). Both are
+    // decided in the main phase and consumed at declare-attackers through a GameState pin.
+    //
+    // Bruna: the provider's subset list has more than one entry only when a HOST-DEPENDENT Aura
+    // (Almost Perfect) is a candidate, so emit the extra entries only while one is reachable THIS
+    // turn -- on the battlefield, in hand, in the graveyard, or in the sideboard with a wish in hand
+    // (a main-1 Glittering Wish can fetch it before combat). An index out of range at resolution
+    // falls back to entry 0 (a duplicate scores identically). Unconditional (no lever): a missing
+    // capability is not a heuristic (the no-greedy rule). MTG_BRUNA_GATHER_FULL (the proof's control
+    // arm) widens it to the full powerset width.
+    //
+    // Arcanum Wings: one variant per Aura-swap permanent that can be on the battlefield at combat
+    // (attached now, or in hand to be cast by this plan), pinning "swap it in combat"; the Aura it
+    // brings in is the provider's damage-max pick at that moment (USER ruling 2026-10-05, proven
+    // against MTG_AURA_SWAP_BRANCH, which instead emits one variant per ranked hand Aura). A
+    // variant whose swap cannot happen (no mana left, no legal Aura, Wings never cast) scores
+    // exactly like its base plan.
+    if (!cont_axes_only && !HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        const Player& bp = state.players[me];
+        bool bruna_live = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.attack_gather_auras) { bruna_live = true; break; }
+        }
+        for (const Card& c : bp.hand)
+        {
+            if (bruna_live) { break; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.attack_gather_auras) { bruna_live = true; }
+        }
+        int gather_width = 1;
+        if (bruna_live)
+        {
+            static const bool full = EnvOn("MTG_BRUNA_GATHER_FULL");   // proof control arm only
+            int dep = 0, any_aura = 0;
+            auto count = [&](const CardDefinition* d)
+            {
+                if (d == nullptr || !d->params.is_aura || d->params.is_land_aura) { return; }
+                ++any_aura;
+                if (d->params.aura_set_base_power >= 0) { ++dep; }
+            };
+            for (const Permanent& p : state.battlefield)
+            { if (p.controller_index == me && !p.def_absent) { count(CardDatabase::Instance().LookupCached(p.card)); } }
+            for (const Card& c : bp.hand)      { count(CardDatabase::Instance().LookupCached(c)); }
+            for (const Card& c : bp.graveyard) { count(CardDatabase::Instance().LookupCached(c)); }
+            bool wish_in_hand = false;
+            for (const Card& c : bp.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->params.wish_from_sideboard) { wish_in_hand = true; break; }
+            }
+            if (wish_in_hand)
+            {
+                for (const Card& c : bp.sideboard)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d != nullptr && d->params.is_aura && d->params.aura_set_base_power >= 0) { ++dep; }
+                }
+            }
+            gather_width = full ? (1 << std::min(any_aura + dep, 6)) : (1 << std::min(dep, 4));
+        }
+        std::vector<int> wings;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent || p.aura_attached_to == 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.aura_swap_cost.has_value()) { wings.push_back(p.card.m_number); }
+        }
+        for (const Card& c : bp.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.aura_swap_cost.has_value()) { wings.push_back(c.m_number); }
+        }
+        int swap_ranks = 1;
+        static const bool swap_branch = EnvOn("MTG_AURA_SWAP_BRANCH");   // proof control arm only
+        if (swap_branch && !wings.empty())
+        {
+            int n = 0;
+            for (const Card& c : bp.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->params.is_aura && !d->params.is_land_aura) { ++n; }
+            }
+            swap_ranks = std::max(1, std::min(n, 8));
+        }
+        if (gather_width > 1 || !wings.empty())
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                    || p.tectonic_keep_choice >= 0)
+                { continue; }
+                for (int k = 1; k < gather_width; ++k)
+                {
+                    TurnSolver::Plan v = p;
+                    v.bruna_gather_choice = k;
+                    extra.push_back(std::move(v));
+                }
+                for (int wnum : wings)
+                {
+                    for (int r = 0; r < swap_ranks; ++r)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.combat_aura_swap_choice = wnum + kAuraSwapRankStride * r;
+                        extra.push_back(std::move(v));
+                    }
+                }
+            }
+            TRACE("brunaaxis", "T%d %zu plan(s) -> %zu variant(s) (gather width %d, wings %zu x %d)",
+                  state.turn_number, all.size(), extra.size(), gather_width, wings.size(), swap_ranks);
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     // SEARCHED PONDER KEEP-vs-SHUFFLE -- the post-dedup fan-out that makes the decision real. Both
     // ponder_keep values are always legal, so unlike the tutor/dig axes there is no candidate list to
     // size: emit the two pinned alternatives and let the base plan carry the heuristic. One of the
@@ -46628,6 +46936,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
+                        || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -46721,6 +47030,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
+                        || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -46957,6 +47267,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0
+                    || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                     || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
@@ -47183,6 +47494,7 @@ static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolv
             || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
             || p.vial_charge_choice >= 0 || p.fling_victim_choice != -1
             || p.tectonic_mode_choice != -1 || p.tectonic_keep_choice != -1
+            || p.bruna_gather_choice != -1 || p.combat_aura_swap_choice != -1
             || p.saga_target_choice != -1 || p.saga_ch1_choice != -1 || p.dig_choice >= 0
             || !p.sac_pins.empty() || p.freshmode_choice != 0 || p.tapmode_choice != 0)
         { continue; }
@@ -47262,7 +47574,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 392;   // pinned; see the static_assert below
+static constexpr std::size_t kPlanDomAssertedSize = 400;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -47399,6 +47711,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.tutor_choice); add(pl.tapmode_choice); add(pl.freshmode_choice);
             add(pl.lackey_choice); add(pl.fling_victim_choice);
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
+            add(pl.bruna_gather_choice); add(pl.combat_aura_swap_choice);
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
@@ -49380,6 +49693,8 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // of the very ability it was choosing to activate. Folded ONLY when set, so every deck with
         // no exert source keeps the EXACT prior key (byte-identical).
         if (perm.skip_next_untap) { Fold(tk, 0xE7E27); }
+        // Colossification's deferred ETB tap: tapped at phase end, cannot attack -> not fungible.
+        if (perm.etb_tap_pending) { Fold(tk, 0xC0105); }
         // A TYPED animation (Gideon's +1) is a materially different board from a Mutavault-style one:
         // the same is_animated bit, but no subtype lord reaches it. Folded only when set, so every
         // deck whose only animation is all-types keeps the EXACT prior key (byte-identical).
@@ -61882,6 +62197,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 // a source-keyed snapshot cannot see), so it is kept as unknown.
                 case Action::Kind::ActivateVial:
                 case Action::Kind::PutFromHandAbility:
+                case Action::Kind::AuraSwap:   // puts a NAMED hand Aura onto the battlefield
                     if (name_is_new(a.card_name)) { uses_new = true; }
                     else                          { unknown = true; }
                     break;
@@ -62358,6 +62674,8 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         }
         else if (a.kind == Action::Kind::PutFromHandAbility)
         { cast_names.push_back("put " + a.card_name + " from hand"); }
+        else if (a.kind == Action::Kind::AuraSwap)
+        { cast_names.push_back("aura swap \xE2\x87\x84 " + a.card_name); }
         else if (a.kind == Action::Kind::JitteModeAbility)
         { cast_names.push_back(a.card_name + (a.gy_exile_mode == 1 ? ": -1/-1" : ": gain 2 life")); }
         // Blink activations: listed bare under "cast:", a blink read "cast: Eldrazi Displacer" --

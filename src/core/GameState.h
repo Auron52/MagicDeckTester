@@ -297,6 +297,16 @@ struct GameState
     // start of each turn's planning/execution -> byte-identical when nothing fills it. NEVER
     // folded into BuildSimKey (it is empty at every cross-turn decision point).
     ManaPool                 floating_mana;
+    // CREATURE-ONLY reserve: unspent mana produced by a creature_mana_only source ("Spend this mana
+    // only to cast creature spells" -- Somberwald Sage's three-of-one-colour tap, Ancient Ziggurat).
+    // Before 2026-10-05 a payment's leftover went into floating_mana unconditionally, which was sound
+    // only because every such source yielded ONE mana and was fully spent; the Sage yields three, so
+    // Sage -> Mother of Runes would have floated {W}{W} that could pay Colossification. A creature
+    // payment drains this FIRST (ManaPayment's TapForCostSharedOnce); a noncreature payment never
+    // sees it; it is credited only to creature-side pools (AvailableManaPool, the creature colour
+    // test), never to BuildNonCreaturePool. Reset at exactly the floating_mana reset sites (lockstep);
+    // like floating_mana, never folded into BuildSimKey (empty at every cross-phase boundary).
+    ManaPool                 floating_creature_mana;
     // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
     // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,
     // TurnSolver::apply_one, and the off-suspend CastOffSuspend -- a Lotus Bloom arrival IS a cast),
@@ -727,6 +737,17 @@ struct GameState
     // Same state-pin shape, lifetime and first-trigger-consumes convention as the mode above;
     // out of range for the cards actually exiled (a short library) falls back to the default.
     int                      scripted_tectonic_keep = -1;
+    // Searched BRUNA, LIGHT OF ALABASTER gather subset (Plan::bruna_gather_choice): which entry of
+    // the provider's ranked BrunaGatherCandidates subset list the attack trigger takes. -1 = the
+    // provider's front (byte-identical). Same state-pin shape and lifetime as the Tectonic pins --
+    // decided in the main phase, consumed (and cleared) by the first gather at declare-attackers;
+    // an index out of range at resolution falls back to the front.
+    int                      scripted_bruna_gather = -1;
+    // Searched ARCANUM WINGS in-combat aura swap (Plan::combat_aura_swap_choice): the CARD NUMBER of
+    // the Aura-swap permanent to activate after attackers are declared (and every attack trigger,
+    // Bruna's included, has resolved), -1 = no combat swap. Which hand Aura it brings in is the
+    // provider's damage-max pick at that moment (USER ruling 2026-10-05). Same pin lifetime as above.
+    int                      scripted_combat_aura_swap = -1;
     // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked
     // CleanupDiscardCandidates this turn's FIRST cleanup shed takes. Same state-pin shape as
     // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan but

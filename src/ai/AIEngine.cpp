@@ -3757,6 +3757,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
     if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
     if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
+    if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
+    if (plan.combat_aura_swap_choice >= 0) { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; }
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's
@@ -5451,6 +5453,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (m_logger)
                 { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
                                        "put " + a.card_name.str() + " onto the battlefield"); }
+            }
+        }
+        else if (a.kind == Action::Kind::AuraSwap)
+        {
+            // Arcanum Wings' main-phase swap (executor mirror -- same shared ApplyAuraSwap).
+            int hi = -1;
+            const std::vector<Card>& hh = state.players[state.active_player_index].hand;
+            for (int i = 0; i < static_cast<int>(hh.size()); ++i)
+            { if (!hh[static_cast<std::size_t>(i)].m_is_staged && hh[static_cast<std::size_t>(i)].m_name == a.card_name) { hi = i; break; } }
+            ManaPool avail = AvailableManaPool(state);
+            if (hi >= 0 && TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
+                const std::string in_name = a.card_name.str();
+                if (ApplyAuraSwap(state, state.active_player_index, a.sac_source_id, hi,
+                                  /*respond_window=*/true) && m_logger)
+                { m_logger->LogAbility(a.sac_source_id, "Aura swap", "swap in " + in_name); }
             }
         }
         else if (a.kind == Action::Kind::JitteModeAbility)
