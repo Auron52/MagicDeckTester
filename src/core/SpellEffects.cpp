@@ -1794,22 +1794,27 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     // the sweep: depleted lands are strictly earlier entries, so the karoo's index shifts down by
     // the number erased before it.
     {
-        const int before = static_cast<int>(state.battlefield.size());
-        int erased_before_self = 0;
-        for (int i = 0; i < before; ++i)
-        {
-            if (i >= self_index) { break; }
-            const Permanent& p = state.battlefield[i];
-            if (!p.card.IsLand()) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d == nullptr || d->params.enters_tapped_with_depletion <= 0) { continue; }
-            bool has_counters = false;
-            for (const Counter& c : p.counters)
-            { if (c.type == Counter::Type::Depletion && c.count > 0) { has_counters = true; break; } }
-            if (!has_counters) { ++erased_before_self; }
-        }
+        // Re-locate the karoo by IDENTITY after the sweep, not by counting erased slots: the
+        // depletion sack now also runs the orphaned-Aura SBA (an Aura on the sacked land -- or any
+        // other orphan earlier in the vector -- is erased too), so slot arithmetic over lands alone
+        // would mis-index. The karoo is the LAST slot in every caller and is never erased here.
+        const int  self_num   = (self_index >= 0 && self_index < static_cast<int>(state.battlefield.size()))
+                              ? state.battlefield[self_index].card.m_number : 0;
+        const bool self_token = (self_index >= 0 && self_index < static_cast<int>(state.battlefield.size()))
+                              && state.battlefield[self_index].is_token;
         SacrificeDepletedLands(state);
-        self_index -= erased_before_self;
+        if (!self_token && self_num != 0)
+        {
+            for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+            {
+                if (state.battlefield[i].card.m_number == self_num && !state.battlefield[i].is_token)
+                { self_index = i; break; }
+            }
+        }
+        else
+        {
+            self_index = std::min(self_index, static_cast<int>(state.battlefield.size()) - 1);
+        }
     }
     // Choose which of our lands to return to hand. Preference, best first:
     //   (1) NEVER bounce another Karoo bounce land -- replaying it just triggers ANOTHER
@@ -1915,6 +1920,11 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     }
     EnterHand(state, controller, c, HandEntryReason::Bounce);
     state.battlefield.erase(state.battlefield.begin() + pick);
+    // CR 704.5m right away (Bruna sweep C, seed 77001): an Aura on the bounced land (Wild Growth on
+    // a Botanical Sanctum the Chancery returns) is put into the graveyard NOW, not at the next combat
+    // / turn-start checkpoint. Shared by the executor and the rollout (both land-drop paths call this
+    // function), and every caller re-locates by card number after it, so the erase is safe here.
+    SweepOrphanedAuras(state);
 }
 
 // ---- Flow-prune oracle (byte-identical infeasibility test) ------------------------------------

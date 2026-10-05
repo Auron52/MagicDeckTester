@@ -28945,6 +28945,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
 // caller holds a battlefield reference/iterator.
 inline void SacrificeDepletedLands(GameState& state)
 {
+    bool sacked = false;
     for (std::vector<Permanent>::iterator it = state.battlefield.begin();
          it != state.battlefield.end(); )
     {
@@ -28957,9 +28958,14 @@ inline void SacrificeDepletedLands(GameState& state)
         {
             state.players[it->owner_index].graveyard.push_back(it->card);
             it = state.battlefield.erase(it);
+            sacked = true;
         }
         else { ++it; }
     }
+    // CR 704.5m with the sack, not at the next combat (Bruna sweep C, seed 77001): a Wild Growth on
+    // the Remote Farm that just ran out of counters goes to the graveyard in the same SBA pass.
+    // Both worlds run this function at their existing sack points; no-op unless a land was sacked.
+    if (sacked) { SweepOrphanedAuras(state); }
 }
 
 // Fires prowess triggers for all Prowess creatures the active player controls.

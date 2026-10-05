@@ -337,3 +337,41 @@ TEST_CASE("Bruna sweep B: a creature Aura's host is a searched axis (one plan pe
     CHECK(on_mother);
     CHECK(on_pilgrim);
 }
+
+// ---- C: the orphaned-Aura SBA (CR 704.5m) runs as the land leaves, not at the next combat --------
+TEST_CASE("Bruna sweep C: Wild Growth on a depleted Remote Farm goes to the graveyard with the sack")
+{
+    BoardBs b;
+    const int farm = b.Put("Remote Farm", /*tapped=*/true);
+    b.Put("Forest");
+    for (Permanent& p : b.s.battlefield)
+    { if (p.card.m_number == farm) { p.counters.push_back(Counter{ Counter::Type::Depletion, 0 }); } }
+    Permanent wg;
+    wg.card = CardBs("Wild Growth", 50); wg.controller_index = 0; wg.owner_index = 0;
+    wg.aura_attached_to = farm;
+    b.s.battlefield.push_back(wg);
+    SacrificeDepletedLands(b.s);
+    CHECK(CountOnBf(b.s, "Remote Farm") == 0);
+    CHECK_MESSAGE(CountOnBf(b.s, "Wild Growth") == 0, "the orphaned Wild Growth stayed on the battlefield");
+    bool in_gy = false;
+    for (const Card& c : b.s.players[0].graveyard) { if (c.m_name.str() == "Wild Growth") { in_gy = true; } }
+    CHECK(in_gy);
+}
+
+TEST_CASE("Bruna sweep C: an Azorius Chancery bouncing the Wild Growth'd land sends the Aura to the graveyard")
+{
+    BoardBs b;
+    const int sanctum = b.Put("Botanical Sanctum", /*tapped=*/true);
+    Permanent wg;
+    wg.card = CardBs("Wild Growth", 50); wg.controller_index = 0; wg.owner_index = 0;
+    wg.aura_attached_to = sanctum;
+    b.s.battlefield.push_back(wg);
+    const int chancery = b.Put("Azorius Chancery", /*tapped=*/true);
+    BounceKarooLand(b.s, 0, static_cast<int>(b.s.battlefield.size()) - 1);
+    CHECK(CountOnBf(b.s, "Botanical Sanctum") == 0);   // the only other land: the bounce takes it
+    CHECK(CountOnBf(b.s, "Azorius Chancery") == 1);
+    CHECK_MESSAGE(CountOnBf(b.s, "Wild Growth") == 0, "the orphaned Wild Growth stayed on the battlefield");
+    bool chancery_ok = false;
+    for (const Permanent& p : b.s.battlefield) { if (p.card.m_number == chancery) { chancery_ok = true; } }
+    CHECK(chancery_ok);
+}
