@@ -1350,6 +1350,8 @@ public:
     // The uncached greedy solve behind Solve() (which memoizes it per decision under MTG_SOLVE_MEMO
     // -- see namespace solvememo in TurnSolver.cpp). Same permit.
     static Plan SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+    // Solve()'s memoised core; Solve() adds the rollout Arcanum Wings swap pin on top (Bruna sweep E).
+    static Plan SolveMemo(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
 
     // THE SEARCH'S QUERY INTO THE COMBO OFF RULE TABLE (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK).
     // Index of a candidate `DecisionProvider::ComboOffPossible` says wins this turn, or -1.

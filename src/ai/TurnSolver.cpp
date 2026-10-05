@@ -23506,7 +23506,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.eval           = std::max(1, (cd ? cd->card.m_mana_cost.ManaValue() : 0)
                                                    - a.cost.ManaValue());
                     a.is_noncreature = true;
-                    actions.push_back(std::move(a));
+                    actions.push_back(a);
+                    // SWAP CHAIN (Bruna sweep E, seed 77001 T4): "swap Wings <-> Conscription, recast
+                    // Wings on the same host, swap again" -- Mother 1 + 10 + 10 = 21, the T4 kill. The
+                    // swap returns Wings to HAND (site 10) and the recast would need a site-9
+                    // continuation inside that continuation; the breakpoint machinery fires each class
+                    // once per apply (first occurrence only), so the chain was inexpressible at any
+                    // budget (scenario: T5 at b3200). One compound activation per chain length K:
+                    // K swaps, each bringing in the damage-max hand Aura AT RESOLUTION (the same
+                    // ruling-3 pick as the single swap), with the Wings re-CAST onto the same host
+                    // between them (a real cast, through each world's own cast path). Searched as K
+                    // variants, never a heuristic: K = 2..min(3, hand Auras the host can take), and
+                    // only while the host is a legal target for the recast (not shrouded).
+                    // Autonomous only -- a human performs the same chain step by step.
+                    if (repick && !HumanPlayActive() && CreatureTargetableByAuraSpell(*hp, state, state.active_player_index))
+                    {
+                        int n_in = 0;
+                        for (const Card& hc2 : ap.hand)
+                        {
+                            if (hc2.m_is_staged) { continue; }
+                            const CardDefinition* cd2 = CardDatabase::Instance().LookupCached(hc2);
+                            if (cd2 && cd2->params.is_aura && !cd2->params.aura_swap_cost.has_value()
+                                && AuraCouldEnchant(state, cd2->params, *hp)) { ++n_in; }
+                        }
+                        const int kmax = std::min(n_in, 3);
+                        for (int kk = 2; kk <= kmax; ++kk)
+                        {
+                            Action ch = a;
+                            ch.chosen_x = kk;
+                            ManaCost c;
+                            for (int r = 0; r < kk; ++r)     { AddManaCost(c, *pd->params.aura_swap_cost); }
+                            for (int r = 0; r + 1 < kk; ++r) { AddManaCost(c, pd->card.m_mana_cost); }
+                            ch.cost = c;
+                            ch.eval = a.eval * kk;
+                            actions.push_back(std::move(ch));
+                        }
+                    }
                 }
             }
         }
@@ -29932,7 +29967,44 @@ TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
                           remaining_depth);
 }
 
+// ROLLOUT ARCANUM WINGS COMBAT SWAP (MTG_ROLLOUT_AURA_SWAP; Bruna sweep E, seed 77008). The searched
+// in-combat swap is a PIN (Plan::combat_aura_swap_choice) that only EnumeratePlansWithLand's variants
+// carry; a plan from Solve -- every turn past the search horizon, and the d0 runner -- never swaps, so
+// a line whose kill is "swap Colossification in after attackers" is invisible to the leaf and found
+// only once the search expands that very turn in-tree (77008: T4 at b800, T5 at b200). This pins the
+// SAME damage-max swap (ruling 3's pick, at resolution) on a pre-combat Solve plan whenever a Wings is
+// attached or cast by the plan. Rollout/d0 policy only (the permitted greedy class); the searched
+// tree still branches swap vs no-swap. Executor and rollout both apply Solve's plan -> lockstep.
+static void MaybePinRolloutAuraSwap(const GameState& state, bool is_pre_combat, TurnSolver::Plan& plan)
+{
+    static const bool s_on = EnvOn("MTG_ROLLOUT_AURA_SWAP", true);   // DEFAULT ON; =0 disables
+    if (!heurarm::Flag(heurarm::ROLLOUT_AURA_SWAP, s_on) || !is_pre_combat || plan.combat_aura_swap_choice >= 0) { return; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent || p.aura_attached_to == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.aura_swap_cost.has_value())
+        { plan.combat_aura_swap_choice = p.card.m_number; return; }
+    }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->params.aura_swap_cost.has_value()) { continue; }
+        for (const Card& c : state.players[me].hand)
+        { if (c.m_name == a.card_name) { plan.combat_aura_swap_choice = c.m_number; return; } }
+    }
+}
+
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
+{
+    TurnSolver::Plan out = SolveMemo(state, is_pre_combat, permit);
+    MaybePinRolloutAuraSwap(state, is_pre_combat, out);
+    return out;
+}
+
+TurnSolver::Plan TurnSolver::SolveMemo(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
     // claimed depth and the innermost search frame -- see greedywindow in TurnSolver.h). There is
@@ -38376,8 +38448,42 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else
             for (int i = 0; i < static_cast<int>(hh.size()); ++i)
             { if (!hh[static_cast<std::size_t>(i)].m_is_staged && hh[static_cast<std::size_t>(i)].m_name == a.card_name) { hi = i; break; } }
-            if (hi >= 0 && TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            { ApplyAuraSwap(state, state.active_player_index, a.sac_source_id, hi, /*respond_window=*/true); }
+            if (a.chosen_x <= 1)
+            {
+                if (hi >= 0 && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                { ApplyAuraSwap(state, state.active_player_index, a.sac_source_id, hi, /*respond_window=*/true); }
+            }
+            else
+            {
+                // SWAP CHAIN (see CollectActions): K swaps, recasting the Wings onto the same host
+                // between them. Each swap pays its own {2}{U} and re-picks at resolution; the recast
+                // goes through apply_one (this world's cast path). Stops at the first link that
+                // cannot happen. Executor twin: AIEngine's AuraSwap branch.
+                const int me = state.active_player_index;
+                const CardDefinition* wd = CardDatabase::Instance().Lookup(
+                    [&]() { for (const Permanent& wp : state.battlefield) { if (wp.card.m_number == a.sac_source_id) { return wp.card.m_name.str(); } } return std::string(); }());
+                int host = 0;
+                for (const Permanent& wp : state.battlefield) { if (wp.card.m_number == a.sac_source_id) { host = wp.aura_attached_to; break; } }
+                for (int link = 0; link < a.chosen_x && wd != nullptr && host > 0; ++link)
+                {
+                    if (link > 0)
+                    {
+                        // Recast the Wings (now in hand) onto the host.
+                        bool in_hand = false;
+                        for (const Card& hc : state.players[me].hand) { if (hc.m_number == a.sac_source_id) { in_hand = true; break; } }
+                        if (!in_hand) { break; }
+                        apply_one(wd->card.m_name.str(), false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                                  std::string{}, host, false, -1, 0, 0, 0, false, false);
+                        bool attached = false;
+                        for (const Permanent& wp : state.battlefield)
+                        { if (wp.card.m_number == a.sac_source_id && wp.aura_attached_to == host) { attached = true; break; } }
+                        if (!attached) { break; }
+                    }
+                    const int pick = AuraSwapPick(state, me, a.sac_source_id, /*host_attacking=*/false);
+                    if (pick < 0 || !TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false)) { break; }
+                    ApplyAuraSwap(state, me, a.sac_source_id, pick, /*respond_window=*/true);
+                }
+            }
         }
         else if (a.kind == Action::Kind::JitteModeAbility)
         {
@@ -43522,7 +43628,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Arcanum Wings' swap: which Wings AND which Aura (the same dedup lesson).
                 case Action::Kind::AuraSwap:
                     msf.push_back("AURASWAP#" + std::to_string(act.sac_source_id)
-                                  + "#" + act.card_name); break;
+                                  + "#" + act.card_name
+                                  + (act.chosen_x > 1 ? "x" + std::to_string(act.chosen_x) : std::string())); break;
                 // Jitte mode: which Jitte, which mode, which target.
                 case Action::Kind::JitteModeAbility:
                     msf.push_back("JITTE#" + std::to_string(act.sac_source_id)

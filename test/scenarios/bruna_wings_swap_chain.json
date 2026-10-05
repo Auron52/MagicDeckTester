@@ -1,0 +1,59 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 21,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Arcanum Wings",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Mother of Runes"
+    },
+    {
+      "name": "Avacyn's Pilgrim",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Azorius Chancery",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Birds of Paradise",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Avacyn's Pilgrim",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Sol Ring",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Botanical Sanctum",
+    "Eldrazi Conscription",
+    "Eldrazi Conscription",
+    "Somberwald Sage"
+  ],
+  "library_filler": "Boseiju, Who Endures",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "expect_win_turn": 4,
+  "comment": "ARCANUM WINGS SWAP CHAIN (Bruna 5d sweep, seed 77001 T4). Mother of Runes wears Arcanum Wings; two Eldrazi Conscriptions in hand; exactly 8 mana with three blue (Azorius Chancery, Birds, the Botanical Sanctum drop). Swap Wings <-> Conscription ({2}{U}), recast Wings on Mother ({1}{U}), swap again ({2}{U}): 1 + 10 + 10 = 21 = the opponent's life. The second swap needs a site-9 continuation inside a site-10 continuation, which the breakpoint machinery never fires (first occurrence only) -- the chain is one compound AuraSwap action (chosen_x = 2). Control: at opponent life 22 this must NOT win on turn 4."
+}

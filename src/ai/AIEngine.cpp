@@ -5490,12 +5490,50 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                       hh[static_cast<std::size_t>(hi)].m_name.str().c_str(),
                       top >= 0 ? hh[static_cast<std::size_t>(top)].m_name.str().c_str() : "-");
             }
-            if (hi >= 0 && TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            if (a.chosen_x <= 1)
             {
-                const std::string in_name = a.card_name.str();
-                if (ApplyAuraSwap(state, state.active_player_index, a.sac_source_id, hi,
-                                  /*respond_window=*/true) && m_logger)
-                { m_logger->LogAbility(a.sac_source_id, "Aura swap", "swap in " + in_name); }
+                if (hi >= 0 && TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                {
+                    const std::string in_name = a.card_name.str();
+                    if (ApplyAuraSwap(state, state.active_player_index, a.sac_source_id, hi,
+                                      /*respond_window=*/true) && m_logger)
+                    { m_logger->LogAbility(a.sac_source_id, "Aura swap", "swap in " + in_name); }
+                }
+            }
+            else
+            {
+                // SWAP CHAIN -- executor twin of ApplyPlanDirect's (Bruna sweep E): K swaps with the
+                // Wings recast (cast_by_name, this world's cast path) onto the same host between them.
+                const int me = state.active_player_index;
+                const CardDefinition* wd = nullptr;
+                int host = 0;
+                for (const Permanent& wp : state.battlefield)
+                {
+                    if (wp.card.m_number != a.sac_source_id) { continue; }
+                    wd = CardDatabase::Instance().LookupCached(wp.card); host = wp.aura_attached_to; break;
+                }
+                for (int link = 0; link < a.chosen_x && wd != nullptr && host > 0; ++link)
+                {
+                    if (link > 0)
+                    {
+                        bool in_hand = false;
+                        for (const Card& hc : state.players[me].hand) { if (hc.m_number == a.sac_source_id) { in_hand = true; break; } }
+                        if (!in_hand) { break; }
+                        cast_by_name(wd->card.m_name.str(), "", 0, 0, -1, -1, 0, "", host);
+                        resolve_now();
+                        bool attached = false;
+                        for (const Permanent& wp : state.battlefield)
+                        { if (wp.card.m_number == a.sac_source_id && wp.aura_attached_to == host) { attached = true; break; } }
+                        if (!attached) { break; }
+                    }
+                    const int pick = AuraSwapPick(state, me, a.sac_source_id, /*host_attacking=*/false);
+                    if (pick < 0) { break; }
+                    ManaPool av = AvailableManaPool(state);
+                    if (!TapForCost(state, *wd->params.aura_swap_cost, av, /*for_creature=*/false)) { break; }
+                    const std::string in_name = state.players[me].hand[static_cast<std::size_t>(pick)].m_name.str();
+                    if (ApplyAuraSwap(state, me, a.sac_source_id, pick, /*respond_window=*/true) && m_logger)
+                    { m_logger->LogAbility(a.sac_source_id, "Aura swap", "swap in " + in_name); }
+                }
             }
         }
         else if (a.kind == Action::Kind::JitteModeAbility)

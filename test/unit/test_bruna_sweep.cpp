@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -401,3 +402,41 @@ TEST_CASE("Bruna sweep D: Wild Growth can enchant the Azorius Chancery played th
     CHECK(AuraHostOf(after, "Wild Growth") == chancery);
     CHECK(CountOnBf(after, "Azorius Chancery") == 1);
 }
+
+// ---- E (seed 77001 T4): the repeated Arcanum Wings swap in one main phase ------------------------
+// Swap Wings <-> Conscription, recast Wings on Mother, swap again: 1 + 10 + 10 = 21. The second swap
+// needed a site-9 continuation inside a site-10 continuation -- inexpressible (T5 at any budget).
+TEST_CASE("Bruna sweep E: Wings swap chain -- swap, recast, swap -- is one searched plan")
+{
+    BoardBs b;
+    const int mother = b.Put("Mother of Runes");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = mother;
+    b.s.battlefield.push_back(w);
+    // Exactly the 8 mana the chain costs ({2}{U} + {1}{U} + {2}{U}), three blue: Chancery's {W}{U},
+    // Birds, and the Botanical Sanctum drop (one other land -> it enters untapped).
+    b.Put("Avacyn's Pilgrim");
+    b.Put("Avacyn's Pilgrim");
+    b.Put("Azorius Chancery");
+    b.Put("Birds of Paradise");
+    b.Put("Sol Ring");
+    b.Hand("Botanical Sanctum");
+    b.Hand("Eldrazi Conscription");
+    b.Hand("Eldrazi Conscription");
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::AuraSwap && a.chosen_x == 2) { line = &p; } }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "the two-link Wings swap chain was not enumerated");
+    GameState after = b.s;
+    TurnSolver::ApplyPlan(after, *line, /*is_pre_combat=*/true);
+    int conscriptions_on_mother = 0;
+    for (const Permanent& p : after.battlefield)
+    { if (p.card.m_name.str() == "Eldrazi Conscription" && p.aura_attached_to == mother) { ++conscriptions_on_mother; } }
+    CHECK(conscriptions_on_mother == 2);
+}
+
