@@ -970,3 +970,18 @@ Every deck is net <= 0. Bruna / bruna2hg are new keys (no GT): smoke d0 6.6130, 
 * Reference reproducibility `--strict`: **Hinata2/claude_s1_gi0 ENUM-GAP** (Soulfire Eruption target
   label). Reproduces identically on the base build of origin `c7487fb9` (`logs/basewt`) -- pre-existing.
 * Overnight was not run (out of scope for this pass) -- Bruna's overnight GT is still owed (`regression_tiers`).
+
+### ff792be6 re-run + ACCEPT (2026-10-05, GT commit 2faab457)
+Re-ran fivecolour, fivecolour2hg, bruna, bruna2hg (smoke + regression, `--deck=`, one pooled
+invocation per mode) at c70890c9 and overlaid them on the staged set (pre-overlay backup:
+`logs/suite_results_2026-10-05/pre_ff792be6_staged/`; final: `.../accepted/`).
+* fivecolour d0 s1001 5.5580 and s2002 5.6470: **GT digests** (the A-iii defect games gone).
+  d3/d5 every case: GT turns, digest-only play changes. Only slower game left: reg d3 s3003 gi126
+  5 -> 6 (budget churn, above). Deck net 0 smoke / 0 regression.
+* fivecolour2hg: smoke 5.4250 (GT 5.4500, net -1, 1 better, 0 worse), regression 5.3400 = GT turns.
+* Bruna (new keys): smoke d0 6.6090, d3 4.9400, d5 5.0000; 2hg 5.5000; regression d0 6.5880,
+  d3 5.1800 / 5.1000, d5 5.0667 / 5.1733. Searched cases same turns as the pre-fix staged run.
+* Spot check (unchanged deck): fungusb smoke d0 + d3 at HEAD = staged `.wins` byte-identical.
+* Accepted smoke + regression (full-tier accepts); `check_gt_logs.py` 668 consistent, 0 stale.
+* **Overnight GT for Bruna / bruna2hg is still OWED** -- rows exist, not run (USER: no overnight
+  until asked). `regression_tiers` stays PARTIAL on overnight until then.
