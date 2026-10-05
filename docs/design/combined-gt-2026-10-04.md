@@ -269,3 +269,33 @@ overnight d0 4x2000, d3 b20 4x1000, d5 b40 4x500 (the modal shape, 12 decks). Ne
 standard count, so there was nothing to reduce. If overnight wall time is the concern, the large shares
 are elsewhere (partial pre-stop run: hinata ~25% of core time, th / fivecolour2hg / creature_giving /
 fivecolour ~9-10% each).
+
+## Follow-up 2026-10-05 (later) -- catch-up overnight on d5f8854f: ACCEPTED
+
+Supersedes "Overnight: NOT accepted on this commit" above: the user then asked for the overnight to be run
+ONCE to clear the backlog. Run on `d5f8854f` (src identical to 45c3c66a; `mtg.run.meta` clean), origin
+unchanged before launch, 385 jobs, batch makespan 64m48s, heartbeat 24/24. Results were copied to
+`/home/vscode/wt/gt-runs/overnight-d5f8854f/` immediately on completion (smoke/regression runs likewise
+under `gt-runs/{smoke,regression}-45c3c66a/`).
+
+| deck | searched | d0 | slower / faster | note |
+|---|---:|---:|---|---|
+| kitty | -511 | +2 | 0 / 511 | d0 +2 greedy churn (same as the 0303292c run) |
+| kittyv2 vs GT | -1229 | -5364 | 118 / 650 | GT STALE (keep profile 05b035c1 never overnight-accepted) |
+| kittyv2 **vs origin d264c556 arm** | **-343** | **-140** | **0 / 343** | same 12 cells, origin binary from its own worktree; gi136 / gi92 now recover |
+| melira | -32 | -- | 7 / 35 | |
+| snow | -13 | -7 | 1 / 14 | |
+| minotaur | -6 | -- | 0 / 6 | |
+| goblins | -3 | -- | 0 / 3 | |
+| fivecolour, soldiers, whiteknights | -2 each | -- | 0 / 2 | |
+| dragons, minotaur2hg, selesnya | -1 each | -- | 0 / 1 | selesnya's +1 from the 0303292c run is gone (gi929 = 5): it was batch nondeterminism |
+
+Digest-only (score-identical) cells: fivecolour2hg, fungus, pirates, stompy. Every deck net <= 0.
+
+**Slower-game recovery (two-stage):** the 8 non-kittyv2 slower games are the same 8 as the 0303292c run,
+with the same outcomes: melira d3/d5 s5005 gi54 (4), d3/d5 s6006 gi11 (5), d3 s6006 gi110 (4), snow d3
+s5005 gi52 (5) recover at stage 1 (dW b100); melira d3/d5 s7007 gi116 is 6 at stage 1 and 5 at stage 2
+(d8 b0) -- recovers. kittyv2 has no slower game against the origin arm. No unruled bar failure.
+
+**Accepted:** overnight, with an `accepted-with-regressions` note carrying the 3de66a1f accept's binding
+items. `check_gt_logs.py`: 659 consistent, 0 stale, 0 missing.
