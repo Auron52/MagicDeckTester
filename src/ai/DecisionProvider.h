@@ -1256,6 +1256,12 @@ public:
     // rule is stated relative to the aura's own mana cost.
     virtual bool UsesLandAuraHostHeuristic() const { return false; }
 
+    // KeysCreatureAuraHost -- does the autonomous plan dedup keep a creature Aura's HOST distinct?
+    // Default false: the name-only fold keeps the first-enumerated host (the historical behaviour,
+    // byte-identical for every deck that does not opt in). A deck whose whole plan is WHICH creature
+    // carries its Auras (Bruna) opts in, making the host a searched axis (Bruna sweep B, 2026-10-05).
+    virtual bool KeysCreatureAuraHost() const { return false; }
+
     // ShouldAttackWith -- combat: should this eligible creature be DECLARED as an attacker this turn?
     // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
     // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an

@@ -203,3 +203,137 @@ TEST_CASE("Bruna sweep A-iii: the search offers Greaves -> a locked mana dork be
     CHECK(CountOnBf(after, "Bruna, Light of Alabaster") == 1);
     CHECK(CountOnBf(after, "Somberwald Sage") == 1);
 }
+
+// ---- B: Aura spells vs a Greaves'd creature, ordered against the plan's own equips --------------
+namespace
+{
+// Mother of Runes wearing Lightning Greaves (seed 77002 / 77014 shape).
+struct GreavesOnMother
+{
+    BoardBs b;
+    int mother = 0, greaves = 0;
+    GreavesOnMother()
+    {
+        mother  = b.Put("Mother of Runes");
+        greaves = b.Put("Lightning Greaves");
+        for (Permanent& p : b.s.battlefield) { if (p.card.m_number == greaves) { p.equipped_to = mother; } }
+    }
+};
+
+int AuraHostOf(const GameState& s, const std::string& aura)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == aura) { return p.aura_attached_to; } }
+    return -1;
+}
+
+int EquipHostOf(const GameState& s, int equip)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == equip) { return p.equipped_to; } }
+    return -1;
+}
+}   // namespace
+
+// Seed 77002 T4: three lands, Pilgrim + Courage in hand. The only way to cast both is Pilgrim, equip
+// Greaves -> Pilgrim (haste: it taps for {W}), Courage -> Mother (no longer shrouded). The search used
+// to offer only "Courage -> Pilgrim" (illegal once the Pilgrim is Greaves'd) and the executor silently
+// put Courage on Mother. Every enumerated plan must now realise exactly as labelled.
+TEST_CASE("Bruna sweep B: Courage -> Mother after Greaves moves to the fresh Pilgrim; no silent retarget")
+{
+    GreavesOnMother g;
+    g.b.Put("Forest");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Razorverge Thicket");
+    const int pilgrim = g.b.Hand("Avacyn's Pilgrim");
+    g.b.Hand("Unflinching Courage");
+    g.b.s.players[0].lands_played_this_turn = 1;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Unflinching Courage"
+                && a.enchant_target == g.mother && PlanCasts(p, "Avacyn's Pilgrim")) { line = &p; }
+        }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "Pilgrim + equip -> Pilgrim + Courage -> Mother was not enumerated");
+    GameState after = g.b.s;
+    TurnSolver::ApplyPlan(after, *line, /*is_pre_combat=*/true);
+    CHECK(AuraHostOf(after, "Unflinching Courage") == g.mother);
+    CHECK(EquipHostOf(after, g.greaves) == pilgrim);
+    // No enumerated plan may realise a different Aura host than it names.
+    const long long before = g_enchant_retargets.load();
+    for (const TurnSolver::Plan& p : plans)
+    {
+        GameState t = g.b.s;
+        TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true);
+    }
+    CHECK_MESSAGE(g_enchant_retargets.load() == before, "a plan's Aura was silently retargeted");
+}
+
+// Seed 77014 T4: Pilgrim already on the battlefield, Greaves on Mother. "Equip Greaves -> Pilgrim, THEN
+// Arcanum Wings -> Mother" needs the equip BEFORE the cast; equips used to trail every cast, so the
+// line was inexpressible.
+TEST_CASE("Bruna sweep B: equip Greaves to another creature, then an Aura on the creature it left")
+{
+    GreavesOnMother g;
+    const int pilgrim = g.b.Put("Avacyn's Pilgrim");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Island");
+    g.b.Hand("Arcanum Wings");
+    g.b.s.players[0].lands_played_this_turn = 1;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool wings_on_mother = false, move = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.enchant_target == g.mother) { wings_on_mother = true; }
+            if (a.kind == Action::Kind::Equip && a.sac_victim_id == pilgrim) { move = true; }
+        }
+        if (wings_on_mother && move) { line = &p; }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "equip Greaves -> Pilgrim + Wings -> Mother was not enumerated");
+    GameState after = g.b.s;
+    TurnSolver::ApplyPlan(after, *line, /*is_pre_combat=*/true);
+    CHECK(AuraHostOf(after, "Arcanum Wings") == g.mother);
+    CHECK(EquipHostOf(after, g.greaves) == pilgrim);
+    // ...and without the move the Aura is still not offered onto the shrouded Mother.
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool wings_on_mother = false, move = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.enchant_target == g.mother) { wings_on_mother = true; }
+            if (a.kind == Action::Kind::Equip && a.sac_victim_id == pilgrim) { move = true; }
+        }
+        CHECK_MESSAGE(!(wings_on_mother && !move), "an Aura targets the shrouded Mother with no Greaves move");
+    }
+}
+
+// The autonomous plan dedup used to key a creature Aura by NAME only, so the search saw ONE host per
+// Aura (the first enumerated) -- which creature carries Mythic Proportions was never searched.
+TEST_CASE("Bruna sweep B: a creature Aura's host is a searched axis (one plan per legal host)")
+{
+    BoardBs b;
+    const int mother  = b.Put("Mother of Runes");
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
+    b.Hand("Mythic Proportions");
+    b.s.players[0].lands_played_this_turn = 1;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true);
+    bool on_mother = false, on_pilgrim = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.enchant_target == mother)  { on_mother = true; }
+            if (a.enchant_target == pilgrim) { on_pilgrim = true; }
+        }
+    }
+    CHECK(on_mother);
+    CHECK(on_pilgrim);
+}

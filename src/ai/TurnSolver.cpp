@@ -8947,6 +8947,43 @@ static bool SubsetHasShroudBlockedEquip(const GameState& state,
     return false;
 }
 
+// ---- An Aura SPELL onto a creature an Equipment shrouds (Bruna sweep B, 2026-10-05) ------------
+// An Aura spell TARGETS its host (CR 303.4a), so it cannot be cast onto a creature Lightning Greaves
+// shrouds (CR 702.18a) -- unless the SAME plan first moves that Greaves to another creature. Both
+// apply worlds realise the move first (TurnSolver::ApplyManaUnlockEquips' shroud-RELEASE half fires
+// the co-selected move before the Aura is cast), so the subset is legal iff:
+//   * it co-selects an Equip of THAT grantor onto a different creature Y, and
+//   * no Aura in the subset targets Y (Y is shrouded from the release onward; casting Y's Aura
+//     BEFORE the move would be legal, but the release is hoisted ahead of every cast -- a disclosed
+//     conservative bound, docs/design/analysis-Bruna.md "Claude-play sweep").
+// The candidates this admits are injected by CollectActions (Equipment-shrouded hosts); every
+// other aura candidate has aura_shroud_src 0 and is untouched. `src` empty => nothing to check.
+static bool SubsetHasShroudBlockedAura(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                       const std::vector<int>& src)
+{
+    if (src.size() != cands.size()) { return false; }
+    for (int idx : sel)
+    {
+        const int g = src[static_cast<std::size_t>(idx)];
+        if (g == 0) { continue; }
+        const int x = cands[idx].enchant_target;
+        int y = 0;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind == Action::Kind::Equip && d.sac_source_id == g && d.sac_victim_id != x)
+            { y = d.sac_victim_id; break; }
+        }
+        if (y == 0) { return true; }                       // nothing moves the shroud off X
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind == Action::Kind::CastFromHand && d.enchant_target == y) { return true; }
+        }
+    }
+    return false;
+}
+
 // ---- Same-turn HASTED mana dork ---------------------------------------------------------------
 // A mana dork is summoning-sick the turn it arrives, which is exactly why the same-turn ROCK credit
 // (EnumeratePlans, `sel_rock`) excludes creatures. But a haste-granting Equipment attached this same
@@ -9082,17 +9119,71 @@ static int SubsetWidensDomainBy(const std::vector<Action>& cands, const std::vec
 // Self-gating and cheap: the guard is "the host is a mana source that cannot tap yet", so an equip
 // onto a beater (Greaves -> Maelstrom Archangel) is untouched and still fires in the trailing pass.
 // Returns how many fired.
+// A not-yet-cast Aura SPELL of this plan targets creature `num` (its card is still in hand).
+static bool PlanHasPendingAuraOn(const GameState& state, const std::vector<Action>& acts, int num)
+{
+    if (num <= 0) { return false; }
+    const Player& ap = state.players[state.active_player_index];
+    for (const Action& c : acts)
+    {
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target != num) { continue; }
+        const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        if (!cd || !cd->params.is_aura || cd->params.is_land_aura) { continue; }
+        for (const Card& h : ap.hand) { if (h.m_name == c.card_name) { return true; } }
+    }
+    return false;
+}
+
 int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts)
 {
-    if (!HasteDorkCreditEnabled()) { return 0; }
     const int active = state.active_player_index;
     int fired = 0;
+    // SHROUD RELEASE (Bruna sweep B, 2026-10-05). A planned move of a shroud-granting Equipment OFF a
+    // creature that a still-pending Aura spell of this plan targets must happen BEFORE that Aura is
+    // cast (CR 303.4a / 702.18a), not in the trailing equip pass -- the order
+    // SubsetHasShroudBlockedAura admitted the plan on. Fired as soon as the destination is on the
+    // battlefield, and only while no pending Aura targets the destination (the reject's other half).
+    // Inert unless a shroud Equipment is attached to an Aura target: every deck without Lightning
+    // Greaves + creature Auras is untouched.
+    if (!s_legacy_shroud)
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::Equip) { continue; }
+            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (!ed || !ed->params.equip_grants_shroud) { continue; }
+            int from = -1; bool have_dest = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active) { continue; }
+                if (p.card.m_number == a.sac_source_id) { from = p.equipped_to; }
+                if (p.card.m_number == a.sac_victim_id) { have_dest = true; }
+            }
+            if (from <= 0 || from == a.sac_victim_id || !have_dest) { continue; }
+            if (!PlanHasPendingAuraOn(state, acts, from)) { continue; }
+            if (PlanHasPendingAuraOn(state, acts, a.sac_victim_id)) { continue; }
+            if (!TapForCostDirect(state,
+                                  EquipActionCostNow(state, active, a.sac_source_id, a.cost,
+                                                     a.sac_victim_id),
+                                  /*for_creature=*/false)) { continue; }
+            ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
+            ++fired;
+        }
+    }
+    if (!HasteDorkCreditEnabled()) { return fired; }
+    int unlocked = 0;
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::Equip) { continue; }
         const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (!ed || !ed->params.equip_grants_haste) { continue; }
         if (EquipmentAttachedTo(state, active, a.sac_source_id, a.sac_victim_id)) { continue; }
+        // A shroud-granting unlock onto a creature a pending Aura of this plan targets would make
+        // that Aura uncastable (seed 77002: Courage -> Pilgrim after Greaves -> Pilgrim). Leave it to
+        // the trailing pass, after the Aura; the enumerator withholds the haste credit for such a
+        // subset (lockstep), so a plan that needed the hasted mana is never offered.
+        if (!s_legacy_shroud && ed->params.equip_grants_shroud
+            && PlanHasPendingAuraOn(state, acts, a.sac_victim_id)) { continue; }
         // The Equipment must already be on the battlefield; the host must be on it too, and be a
         // still-locked mana source (HasteUnlockedManaOf returns nothing for a hand host, a tapped
         // one, a non-dork, or one that can tap already). A piece still in hand just means the cast
@@ -9119,14 +9210,14 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
                                                  a.sac_victim_id),
                               /*for_creature=*/false)) { continue; }
         ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
-        ++fired;
+        ++unlocked;
     }
     // The colour reservation exists only to carry the payoff's scarce colour PAST the enabler casts
     // (see ManaUnlockColorReserve). Once the dork is hasted the payoff is the next thing to pay, and
     // the reserved source is exactly what it wants to tap -- so drop the hold rather than make every
     // remaining payment try the reserved attempt first and fall back.
-    if (fired > 0) { PlanSourceReserveScope::Release(); }
-    return fired;
+    if (unlocked > 0) { PlanSourceReserveScope::Release(); }
+    return fired + unlocked;
 }
 
 // The card numbers of battlefield sources a plan with a mana-unlock equip must hold untapped until
@@ -11880,6 +11971,10 @@ struct SubsetFilterPre
     std::vector<char> equip_vic_on_bf;    // per candidate (Equip only): victim already on the bf
     std::vector<int>  equip_shroud_src;   // per candidate (Equip only): shroud grantor, 0 = none
     bool              any_equip_shroud = false;   // meaningful only when equip_shroud_src is non-empty
+    // Per candidate (creature-Aura cast only): the Equipment currently shrouding its enchant target
+    // (0 = none). Empty = no controlled shroud-granting Equipment is attached to anything, which
+    // proves SubsetHasShroudBlockedAura can find nothing (every deck without Lightning Greaves).
+    std::vector<int>  aura_shroud_src;
 
     std::vector<const CardDefinition*> sac_src_def;   // per candidate; nullptr = none/not a sac action
     bool board_persist     = false;                   // meaningful only when sac_src_def is non-empty
@@ -11900,11 +11995,47 @@ struct SubsetFilterPre
     unsigned dup_clause = kDupAll;
 };
 
+    // Aura-target shroud grantors (see the struct / SubsetHasShroudBlockedAura). Grantors first, so a
+    // board with no attached shroud Equipment pays one battlefield walk and nothing else.
+static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>& cands,
+                               std::vector<int>& out)
+{
+    if (!s_legacy_shroud)
+    {
+        const int active_pi = state.active_player_index;
+        std::vector<std::pair<int, int>> grant;   // (host number, grantor number)
+        for (const Permanent& a : state.battlefield)
+        {
+            if (a.controller_index != active_pi || a.equipped_to == 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+            if (!d || !d->params.is_equipment || !d->params.equip_grants_shroud) { continue; }
+            bool seen = false;   // FIRST attachment wins, as in CreatureHasShroud
+            for (const std::pair<int, int>& g : grant) { if (g.first == a.equipped_to) { seen = true; break; } }
+            if (!seen) { grant.emplace_back(a.equipped_to, a.card.m_number); }
+        }
+        if (!grant.empty())
+        {
+            out.assign(cands.size(), 0);
+            for (std::size_t j = 0; j < cands.size(); ++j)
+            {
+                const Action& a = cands[j];
+                if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
+                // enchant_target is reused by non-Aura axes (copy source, soulbond, trick target);
+                // only an Aura SPELL's target is the host this rule is about.
+                const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (!ad || !ad->params.is_aura || ad->params.is_land_aura || a.bestow) { continue; }
+                for (const std::pair<int, int>& g : grant)
+                { if (g.first == a.enchant_target) { out[j] = g.second; break; } }
+            }
+        }
+    }
+}
+
 static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
 {
     SubsetFilterPre p;
     // See "INSTRUMENTS DISARM IT" above: all-true is the unoptimised chain, unchanged.
-    if (GateProbeArmed() || strandedstats::Enabled() || BfCensusOn() || FoldVerifyOn()) { return p; }
+    if (GateProbeArmed() || strandedstats::Enabled() || BfCensusOn() || FoldVerifyOn()) { BuildAuraShroudSrc(state, cands, p.aura_shroud_src); return p; }
 
     // Start from "no filter can fire" and raise a bit per candidate. A field added to the struct
     // without a matching `false` here keeps its member initialiser -- i.e. stays TRUE, the
@@ -12079,6 +12210,8 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             }
         }
     }
+
+    BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -20438,6 +20571,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.enchant_target = tgt_num;
                 actions.push_back(std::move(a));
+            }
+            // GREAVES-SHROUDED HOSTS (Bruna sweep B, 2026-10-05). A creature Lightning Greaves
+            // shrouds is not a legal target NOW, but it is once the same plan moves the Greaves to
+            // another creature -- "equip Greaves -> Avacyn's Pilgrim, then Unflinching Courage ->
+            // Mother of Runes" (seed 77002) and "equip Greaves -> Pilgrim, then Arcanum Wings ->
+            // Mother" (seed 77014) were inexpressible: the frozen-snapshot host list never named
+            // Mother. Inject her as a host; SubsetHasShroudBlockedAura keeps only subsets that
+            // co-select the move, and the apply fires that move before the cast (both worlds,
+            // ApplyManaUnlockEquips). No shroud Equipment attached -> nothing injected.
+            if (!def.params.is_land_aura && !s_legacy_shroud)
+            {
+                int other_hosts = 0;   // creatures a moved Greaves could land on (bf + hand)
+                for (const Permanent& p : state.battlefield)
+                { if (p.controller_index == state.active_player_index && p.card.IsCreature()) { ++other_hosts; } }
+                for (const Card& hc : ap.hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd && hd->card.IsCreature()) { ++other_hosts; }
+                }
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index || !p.card.IsCreature()) { continue; }
+                    int ssrc = 0;
+                    if (!CreatureHasShroud(p, state, &ssrc) || ssrc == 0) { continue; }
+                    if (other_hosts < 2) { continue; }   // the shrouded creature is the only body
+                    if (def.params.aura_enchant_requires == "another_aura" && !CreatureHasAura(p, state)) { continue; }
+                    if (def.params.aura_enchant_requires == "modified" && !CreatureIsModified(p, state)) { continue; }
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    a.cost           = EffectiveCost(def, state);
+                    a.eval           = EvalCard(def, state);
+                    a.is_noncreature = true;
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    a.enchant_target = p.card.m_number;
+                    actions.push_back(std::move(a));
+                }
             }
             continue;
         }
@@ -30226,6 +30397,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in eval_and_push.
         if (pre.equip && SubsetHasShroudBlockedEquip(state, cands, sel,
                                                        pre.equip_shroud_src, pre.any_equip_shroud))
+        { return; }
+        // ...and an Aura SPELL onto a Greaves-shrouded creature without that move (CR 303.4a).
+        if (!pre.aura_shroud_src.empty() && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src))
         { return; }
         // Reject a creature sac-for-mana whose float nothing spends (see the helper). Solve's
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
@@ -41333,6 +41507,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (pre.equip && SubsetHasShroudBlockedEquip(state, cands, sel,
                                                        pre.equip_shroud_src, pre.any_equip_shroud))
         { return; }
+        // ...and an Aura SPELL onto a Greaves-shrouded creature without that move (CR 303.4a).
+        if (!pre.aura_shroud_src.empty() && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src))
+        { return; }
         // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
@@ -41620,6 +41797,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (int j : sel)
             {
                 if (haste_unlock[j].Total() <= 0) { continue; }
+                // Lockstep with ApplyManaUnlockEquips: a shroud-granting unlock onto a host an Aura
+                // of this subset targets is NOT fired early (the Aura must be cast first), so its
+                // mana cannot fund the subset.
+                if (!s_legacy_shroud && cands[j].def && cands[j].def->params.equip_grants_shroud)
+                {
+                    bool aura_on_host = false;
+                    for (int k : sel)
+                    {
+                        if (cands[k].kind == Action::Kind::CastFromHand
+                            && cands[k].enchant_target == cands[j].sac_victim_id) { aura_on_host = true; break; }
+                    }
+                    if (aura_on_host) { continue; }
+                }
                 const ManaCost& eq = cands[j].cost;              // the equip activation ({0} for Greaves)
                 enable_costs.white += eq.white; enable_costs.blue      += eq.blue;
                 enable_costs.black += eq.black; enable_costs.red       += eq.red;
@@ -43052,7 +43242,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const bool host_sig = s_aura_host_sig
                        && (!s_aura_host_karoo || g_enum_karoo_drop || s_human_play_sig
                            || DecisionUnpruned());
-    auto plan_signature = [s_human_play_sig, host_sig](const TurnSolver::Plan& p) -> std::string
+    // CREATURE-AURA HOST (Bruna sweep B, 2026-10-05). The autonomous signature keyed a creature Aura
+    // by NAME only, so "Courage -> Mother" and "Courage -> Pilgrim" folded to whichever was enumerated
+    // first: WHICH creature carries an Aura was never a searched decision outside human play -- a
+    // heuristic substitute in the search window, and on a voltron deck the decision that matters
+    // most. Provider-owned opt-in (DecisionProvider::KeysCreatureAuraHost; Bruna only -- the fold's
+    // fleet-wide status is an open user question in docs/design/analysis-Bruna.md), plus the
+    // un-pruned oracle (MTG_UNPRUNED), whose plan list must show the axis. Human play keys it already.
+    const bool cre_host_sig = ResolveProvider(state).KeysCreatureAuraHost() || DecisionUnpruned();
+    auto plan_signature = [s_human_play_sig, host_sig, cre_host_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
         for (const Action& act : p.actions)
@@ -43188,7 +43386,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // deck without land Auras moves; =0 restores the name-only fold.
                         + ((act.def && act.def->params.is_land_aura && act.enchant_target > 0
                             && host_sig)
-                           ? ("#H" + std::to_string(act.enchant_target)) : "")); break;
+                           ? ("#H" + std::to_string(act.enchant_target)) : "")
+                        + ((cre_host_sig && act.def && act.def->params.is_aura
+                            && !act.def->params.is_land_aura && act.enchant_target > 0)
+                           ? ("#A" + std::to_string(act.enchant_target)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;

@@ -3440,6 +3440,26 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
 // mana rides the enchanted land's tap, so doubling up on the land that already makes the most is
 // the deterministic default. It is only a fallback -- which land to enchant is emitted as a plan
 // variant per legal host, so the search normally decides. Defaults false -> byte-identical.
+// SILENT RETARGET METER (Bruna sweep B, 2026-10-05). A SEARCHED creature target (enchant_target > 0)
+// that is not legal when the Aura spell resolves means the plan the search priced is not the plan
+// that runs: seed 77002's "Courage -> Avacyn's Pilgrim" (Greaves had just shrouded the Pilgrim) quietly
+// became Courage -> Mother of Runes. The fallback below is kept (an Aura with no legal target would
+// otherwise be lost, and every world must still agree), but it is no longer silent: every occurrence
+// is counted and the total printed at exit -- after the enumeration fixes it should read zero -- and
+// MTG_ENCHANT_RETARGET_ABORT=1 aborts on the first one (tests / bisection).
+inline std::atomic<long long> g_enchant_retargets{0};
+struct EnchantRetargetDumper
+{
+    ~EnchantRetargetDumper()
+    {
+        const long long n = g_enchant_retargets.load();
+        if (n > 0)
+        { std::fprintf(stderr, "[enchant-retarget] %lld searched Aura target(s) illegal at resolution "
+                               "(fallback host used)\n", n); }
+    }
+};
+inline EnchantRetargetDumper g_enchant_retarget_dumper;
+
 inline int ResolveEnchantTarget(const GameState& state, int controller, int enchant_target,
                                 bool land_aura = false)
 {
@@ -3471,6 +3491,16 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
         if (p.controller_index == controller && p.card.IsCreature()
             && p.card.m_number == enchant_target && CreatureTargetableByAuraSpell(p, state, controller))
         { return enchant_target; }
+    if (enchant_target > 0)
+    {
+        g_enchant_retargets.fetch_add(1, std::memory_order_relaxed);
+        static const bool s_abort = EnvOn("MTG_ENCHANT_RETARGET_ABORT");
+        if (s_abort)
+        {
+            std::fprintf(stderr, "[enchant-retarget] ABORT: Aura target #%d illegal at resolution\n", enchant_target);
+            std::abort();
+        }
+    }
     int best = 0, best_score = -1;
     for (const Permanent& p : state.battlefield)
     {

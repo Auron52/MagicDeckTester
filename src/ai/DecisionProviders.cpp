@@ -15560,6 +15560,12 @@ static bool BrunaOrderEnabled()
     return heurarm::Flag(heurarm::BRUNA_ORDER, on);
 }
 
+bool BrunaProvider::KeysCreatureAuraHost() const
+{
+    static const bool on = EnvOn("MTG_BRUNA_AURA_HOST_SIG", true);   // DEFAULT ON; =0 restores the fold
+    return heurarm::Flag(heurarm::BRUNA_AURA_HOST_SIG, on);
+}
+
 int BrunaProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!BrunaOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }

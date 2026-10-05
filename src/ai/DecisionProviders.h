@@ -453,6 +453,10 @@ public:
     // precedent). Glittering Wish's pool is at most 4 names. 8 = every legal name, so the target is
     // fully searched.
     int TutorSearchWidth() const override { return 8; }
+    // WHICH creature an Aura spell enchants is the deck's central decision, so the plan dedup keeps
+    // every host distinct (Bruna sweep B). MTG_BRUNA_AURA_HOST_SIG=0 restores the name-only fold (A/B
+    // hatch).
+    bool KeysCreatureAuraHost() const override;
     // MTG_BRUNA_ORDER -- a PROPOSED cast order (analyze-deck Stage 4, 2026-10-05), DEFAULT OFF: cast
     // order is USER-OWNED (docs/design/analysis-Bruna.md, "Stage 4 -- proposed cast order"). Off =>
     // DeckProvider (Generic) byte-for-byte.
