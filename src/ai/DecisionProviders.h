@@ -1599,11 +1599,22 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "CritterLifegain"; }
-    // Legend rule for three Ajani, Strength of the Pride: keep the copy with the MOST loyalty
-    // (tie: the one that can still activate this turn, then the oldest). Tried as the generic
-    // default first and REJECTED there: fivecolour smoke d0 gi=15 moved 6->7 (the kept fresh
-    // Bolas spent its +3 in main 2 on our own permanent and cost the winning cast), so the
-    // refinement lives with the deck that wants it. MTG_LEGEND_KEEP_LOYALTY=0 restores oldest.
+    // Legend rule: keep the copy with the MOST loyalty (tie: the one that can still activate this
+    // turn, then the oldest). Tried as the generic default first and REJECTED there: fivecolour
+    // smoke d0 gi=15 moved 6->7 (the kept fresh Bolas spent its +3 in main 2 on our own permanent
+    // and cost the winning cast), so the refinement lives with the deck that wants it.
+    // MTG_LEGEND_KEEP_LOYALTY=0 restores oldest.
+    //
+    // This comment used to open "Legend rule for three Ajani, Strength of the Pride", which was
+    // true of `v1-thune4-basilica` and went stale when the list was adopted: the SHIPPING list runs
+    // ONE Ajani (and 2 Heliod, Sun-Crowned -- which is now the deck's only live duplicate-legend
+    // case). The count is not why the hook exists, so it is stated without one here. Corrected
+    // 2026-09-23 after the stale number misled a discard-policy authoring pass into reasoning about
+    // shedding surplus Ajani copies that the shipped deck cannot draw.
+    //
+    // WORTH KNOWING for any keep/shed rule built on top of this: a duplicate PLANESWALKER is not a
+    // dead card the way a duplicate legendary creature is. This very hook makes a fresh copy
+    // RECHARGE a spent one (most loyalty wins), so a second walker is low-value, not blank.
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
     // Same-turn "cast Ajani + activate" plan variants (see DecisionProvider). DEFAULT ON here;
     // MTG_WALKER_CAST_ACTIVATE=0 restores the cast-only enumeration for the A/B.

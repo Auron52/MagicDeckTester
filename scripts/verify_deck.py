@@ -29,6 +29,12 @@ Gates (blocking unless noted):
                    defaults; assert determinism + integrity + progress (runtime; --no-sweep skips)
   claude_sweep  -- workstream 4b: the Claude-DRIVEN judgment sweep, recorded in the per-deck
                    ledger ('## Claude-play sweep'); absent->SKIP, unresolved flags->FAIL, clean->PASS
+  discard_policy -- the deck's provider must override CleanupDiscardCandidates with an AUTHORED
+                   BUCKET policy (analyze-deck 5i). Missing -> blocking FAIL; inherited from a
+                   base provider (another deck's buckets) -> FAIL; an override with no
+                   MTG_*_BUCKET_DISCARD gate (a patch over the max-MV fallback) -> FAIL. Added
+                   2026-09-23 because this mandated step had NO gate, so decks shipped on the
+                   generic fallback silently and only the user asking ever surfaced it.
 
 Sign-off: the ledger's "## Approved deferrals" section (user-owned) lists keys like
 `coverage:Ignoble Hierarch` or `viewer_wiring:land_entry`. A blocking failure whose every
@@ -457,6 +463,217 @@ def gate_claude_sweep(deck_path):
     return Gate("claude_sweep", PASS, True, "Claude-play sweep recorded, 0 unresolved flags", disclose=disclose)
 
 
+# --------------------------------------------------------------------------- discard policy
+# A policy that is AUTHORED but predates the flag convention. Keyed by class, with the reason, so
+# the allowlist cannot quietly grow: an entry here asserts "this is a real bucket policy", which is
+# a claim a reader can check against the code.
+DISCARD_AUTHORED_NO_FLAG = {
+    "TreasureHuntProvider":
+        "the keep-set rule with the broken-up mana bucket -- analyze-deck 5i names it a reference "
+        "implementation; it predates the MTG_*_BUCKET_DISCARD convention",
+}
+
+# The signals that an override IS an authored bucket policy rather than a patch over the shared
+# max-MV fallback: the default-on A/B hatch the convention requires (see analyze-deck 5i).
+DISCARD_FLAG_RE = re.compile(r"_BUCKET_DISCARD|_DISCARD_ORDER|BucketDiscardEnabled\s*\(\s*\)")
+
+
+def _provider_classes():
+    """-> {class: (base, declares_CleanupDiscardCandidates_in_its_OWN_body)}.
+
+    Reading the class's OWN body is the point, not an implementation detail. The compiler cannot
+    catch a provider that INHERITS another deck's discard buckets -- KnightsProvider derives from
+    VialProvider -- and inheriting another archetype's narrowing is the recorded misroute class this
+    repo keeps paying for (Goblin Matron, Stoneforge, the FiveColour fetchlands...). provider_audit.py
+    closes the same loophole for Certificate(); this closes it for the discard policy.
+    """
+    hdr = (ROOT / "src/ai/DecisionProviders.h").read_text()
+    out = {}
+    for m in re.finditer(r"^class (\w+) : public (\w+)\b", hdr, re.M):
+        cls, base = m.group(1), m.group(2)
+        try:
+            body = hdr[m.end(): hdr.index("\n};", m.end())]
+        except ValueError:
+            continue
+        out[cls] = (base, "CleanupDiscardCandidates" in body)
+    return out
+
+
+def _discard_impl_body(cls):
+    """The CODE of `<cls>::CleanupDiscardCandidates` -- comments stripped -- or '' if it has none.
+
+    Brace-matched, not delimited by "the next function definition", and comment-stripped rather
+    than taken raw. Both were found necessary by testing this gate rather than reasoning about it:
+    a next-definition scan keyed on `^std::vector<int> \\w+::` does not match the `int ...::` and
+    `static bool ...` definitions that actually follow CreatureGivingProvider's override, so the
+    body ran 24,000 characters downstream into FiveColourProvider's header comment and matched ITS
+    `MTG_5C_BUCKET_DISCARD` -- passing the one deck in the repo whose override is a known patch.
+    Comments are stripped for the same reason at a smaller scale: a body that merely NAMES another
+    deck's flag must not read as carrying one.
+
+    Braces inside string and character literals are skipped, so a mana-symbol string ("{W}{W}")
+    cannot unbalance the scan.
+    """
+    src = (ROOT / "src/ai/DecisionProviders.cpp").read_text()
+    m = re.search(r"^std::vector<int> " + re.escape(cls) + r"::CleanupDiscardCandidates\b",
+                  src, re.M)
+    if not m:
+        return ""
+    open_at = src.find("{", m.end())
+    if open_at < 0:
+        return ""
+    out, depth, i, n = [], 0, open_at, len(src)
+    while i < n:
+        c = src[i]
+        two = src[i:i + 2]
+        if two == "//":
+            j = src.find("\n", i)
+            i = n if j < 0 else j            # drop to end of line, keep the newline out
+            continue
+        if two == "/*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c in "\"'":
+            j, q = i + 1, c
+            while j < n:
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src[j] == q:
+                    break
+                j += 1
+            out.append(src[i:j + 1])
+            i = j + 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                out.append(c)
+                break
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _resolve_provider(deck_path):
+    """The provider the ENGINE routes this deck to, or None.
+
+    Runs provider_audit.py over the deck's folder rather than re-deriving detection in Python --
+    that script's own rationale, and the right one: `SelectDecisionProvider` keys on card params, so
+    a second implementation would just be a thing to drift.
+    """
+    rc, out, err = run([sys.executable, str(ROOT / "scripts/provider_audit.py"),
+                        str(Path(deck_path).parent)])
+    stem = deck_stem(deck_path)
+    for ln in out.splitlines():
+        m = re.match(r"\s+(\S.*?)\s\s+(\w+)\s+cert=", ln)
+        if m and m.group(1).strip() == stem:
+            return m.group(2)
+    return None
+
+
+def gate_discard_policy(deck_path):
+    """Every deck must carry an AUTHORED, user-reviewed cleanup-discard BUCKET policy.
+
+    WHY THIS GATE EXISTS (user, 2026-09-23): "I keep finding problems only when I ask explicitly.
+    That's the worst case scenario." The discard policy is a mandated analysis step -- analyze-deck
+    5i, on the 2026-08-07 ruling that there is NO general discard heuristic and the 2026-08-21
+    ruling that the shape is BUCKETS -- and it had no gate. So every deck onboarded after the
+    doctrine was written shipped on the shared fallback silently, and the omission was only ever
+    found by the user asking. That is precisely the failure mode this spine exists to prevent: the
+    only thing that reaches the user should be an explicit approve-or-defer decision.
+
+    The fallback is not neutral, which is why a missing policy is BLOCKING rather than advisory. Its
+    tier B is descending mana value -- "most expensive = most expendable" -- which is backwards for
+    every payoff/ramp/combo deck here: it ranked Creature Giving's Defense of the Heart FIRST to
+    pitch (measured a full turn worse, gi564/gi798) and shed FiveColour's Progenitus for a measured
+    1-turn cost. And `real == 0` does not excuse it: the ROLLOUT takes index 0 of this ranking with
+    no search above it (Minotaur: 99 real sheds against 250,265 inside the search), so a deck that
+    never sheds in play still has every searched line biased by the rule.
+    """
+    classes = _provider_classes()
+    prov = _resolve_provider(deck_path)
+    if prov is None:
+        return Gate("discard_policy", SKIP, True, "could not resolve the deck's provider",
+                    disclose=["discard_policy SKIPPED -- scripts/provider_audit.py did not report a "
+                              f"provider for {deck_stem(deck_path)} (needs build/Release/mtg and a "
+                              "sibling .profile.json). Build with ./build.sh and re-run; a deck with "
+                              "no profile has never been measured at shipped play, so its routing -- "
+                              "and therefore its discard policy -- is undecided."])
+    cls = prov + "Provider"
+    if cls not in classes:
+        return Gate("discard_policy", ERROR, True,
+                    f"provider {prov} reported by the engine has no class {cls} in DecisionProviders.h")
+
+    ledger = _ledger_section(deck_path, "Discard policy")
+
+    # Walk the chain so an INHERITED policy is reported as its own defect, never as coverage.
+    own = classes[cls][1]
+    inherited_from = None
+    if not own:
+        cur = classes[cls][0]
+        while cur in classes:
+            if classes[cur][1]:
+                inherited_from = cur
+                break
+            cur = classes[cur][0]
+
+    if not own and inherited_from:
+        return Gate("discard_policy", FAIL, True,
+                    f"{cls} INHERITS its discard buckets from {inherited_from}",
+                    [(f"discard_policy:inherited",
+                      f"{cls} declares no CleanupDiscardCandidates of its own and inherits "
+                      f"{inherited_from}'s -- another deck's buckets, keyed on another deck's cards. "
+                      f"Author this deck's own policy (analyze-deck 5i) and declare the override in "
+                      f"{cls}'s own body.")])
+
+    if not own:
+        return Gate("discard_policy", FAIL, True,
+                    f"{cls} has NO cleanup-discard policy -- running the generic max-MV fallback",
+                    [(f"discard_policy:missing",
+                      f"{cls} does not override CleanupDiscardCandidates, so this deck sheds by the "
+                      f"shared fallback's descending-mana-value tier. Author a BUCKET policy per "
+                      f"analyze-deck 5i + docs/design/discard-bucket-authoring-brief.md, present it "
+                      f"to the user for confirmation, and gate it default-on behind "
+                      f"MTG_<DECK>_BUCKET_DISCARD.")])
+
+    body = _discard_impl_body(cls)
+    if not body:
+        return Gate("discard_policy", ERROR, True,
+                    f"{cls} declares CleanupDiscardCandidates but no definition was found in "
+                    f"DecisionProviders.cpp")
+
+    authored = bool(DISCARD_FLAG_RE.search(body)) or cls in DISCARD_AUTHORED_NO_FLAG
+    if not authored:
+        return Gate("discard_policy", FAIL, True,
+                    f"{cls}'s override is a PATCH over the generic ranking, not a bucket policy",
+                    [(f"discard_policy:patch",
+                      f"{cls}::CleanupDiscardCandidates carries no MTG_*_BUCKET_DISCARD gate, which "
+                      f"is the convention's marker for an authored policy. Inspect it: an override "
+                      f"that defers to GenericProvider and then reorders one or two named cards is a "
+                      f"special case bolted onto the max-MV rule the user has called \"too "
+                      f"arbitrary\", not the bucket structure 5i requires.")])
+
+    disclose = []
+    if cls in DISCARD_AUTHORED_NO_FLAG:
+        disclose.append(f"discard_policy: {cls} is allowlisted as authored-without-a-flag -- "
+                        f"{DISCARD_AUTHORED_NO_FLAG[cls]}. It has no =0 A/B hatch, so the policy "
+                        f"cannot be measured against the generic baseline without a code edit.")
+    if ledger is None:
+        disclose.append("discard_policy: an authored policy is in place, but there is no "
+                        f"'## Discard policy' section in {ledger_path(deck_path).relative_to(ROOT)}. "
+                        "Adoption is a USER REVIEW (same gate as cast order), so record the bucket "
+                        "list, the quotas and the user's confirmation there -- otherwise the review "
+                        "is unevidenced and the next agent cannot tell an approved policy from an "
+                        "assumed one.")
+    return Gate("discard_policy", PASS, True,
+                f"{cls} carries an authored bucket policy"
+                + ("" if ledger is None else " (user review recorded)"), disclose=disclose)
+
+
 # --------------------------------------------------------------------------- ledger
 LEDGER_BEGIN = "<!-- verify_deck:begin (generated -- do not edit inside) -->"
 LEDGER_END = "<!-- verify_deck:end -->"
@@ -578,6 +795,7 @@ def main():
         gate_mismatch(deck, profile, seeds, args.games, args.no_sweep),
         gate_play_invariants(deck, profile, seeds, args.games, args.no_sweep),
         gate_claude_sweep(deck),
+        gate_discard_policy(deck),
     ]
 
     approved = read_approved(deck)

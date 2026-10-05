@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Eldrazi Conscription"/>
+        <card number="3" name="Lightning Greaves"/>
+        <card number="4" name="Somberwald Sage"/>
+        <card number="2" name="Birds of Paradise"/>
+        <card number="3" name="Bruna, Light of Alabaster"/>
+        <card number="1" name="Prodigious Growth"/>
+        <card number="1" name="Skycloud Expanse"/>
+        <card number="5" name="Forest"/>
+        <card number="3" name="Azorius Chancery"/>
+        <card number="2" name="Seaside Citadel"/>
+        <card number="4" name="Glittering Wish"/>
+        <card number="2" name="Mythic Proportions"/>
+        <card number="3" name="Remote Farm"/>
+        <card number="4" name="Colossification"/>
+        <card number="2" name="Arcanum Wings"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="3" name="Razorverge Thicket"/>
+        <card number="4" name="Botanical Sanctum"/>
+        <card number="3" name="Avacyn's Pilgrim"/>
+        <card number="1" name="Boseiju, Who Endures"/>
+        <card number="2" name="Mother of Runes"/>
+        <card number="2" name="Open the Armory"/>
+        <card number="1" name="Wild Growth"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Bruna, Light of Alabaster"/>
+        <card number="1" name="Indrik Umbra"/>
+        <card number="1" name="Almost Perfect"/>
+        <card number="1" name="Unflinching Courage"/>
+        <card number="1" name="Mythic Proportions"/>
+        <card number="1" name="Avacyn's Pilgrim"/>
+        <card number="1" name="Elgaud Shieldmate"/>
+        <card number="1" name="Worldfire"/>
+    </zone>
+</cockatrice_deck>

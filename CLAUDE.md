@@ -372,6 +372,23 @@ When the user asks to **analyze a deck**, **add a new deck**, or **run the simul
 
 This workflow requires no external API calls — all generation and review happens in the conversation.
 
+**EVERY DECK MUST CARRY AN AUTHORED BUCKETED DISCARD POLICY — and it is now GATED.** Skill §5i has
+mandated a per-deck cleanup-discard policy since 2026-08-07, but until 2026-09-23 nothing enforced
+it, so skipping it produced no error and no output anywhere: **16 of 25 decks had none, and 10 of
+the 14 decks whose ledgers recorded a green `verify_deck` GATE PASS were missing it.** The user
+found it only by asking (*"I keep finding problems only when I ask explicitly. That's the worst
+case scenario."*).
+* Per deck: `verify_deck.py`'s **`discard_policy`** gate (blocking). It fails on MISSING, on
+  PATCH-ONLY (an override with no `MTG_*_BUCKET_DISCARD` hatch — a special case bolted onto the
+  max-MV fallback), and on INHERITED (no override of its own while a BASE provider has one, i.e.
+  running another deck's buckets — `KnightsProvider` derives from `VialProvider`).
+* Fleet: `python3 scripts/discard_policy_audit.py [--check]`.
+* Authoring contract: `docs/design/discard-bucket-authoring-brief.md`. Adoption is a **USER
+  REVIEW**, the same gate as cast order — author the policy, present it, never ask the user to
+  design the buckets.
+* **The general rule this encodes: a mandated step with no gate is a step that does not happen.**
+  When you add a required stage to a skill, add its gate in the SAME change.
+
 ## Regression Testing Skill
 
 When the user asks to **run regression tests**, **smoke/overnight test**, **A/B a change**, **update/rebaseline ground truth**, or **add a deck to the test suite**, read `.claude/skills/regression-testing.md` first. It is the authoritative guide for the `test/` harness.

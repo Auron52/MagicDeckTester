@@ -418,10 +418,23 @@ CLASS. What the core invariant forbids is getting there **by accident**. So:
 It runs the whole battery as a single green gate — coverage (**hard-fails on partial gaps**, not
 just missing), Scryfall cost audit, the viewer decision auditor, a static sites-3&4
 `viewer_wiring` check (every decision type the deck uses has an emitter in `main.cpp` + a GUI branch
-in `index.html`), and the `nonconv`/`fd-diverge` mismatch harnesses — and **exits non-zero unless
+in `index.html`), the `nonconv`/`fd-diverge` mismatch harnesses, and the **`discard_policy` gate**
+(§5i below: the deck's provider must carry an authored BUCKET policy — missing, inherited from
+another deck's provider, or a patch over the max-MV fallback all FAIL) — and **exits non-zero unless
 every blocking check is green or its failure is signed off** in the per-deck ledger
 `docs/design/analysis-<deck>.md` (`## Approved deferrals`). Not-yet-built checks (② field/clause
 audit, ④ broadened claude-play sweep) are reported as **disclosed skips, never silently omitted**.
+
+> **Why `discard_policy` exists, and the lesson in it (user, 2026-09-23).** §5i has mandated a
+> per-deck discard policy since 2026-08-07, and until 2026-09-23 **nothing enforced it** — so
+> skipping it produced no error, no warning and no output anywhere. The result: **10 of the 14
+> decks whose ledgers recorded a green `verify_deck` GATE PASS had no discard policy at all**, and
+> 16 of 25 decks in the repo were shedding by the generic max-MV rule the user has called "too
+> arbitrary". The user found it only by asking directly: *"I keep finding problems only when I ask
+> explicitly. That's the worst case scenario."* A mandated step with no gate is a step that does
+> not happen. When you add a required stage to this skill, add its gate to `verify_deck.py` in the
+> same change — a checklist item that only a human can notice is missing is not a checklist item.
+> Fleet view: `python3 scripts/discard_policy_audit.py [--check]`.
 Use it as the Stage-5→6 gate; the sub-stages below are what it invokes and how to trace a failure it
 reports. (`--no-network` skips the Scryfall audit; `--no-sweep` skips the runtime gates for a fast
 static pre-check; `--write-ledger` records the run + Stage-6a disclosure.)
@@ -803,11 +816,33 @@ tier is only the fallback while no authored rule exists ("too arbitrary" — it 
 expensive = most expendable", which is backwards for payoff decks: it ranked Creature
 Giving's engine first to pitch, and shed FiveColour's Progenitus for a measured 1-turn cost).
 
-#### The shape: buckets (USER doctrine, 2026-08-21)
+#### The shape: buckets (USER doctrine, 2026-08-21, restated 2026-09-23)
 
 "The best approach is almost always bucketing." Partition the hand into ROLES, give each a
 keep QUOTA, and build the keep set quota-first; only overflow beyond quotas is sheddable,
 and the shed is the overall-lowest-priority card.
+
+**How to pick the bucket COUNT (user, 2026-09-23 — the restatement to author from):**
+
+> "Bucketed here just means that we look at what the deck needs and separate the pieces into
+> buckets. Simple decks have 2 buckets like mana and threats. Ramp decks tend to have a category
+> for ramp as well, though it splits up the ramp. Combo decks want each part of the combo split
+> but similar effects grouped."
+
+So the count comes from **what THIS deck needs to function**, and is justified in the proposal —
+never imported from another deck. Simple aggro/midrange: **2** (mana, threats). Ramp: mana, **ramp
+split by role**, threats. Combo: **one bucket per part**, with *similar effects grouped* (two cards
+doing the same combo job share a bucket; two filling different slots do not), plus a dig/cantrip
+bucket where the deck has one.
+
+**And the board is part of what you have (user, 2026-09-23):** *"It's also important that what is
+on board is considered as part of what we have available."* This is structural rule 2 below, and it
+is not a refinement — census the battlefield BEFORE computing any quota. A role already filled on
+board needs no hand copy.
+
+Authoring brief with the full contract, the traps and the deliverable shape:
+`docs/design/discard-bucket-authoring-brief.md`. Enforcement: `verify_deck.py`'s `discard_policy`
+gate (per deck) and `scripts/discard_policy_audit.py` (the fleet).
 
 | bucket | notes |
 |---|---|

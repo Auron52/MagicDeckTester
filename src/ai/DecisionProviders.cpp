@@ -9831,12 +9831,23 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
     bool critter = false; // CritterLifegain -- routes ABOVE goblin (Ranger-Captain's sac outlet) and anti (its tutor)
     // Angels tribal (mono-white). MUST be detected and MUST return ABOVE `critter`: this deck runs
-    // 4 Archangel of Thune, whose lifegain_each_own_creature_counters ALONE sets the CritterLifegain
+    // Archangel of Thune, whose lifegain_each_own_creature_counters ALONE sets the CritterLifegain
     // signature -- the archetype-NEUTRAL-param misroute class that has now caught Mirrorwing
     // (Goblin Instigator), StompySurprise (Hornet Queen), Minotaur (Slaughter-Priest) and Dragons.
     // Landing on CritterLifegainProvider would hand Angels another deck's discard buckets, cast
-    // ordering AND its LegendKeepIndex override -- and this deck has 3 Lyra + 2 Giada + 2 Serra, so
-    // that last one is not hypothetical. Angels holds NO judgement hook: AngelsProvider is an empty
+    // ordering AND its LegendKeepIndex override -- and this deck runs several DUPLICATED legends
+    // (4 Giada, 4 Lyra Archangel of Dawn, 2 Serra), so that last one is not hypothetical.
+    //
+    // COUNTS CORRECTED 2026-09-23. This read "4 Archangel of Thune" and "3 Lyra + 2 Giada +
+    // 2 Serra", which describes the ARCHIVED `v1-thune4-chancery` list, not the one that ships
+    // (2 Thune; 1 Lyra Dawnbringer AND 4 Lyra Archangel of Dawn -- two different cards; 4 Giada).
+    // The ARGUMENT was unaffected -- duplicate legends are still real here -- but the stale numbers
+    // misled a discard-policy authoring pass into reasoning about the wrong list. Second instance
+    // that day (see CritterLifegainProvider's "three Ajani"): a comment that states DECKLIST COUNTS
+    // goes stale the moment a list is adopted and its predecessor archived, and nothing gates it.
+    // Prefer stating the PROPERTY the routing depends on ("runs duplicated legends") over a count.
+    //
+    // Angels holds NO judgement hook: AngelsProvider is an empty
     // DeckProvider derivation, so every heuristic is byte-for-byte the Generic one it rode before
     // (verified play-neutral by the smoke audit, play-changed=0). What it adds is a place for a
     // proof and a name in the audit -- see the always-own-a-provider block above the routing chain.
