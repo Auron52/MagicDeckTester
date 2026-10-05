@@ -1027,6 +1027,21 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             emit("wild_c", std::min(fm.wild_c, fm.wild));
             os << "}";
         }
+        // The CREATURE-ONLY reserve (Somberwald Sage's "spend this mana only to cast creature
+        // spells"), shown separately so a player never reads it as general float. Emitted only when
+        // non-empty (no existing deck/reference ever carries it otherwise).
+        const ManaPool& cm = s.floating_creature_mana;
+        if (cm.Total() > 0)
+        {
+            os << ", \"floating_creature_mana\": {";
+            bool first = true;
+            auto emit = [&](const char* sym, int n) {
+                if (n > 0) { if (!first) { os << ", "; } first = false; os << "\"" << sym << "\": " << n; }
+            };
+            emit("W", cm.white); emit("U", cm.blue); emit("B", cm.black); emit("R", cm.red);
+            emit("G", cm.green); emit("C", cm.colorless); emit("wild", cm.wild);
+            os << "}";
+        }
     }
     // Energy counters. Aether Hub's COLOURED modes are energy-gated ("{T}, Pay {E}: Add one mana of
     // any colour") while its "{T}: Add {C}" is free -- so with zero energy a Hub is a colourless

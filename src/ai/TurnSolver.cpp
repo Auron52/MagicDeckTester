@@ -22239,6 +22239,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (h.score > best_sc) { best_sc = h.score; unpark_id = h.id; }
                     }
                 }
+                // MANA-UNLOCK host (Bruna sweep 2026-10-05): the haste ranking above prices a host by
+                // what it ADDS TO THE ATTACK, and is width-capped at 1 -- so a fresh mana dork whose
+                // haste would fund the turn's payoff (Greaves -> Somberwald Sage, whose {W}{W}{W}
+                // pays Bruna, Light of Alabaster) lost to the payoff itself (Bruna in hand outranks a
+                // 0/1) and the line was inexpressible in the search at any budget, while human play
+                // (all hosts) offered it. Hasting a dork is a different benefit class -- mana, which
+                // the enumerator's HasteUnlockedManaOf credit and ApplyManaUnlockEquips already
+                // model -- so the best such host (most mana per tap, then lowest id) is always KEPT
+                // alongside the attack pick, as the unpark / Stoneforge enables are. A widening, never
+                // a prune; affordability still decides whether any subset can use it.
+                int unlock_id = 0;
+                if (ed->params.equip_grants_haste && HasteDorkCreditEnabled())
+                {
+                    int best_amt = 0;
+                    for (const Host& h : hosts)
+                    {
+                        if (!h.fresh || h.haste) { continue; }
+                        if (attached_to[e] == h.id && h.id != 0) { continue; }
+                        const HostStats st = host_stats(h.id);
+                        if (!st.def || !st.def->card.IsCreature()) { continue; }
+                        if (st.def->tmpl != CardTemplate::ManaDork && !st.def->params.mana_rock) { continue; }
+                        const int amt = std::max(1, st.def->params.produces_amount);
+                        if (amt > best_amt) { best_amt = amt; unlock_id = h.id; }
+                    }
+                }
                 auto by_score = [](const std::pair<int, int>& a, const std::pair<int, int>& b)
                                 { return a.first != b.first ? a.first > b.first : a.second < b.second; };
                 std::sort(ranked.begin(), ranked.end(), by_score);
@@ -22369,7 +22394,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // (Greaves) additionally always offers the Kemba park (doctrine 4e:
                         // "always be equipped to Kemba by end of turn if possible") and the
                         // Stoneforge tap-put enable (doctrine 4b).
-                        bool kept = (unpark_id != 0 && h.id == unpark_id);
+                        bool kept = (unpark_id != 0 && h.id == unpark_id)
+                                 || (unlock_id != 0 && h.id == unlock_id);
                         if (s_consolidate && ed->params.equip_grants_haste
                             && ((kemba_id != 0 && h.id == kemba_id)
                                 || (stoneforge_id != 0 && h.id == stoneforge_id)))
@@ -33009,6 +33035,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Closes the "Known limitation (mixed batches)" deferred in
     // docs/design/slivers-restricted-mana-tap-order-bug.md, now measurably motivated.
     bool mixed_ok = false;
+    ManaPool mixed_p_crea, mixed_p_nonc;   // each stage's own production (creature-only routing below)
     if (!ok && !all_creatures && g_prepay_mixed_on && c_crea.ManaValue() > 0)
     {
         auto restore = [&]()
@@ -33056,6 +33083,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 sum.wild += p2.wild;
                 if (sum.wild != 0) { continue; }   // same ambiguous-pinning bar as the single solve
                 produced = sum; ok = true; mixed_ok = true; won_hold = hold;
+                mixed_p_crea = first_c ? p1 : p2;
+                mixed_p_nonc = first_c ? p2 : p1;
             }
         }
         if (!mixed_ok) { restore(); }
@@ -33305,6 +33334,59 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // legal for every cast it funds; any surplus stays restricted (conservative: a general source's
     // over-tap is under-credited, never laundered). A mixed batch cannot tap such a source at all
     // (RestrictedManaUsable refuses it for for_creature=false). No-op unless one was tapped.
+    // MIXED BATCH (finding A-i, Bruna sweep seed 77012): the two-stage solve above DOES tap a
+    // creature_mana_only source -- its creature stage runs with for_creature=true -- so the old note
+    // ("a mixed batch cannot tap such a source at all") was false, and Somberwald Sage's surplus
+    // landed in the GENERAL float ({U}{G} left over, spendable on Colossification). Route by stage:
+    // the creature stage's whole pre-paid pool (its pins + generic + surplus) becomes creature-only
+    // float -- every unit it holds is paid toward a creature cast, which drains floating_creature_mana
+    // first, so the batch still pays in full -- and the noncreature stage's pool stays general. Same
+    // conservative attribution as the all-creature rule below (a general source's over-tap in the
+    // creature stage is under-credited, never laundered). Only when a restricted source was tapped:
+    // every other mixed batch keeps the combined pool byte-identically.
+    if (mixed_ok && !all_creatures)
+    {
+        bool restricted_tapped = false;
+        const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+        for (int bi = 0; bi < nb && !restricted_tapped; ++bi)
+        {
+            const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+            if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+            if (bd != nullptr && bd->params.creature_mana_only) { restricted_tapped = true; }
+        }
+        if (restricted_tapped)
+        {
+            // Per-stage twin of the true-colours pre-load above: pins at their colours, the stage's
+            // generic as `wild`, the stage's over-production funded colourless-first then largest.
+            auto stage_pool = [](const ManaCost& c, const ManaPool& prod) -> ManaPool
+            {
+                ManaPool pl;
+                pl.white = c.white; pl.blue = c.blue; pl.black = c.black;
+                pl.red = c.red; pl.green = c.green; pl.colorless = c.colorless;
+                int* dst[6]   = { &pl.white, &pl.blue, &pl.black, &pl.red, &pl.green, &pl.colorless };
+                int  free_[6] = { prod.white - c.white, prod.blue - c.blue, prod.black - c.black,
+                                  prod.red - c.red, prod.green - c.green, prod.colorless - c.colorless };
+                for (int i = 0; i < 6; ++i) { if (free_[i] < 0) { free_[i] = 0; } }
+                int need = c.generic;
+                while (need > 0 && free_[5] > 0) { --free_[5]; --need; }
+                while (need > 0)
+                {
+                    int best = -1;
+                    for (int i = 0; i < 5; ++i) { if (free_[i] > 0 && (best < 0 || free_[i] > free_[best])) { best = i; } }
+                    if (best < 0) { break; }
+                    --free_[best]; --need;
+                }
+                pl.wild = c.generic - need;
+                for (int i = 0; i < 6; ++i) { *dst[i] += free_[i]; }
+                pl.wild += prod.Total() - pl.Total();   // preserve the stage total exactly
+                return pl;
+            };
+            state.floating_mana = fm_snap;
+            state.floating_mana.AddPool(stage_pool(c_nonc, mixed_p_nonc));
+            state.floating_creature_mana.AddPool(stage_pool(c_crea, mixed_p_crea));
+        }
+    }
     if (all_creatures)
     {
         bool restricted_tapped = false;
@@ -41527,6 +41609,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // stays net. EnumeratePlans only: an optimistic affordability hint is sound only where a
         // rollout validates the line, and Solve's d0 greedy has none (the Medallion precedent).
         // The rollout and the executor realise it via the ordering hoist in ApplyManaUnlockEquips.
+        // Colours the credited hasted dork adds (bit ci = Color ci; 31 = any): widens the colour-
+        // PRESENCE gate below exactly as a same-subset rock does (WidenHaveWithSubsetRocks). Without
+        // it a plan whose only {W} source IS the unlocked dork (Forests + Somberwald Sage paying Mother
+        // of Runes) was rejected as "colour-exists" -- a legal line the search could not express.
+        int haste_cols = 0;
         if (any_haste_dork)
         {
             ManaPool dork_prod, dork_prod_nc; ManaCost enable_costs; bool sel_dork = false;
@@ -41557,8 +41644,53 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 dork_prod_nc.AddPool(haste_unlock_nc[j]);
                 sel_dork = true;
             }
+            // CREATURE-ONLY unlocked mana (Somberwald Sage: "Spend this mana only to cast creature
+            // spells") is NOT fungible, so the two-pool test below cannot price it: `combined` still
+            // carries the enablers' own costs, and the joint check lets the restricted units "pay"
+            // the host's own cast / the Equipment while the general pool pays a noncreature payoff
+            // -- an exchange that does not exist. Seed 77003 T4 (Bruna sweep, finding A-ii): Sage +
+            // Colossification + equip Greaves -> Sage read 10-of-10 affordable off 7 general mana,
+            // offered six plans that each drop a cast. The restricted units can only ever fund a
+            // creature spell of THIS subset other than the enabling pieces (cast after the unlock),
+            // so cap them at that creature MV. Still an upper bound (never under-credits a real
+            // line); byte-identical for every unrestricted unlocked dork (Bloom Tender's credit is
+            // fully mirrored in dork_prod_nc, so restricted == 0).
+            int restricted = dork_prod.Total() - dork_prod_nc.Total();
+            if (sel_dork && restricted > 0)
+            {
+                int payoff_cre_mv = 0;
+                for (int k : sel)
+                {
+                    const Action& c = cands[k];
+                    if (c.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+                    if (!cd || !cd->card.IsCreature()) { continue; }
+                    if (c.hand_index >= 0 && c.hand_index < static_cast<int>(ap.hand.size()))
+                    {
+                        bool piece = false;
+                        const int num = ap.hand[c.hand_index].m_number;
+                        for (int j : sel)
+                        {
+                            if (haste_unlock[j].Total() <= 0) { continue; }
+                            if (num == cands[j].sac_source_id || num == cands[j].sac_victim_id) { piece = true; break; }
+                        }
+                        if (piece) { continue; }
+                    }
+                    payoff_cre_mv += c.cost.ManaValue();
+                }
+                int excess = restricted - payoff_cre_mv;
+                int* slot[7] = { &dork_prod.wild, &dork_prod.colorless, &dork_prod.white, &dork_prod.blue,
+                                 &dork_prod.black, &dork_prod.red, &dork_prod.green };
+                for (int s = 0; s < 7 && excess > 0; ++s)
+                { const int t = std::min(excess, *slot[s]); *slot[s] -= t; excess -= t; }
+            }
             if (sel_dork && pool.CanPay(enable_costs))
-            { eff.AddPool(dork_prod); eff_nc.AddPool(dork_prod_nc); credited = true; }
+            {
+                eff.AddPool(dork_prod); eff_nc.AddPool(dork_prod_nc); credited = true;
+                haste_cols = (dork_prod.white > 0 ? 1 : 0) | (dork_prod.blue  > 0 ? 2 : 0)
+                           | (dork_prod.black > 0 ? 4 : 0) | (dork_prod.red   > 0 ? 8 : 0)
+                           | (dork_prod.green > 0 ? 16 : 0) | (dork_prod.wild > 0 ? 31 : 0);
+            }
         }
         // Same-turn SCALING SOURCE widening credit. A coloured permanent cast by THIS subset adds its
         // colours to "each color among permanents you control", so every live scaling source taps for
@@ -42044,6 +42176,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel,
                                                         /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
                                                         /*any_rock_cand=*/any_rock);
+        bool have_haste[5];
+        if (haste_cols != 0)
+        {
+            for (int ci = 0; ci < 5; ++ci) { have_haste[ci] = have_eff[ci] || ((haste_cols >> ci) & 1); }
+            have_eff = have_haste;
+        }
         if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
