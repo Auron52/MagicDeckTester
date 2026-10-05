@@ -2781,4 +2781,8 @@ int  EquipRouteTrial(const GameState& s, int controller);     // 0 no, 1 WIN (le
 int  EquipRouteApply(GameState& s, int controller);           // same codes; live run on `s`
 bool EquipRouteTraceOn();                                     // MTG_EQUIP_ROUTE_TRACE (diagnostic)
 bool EquipRouteInProgress();                                  // true inside a route playout (trial or apply)
+// The verdict memo's board key (test seam): two boards whose route verdict can differ must not
+// share it. Pinned by test_equip_route_key.cpp after a Jitte-counter collision replayed a proven
+// kill on a counterless board (2026-10-05).
+std::uint64_t EquipRouteStateKey(const GameState& s, int controller);
 bool EquipRouteDfsActive();                                   // ...and inside its DFS specifically (not the certificate)

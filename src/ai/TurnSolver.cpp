@@ -31199,7 +31199,25 @@ TurnSolver::GreedyPermit::~GreedyPermit()
 TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
     : m_d0(site == GreedySite::D0Runner)
 {
-    if (m_d0) { ++g_d0_permit_nest; }   // TurnSolver::InD0Runner() for the permit's extent
+    if (m_d0)
+    {
+        ++g_d0_permit_nest;             // TurnSolver::InD0Runner() for the permit's extent
+        // A DEPTH-0 TURN IS A DECISION. Every per-decision cache (the equip route's verdict memo and
+        // transposition set, the breakpoint enumeration memo) is scoped on g_decision_epoch, and the
+        // epoch advanced only where a budgeted Solve or the committed-decision driver advanced it --
+        // never here. So under this permit it stood still for a whole depth-0 game, and for every
+        // game a thread played at depth 0 in a row: the lookahead's bottoming trial games, every
+        // `--depth 0` row, the analyzer's card-score games. The caches' keys are sound only inside
+        // one decision (same deck order below the top of the library, same budget state); across
+        // turns and games the same hand + battlefield + top-8 cards sits on a different library, and
+        // a stale verdict crosses over. Observed 2026-10-05 on the swap screen's card-scores run
+        // (101-card union list, DefaultProfile): 2,000+ "[equip-route] !! APPLY replay found no kill
+        // on a board the trial proved" -- a memoised LETHAL from another trial game, replayed on a
+        // board every fresh trial had just called winless -- and the silent mirror image, a stale
+        // "no" suppressing a kill that was there. Zero of either with a keep table attached, because
+        // then every Solve is budgeted and the epoch advances per decision as designed.
+        ++g_decision_epoch;
+    }
     // A permit is a CLAIM that the greedy pick sits outside every search window, and it is checked
     // two ways (greedywindow::InWindow): the claim itself (`remaining_depth`, which the call site
     // supplies) and the innermost open search frame (greedywindow::t_depth, which the HOSTS supply).

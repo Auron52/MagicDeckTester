@@ -323,6 +323,8 @@ add_executable(mtg-test
     test/unit/test_double_strike_grants.cpp
     test/unit/test_equip_all_free.cpp
     test/unit/test_begin_combat_attach.cpp
+    test/unit/test_d0_epoch.cpp
+    test/unit/test_equip_route_key.cpp
     test/unit/test_prevent_damage.cpp
     test/unit/test_prevent_damage_spells.cpp
     test/unit/test_prevent_damage_creatures.cpp
