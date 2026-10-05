@@ -10,7 +10,10 @@
 
 struct CardDefinition; // fwd decl: Card caches a pointer into the CardDatabase (see m_def)
 
-enum class CardType { Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Battle };
+// Kindred (CR 308; formerly "Tribal"): a card type that only ever appears beside another card type
+// (Eldrazi Conscription is a Kindred Enchantment). It is deliberately NOT in IsPermanent's list --
+// Kindred alone is not a permanent type; the card is a permanent through its other type.
+enum class CardType { Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Battle, Kindred };
 enum class Color { White, Blue, Black, Red, Green, Colorless };
 
 // Human-readable colour name, for play-event text and viewer labels only (never parsed back).
@@ -152,6 +155,11 @@ enum class Keyword
     // change an outcome. NOTE KeywordFromString THROWS on an unmapped keyword, so a cards.json
     // entry listing "Jump" without this enumerator crashes card loading rather than degrading.
     Jump,
+    // Aura swap (Arcanum Wings): an INERT keyword-ability tag -- the "{cost}: exchange this Aura with an
+    // Aura card in your hand" mechanic is modelled structurally via CardParams::aura_swap_cost
+    // (Action::Kind::AuraSwap + the in-combat swap pin), not by this enum. Kept so the Scryfall keywords
+    // field ["Aura Swap"] stays faithful.
+    AuraSwap,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

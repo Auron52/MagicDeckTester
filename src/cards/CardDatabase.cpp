@@ -226,6 +226,12 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             ap2.aura_tough_bonus  = def.params.aura_tough_bonus;
             ap2.aura_grants_lifelink = def.params.aura_grants_lifelink;
             ap2.aura_enchant_requires = def.params.aura_enchant_requires;
+            ap2.aura_set_base_power     = def.params.aura_set_base_power;
+            ap2.aura_set_base_toughness = def.params.aura_set_base_toughness;
+            ap2.aura_etb_tap_host       = def.params.aura_etb_tap_host;
+            // CR 702.103e: an unattached bestowed Aura becomes a creature again rather than going
+            // to the graveyard, so the orphaned-Aura SBA (SweepOrphanedAuras) must skip this face.
+            ap2.aura_is_bestow_face     = true;
             aura.params = std::move(ap2);
             m_def_hash[bname] = CardDefHash(entry) ^ std::hash<std::string>{}(bname);
             m_cards[bname] = std::move(aura);
@@ -418,6 +424,7 @@ static CardType CardTypeFromString(const std::string& s)
     if (s == "Artifact")    { return CardType::Artifact; }
     if (s == "Planeswalker"){ return CardType::Planeswalker; }
     if (s == "Battle")      { return CardType::Battle; }
+    if (s == "Kindred")     { return CardType::Kindred; }   // CR 308 (Eldrazi Conscription)
     throw std::runtime_error("Unknown card type: " + s);
 }
 
@@ -465,6 +472,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Transmute")     { return Keyword::Transmute; }  // inert tag; mechanic is param-modelled
     if (s == "Eternalize")    { return Keyword::Eternalize; } // inert tag; mechanic is param-modelled
     if (s == "Jump")          { return Keyword::Jump; }       // inert tag; see Keyword::Jump
+    if (s == "Aura Swap")     { return Keyword::AuraSwap; }   // inert tag; param-modelled (aura_swap_cost)
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1030,6 +1038,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tutor_mv_max_is_x         = params.value("tutor_mv_max_is_x", false);
     p.wish_from_sideboard       = params.value("wish_from_sideboard", false);
     p.wish_requires_name        = params.value("wish_requires_name", std::string());
+    p.wish_requires_multicolored = params.value("wish_requires_multicolored", false);
     p.etb_energy                = params.value("etb_energy", 0);
     p.energy_per_colored_tap    = params.value("energy_per_colored_tap", 0);
     p.exiles_self_on_resolve    = params.value("exiles_self_on_resolve", false);
@@ -1220,6 +1229,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.aura_scale_power          = params.value("aura_scale_power", 0);
     p.aura_scale_tough          = params.value("aura_scale_tough", 0);
     p.aura_enchant_requires     = params.value("aura_enchant_requires", std::string());
+    p.aura_set_base_power       = params.value("aura_set_base_power", -1);
+    p.aura_set_base_toughness   = params.value("aura_set_base_toughness", -1);
+    p.aura_etb_tap_host         = params.value("aura_etb_tap_host", false);
+    p.attack_gather_auras       = params.value("attack_gather_auras", false);
+    if (params.contains("aura_swap_cost"))
+    { p.aura_swap_cost = ManaCostFromString(params["aura_swap_cost"].get<std::string>()); }
     p.aura_self_buff_power      = params.value("aura_self_buff_power", 0);
     p.aura_self_buff_tough      = params.value("aura_self_buff_tough", 0);
     p.draw_on_aura_cast         = params.value("draw_on_aura_cast", false);
@@ -1382,6 +1397,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_life_floor               = params.value("etb_life_floor", 0);
     p.mana_per_creature_count_all  = params.value("mana_per_creature_count_all", false);
     p.mana_per_life_gained         = params.value("mana_per_life_gained", false);
+    p.produces_one_color           = params.value("produces_one_color", false);
     p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
     p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);

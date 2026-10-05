@@ -1195,6 +1195,12 @@ struct CardParams
     // whole sideboard. Without that, this deck's two unreachable future-deckbuilding sideboard
     // cards would be reported as implementable gaps.
     std::string              wish_requires_name;
+    // Glittering Wish: "...a MULTICOLORED card you own from outside the game" -- a colour-COUNT
+    // filter (two or more colours, CR 105.2c), read off the card DEFINITION. A conjunct inside
+    // TutorNumericFilterOk (so it reaches every enumeration site at once, like wish_requires_name)
+    // plus a resolution guard in PerformTutor. ALSO READ BY scripts/analyze_deck.py's
+    // sideboard-reachability scan. false = unrestricted (byte-identical).
+    bool                     wish_requires_multicolored = false;
     // "Exile <this card>" on resolution, instead of the graveyard (Living Wish). NOT inert, though
     // nothing in this deck can interact with an exiled card: MidGameFeature::GraveyardSize and
     // ExileSize are real learned-model features, and EOT dominance folds each zone when the attached
@@ -2057,6 +2063,36 @@ struct CardParams
     //                   or a +1/+1 counter). No equipment in this deck; = has an aura or a +1/+1 counter.
     // Empty => any creature you control is a legal target.
     std::string aura_enchant_requires;
+    // Almost Perfect: "Enchanted creature has base power and toughness 9/10". A LAYER-7b base SET
+    // (CR 613.4b), not a +N/+N: AuraBonusFor returns the delta (set - (printed + CDA base)) once,
+    // so every 7c modifier (other auras, counters, pumps, lords) still stacks on top -- Somberwald
+    // Sage + Almost Perfect + Eldrazi Conscription = 19/20. The delta can be NEGATIVE (a host whose
+    // base exceeds 9) and is not clamped. -1 = no base-set (0 is a legal set value).
+    int  aura_set_base_power     = -1;
+    int  aura_set_base_toughness = -1;
+    // Colossification: "When this Aura enters, tap enchanted creature." A mandatory ETB, resolved by
+    // the shared ResolveAuraEnterTapHost right AFTER aura_attached_to is set, at EVERY aura-ENTER
+    // site (cast executor + rollout, Bruna's put, Arcanum Wings' swap) -- CR 603.6a, a put fires it
+    // just like a cast. Re-attaching an Aura already on the battlefield is not an enter (no tap).
+    bool aura_etb_tap_host = false;
+    // Internal (never read from JSON): set on the synthesized "<name> (Bestowed)" aura face. An
+    // unattached bestowed Aura becomes a creature (CR 702.103e) instead of going to the graveyard,
+    // so the CR 704.5m orphaned-Aura sweep skips it (it keeps the historical inert-orphan model).
+    bool aura_is_bestow_face = false;
+    // Arcanum Wings: "Aura swap {2}{U} ({2}{U}: Exchange this Aura with an Aura card in your hand.)"
+    // Action::Kind::AuraSwap (main phase) + the in-combat swap pin (Plan::combat_aura_swap ->
+    // GameState::scripted_combat_aura_swap), both resolved by the shared ApplyAuraSwap. The hand
+    // Aura is PUT (not cast, does not target -- CR 303.4f), so shroud does not stop it.
+    // nullopt = no aura swap (every other card byte-identical).
+    std::optional<ManaCost> aura_swap_cost;
+    // Bruna, Light of Alabaster: "Whenever Bruna attacks ..., you may attach to it any number of
+    // Auras on the battlefield and you may put onto the battlefield attached to it any number of
+    // Aura cards that could enchant it from your graveyard and/or hand." Resolved at declare-
+    // attackers (after attack pumps, before damage) in BOTH worlds by FireAttackGatherAuras. WHICH
+    // Auras is a SEARCHED subset (Plan::bruna_gather_choice -> GameState::scripted_bruna_gather);
+    // the provider's BrunaGatherCandidates is the only narrower. Also the Bruna provider-routing
+    // signature (DetectDecisionProvider).
+    bool attack_gather_auras = false;
 
     // --- Kor Spiritdancer ---
     // "This creature gets +N/+N for each Aura attached to it." Applied to THIS permanent in AuraBonusFor
@@ -2736,6 +2772,11 @@ struct CardParams
     // the mana ceiling declines to prune while a tappable copy is out. It is also never a dead
     // source, unlike a Priest at zero Elves: the floor is 1.
     bool mana_per_life_gained = false;
+    // Somberwald Sage: "{T}: Add three mana of any ONE color." A FIXED produces_amount N>1 across a
+    // multi-colour produces list that is all ONE chosen colour -- NOT a Karoo one-of-each bundle.
+    // Routes through IsSingleColorBurstSource exactly like mana_per_life_gained, so both payers
+    // suppress the bundle rule. false = historical behaviour (byte-identical).
+    bool produces_one_color = false;
 
     // Arbor Elf: "{T}: Untap target Forest." Modelled as a G dork that is LIVE only while the
     // controller controls a land with this subtype -- equivalent in a single-main goldfish
