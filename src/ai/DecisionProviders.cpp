@@ -2315,6 +2315,33 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     return r;
 }
 
+// Attack-turn body order (MTG_ATTACK_BODY_TAP_ORDER; the hook's contract is on the declaration in
+// DecisionProvider.h). Lower taps first, so: a body that cannot attack this combat prices 0 (tap it
+// before any attacker), and an attacker prices 1 + its effective power. The +1 keeps a 0-power
+// attacker (Ignoble Hierarch) ahead of a non-attacker in the hold order while still behind every
+// body with power. Effective power (counters, auras, equipment) rather than the printed value: the
+// damage the body would deal is what the hold protects. Plan-gated through PlanTraits, exactly like
+// the scaler bias above: null traits (outside a plan apply, human play's own payments, the lever
+// off) -> 0 for every source, i.e. the historical comparator. A same-turn pump the PLAN carries is
+// not added here: a magnet fan-out (Mirrorwing) pumps every body by the same X, which preserves
+// the order; a single-target pump's target is already held by MTG_PUMP_TARGET_HOLD.
+int GenericProvider::ManaSourceHoldValue(const GameState& s, const Permanent& p,
+                                         const CardDefinition&) const
+{
+    if (!AttackBodyTapOrderOn()) { return 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (pt == nullptr || !pt->attack_matters) { return 0; }
+    if (!p.card.IsCreature() && !p.is_animated) { return 0; }
+    if (!CanAttackFull(p, s.battlefield, s.active_player_index)) { return 0; }
+    // The power COMBAT would deal, not the printed value: Combat.cpp's attacker damage is
+    // EffectivePower() + ComputeLordBonus(), and ComputeLordBonus is where the static self-pumps
+    // live -- Faeburrow Elder is printed 0/0 with domain_self_pump (+1/+1 per colour), so on the
+    // printed value it ranked as the SMALLEST body and was tapped ahead of a 1/1 Bloom Tender
+    // (fivecolour d0 gi94: a 5-power vigilance attacker lost, T5 -> T6).
+    const int lord_pb = ComputeLordBonus(p.card, s, s.active_player_index, false, &p).first;
+    return 1 + std::max(0, p.EffectivePower() + lord_pb);
+}
+
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
 {
     // See DecisionProvider::ManaSourceRank. Flexibility rank for the scarcity-first tap order (LOWER =
@@ -2761,7 +2788,18 @@ int SnowProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) 
     if (!HumanPlayActive()) { return base; }
     // Cheap param gate above: every other source in the deck returns before the board scan.
     const int need  = def.params.tap_draw_cost->ManaValue();
-    const int spare = SpareUntappedMana(s, s.active_player_index) - ManaProducedPerTap(def);
+    // TURN scope, not board scope (fix 2026-10-05): the hold buys a dig only if the board can still
+    // pay {1}{S} AFTER the payment being ordered has taken its pips from the other sources. The
+    // board-scope read (spare before the payment) is what the APPROXIMATION note above disclosed,
+    // and it bit exactly as predicted on references/Snow/claude_s4_gi3 T5: two Sheets, Forest, two
+    // Islands, one Sheets activating. Spare 3 >= 2 held the second Sheets, so the dig's {1}{S} took
+    // BOTH Islands -- and spare after that payment was 0, so the held Sheets could never dig again.
+    // All the hold did was strand the {U} the found Frost Augur needed; the human paid the dig with
+    // the other Sheets' {C} + one Island and kept an Island up. Subtracting what this payment still
+    // owes (g_pay_remaining_mv, live inside TapForCostSharedOnce) is the user's own rule applied at
+    // the right moment: "until we would end up with 2 or less mana" is about what is LEFT.
+    const int owed  = g_pay_need_live ? g_pay_remaining_mv : 0;
+    const int spare = SpareUntappedMana(s, s.active_player_index) - ManaProducedPerTap(def) - owed;
     return (spare >= need) ? 60 : base;
 }
 

@@ -309,6 +309,9 @@ enum Slot : int
     VIAL_TWIN_DEDUP,          // MTG_VIAL_TWIN_DEDUP      a Vial-put ORDER twin (Plan::vial_after_casts) joins the post-apply EXACT-duplicate skip (PlanDupSkippable). Default ON
     VIAL_TWIN_ROLLOUT_LEGACY, // MTG_VIAL_TWIN_ROLLOUT_LEGACY  inside a leaf ROLLOUT the Vial-order twin keeps its pre-0cb72937 param gate. Default ON
     CANON_CONT_NOACTS,        // MTG_CANON_CONT_NOACTS    an UNBRANCHED canon continuation (BpUnbranchedCanon) applies its casts only, not its board activations (Plan::cont_canon). Default ON
+    NEEDS_TAP_ORDER,          // MTG_NEEDS_TAP_ORDER        needs-based mana-source choice: among the plain-land tiers a source is ranked FIRST by the unmet demand its tap would create (demand = hand cast costs + our board's activation pips + one expected reveal from the LIBRARY's castable pips when a dig/draw is live, net of this payment's own coloured pips; supply = untapped sources per colour, decremented as the payment taps), THEN by the flexibility ladder. Colourless stops being "spend first" the moment a {C} pip is in demand (EDF's Displacer); a needed colour is held while an unneeded one pays a generic pip. USER 2026-10-05: "needs based ... first hand and then deck for cases where we are drawing cards". Measurement lever, default OFF
+    PAY_ROLLBACK,             // MTG_PAY_ROLLBACK           same-turn mana-payment ROLLBACK: when a later line is short of a colour (a real payment fails, or a dig's find has the mana but not the colour), re-pay ONE earlier pip of this turn from a still-untapped side-effect-free source that cannot make that colour, freeing the source that can (src/ai/PayRollback.h; docs/design/mana-payment-rollback.md). At most one rescue per turn, dominant swaps only, lockstep on the state. USER 2026-10-05: "a backup which attempts to bridge this consistency gap". Measurement lever, default OFF
+    ATTACK_BODY_TAP_ORDER,    // MTG_ATTACK_BODY_TAP_ORDER  on a pre-combat main with an eligible attacker (PlanTraits::attack_matters), equal-rank mana CREATURES tap lowest-attack-power first (DecisionProvider::ManaSourceHoldValue), ahead of the demand-surplus colour tiebreak. USER 2026-10-05 (Mirrorwing v2 s51_gi50 T4: Libation X=5 tapped two 1-power Mystics over two 0-power Hierarchs, 19 damage vs a 21 kill). Measurement lever, default OFF
     COUNT
 };
 
@@ -579,6 +582,9 @@ inline const char* Name(int slot)
         "MTG_VIAL_TWIN_DEDUP",
         "MTG_VIAL_TWIN_ROLLOUT_LEGACY",
         "MTG_CANON_CONT_NOACTS",
+        "MTG_NEEDS_TAP_ORDER",
+        "MTG_PAY_ROLLBACK",
+        "MTG_ATTACK_BODY_TAP_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

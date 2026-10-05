@@ -6,6 +6,7 @@
 #include "DecisionProviders.h"
 #include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
+#include "PayRollback.h"   // MTG_PAY_ROLLBACK: the dig-gate rescue (lockstep with TurnSolver's twin)
 #include "LandPlay.h"
 #include "Combat.h"
 #include "EngineFlags.h"
@@ -5261,6 +5262,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // SHARED BODY with the rollout (was a copy-pasted twin kept aligned by
                         // comment discipline) -- see TurnSolver::SnowLookFoundPlayable. The two
                         // worlds must agree exactly or bp_seen counting diverges.
+                        // MANA-PAYMENT ROLLBACK (MTG_PAY_ROLLBACK; the rollout twin does the same):
+                        // the find has the mana but the dig's own payment spent its colour -- re-pay
+                        // one earlier pip so the colour comes free, BEFORE the gate is asked (with
+                        // MTG_SNOW_LOOK_COLOR off the gate calls a colour-short find "worth" and the
+                        // re-solve then silently never casts it).
+                        if (fd && PayRollbackOn() && TurnSolver::SnowLookFoundColorShort(state, *fd))
+                        { payroll::TryRescue(state, EffectiveCost(*fd, state), fd->card.m_name.str().c_str()); }
                         if (fd) { snow_look_worth = TurnSolver::SnowLookFoundPlayable(state, *fd); }
                     }
                     if (snow_look_worth)

@@ -1,5 +1,19 @@
 # The reference reproducibility gate is RED on `origin/phase-1-2-deck-analyzer`
 
+## UPDATE 2026-10-05 (later) — all three now REPLAY
+
+* **Snow `s4_gi3` — FIXED (engine, human play only).** The cause was narrower than "needs-based
+  generic payment": `SnowProvider::ManaSourceRank`'s Scrying Sheets hold judged affordability on the
+  board BEFORE the payment (spare 3 ≥ dig 2, so it held the second Sheets at rank 60) and the dig's
+  `{1}{S}` took both Islands — yet spare AFTER the payment was 0, so the held Sheets could never dig
+  again. The hold now subtracts what the payment still owes (`g_pay_remaining_mv`). Replays `ok`.
+* **Mirrorwing v2 `s51_gi50` — replays at T4 under `MTG_ATTACK_BODY_TAP_ORDER=1`** (lowest-power
+  mana creature taps first on an attack turn; 21 damage). Default OFF until the A/B in
+  `test/mana_tap_order_ab.sh` clears the adoption bar; the gate at default still reports it as the
+  one play-drift until then.
+* The generalised needs-based choice (`MTG_NEEDS_TAP_ORDER`) is built alongside; design and status
+  in `mana-payment-rollback.md`.
+
 ## UPDATE 2026-10-05 — all three ROOT-CAUSED; one fixed, two owed a payment heuristic
 
 Found by following each recorded line to the frame where the engine refuses it (no bisect needed).

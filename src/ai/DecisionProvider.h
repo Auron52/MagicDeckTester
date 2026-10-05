@@ -1877,6 +1877,21 @@ public:
     // header; GenericProvider implements it and every archetype inherits that.
     virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
 
+    // ManaSourceHoldValue -- the WITHIN-RANK tap-order key: among sources ManaSourceRank ties, the
+    // one with the LOWER hold value pays first. What it prices is the body, not the mana: on a
+    // pre-combat main with an eligible attacker (PlanTraits::attack_matters) a mana creature's
+    // hold value is its attack power, so the payment spends the creatures that would deal the
+    // least damage and keeps the biggest bodies untapped to swing (Mirrorwing v2 s51_gi50 T4:
+    // Luxurious Libation X=5 tapped both 1-power Elvish Mystics and left two 0-power Ignoble
+    // Hierarchs -- 19 damage against a 20-life opponent; tapping the Hierarchs is 21). USER
+    // 2026-10-05: on an attack turn tap the non-attackers first, then the lowest attack value, and
+    // colour flexibility "only as a needs-based tiebreak" -- so this key sits BEFORE the payment's
+    // demand-surplus tiebreak and AFTER the rank (a creature never jumps a land). The default 0 is
+    // the historical comparator exactly; GenericProvider implements the attack-turn rule behind
+    // MTG_ATTACK_BODY_TAP_ORDER.
+    virtual int ManaSourceHoldValue(const GameState&, const Permanent&, const CardDefinition&) const
+    { return 0; }
+
     // EtbChosenColor -- "As this permanent enters, choose a color" (CardParams::etb_choose_color;
     // Coldsteel Heart). Returns the Color ordinal to LOCK into Permanent::chosen_color, or -1 to
     // leave it unchosen (readers then fall back to the definition's full menu).

@@ -343,7 +343,13 @@ static_assert(sizeof(Player) == 200,
 // Cathar, CR 726) is GAME STATE and IS folded above (nonzero-gated). Permanent gained
 // `chosen_keyword_mask` (Rick) and `linked_exile_number` (Brutal Cathar), both in existing padding
 // (sizeof(Permanent) unchanged) and both folded above, nonzero-gated.
-static_assert(sizeof(GameState) == 864,
+// +104 bytes (2026-10-05; size set from a measured sizeof): `pay_ledger` (PayRollbackLedger, the
+// same-turn mana-payment rollback's record of this turn's committed taps -- src/ai/PayRollback.h).
+// Classification: MID-TURN SCRATCH, DEAD AT THE BOUNDARY. It is stamped by (turn, player) and reset
+// the moment a new turn starts, and this comparator only ever compares END-OF-TURN states (mid-turn
+// state is refused outright, see the boundary assertion), where the ledger's content has no effect on
+// any future line. With MTG_PAY_ROLLBACK off it is never written at all. Nothing to fold.
+static_assert(sizeof(GameState) == 968,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

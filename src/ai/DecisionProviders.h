@@ -201,6 +201,8 @@ public:
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
     int         ManaSourceRank(const GameState&, const CardDefinition&) const override;
+    // Attack-turn body order (MTG_ATTACK_BODY_TAP_ORDER): see DecisionProvider::ManaSourceHoldValue.
+    int         ManaSourceHoldValue(const GameState&, const Permanent&, const CardDefinition&) const override;
     int         EtbChosenColor(const GameState&, int controller,
                                const CardDefinition&) const override;
     double      NcLandDropTempoBonus(const GameState&, int) const override;

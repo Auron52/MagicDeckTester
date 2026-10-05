@@ -11246,6 +11246,9 @@ inline int UntapCreatureDeadReason(const GameState& state, int controller, int s
 inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
                                const std::string& subtype)
 {
+    // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
+    // retroactive re-pay can no longer assume "untapped now" means "untapped then".
+    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
     int src = -1, best = -1, best_yield = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -14710,6 +14713,9 @@ inline bool AttackUntapSnowFires(const GameState& state, int controller,
 
 inline void UntapSnowPermanents(GameState& state, int controller)
 {
+    // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
+    // retroactive re-pay can no longer assume "untapped now" means "untapped then".
+    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
     const bool ice_grants = AnyIceCounters(state) && IceGrantsSnow(state);
     for (Permanent& p : state.battlefield)
     {
@@ -17219,6 +17225,9 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
 // (lowest battlefield index first) so the rollout and executor agree.
 inline void UntapManaSources(GameState& state, int count)
 {
+    // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
+    // retroactive re-pay can no longer assume "untapped now" means "untapped then".
+    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
     const int active = state.active_player_index;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()) && count > 0; ++i)
     {
@@ -17480,6 +17489,9 @@ inline bool FeedFilterFirstOn()
 // of the X).
 inline void RitualUntapSources(GameState& state, int count)
 {
+    // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
+    // retroactive re-pay can no longer assume "untapped now" means "untapped then".
+    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
     if (count <= 0) { return; }
     const int active = state.active_player_index;
     std::vector<std::pair<int, int>> tapped;   // (per-tap output, battlefield index)
@@ -21374,6 +21386,9 @@ inline ManaCost EffectiveActivationCost(const GameState& state, int controller,
 // the default.
 inline void EtbUntapLands(GameState& state, int controller, int count, bool log_ledger)
 {
+    // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
+    // retroactive re-pay can no longer assume "untapped now" means "untapped then".
+    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
     if (count <= 0) { return; }
     // Computed ONCE per untap, not per land: the sink is a property of the board, and the scan is
     // O(battlefield). HumanPlayActive() first, so an autonomous game pays a single bool. See the
@@ -24169,21 +24184,36 @@ inline bool FreshHoldActive()
 // read are untouched). Same publish-a-scalar shape as the (reverted) fix-1 g_pay_remaining_pips.
 inline thread_local int  g_pay_colored_need[5] = {0, 0, 0, 0, 0};
 inline thread_local bool g_pay_need_live       = false;
+// ...AND THE PAYMENT'S REMAINING MANA VALUE (every pip still owed, net of floating), published
+// alongside and DECREMENTED by the greedy as each pip lands. Consumer: a liveness-gated reserve
+// that asks a TURN-scope question -- "after this payment, can the board still afford X?" -- which
+// SpareUntappedMana alone cannot answer (it is the board BEFORE the payment). The first consumer
+// is SnowProvider's Scrying Sheets hold: with two Sheets, Forest, two Islands, it held the second
+// Sheets (board spare 3 >= dig 2) and paid the dig's {1}{S} with BOTH Islands -- but spare AFTER
+// the payment was 0, so the held Sheets could never dig again and the hold only stranded the
+// {U} the found Frost Augur needed (references/Snow/claude_s4_gi3, T5; never replayed before).
+// Reset to the full value when the greedy fails, so the backtracker's rank reads see the whole
+// payment again. 0 when !g_pay_need_live.
+inline thread_local int  g_pay_remaining_mv    = 0;
 struct PayNeedScope
 {
     int  prev[5];
+    int  prev_mv;
     bool prev_live;
-    PayNeedScope(int w, int u, int b, int r, int g)
+    PayNeedScope(int w, int u, int b, int r, int g, int remaining_mv)
     {
         for (int i = 0; i < 5; ++i) { prev[i] = g_pay_colored_need[i]; }
+        prev_mv   = g_pay_remaining_mv;
         prev_live = g_pay_need_live;
         g_pay_colored_need[0] = w; g_pay_colored_need[1] = u; g_pay_colored_need[2] = b;
         g_pay_colored_need[3] = r; g_pay_colored_need[4] = g;
+        g_pay_remaining_mv = remaining_mv;
         g_pay_need_live = true;
     }
     ~PayNeedScope()
     {
         for (int i = 0; i < 5; ++i) { g_pay_colored_need[i] = prev[i]; }
+        g_pay_remaining_mv = prev_mv;
         g_pay_need_live = prev_live;
     }
     PayNeedScope(const PayNeedScope&)            = delete;

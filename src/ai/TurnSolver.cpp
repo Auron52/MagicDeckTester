@@ -5,6 +5,8 @@
 #include "TurnSolver.h"
 #include "ContPinScope.h"
 #include "ManaPayment.h"
+#include "PayLedger.h"   // MTG_PAY_ROLLBACK_AUDIT: the dig-gate half of the count-only instrument
+#include "PayRollback.h" // MTG_PAY_ROLLBACK: the dig-gate rescue (lockstep with AIEngine's twin)
 #include "PlanContext.h"
 #include "LandPlay.h"
 #include "Combat.h"
@@ -15030,6 +15032,15 @@ static bool SnowLookColorGateOn()
 // site 8 exists because the found card must be playable this turn (USER 2026-09-06, "we need to be
 // able to play it"), and anything else the continuation could cast was already available to the base
 // plan. This tightens the existing question; it does not change which question is asked.
+bool TurnSolver::SnowLookFoundColorShort(const GameState& state, const CardDefinition& fd)
+{
+    if (fd.card.IsLand()) { return false; }
+    ManaPool have = AvailableManaPool(state);
+    have.AddPool(state.floating_mana);
+    if (static_cast<int>(have.Total()) < fd.card.m_mana_cost.ManaValue()) { return false; }
+    return !have.CanPay(EffectiveCost(fd, state));
+}
+
 bool TurnSolver::SnowLookFoundPlayable(const GameState& state, const CardDefinition& fd)
 {
     const Player& lap = state.players[state.active_player_index];
@@ -15049,6 +15060,10 @@ bool TurnSolver::SnowLookFoundPlayable(const GameState& state, const CardDefinit
     const bool color_ok = have.CanPay(EffectiveCost(fd, state));
     if (!color_ok && census)
     { g_snow_look_color_fail.fetch_add(1, std::memory_order_relaxed); }
+    // Rollback audit (count-only, real play): the find has the mana but not the colour -- would a
+    // same-turn re-pay of the dig's own payment have freed it? (Snow s4_gi3's class.)
+    if (!color_ok && payledger::On() && g_real_resolution)
+    { payledger::NoteLookDeclined(state, EffectiveCost(fd, state), fd.card.m_name.str().c_str()); }
     return SnowLookColorGateOn() ? color_ok : true;
 }
 
@@ -37520,6 +37535,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         const Player& lap = state.players[state.active_player_index];
                         const CardDefinition* fd =
                             CardDatabase::Instance().LookupCached(lap.hand.back());
+                        // MANA-PAYMENT ROLLBACK (MTG_PAY_ROLLBACK; lockstep with the executor twin):
+                        // a colour-short find gets one same-turn re-pay BEFORE the gate is asked.
+                        if (fd && PayRollbackOn() && TurnSolver::SnowLookFoundColorShort(state, *fd))
+                        { payroll::TryRescue(state, EffectiveCost(*fd, state), fd->card.m_name.str().c_str()); }
                         // SHARED with the executor twin -- see TurnSolver::SnowLookFoundPlayable.
                         if (fd) { snow_look_worth = TurnSolver::SnowLookFoundPlayable(state, *fd); }
                     }

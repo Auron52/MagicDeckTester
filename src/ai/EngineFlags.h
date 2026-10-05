@@ -99,6 +99,32 @@ inline bool SporeSourcePoolEnabled()
     return heurarm::Flag(heurarm::FUNGUS_SPORE_POOL, env_on);
 }
 
+// MTG_ATTACK_BODY_TAP_ORDER -- DEFAULT OFF until measured. The attack-turn creature tap order: see
+// DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce), so
+// executor and rollout see one value; heurarm slot so a pooled batch can carry both arms.
+inline bool AttackBodyTapOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_BODY_TAP_ORDER");
+    return heurarm::Flag(heurarm::ATTACK_BODY_TAP_ORDER, env_on);
+}
+
+// MTG_NEEDS_TAP_ORDER -- DEFAULT OFF until measured. Needs-based mana-source choice: see the
+// ComputeNeedsDemandSupply header in ManaPayment.cpp. Read inside the shared payment, so executor
+// and rollout see one value; heurarm slot so a pooled batch can carry both arms.
+inline bool NeedsTapOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_NEEDS_TAP_ORDER");
+    return heurarm::Flag(heurarm::NEEDS_TAP_ORDER, env_on);
+}
+
+// MTG_PAY_ROLLBACK -- DEFAULT OFF until measured. The same-turn mana-payment rollback: see
+// src/ai/PayRollback.h. Read in the shared payment entry and both dig-gate twins (lockstep).
+inline bool PayRollbackOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_ROLLBACK");
+    return heurarm::Flag(heurarm::PAY_ROLLBACK, env_on);
+}
+
 // MTG_ETB_WATCHER_GATES (DEFAULT ON) -- stamp the two remaining ETB-cascade presence gates
 // (GameState::deck_has_subtype_enter_counters / deck_has_etb_counter_payer) from the decklist
 // instead of leaving them unconditionally open.

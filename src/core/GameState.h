@@ -187,9 +187,32 @@ struct StackEntry
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 
+// MANA-PAYMENT ROLLBACK ledger (MTG_PAY_ROLLBACK; src/ai/PayRollback.h): this turn's committed
+// payment taps, so a later same-turn line short of a colour can re-pay one earlier pip from another
+// source. On the STATE rather than thread-local so every rollout branch and the executor carry their
+// own copy in lockstep. Stamped by (turn, player); ~110 bytes; written only with the lever on except
+// the untap-effect flag, which the untap effects always set (one store).
+struct PayRollbackLedger
+{
+    struct Entry { int source_num = 0; signed char produced = -1; bool generic = false; };
+    static constexpr int kMax = 12;
+    Entry       e[kMax];
+    signed char n            = 0;
+    signed char player       = -1;
+    signed char rollbacks    = 0;       // rescues fired this turn (capped at one)
+    bool        untap_effect = false;   // an untap EFFECT fired this turn: a retroactive re-pay is unsound
+    int         turn         = -1;
+    void Stamp(int t, int p)
+    { if (t != turn || p != player) { n = 0; turn = t; player = static_cast<signed char>(p); rollbacks = 0; untap_effect = false; } }
+    void Push(int t, int p, int num, int col, bool gen)
+    { Stamp(t, p); if (n < kMax) { e[n].source_num = num; e[n].produced = static_cast<signed char>(col); e[n].generic = gen; ++n; } }
+    void NoteUntapEffect(int t, int p) { Stamp(t, p); untap_effect = true; }
+};
+
 struct GameState
 {
     std::array<Player, 2>    players;
+    PayRollbackLedger        pay_ledger;
     int                      active_player_index   = 0;
     int                      priority_player_index = 0;
     Phase                    phase                 = Phase::Beginning;

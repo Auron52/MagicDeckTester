@@ -1434,6 +1434,11 @@ public:
     // the two worlds cannot disagree about whether the occurrence is counted -- a disagreement
     // shifts every later bp_at index. `fd` is the card the tap-draw just found (hand.back()).
     static bool SnowLookFoundPlayable(const GameState& state, const CardDefinition& fd);
+    // The find has the mana (mana value fits what is untapped + floating) but NOT the colours. The
+    // mana-payment rollback's trigger at the dig gate (src/ai/PayRollback.h): tested BEFORE the gate,
+    // because with MTG_SNOW_LOOK_COLOR off the gate reports a colour-short find as "worth" and the
+    // re-solve then silently never casts it. False for a land find (nothing to re-pay for).
+    static bool SnowLookFoundColorShort(const GameState& state, const CardDefinition& fd);
     // Site 8's UNSEARCHED continuation inside the search window plays nothing (not even a found
     // land) when this is true -- see ApplyPlanDirect's narrow branch. SHARED with the executor,
     // which mirrors that branch on a committed line instead of re-solving (lockstep).

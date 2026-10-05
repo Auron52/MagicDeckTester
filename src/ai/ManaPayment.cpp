@@ -5,6 +5,8 @@
 #include "ManaPayment.h"
 #include "DecisionProviders.h"   // IdealOrderSuppressScope (the range's cost-efficient end)
 #include "EngineFlags.h"
+#include "PayLedger.h"            // MTG_PAY_ROLLBACK_AUDIT: the rollback's count-only instrument
+#include "PayRollback.h"          // MTG_PAY_ROLLBACK: the rollback itself (ledger on the state)
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
@@ -16,6 +18,195 @@
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
 #include <vector>
+
+// ---- NEEDS-BASED TAP ORDER (MTG_NEEDS_TAP_ORDER; NeedsTapOrderOn in EngineFlags.h) -------------
+//
+// USER 2026-10-05: *"It should be needs based ... improve our heuristics to reflect need (first hand
+// and then deck for cases where we are drawing cards, since you want to retain the most potentially
+// useful colour for the deck we are playing)"*, and on colourless: *"Regarding using colourless for
+// generic costs that entirely depends on what our deck needs. EDF is a good example of a case that
+// doesn't work nicely with this rule ... The handling should be generalized, but choose different
+// types of mana based on the deck and hand."*
+//
+// The scarcity ladder (ManaSourceRank: {C}-only 5, mono 10, dual 20, tri 30, rainbow 50) is a PRIOR
+// -- "a flexible source is more likely to be wanted later" -- that knows nothing about what this
+// hand, this board or this library actually wants. This computes the posterior once per payment:
+//
+//   D[c]  DEMAND still ahead of this payment THIS TURN, per colour (W,U,B,R,G,C):
+//           the hand's cast costs and our battlefield's repeatable activation pips (Displacer's
+//           {2}{C}, Sheets' {1}{S}) that are CASTABLE with what the board has left after this
+//           payment -- every land untaps at the next untap step, so a colour held for a spell this
+//           turn cannot reach is a colour held for nothing (the uncapped hand was measured: it
+//           held Blood Crypt for an eight-mana spell on five sources, fivecolour d0 gi414) --
+//           the spell being paid excluded ("hand first");
+//         + on a turn whose plan attacks, the repeatable combat pumps as a SINK (firebreathing
+//           {R}, a team pump {1}{R}): pips x (remainder / MV), since ApplyFirebreathing spends the
+//           whole leftover pool;
+//         + when a REVEAL is live this turn (a dig/draw in the plan, or an untapped tap-draw /
+//           sac-draw permanent of ours), ONE reveal's expected pips: the library's castable nonland
+//           cards' pips over the library size ("then deck"), the same castability cap. This reads
+//           the library as a MULTISET only -- the decklist minus the zones you can see, which a
+//           human knows -- never its order.
+//         NOT priced: a depletion land's counter (the ladder's +1 nudge and dep tiebreak keep it,
+//           inside equal harm) -- charging it half a shortfall pushed a dual ahead of the two-mana
+//           depletion land and stranded the dual's other colour (th d0 gi50/218/687).
+//   S[c]  SUPPLY: untapped own sources that produce c (lands, dorks that can tap now, rocks),
+//           decremented as this payment's taps land so later pips see what is really left.
+//
+// A candidate's HARM is the unmet demand its tap would create, summed over the colours it produces:
+// per colour, shortfall(S - 1) - shortfall(S) with shortfall(x) = max(0, D - x). Fixed point x64 so
+// the library's fractional pips compare against integer supply. The payment's comparator then
+// orders the plain-land tiers by (harm, ladder rank) instead of (ladder rank): a {C}-only land with
+// a live {C} sink (D[C] >= S[C]) is held while a Forest nobody needs pays the generic pip, which is
+// the autonomous-play generalisation of the human-only MTG_C_SOURCE_HOLD / MTG_HOLD_C_FOR_SINK /
+// MTG_HUMAN_TAP_DEMAND rules; a rainbow land nothing in hand or deck needs this turn pays before a
+// mono land whose colour is exactly covered. The reserve tiers (60+), the creature band (64+) and
+// the pins (negative ranks) keep their absolute order -- harm only breaks ties INSIDE them -- so
+// "no creature ever ranks ahead of any land" (six refuted variants) still holds.
+//
+// Lockstep: computed inside the shared payment, so executor and rollout agree. Cost: one hand +
+// battlefield scan per payment (not per pip), plus one library scan only when a reveal is live.
+static constexpr int kNdScale = 64;
+static void ComputeNeedsDemandSupply(const GameState& state, int active, const ManaCost& cost,
+                                     int* D, int* S)
+{
+    for (int i = 0; i < 6; ++i) { D[i] = 0; S[i] = 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    bool reveal = (pt != nullptr && pt->mid_turn_casts);
+    int  total  = 0;   // untapped mana: the castability cap for the hand, the board and the library
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if ((d->params.tap_draw_cost.has_value() || d->params.sac_draw_cost.has_value())
+            && (!d->card.IsCreature() || CanTapNow(p, state.battlefield))) { reveal = true; }
+        const bool dork = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
+                       && GraveyardFuelLive(state, active, *d);
+        if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+        total += ManaProducedPerTap(*d);
+        // A CONVERSION source (Cascade Bluffs, Capital City) is not supply of its colours: it
+        // only re-colours a feeder's mana, so counting it would credit the board with colours it
+        // cannot make on its own, and the harm of spending it would hold it while the real duals
+        // pay -- exactly the Fluctuator s10 T3 defect the rank-6 tier was built against ("taps
+        // both black lands"). Its FREE {C} mode is real supply; its outputs are not.
+        if (IsManaConversionSource(d->params) || d->params.any_color_filter)
+        {
+            // A RAMP filter (Ferrous Lake "{1}, {T}: Add {U}{R}") has no free mode at all -- it
+            // produces nothing without a feeder -- so it is not {C} supply either (the th d0
+            // instrument read S[C] = 2 with one Reliquary Tower on the board).
+            if (!d->params.filter_no_free_colorless && !d->params.ramp_filter)
+            { S[static_cast<int>(Color::Colorless)] += kNdScale; }
+            continue;
+        }
+        int seen = 0;
+        for (Color c : EffectiveProducesFor(state, active, *d, &p))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci > 5 || (seen & (1 << ci))) { continue; }
+            seen |= (1 << ci);
+            S[ci] += kNdScale;
+        }
+    }
+    // DEMAND IS WHAT COULD STILL BE CAST THIS TURN. Every land untaps at the next untap step,
+    // so holding a colour for a spell this turn cannot reach buys nothing and costs the ladder's
+    // flexibility order. Round 2 measured the uncapped hand (ComputeRefloatDemand: every card's
+    // pips): fivecolour d0 gi414 held Blood Crypt for an eight-mana {4}{U}{B}{B}{R} on a
+    // five-source board and spent Jetmir's Garden (T5 -> T6); selesnya d0 gi623 held Selesnya
+    // Sanctuary's only W for a {4}{W}{W} it was two short of; fluctuator d0 gi618 the same with
+    // Glittering Massif. The cap is the mana left after this cost -- the library half below
+    // already used it. The spell being paid is excluded by cost identity when it is in hand; an
+    // activation (no hand match) subtracts its own pips instead.
+    const int castable = std::max(0, total - cost.ManaValue());
+    int need[6] = { 0, 0, 0, 0, 0, 0 };
+    bool skipped_self = false;
+    const auto same_cost = [&](const ManaCost& m) {
+        return m.generic == cost.generic && m.white == cost.white && m.blue == cost.blue
+            && m.black == cost.black && m.red == cost.red && m.green == cost.green
+            && m.colorless == cost.colorless;
+    };
+    for (const Card& hc : state.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || hd->card.IsLand()) { continue; }
+        const ManaCost& m = hd->card.m_mana_cost;
+        if (!skipped_self && same_cost(m)) { skipped_self = true; continue; }
+        if (m.ManaValue() > castable) { continue; }
+        AddCostToRefloatDemand(need, m);
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        const std::optional<ManaCost>* costs[] = {
+            &q.drain_cost, &q.exile_opponent_top_cost, &q.blink_cost, &q.tap_damage_cost,
+            &q.tap_investigate_cost, &q.tap_draw_cost, &q.sac_draw_cost,
+        };
+        for (const std::optional<ManaCost>* c : costs)
+        {
+            if (!c->has_value()) { continue; }
+            const ManaCost m = EffectiveActivationCost(state, active, p.card, c->value());
+            if (!skipped_self && same_cost(m)) { skipped_self = true; continue; }
+            if (m.ManaValue() > castable) { continue; }
+            AddCostToRefloatDemand(need, m);
+        }
+    }
+    // REPEATABLE COMBAT PUMPS ARE A SINK, NOT ONE CAST. Firebreathing (Scourge of Valkas "{R}:
+    // +1/+0") and a team pump (Lathliss "{1}{R}") spend every leftover mana of their colour in
+    // combat -- ApplyFirebreathing reads the untapped pool after the main phase -- so on a turn
+    // whose plan attacks, their demand is the whole remainder: pips x (remainder / MV). The
+    // uncapped hand protected R here only by accident (dragons d0 gi340: four R pips of
+    // uncastable dragons kept both Mountains for Scourge, 10 damage and the win on T6; capped to
+    // the hand alone it spent a Mountain and dealt 9).
+    if (pt != nullptr && pt->attack_matters && castable > 0)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.firebreathing_cost.has_value()
+                && (p.card.IsCreature() || p.is_animated)
+                && CanAttackFull(p, state.battlefield, active))
+            {
+                const ManaCost& m = d->params.firebreathing_cost.value();
+                const int times = castable / std::max(1, m.ManaValue());
+                for (int k = 0; k < times; ++k) { AddCostToRefloatDemand(need, m); }
+            }
+            if (d->params.team_pump_cost.has_value())
+            {
+                const ManaCost& m = d->params.team_pump_cost.value();
+                const int times = castable / std::max(1, m.ManaValue());
+                for (int k = 0; k < times; ++k) { AddCostToRefloatDemand(need, m); }
+            }
+        }
+    }
+    if (!skipped_self)
+    {
+        const int own[6] = { cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless };
+        for (int i = 0; i < 6; ++i) { need[i] = std::max(0, need[i] - own[i]); }
+    }
+    for (int i = 0; i < 6; ++i) { D[i] = need[i] * kNdScale; }
+    if (!reveal) { return; }
+    const Library& lib = state.players[active].library;
+    const int n = static_cast<int>(lib.size());
+    if (n <= 0) { return; }
+    const int cap = std::max(1, total - cost.ManaValue());
+    int pips[6] = { 0, 0, 0, 0, 0, 0 };
+    for (const Card& c : lib)
+    {
+        // The DEFINITION's cost and type: a library Card is a placeholder (empty masks, empty cost).
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        const ManaCost& m = d->card.m_mana_cost;
+        if (m.ManaValue() > cap) { continue; }
+        pips[0] += m.white; pips[1] += m.blue; pips[2] += m.black;
+        pips[3] += m.red;   pips[4] += m.green; pips[5] += m.colorless;
+    }
+    for (int i = 0; i < 6; ++i) { D[i] += pips[i] * kNdScale / n; }
+}
 
 // MTG_FLOAT_TRACE (see the two print sites below). Namespace scope, not a function-local static:
 // this is read on every payment, and a magic static would add a guard check to each.
@@ -238,6 +429,12 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                      def.card.m_name.str().c_str(), (int)col,
                      state.players[active].energy_counters); } }
     p.tapped = true;
+    // Rollback audit (count-only, real play): this tap and the alternatives it had.
+    if (payledger::On() && g_real_resolution)
+    { payledger::Record(state, active, p, def, col, payledger::t_cur_pip_any); }
+    // Rollback ledger (MTG_PAY_ROLLBACK, both worlds): the committed tap, on the state.
+    if (PayRollbackOn())
+    { state.pay_ledger.Push(state.turn_number, active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any); }
     // CRACK FLAG: a pay-sac source (Treasure / Eldrazi Spawn) is SACRIFICED, not left tapped, and
     // the erase is deferred to CommitPaySacSacrifices -- which uses this flag to skip its whole
     // battlefield walk on the overwhelmingly common board that cracked nothing. Set here because
@@ -618,7 +815,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     SpendFloatingTowardCost(state.floating_mana, cost);
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
-    PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green);
+    PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green, cost.ManaValue());
+    const int pay_full_mv = cost.ManaValue();   // restored before the backtracker (see pay())
 
     // SNOW-pip restriction (see ManaCost::snow_pips): while the greedy loop is settling an {S}
     // pip this flag narrows every candidate to SNOW producers -- the one choke point (usable)
@@ -626,6 +824,14 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // producing PERMANENT's snow-ness is what CR 106.4b cares about (a fed snow filter's output
     // is snow mana regardless of the feeder). false for every non-{S} pip -> byte-identical.
     bool paying_snow = false;
+
+    // Needs-based tap order (MTG_NEEDS_TAP_ORDER): per-payment demand/supply, computed lazily at the
+    // first pip that reaches the scarcity loop and decremented as taps land. See
+    // ComputeNeedsDemandSupply at the top of this file.
+    bool nd_ready = false;
+    int  nd_left[7] = { 0, 0, 0, 0, 0, 0, 0 };   // W,U,B,R,G,C pips + generic still owed by THIS payment (needs lever)
+    int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
+    int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
 
     // §2b SAC-FOR-MANA FODDER (MTG_SAC_OUTLET_PAY -- see SacOutletPayEnabled in SpellEffects.h).
     // Resolved ONCE per payment, never per source per pip: the latter is the O(board^2) walk this
@@ -726,6 +932,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             const int bn = static_cast<int>(state.battlefield.size());
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
             int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)
+            int best_hold = 1 << 30;   // provider hold value: LOWER taps first (ManaSourceHoldValue)
             // HUMAN-PLAY DEMAND TIEBREAK (MTG_HUMAN_TAP_DEMAND, default ON; =0 restores the
             // battlefield-order tie). USER 2026-09-05, Melira s1 T4: a pod activation's generic
             // {1} tapped the FOREST while Boulderloft (W) and Darkbore (B) sat untapped -- all
@@ -774,6 +981,34 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 }
             }
             int ff_i = -1, ff_rank = 1 << 30;   // best kind-2 filter candidate (FeedFilterFirstOn reroute)
+            // Needs-based order (MTG_NEEDS_TAP_ORDER): demand/supply once per payment.
+            const bool nd_live = NeedsTapOrderOn();
+            if (nd_live && !nd_ready) { nd_ready = true; ComputeNeedsDemandSupply(state, active, cost, nd_D, nd_S); }
+            // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): the needs model's demand/supply for this
+            // pip and every candidate's key, real payments only (the [tapdbg]/[paydbg] contract).
+            static const bool s_nddbg = EnvOn("MTG_TAPDBG");
+            const bool nddbg = s_nddbg && nd_live && g_real_resolution;
+            if (nddbg)
+            { std::fprintf(stderr, "[nddbg] pip=%s D=[%d %d %d %d %d %d] S=[%d %d %d %d %d %d]\n",
+                           any ? "any" : std::to_string(static_cast<int>(needed)).c_str(),
+                           nd_D[0], nd_D[1], nd_D[2], nd_D[3], nd_D[4], nd_D[5],
+                           nd_S[0], nd_S[1], nd_S[2], nd_S[3], nd_S[4], nd_S[5]); }
+            // The comparator's lexicographic key (see the block at the comparator): plain-land
+            // tiers compare (0, harm, rank, hold); every other tier (reserves, the creature band,
+            // the negative pins) compares (rank, hold, harm, 0). Then depletion, then demand surplus.
+            int best_key[4] = { 1 << 30, 1 << 30, 1 << 30, 1 << 30 };
+            // FILTER DEFERRAL (needs lever only). A filter's modes -- the fed conversion (kind 2)
+            // and the free {C} (kind 3) -- are NOT needs-ordered against the direct sources: the
+            // needs model prices access to colours and a filter neither adds supply nor spends it
+            // in a way that model can see (its fed mode consumes a feeder; its {C} mode forfeits a
+            // conversion). Both directions were measured wrong: charged 0, the fed mode jumped a
+            // harm-carrying dual (th d0 gi442: Bluffs+Vents paid {1}{U}, the {1}{R}{R} payload lost
+            // its conversion, 5 -> unwon); charged its outputs, Capital City was held while the
+            // duals paid (Fluctuator s10 T3, the user's 09-05 defect). So the best filter is kept
+            // aside and compared ONCE, after the loop, against the best direct source AT THAT
+            // SOURCE'S HARM -- i.e. by the ladder rank, dep and sur alone, exactly the historical
+            // filter-vs-direct order -- while the direct sources are needs-ordered among themselves.
+            int best_f = -1, best_f_kind = 0, best_f_rank = 1 << 30, best_f_dep = -1, best_f_sur = -(1 << 30);
             // HOISTED out of the per-permanent loop below: SacPayFodderRank is called once per
             // candidate body, and resolving the doomed-token creators inside it made the whole pass
             // O(board^2) -- measured at +48% CPU on Fungus candidate B before this hoist. Empty
@@ -945,13 +1180,163 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     }
                     sur = has_col ? worst : (1 << 20);
                 }
-                if (rank < best_rank
-                    || (rank == best_rank
-                        && (dep > best_dep || (dep == best_dep && sur > best_sur))))
-                { best_rank = rank; best_i = i; best_kind = kind; best_dep = dep; best_sur = sur; }
+                // Provider HOLD VALUE (ManaSourceHoldValue): among equal-rank candidates, the
+                // one whose body is worth LESS this turn taps first -- the attack-turn creature
+                // order (MTG_ATTACK_BODY_TAP_ORDER). Sits between the rank and the depletion /
+                // demand tiebreaks: a creature and a depletion land never share a rank, and the
+                // user's ruling puts colour flexibility AFTER attack value ("colour flexibility
+                // only as a needs-based tiebreak"). 0 everywhere the lever is off -> the
+                // comparator below is the historical one, byte-identical.
+                const int hold = (kind == 1) ? ResolveProvider(state).ManaSourceHoldValue(state, p, *def) : 0;
+                // Needs-based HARM (MTG_NEEDS_TAP_ORDER; ComputeNeedsDemandSupply): the unmet
+                // demand this tap would create, over the colours the source produces. A direct
+                // source's payment-legal colours; a filter's conversion outputs (tapping it for its
+                // free {C} spends the conversion for the turn). 0 with the lever off.
+                // A filter's {C} mode (kind 3) is charged its {C} only -- its conversion outputs
+                // are not supply (see ComputeNeedsDemandSupply) -- and its fed coloured mode
+                // (kind 2) is charged nothing here: the feeder it consumes is chosen by its own
+                // scarcity pass, which carries that feeder's harm.
+                int harm = 0;
+                if (nd_live && (kind == 1 || kind == 3))
+                {
+                    static const std::vector<Color> kOnlyC{ Color::Colorless };
+                    const std::vector<Color>& hp = (kind == 1) ? pay_produces(*def, &p) : kOnlyC;
+                    int seen = 0;
+                    for (Color c : hp)
+                    {
+                        const int ci = static_cast<int>(c);
+                        if (ci > 5 || (seen & (1 << ci))) { continue; }
+                        seen |= (1 << ci);
+                        const int sf_now  = std::max(0, nd_D[ci] - nd_S[ci]);
+                        const int sf_less = std::max(0, nd_D[ci] - (nd_S[ci] - kNdScale));
+                        harm += sf_less - sf_now;
+                    }
+                    // PER MANA THIS PAYMENT CAN USE: a bounce land's one tap pays two pips (Izzet
+                    // Boilerworks {U}{R}), so the colours it spends are spread over twice the mana
+                    // and its tap saves another source. Charging it per colour tapped an Island
+                    // instead and floated the bounce land's second mana (hinata d0 gi229: 4 lands
+                    // for a 4-pip cast, the follow-up 2-drop lost, T7 -> T8). But only the units
+                    // the REST OF THIS PAYMENT can consume count: per mana PRODUCED, Sandstone
+                    // Needle's {R}{R} at half harm won a lone {R} pip over a Mountain, its second
+                    // mana floated away and a depletion counter went with it (dragonstorm d0
+                    // gi168/438/560, mirrorwing d0 gi579). The extra units can pay the generic
+                    // pips still owed and the coloured pips of the colours the source yields.
+                    {
+                        const int yield = ManaProducedPerTap(*def);
+                        int usable = 1;
+                        if (yield > 1)
+                        {
+                            int rem[7];
+                            for (int k = 0; k < 7; ++k) { rem[k] = nd_left[k]; }
+                            { const int slot = any ? 6 : static_cast<int>(needed);
+                              if (slot >= 0 && slot < 7 && rem[slot] > 0) { --rem[slot]; } }
+                            int payable = rem[6], seen2 = 0;
+                            for (Color c : hp)
+                            {
+                                const int ci = static_cast<int>(c);
+                                if (ci < 0 || ci > 5 || (seen2 & (1 << ci))) { continue; }
+                                seen2 |= (1 << ci);
+                                payable += rem[ci];
+                            }
+                            usable = 1 + std::min(yield - 1, payable);
+                        }
+                        harm /= usable;
+                    }
+                    // A DRIP land's coloured tap gifts the opponent a life, priced in harm's own
+                    // unit (kNdScale = one colour fully short): antilife d0 gi124, Grove paid {G}
+                    // over Temple Garden because W was short, T5 -> T6. Static like the ladder's
+                    // nudge (the Remedy-live drip is forced separately by TapDripLandsIfUseful,
+                    // never by tap order). A DEPLETION land is NOT priced here: round 1 charged it
+                    // half a shortfall and that outranked the ladder, so a dual paid ahead of the
+                    // two-mana depletion land and the dual's other colour was stranded for the
+                    // follow-up cast (th d0 gi50: Temple paid {1}{U} over Skerry, Land's Edge
+                    // {1}{R}{R} uncastable, T4 -> T5; gi218, gi687 the same shape with Needle).
+                    // Its finite counter stays the ladder's +1 nudge and the dep tiebreak, both of
+                    // which still apply INSIDE equal harm.
+                    if (def->params.tap_opponent_lifegain > 0) { harm += kNdScale; }
+                }
+                // Key order. PLAIN-LAND tiers (0 <= rank < 60: the flexibility ladder, the filter
+                // and one-shot tiers, their nudges) compare NEEDS first, then the ladder: that is
+                // what makes the order needs-based rather than flexibility-based. Every other
+                // tier -- the reserves (60-63), the creature band (64+), §2b fodder (500+) and the
+                // NEGATIVE pins (tap-pref, sac victim) -- keeps its absolute rank, so a creature
+                // never jumps a land and a pinned source always pays first; inside one of those
+                // tiers the body's hold value comes before needs (USER: colour flexibility "only
+                // as a needs-based tiebreak" among attackers). With both levers off every key is
+                // (0, 0, rank, 0) or (rank, 0, 0, 0) -> the historical rank comparator exactly.
+                if (nd_live && (kind == 2 || kind == 3) && rank >= 0 && rank < 60)
+                {
+                    // Deferred (see best_f above): historical order among the filters themselves.
+                    if (rank < best_f_rank
+                        || (rank == best_f_rank
+                            && (dep > best_f_dep || (dep == best_f_dep && sur > best_f_sur))))
+                    { best_f = i; best_f_kind = kind; best_f_rank = rank; best_f_dep = dep; best_f_sur = sur; }
+                    if (kind == 2 && FeedFilterFirstOn() && rank < ff_rank) { ff_rank = rank; ff_i = i; }
+                    if (nddbg)
+                    { std::fprintf(stderr, "[nddbg]   filter %s kind=%d rank=%d dep=%d sur=%d (deferred)\n",
+                                   def->card.m_name.str().c_str(), kind, rank, dep, sur); }
+                    continue;
+                }
+                if (nddbg)
+                { std::fprintf(stderr, "[nddbg]   cand %s kind=%d rank=%d harm=%d hold=%d dep=%d sur=%d\n",
+                               def->card.m_name.str().c_str(), kind, rank, harm, hold, dep, sur); }
+                // "FIRST HAND, THEN DECK" (USER): harm's WHOLE pips (certain demand: the hand, the
+                // board, a pump sink) outrank the ladder; its FRACTION (the library reveal's
+                // expectation, pips / library size) only breaks a rank tie. Compared raw, a 2/64
+                // vs 4/64 reveal fraction overrode the ladder and tapped Sandstone Needle's LAST
+                // counter for a lone generic pip over an Island (th d3/d5 s3003 gi69, T5 -> T6).
+                // hold is 0 for every plain-tier source (ManaSourceHoldValue is creature-only, and
+                // creatures sit in the 64+ band), so the plain key's fourth slot is free for it.
+                int key[4];
+                if (kind != 5 && rank >= 0 && rank < 60)
+                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank; key[3] = harm % kNdScale; }
+                else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
+                int cmp = 0;
+                for (int k = 0; k < 4 && cmp == 0; ++k) { cmp = (key[k] < best_key[k]) ? -1 : (key[k] > best_key[k] ? 1 : 0); }
+                const bool better = cmp < 0
+                    || (cmp == 0 && (dep > best_dep || (dep == best_dep && sur > best_sur)));
+                if (better)
+                { best_rank = rank; best_i = i; best_kind = kind; best_dep = dep; best_sur = sur; best_hold = hold;
+                  for (int k = 0; k < 4; ++k) { best_key[k] = key[k]; } }
                 if (kind == 2 && FeedFilterFirstOn() && rank < ff_rank) { ff_rank = rank; ff_i = i; }
             }
+            if (best_f >= 0)
+            {
+                // The deferred filter competes at the best direct source's own harm (its key[1] and key[3]),
+                // so only the ladder rank, dep and sur decide between them -- the historical order.
+                const int fkey[4] = { 0, best_i >= 0 ? best_key[1] : 0, best_f_rank, best_i >= 0 ? best_key[3] : 0 };
+                int cmp = 0;
+                for (int k = 0; k < 4 && cmp == 0; ++k) { cmp = (fkey[k] < best_key[k]) ? -1 : (fkey[k] > best_key[k] ? 1 : 0); }
+                const bool better = best_i < 0 || cmp < 0
+                    || (cmp == 0 && (best_f_dep > best_dep || (best_f_dep == best_dep && best_f_sur > best_sur)));
+                if (better)
+                { best_i = best_f; best_kind = best_f_kind; best_rank = best_f_rank; best_dep = best_f_dep;
+                  best_sur = best_f_sur; best_hold = 0; for (int k = 0; k < 4; ++k) { best_key[k] = fkey[k]; } }
+            }
             if (best_i < 0) { return false; }
+            if (nddbg)
+            { std::fprintf(stderr, "[nddbg]   -> %s kind=%d rank=%d key=(%d %d %d %d)\n",
+                           CardDatabase::Instance().LookupCached(state.battlefield[best_i].card)->card.m_name.str().c_str(),
+                           best_kind, best_rank, best_key[0], best_key[1], best_key[2], best_key[3]); }
+            // Needs-based order: the chosen source leaves the supply for this payment's later pips.
+            if (nd_live && nd_ready && (best_kind == 1 || best_kind == 3))
+            {
+                const Permanent& bp = state.battlefield[best_i];
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd != nullptr)
+                {
+                    static const std::vector<Color> kOnlyC{ Color::Colorless };
+                    const std::vector<Color>& hp = (best_kind == 1) ? pay_produces(*bd, &bp) : kOnlyC;
+                    int seen = 0;
+                    for (Color c : hp)
+                    {
+                        const int ci = static_cast<int>(c);
+                        if (ci > 5 || (seen & (1 << ci))) { continue; }
+                        seen |= (1 << ci);
+                        nd_S[ci] -= kNdScale;
+                    }
+                }
+            }
             // Feed-aware reroute (MTG_FEED_FILTER_FIRST; see FeedFilterFirstOn in SpellEffects.h):
             // when the chosen DIRECT source is the LAST untapped non-filter source producing any of
             // the best filter candidate's colours, and none of those colours float, tapping it
@@ -1301,9 +1686,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
 
     auto pay = [&](Color needed, bool any) -> bool
     {
-        if (!produce(needed, any, true)) { return false; }
-        if (any) { Color took; return ConsumeFloatingAny(floating, took); }
-        return ConsumeFloating(floating, needed);
+        payledger::t_cur_pip_any = any;     // rollback audit: what kind of pip this tap pays
+        const bool produced = produce(needed, any, true);
+        payledger::t_cur_pip_any = false;
+        if (!produced) { return false; }
+        const bool ok = any ? [&]{ Color took; return ConsumeFloatingAny(floating, took); }()
+                            : ConsumeFloating(floating, needed);
+        // One pip landed: the turn-scope reserves (g_pay_remaining_mv's consumers) now see one
+        // fewer pip still owed by this payment.
+        if (ok && g_pay_remaining_mv > 0) { --g_pay_remaining_mv; }
+        if (ok) { const int slot = any ? 6 : static_cast<int>(needed); if (slot >= 0 && slot < 7 && nd_left[slot] > 0) { --nd_left[slot]; } }
+        return ok;
     };
 
     // Greedy-first, then a backtracking fallback for filter chains the greedy strands
@@ -1362,6 +1755,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                      state.floating_mana.wild); } };
     auto greedy = [&]() -> bool
     {
+        nd_left[0] = cost.white; nd_left[1] = cost.blue;  nd_left[2] = cost.black;     nd_left[3] = cost.red;
+        nd_left[4] = cost.green; nd_left[5] = cost.colorless; nd_left[6] = cost.generic;
         // Pay coloured requirements first (most restrictive), then generic.
         for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
         for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) return false; }
@@ -1401,6 +1796,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         if (cap_live && available) { *available = av_pre_greedy; }
     }
     // Greedy failed: try the backtracking solver from a clean board.
+    g_pay_remaining_mv = pay_full_mv;   // the greedy's partial decrements are undone with its taps
     // OPPONENT life is part of the rollback (2026-08-21): a Grove-class drip land tapped by the
     // failed greedy arrangement has already paid the opponent's gain/loss, and without restoring
     // it the backtracker's own tap pays it AGAIN -- the opponent took Grove's drip twice for one
@@ -3537,17 +3933,37 @@ static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
-    if (!state.dmg_events_armed)
-    { return TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
-    // PREVENT DAMAGE (armed only). The payment's taps recorded their triggers on the permanents
-    // (Permanent::mana_tap_mark); resolve them once the OUTERMOST payment has succeeded -- after the
-    // mana abilities, before the spell resolves, which is where the rules put those triggers (they
-    // go on the stack above the spell being cast). A failed payment restored every mark.
+    // Nesting is counted on BOTH branches now (it used to be the armed one only): the rollback
+    // audit below wants the OUTERMOST failure, the same depth-1 notion the damage flush uses.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
-    // (The pain-aware payment policy runs per ATTEMPT, inside TapForCostSharedOnce -- see there.)
-    const bool ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
-    if (ok && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
+    bool ok;
+    if (!state.dmg_events_armed)
+    { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
+    else
+    {
+        // PREVENT DAMAGE (armed only). The payment's taps recorded their triggers on the permanents
+        // (Permanent::mana_tap_mark); resolve them once the OUTERMOST payment has succeeded -- after
+        // the mana abilities, before the spell resolves, which is where the rules put those triggers
+        // (they go on the stack above the spell being cast). A failed payment restored every mark.
+        // (The pain-aware payment policy runs per ATTEMPT, inside TapForCostSharedOnce -- see there.)
+        ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        if (ok && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
+    }
+    // Rollback audit (count-only, real play): would one same-turn re-pay have rescued this?
+    if (!ok && t_pay_nest == 1 && payledger::On() && g_real_resolution)
+    { payledger::NoteFailure(state, cost_in); }
+    // MANA-PAYMENT ROLLBACK (MTG_PAY_ROLLBACK): the outermost payment failed -- if one earlier
+    // same-turn pip can be re-paid so the colour this cost lacks comes free, do it and pay again.
+    // Once (TryRescue caps itself at one rescue per turn), never nested (depth 1 only).
+    if (!ok && t_pay_nest == 1 && PayRollbackOn() && payroll::TryRescue(state, cost_in, nullptr))
+    {
+        ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        if (ok && state.dmg_events_armed) { dmgev::FlushDamageEvents(state); }
+        // The retry still failed: a failed payment must leave the game exactly as it found it,
+        // so the re-pay is undone too (its own taps were restored by the failure path above).
+        if (!ok) { payroll::UndoLast(state); }
+    }
     return ok;
 }
 
