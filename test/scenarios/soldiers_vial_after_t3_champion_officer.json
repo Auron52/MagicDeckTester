@@ -1,0 +1,23 @@
+{
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 11,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "_comment": "Soldiers 5d sweep seed 9100047 T3 line: Vial on 2, two Esper Sentinels already attacking, hand Champion of the Parish + Recruitment Officer + Jirina (MV2, Vial-able; the Champion is MV1 and cannot swap roles). Best: cast Champion, cast Officer, THEN Vial-put Jirina -> Champion +2. T3 swing 2 (11 -> 9); T4 swing Champion 3 + Officer 2 + Jirina 2 + Sentinels 2 = 9 = lethal. The engine's old line (Jirina (vial), Champion, Officer) leaves Champion at +1 -> 8, no T4 kill.",
+  "battlefield": [
+    { "name": "Aether Vial", "charge_counters": 2 },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Esper Sentinel" },
+    { "name": "Esper Sentinel" }
+  ],
+  "hand": [ "Champion of the Parish", "Recruitment Officer", "Jirina, Dauntless General" ],
+  "expect_win_turn": 4
+}

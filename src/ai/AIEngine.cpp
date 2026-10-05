@@ -4633,8 +4633,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      && (a.convoke_green > 0 || a.convoke_other > 0))
             { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
         }
-        for (const Action& a : extra.actions)
-        { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
+        // Plan::vial_after_casts on a CONTINUATION (lockstep with ApplyPlanDirect's
+        // apply_continuation_plan): its puts deploy after its casts, below. Two routes reach here with
+        // the flag set -- a continuation-list twin (AppendVialOrderVariants now twins those) and the
+        // searched re-solve, whose fresh enumeration has always twinned; before this branch the
+        // latter deployed its puts FIRST, i.e. the executor played a line the search never scored.
+        const bool cont_vial_after = extra.vial_after_casts;
+        if (!cont_vial_after)
+        {
+            for (const Action& a : extra.actions)
+            { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
+        }
         // Continuation casts in the SAME canonical order the rollout's apply_plan_actions
         // realises (ordering-audit 2026-08-15, item 2: this loop ran in RAW plan order, so a
         // continuation holding more than one cast could execute a different sequence than the
@@ -4727,6 +4736,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+        }
+        // ...the deferred puts, at the point the rollout's apply_plan_actions deploys them (after the
+        // graveyard casts, before the trailing activations).
+        if (cont_vial_after)
+        {
+            for (const Action& a : extra.actions)
+            { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
         }
         // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
         // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw

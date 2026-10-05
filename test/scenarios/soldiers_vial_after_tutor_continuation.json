@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "library_top": [ "Plains", "Champion of the Parish" ],
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "_comment": "Soldiers 5d sweep seed 9100019 shape: the Vial-put order inside a breakpoint CONTINUATION. Four Plains, Vial on 2, hand Recruiter of the Guard + Cathar Commando (MV2). Cast Recruiter -> fetch Champion of the Parish, cast the Champion, THEN Vial-put the Commando: Champion takes +1 and the T5 swing is Recruiter 1 + Champion 2 + Commando 3 = 6 = lethal. The Champion is not in hand before the tutor resolves, so this order exists only as a continuation; continuation lists were never twinned (AppendVialOrderVariants returned at g_bp_enum_depth > 0).",
+  "battlefield": [
+    { "name": "Aether Vial", "charge_counters": 2 },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" }
+  ],
+  "hand": [ "Recruiter of the Guard", "Cathar Commando" ],
+  "expect_win_turn": 5
+}

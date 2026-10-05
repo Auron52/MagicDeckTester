@@ -397,7 +397,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
     }
     else if (plan.land_decided)                           { os << "land=none; "; }
     std::vector<std::string> casts;
-    std::vector<char>        vial_tag;   // parallel to casts: 1 = an ActivateVial entry
+    std::vector<char>        vial_tag;   // parallel to casts: 1 = an ActivateVial entry, 2 = a cast, 0 = other
     for (const Action& a : plan.actions)
     {
         std::string tag;
@@ -773,24 +773,31 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         { tag += " (devour " + std::to_string(a.devour_count) + ")"; }
         if (a.discard_lands)  { tag += " +discard" + std::to_string(a.discard_lands); }
         casts.push_back(tag);
-        vial_tag.push_back(a.kind == Action::Kind::ActivateVial ? 1 : 0);
+        vial_tag.push_back(a.kind == Action::Kind::ActivateVial ? 1
+                           : (a.kind == Action::Kind::CastFromHand
+                              || a.kind == Action::Kind::CastFromGraveyard) ? 2 : 0);
     }
-    // RESOLUTION ORDER of Vial puts vs casts (Plan::vial_after_casts; Pirates 5d sweep). Where the
-    // order can change the outcome (TurnSolver::VialOrderMatters -- a Mimic / Forerunner / Buccaneer
-    // cast alongside a Vial put) the summary lists the entries in the order they RESOLVE: the default
-    // plan deploys its Vial puts first, the variant after its casts, and the two read differently
-    // ("Siren Stormtamer (vial), Metallic Mimic" vs "Metallic Mimic, Siren Stormtamer (vial)").
-    // Before, both were listed in action-vector order, which put the Vial put LAST while it resolved
-    // FIRST. Every plan the predicate does not match (every other deck) prints exactly as before.
-    if (TurnSolver::VialOrderMatters(plan))
+    // RESOLUTION ORDER of Vial puts vs casts (Plan::vial_after_casts). The summary lists the entries
+    // in the order they RESOLVE: every plan deploys its Vial puts FIRST (both apply worlds), and a
+    // vial_after_casts plan deploys them right after its last cast (before the trailing board
+    // activations) -- so "Siren Stormtamer (vial), Metallic Mimic" vs "Metallic Mimic, Siren
+    // Stormtamer (vial)". UNCONDITIONAL whenever a put is present (Soldiers 5d sweep, seeds 9100047 /
+    // 9100043 / 9100019, 2026-10-04): this used to be keyed on VialOrderMatters' old param list, so
+    // every plan outside it -- "Champion of the Parish, Esper Sentinel, Esper Sentinel (vial)" -- was
+    // printed in action-vector order, the put LAST, while it resolved FIRST; the human picked lines by
+    // a description of a different line.
+    if (std::find(vial_tag.begin(), vial_tag.end(), 1) != vial_tag.end())
     {
-        std::vector<std::string> ordered;
-        for (int pass = 0; pass < 2; ++pass)
+        std::vector<std::string> puts, ordered;
+        int last_cast = -1;   // position in `ordered` (the put-less list) of the last cast
+        for (size_t i = 0; i < casts.size(); ++i)
         {
-            const int want = (pass == 0) == !plan.vial_after_casts ? 1 : 0;
-            for (size_t i = 0; i < casts.size(); ++i)
-            { if (vial_tag[i] == want) { ordered.push_back(casts[i]); } }
+            if (vial_tag[i] == 1) { puts.push_back(casts[i]); continue; }
+            if (vial_tag[i] == 2) { last_cast = static_cast<int>(ordered.size()); }
+            ordered.push_back(casts[i]);
         }
+        const std::size_t at = plan.vial_after_casts ? static_cast<std::size_t>(last_cast + 1) : 0;
+        ordered.insert(ordered.begin() + static_cast<long>(at), puts.begin(), puts.end());
         casts.swap(ordered);
     }
     if (casts.empty()) { os << "cast: (nothing)"; }
@@ -3644,7 +3651,7 @@ static void WriteStorageHoldDecisionJson(std::ostream& os, const GameState& s,
 
 // Land-entry decision (shock lands, and reveal lands like Frostboil Snarl): as the land enters you may
 // pay a cost to have it enter UNTAPPED, or let it enter tapped. Shock lands pay `pay_life` life; reveal
-// lands reveal a matching land (`reveal_types`) already in hand -- free, but shown as a choice. The AI
+// lands reveal a card of one of `reveal_types` (a land type, or a creature type for Fortified Beachhead) already in hand -- free, but shown as a choice. The AI
 // default (heuristic_default = 1 untapped / 0 tapped) is: shock -> pay iff mana is needed this turn;
 // reveal -> reveal iff able. The reply is 1 (enter untapped, pay the cost) or 0 (enter tapped).
 static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
@@ -3655,9 +3662,21 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
     d.Type("land_entry").Source(source).Turn(s.turn_number).Board(s).Int("pay_life", pay_life);
     d.Array("reveal_types", reveal_types.size(), [&](std::size_t i) { JsonStr(os, reveal_types[i]); });
     d.HeuristicDefault(heuristic_untapped ? 1 : 0);
+    // Name WHAT is revealed, from reveal_types: a Snarl reveals "an Island or a Mountain card",
+    // Fortified Beachhead "a Soldier card" (Soldiers 5d sweep: the note said "a matching land" for a
+    // creature-type reveal). Each type takes its own article, as the oracle text reads.
+    std::string reveal_what;
+    for (std::size_t i = 0; i < reveal_types.size(); ++i)
+    {
+        const std::string& t = reveal_types[i];
+        if (i > 0) { reveal_what += (i + 1 == reveal_types.size()) ? " or " : ", "; }
+        const bool vowel = !t.empty() && std::string("AEIOUaeiou").find(t[0]) != std::string::npos;
+        reveal_what += (vowel ? "an " : "a ") + t;
+    }
+    reveal_what = reveal_what.empty() ? std::string("reveal a matching card from your hand")
+                                      : "reveal " + reveal_what + " card from your hand";
     d.Note("reply 1 to enter UNTAPPED ("
-           + (pay_life > 0 ? "pay " + std::to_string(pay_life) + " life"
-                           : std::string("reveal a matching land"))
+           + (pay_life > 0 ? "pay " + std::to_string(pay_life) + " life" : reveal_what)
            + "), or 0 to enter tapped. Default = the AI's pick.");
 }
 

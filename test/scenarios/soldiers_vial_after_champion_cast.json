@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Soldiers/soldiers.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 7,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "_comment": "Soldiers 5d sweep seed 9100047: Vial-put vs hand-cast ORDER. Vial on 2, two Plains, hand Champion of the Parish + Esper Sentinel + Cathar Commando (MV2 -- the only Vial-able card). Cast Champion, cast Sentinel, THEN Vial-put Commando: Champion takes +2 (3/3) and the T4 attack is 3+1+3 = 7 = lethal. Puts-first (Commando, Champion, Sentinel) gives +1 -> 6, no T4 kill. Inexpressible before the measured VialOrderChangesOutcome gate (the param list never named Champion).",
+  "battlefield": [
+    { "name": "Aether Vial", "charge_counters": 2 },
+    { "name": "Plains" },
+    { "name": "Plains" }
+  ],
+  "hand": [ "Champion of the Parish", "Esper Sentinel", "Cathar Commando" ],
+  "expect_win_turn": 4
+}

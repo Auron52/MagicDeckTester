@@ -4329,16 +4329,20 @@ function replicatePanelHtml(d){
 }
 // Land-entry panel (shock lands, and reveal lands like Frostboil Snarl): IMAGE-based central modal. The
 // land is shown as art; two buttons pick whether it enters UNTAPPED (pay `pay_life` life, or reveal a
-// matching land) or tapped. The AI's default (pay iff mana is needed / reveal iff able) is tagged.
+// card of a `reveal_types` type) or tapped. The AI's default (pay iff mana is needed / reveal iff able) is tagged.
 // Repetitive, so the options menu can set this to "let AI decide" (default) — see AUTO_RESOLVABLE.
 function landEntryPanelHtml(d){
   const def = d.heuristic_default===1;                      // 1 = enter untapped, 0 = tapped
   const pay = d.pay_life||0, reveal = d.reveal_types||[];
+  // Name the reveal from reveal_types with a per-type article: "an Island or a Mountain card",
+  // "a Soldier card" (Fortified Beachhead reveals a creature type, not a land).
+  const art = t => (/^[AEIOU]/i.test(t)?'an ':'a ')+t;
+  const revealWhat = reveal.length ? reveal.map(art).join(' or ')+' card' : 'a matching card';
   const untapLabel = pay>0 ? `Pay ${pay} life — untapped`
-                   : `Reveal ${reveal.length?('a '+reveal.join(' / ')):'a matching land'} — untapped`;
+                   : `Reveal ${revealWhat} — untapped`;
   let h=`<h3>Land enters — ${esc(d.source||'')}</h3>`;
   h+=`<div class="sub">${esc(d.source||'This land')} can enter <b>untapped</b> by `+
-     `${pay>0?('paying <b>'+pay+' life</b>'):('revealing '+(reveal.length?('an '+reveal.map(esc).join(' / ')):'a matching land')+' from your hand')}, `+
+     `${pay>0?('paying <b>'+pay+' life</b>'):('revealing '+esc(revealWhat)+' from your hand')}, `+
      `or enter <b>tapped</b> for free. The AI ${def?(pay>0?'pays':'reveals'):'declines'} here.</div>`;
   h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
   h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+

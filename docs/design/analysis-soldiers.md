@@ -397,6 +397,39 @@ affordable before the kill), so it is listed in the 5d plan as an item to exerci
 Benchmark (60 games, play settings): T4 x33, T5 x26, T7 x1 (s9100037: a 5-land + Vial + Rick flood
 keep -- T7 confirmed optimal at d8 b0).
 
+## Claude-play sweep
+- commit: `74737c6e`
+- seeds: 9100001..9100059 (the 20 in `logs/soldiers_5d_plan.md`) games: 20
+- flags: 0 unresolved
+
+Run 2026-10-04 by the orchestrator's fan-out (one Opus agent per seed, results in
+`logs/soldiers/5d/results/<seed>.json`, gitignored). Claude tied the AI in 19/20 and beat it in 1
+(9100012, T4 vs T5 -- a mulligan call, below). Decision types seen: mulligan, bottom, main_phase,
+vial_charge, land_entry, choose_abilities, dig (`target` and `firebreathe` not reached; `target` is
+verified separately at seed 9001 gi28, 5h). 1 strong + 11 weak flags, every one resolved:
+
+| # | seeds | sev | flag | resolution |
+|---|---|---|---|---|
+| 1 | 9100047 (also 9100043, 9100019) | strong | Vial-put vs hand-cast ORDER inexpressible for Champion of the Parish / Thalia's Lieutenant: "cast Champion, THEN Vial-put a Human" offered to neither search nor human (`VialOrderMatters` was a 4-term param list). | **FIXED.** `VialOrderMatters` is now structural (a put + a cast) and the twin is gated on `TurnSolver::VialOrderChangesOutcome` -- both orders applied on copies, compared under the canonical sim key -- so any enters/cost/reveal class qualifies with no card list. Also: base plans marked only for breakpoint site 9 (Recruitment Officer's dig, a post-plan site a base plan never opens) are no longer excluded; continuation lists are twinned (a tutored Champion cast then the Vial puts, 9100019's shape) and BOTH worlds honour a continuation's flag (`apply_continuation_plan` / AIEngine `cont_vial_after`) -- which also fixes a latent lockstep bug: the executor's breakpoint re-solve could pick a twin and then deploy its puts FIRST. Interleavings beyond one split point remain deferred: `docs/design/vial-put-interleaving.md`. |
+| 2 | 9100047, 9100043, 9100019 | weak | Plan SUMMARY printed Vial puts in action-vector order (last) while they resolve first. | **FIXED.** `SummarizePlan` now always lists puts where they resolve: first, or right after the last cast for a `vial_after_casts` plan (it used to reorder only inside the old predicate). The viewer shows the same string. |
+| 3 | 9100001, 9100004, 9100019, 9100025, 9100042, 9100052, 9100059 | weak | `land_entry` note for Fortified Beachhead said "reveal a matching land"; the reveal is a Soldier card. | **FIXED** generally: the note (main.cpp) and the viewer panel (index.html) name the `reveal_types` with per-type articles ("reveal a Soldier card", "an Island or a Mountain card"). |
+| 4 | 9100004 | weak | Payer taps the painful Silent Clearing for {W} while Unclaimed Territory / Secluded Courtyard sat untapped (1 life/tap). | **VERDICT: not changed.** The only pain-aware ordering in the payer (`PreventDamageProvider::ManaSourceRank` +5/pain and `dmgev::PainAwarePay`) is armed solely under `dmg_events_armed` (Prevent Damage). The generic scarcity rank sees Clearing as a W/B dual (20) and the two creature-only any-colour lands as rainbow (50), so it spends the dual first by design (keep flexible sources). No existing generic pain preference missed a case; adding one is a fleet-wide rank change (every painland deck's GT), and life is inert in this goldfish deck (no life payment, no life-total payoff). Recorded, no change. |
+| 5 | 9100012 | weak | claude_win 4 < ai_win 5. | **VERDICT: mulligan, not play.** The AI mulled a 6-card 1-lander on the play; Claude's keep relied on `--reveal` draws. Handing Claude's keep to the search (`--choices 0,1,5 --choices-then-auto`) also wins T4 on the same line. A keep-policy data point for the mulligan stage (no keep table yet). |
+
+Measured after fix #1-3 (worktree build vs a scratch-worktree build of 74737c6e, Soldiers d5/b20, one
+pooled batch each, 60 bench seeds + 300 cost seeds 9300000..): win turns **identical in all 360 games**
+(9100047 stays T5: the twin ties the base line there, and ties keep the base); units_total
+**+3.1% (60) / +1.6% (300)**, wall +5-10% (run-to-run wall noise 4-7%). New scenarios FAIL before / PASS
+after: `soldiers_vial_after_champion_cast`, `soldiers_vial_after_t3_champion_officer` (the 9100047 T3
+line), `soldiers_vial_after_tutor_continuation` (9100019 shape); unit tests
+`test/unit/test_soldiers_vial_order.cpp` (3 of 4 fail before). Regression tier vs the same base build
+(GT itself is stale on this branch for ~50 non-Vial keys, so attribution is base-vs-new, not vs GT):
+digests moved ONLY on Vial decks -- soldiers (d3 s2002, d5 s2002, d5 s3003), minotaur (d3 s2002/s3003,
+d5 s3003, 2hg d3 s2002), pirates (d3 s3003). Two searched games slower, both **budget churn**
+(recover at 4x and 16x budget): soldiers d5 s3003 gi72 T4->T5, minotaur d3 s2002 gi295 T4->T5. No
+game faster. Reference gate: identical to base except `Pirates/claude_s4_gi3` ok -> repaired (2 stale
+plan indices; same T5 outcome). GT NOT re-accepted (see open question F).
+
 ### 4-bis / 5j -- regression-suite membership (ALL THREE tiers)
 Rows added to `test/regression_cases.sh` at pirates' counts (smoke d0x1000 / d3 b10 x150 / d5 b20 x75
 @1001 + `soldiers2hg` d3 x50 smoke canary; regression d0 @2002, d3/d5 @2002+3003; overnight d0 x2000 @
@@ -1284,8 +1317,8 @@ Nightbound (If a player casts at least two spells during their own turn, it be
 <!-- verify_deck:end -->
 
 ## Stage 4/5 status + OPEN USER QUESTIONS (2026-10-04; none blocked the run -- default taken for each)
-Status: Stage 4 + 5a/5b/5c/5c2/5e/5f/5g/5h/5i + 4-bis DONE; **5d claude-play sweep UN-RUN** (the
-orchestrator's fan-out; plan `logs/soldiers_5d_plan.md`). verify_deck after this run: the only
+Status: Stage 4 + 5a/5b/5c/5c2/5e/5f/5g/5h/5i + 4-bis DONE; 5d claude-play sweep RUN (see
+"## Claude-play sweep"; flags resolved 2026-10-05). verify_deck after this run: the only
 blocking reds are `claude_sweep` (5d un-run) and `card_costs` (Scryfall HTTP 429 -- a did-not-run;
 re-run when the limit clears); `viewer_wiring:choose_abilities` FIXED (DECISIONS.md row's type cell
 held prose, so the registry parser could not read it).
@@ -1304,6 +1337,13 @@ D. **Pre-existing reference failures** at bb5bcceb (not this branch): Hinata2 `c
    REGRESSION DETECTED. Owner?
 E. **3x cost gate at 2.98x** from a filtered run; a pooled `--measure-all` would likely read far lower
    (see 5j note). Accept the filtered verdict as-is? Default taken: yes (it PASSes).
+F. **Vial-order twin cost (claude-play flag #1).** The fix is an expressibility repair (a legal line no
+   budget reached), but it adds candidates: Soldiers d5/b20 units +1.6-3.1%, and two regression-tier
+   games went T4->T5 at their case budget (soldiers d5 s3003 gi72, minotaur d3 s2002 gi295), both
+   recovering at 4x budget (churn); 0 of 360 play-setting Soldiers games moved. Default taken: ship it,
+   GT for soldiers/minotaur/pirates NOT re-accepted (the branch's GT is already stale on ~50 unrelated
+   keys -- whoever rebaselines the tier owns the per-difference verdicts). Want the churn minimised
+   further (e.g. a cheaper gate) before accepting?
 - (later) The discard hatch reader was renamed `SoldiersBucketDiscardEnabled()` so the pending
   `discard_policy` gate (main checkout's WIP verify_deck: `DISCARD_FLAG_RE` matches
   `_BUCKET_DISCARD` / `BucketDiscardEnabled()` in the method BODY) recognises the authored policy;

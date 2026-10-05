@@ -1667,14 +1667,20 @@ public:
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);
 
-    // Can the order of this plan's Vial puts relative to its hand casts change the outcome? True iff
-    // the plan holds at least one ActivateVial AND a non-sacrifice hand cast of an entering-effect
-    // SOURCE (other_chosen_subtype_enters_counters -- Metallic Mimic; own_creature_enters_opp_life_loss
-    // -- Forerunner of the Coalition) or of a reveal-cost card (reveal_or_pay_cost -- Daring
-    // Buccaneer), or an ActivateVial of a noncreature-spell TAXER (Thalia) alongside a noncreature
-    // hand cast. Params only, no state: it gates AppendVialOrderVariants' emission and keys the
-    // resolution-order summary / CheckLine sub, so it must not move between enumeration and display.
+    // STRUCTURAL precondition for the Vial-put ORDER axis (Plan::vial_after_casts): the plan holds at
+    // least one ActivateVial AND at least one cast (hand or graveyard) the puts can be ordered against.
+    // Params-free and state-free on purpose (Soldiers 5d sweep, 2026-10-04): it used to be a list of
+    // param terms (Mimic / Forerunner / Buccaneer / Thalia), and every card class the list did not
+    // name -- Champion of the Parish, Thalia's Lieutenant -- made the order silently inexpressible.
+    // Whether the order ACTUALLY changes the outcome is now MEASURED, not predicted: see
+    // TurnSolver::VialOrderChangesOutcome, which AppendVialOrderVariants and the cast-ordering twin
+    // run on every plan this predicate admits. Also keys the CheckLine "Aether Vial timing" sub.
     static bool VialOrderMatters(const Plan& plan);
+    // Apply `plan` puts-first and puts-last on two copies of `state` and compare the resulting
+    // positions under the canonical (zone-order-free) sim key. True iff they differ -- i.e. some
+    // entering effect, cost, reveal or trigger made the relative order of the Vial puts and the casts
+    // matter. Derived from what the engine actually does, so a new card class needs no new term here.
+    static bool VialOrderChangesOutcome(const GameState& state, const Plan& plan, bool is_pre_combat);
     // ...and the order this plan will ACTUALLY be cast in: the vector order for a searched_order
     // plan, the canonical sort otherwise. Same rule apply_plan_actions applies (and BpPrepayPrefix
     // already mirrors) -- see the note on the definition for why reporting the canonical sort for
