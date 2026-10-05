@@ -28,6 +28,29 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
 
 ## Repository Conventions
 
+- **THE PLAY SERVER MUST NEVER, EVER RUN FROM A TEMPORARY FOLDER (user directive, 2026-10-05).**
+  The viewer (`play.sh` / `play.cmd` / `tools/play/server.js`) saves the user's hand-played
+  reference games into **its own checkout's** `references/` (`ROOT` = the tree the server was
+  started from). Start it from `/tmp`, a scratch worktree, a build sandbox, or any directory that
+  can be wiped, and every game the user saves lands there and **dies with it**.
+  * **What it cost:** on 2026-09-28 an agent started the viewer from a scratch worktree at
+    `/tmp/pd-wt`. The user then played and saved reference games (Angels, WhiteKnights,
+    SelesnyaLifegain, Snow) through it for a week. On 2026-10-05 the container was recreated,
+    `/tmp` was emptied, and **every reference saved since the last commit was destroyed** —
+    unrecoverable, hand-played user work. The user: *"one of the stupidest errors I have seen
+    from agents."*
+  * **The rule:** run the viewer ONLY from a **persistent, up-to-date checkout** — never under
+    `/tmp`, `/var/tmp`, `$TMPDIR`, or any `git worktree` an agent created for scratch work. If
+    unsure whether a directory is persistent, it is not: use one that is.
+  * **It is GATED:** `tools/play/server.js` refuses to start when its root resolves inside a
+    temporary directory. Do NOT add a bypass, and do not work around it by copying the server
+    elsewhere.
+  * **Commit references promptly.** Whenever an agent sees new or modified files under
+    `references/` in the viewer's tree, commit them (and push) at once — an uncommitted
+    reference has exactly one copy.
+  * Before restarting or killing a viewer, check its tree for uncommitted references and commit
+    them first.
+
 - **NO GREEDY PICK INSIDE THE SEARCH WINDOW — the ENGINE is heuristic-free (user hard rule,
   2026-09-30).** The user's words: *"We need to make sure all of them are purged"*, *"I don't care
   whether it is main 1 or 2"*, *"the code that calls that way should be deleted"*, *"Only heuristics

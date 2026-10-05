@@ -24,6 +24,31 @@ const path = require('path');
 const { spawnSync, spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');          // repo root
+// HARD GUARD (user directive 2026-10-05, see CLAUDE.md): the viewer saves the user's hand-played
+// reference games under ROOT/references, so ROOT must be a PERSISTENT checkout. A viewer started
+// from a /tmp scratch worktree once silently destroyed a week of reference games when the
+// container was recreated. Refuse to run from any temporary directory. No bypass, by design.
+(function refuseTemporaryRoot() {
+  const os = require('os');
+  let real = ROOT;
+  try { real = fs.realpathSync(ROOT); } catch (e) {}
+  const temps = new Set(['/tmp', '/var/tmp', '/dev/shm']);
+  for (const t of [os.tmpdir(), process.env.TMPDIR, process.env.TEMP, process.env.TMP]) {
+    if (!t) continue;
+    temps.add(path.resolve(t));
+    try { temps.add(fs.realpathSync(t)); } catch (e) {}
+  }
+  const norm = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+  for (const t of temps) {
+    const rel = path.relative(norm(t), norm(real));
+    if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+      console.error(`REFUSING TO START: the play server root ${real} is inside the temporary directory ${t}.`);
+      console.error('Reference games are saved under <root>/references and would be LOST when it is wiped.');
+      console.error('Start the viewer from a persistent, up-to-date checkout instead (see CLAUDE.md).');
+      process.exit(2);
+    }
+  }
+})();
 const DECKS_DIR = path.join(ROOT, 'decks');
 const CARDS_JSON = path.join(ROOT, 'src', 'cards', 'data', 'cards.json');
 // Engine binary. Honours $MTG_BIN, else probes the multi-config layout for BOTH names:
