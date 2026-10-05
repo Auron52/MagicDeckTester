@@ -2073,6 +2073,11 @@ public:
         //
         // EMPTY keeps the legacy card-name-in-casts matching, so no saved reference moves.
         std::vector<std::string> tap_lifes;
+        // "auraswap=<Aura brought in>": Arcanum Wings' main-phase Aura swap (Action::Kind::AuraSwap),
+        // naming the hand Aura it puts onto the Wings' host. ALWAYS its own verb (no legacy split --
+        // the kind is new): `cast=Colossification` and swapping Colossification in are different
+        // plays, so a plan that swaps never matches a line that does not say so.
+        std::vector<std::string> aura_swaps;
         // "pod=<fetch name>[#<victim m_number>]": a Birthing Pod activation, one entry per
         // activation. Its own verb for the same reason `equip=` has one -- the action names the
         // SOURCE artifact, so `cast=Birthing Pod` is ambiguous with hard-casting a copy from

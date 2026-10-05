@@ -487,6 +487,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     + ") \xE2\x86\x92 " + a.card_name.str(); break;
             case Action::Kind::PutFromHandAbility:
                 tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; break;
+            case Action::Kind::AuraSwap:
+                tag = "aura swap: " + EnchantTargetName(s, a.sac_source_id) + " \xE2\x87\x84 "
+                    + a.card_name.str(); break;
             case Action::Kind::JitteModeAbility:
             {
                 // Mode 3 (+2/+2) names no victim -- it pumps the EQUIPPED creature -- and carries a
@@ -1878,6 +1881,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::AttachAllEquipment
              || ac.kind == Action::Kind::AttachAllFreeEquipment
              || ac.kind == Action::Kind::PutFromHandAbility
+             || ac.kind == Action::Kind::AuraSwap
              || ac.kind == Action::Kind::GraveyardExileAbility
              || ac.kind == Action::Kind::GraveyardReturnAbility
              || ac.kind == Action::Kind::GraveyardPlayAbility
@@ -1960,6 +1964,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      << ", \"pieces\": "
                      << FreeAttachableEquipment(s, s.active_player_index, ac.sac_victim_id).size(); }
                 else if (ac.kind == Action::Kind::PutFromHandAbility) { os << ", \"verb\": \"sfput\""; }
+                // Arcanum Wings' swap names the Aura brought IN (card_name, in HAND), so `cast=` would
+                // read as hard-casting it -- its own verb, like sfput.
+                else if (ac.kind == Action::Kind::AuraSwap)           { os << ", \"verb\": \"auraswap\""; }
                 else if (ac.kind == Action::Kind::Equip)              { os << ", \"verb\": \"equip\""; }
                 else if (ac.kind == Action::Kind::JitteModeAbility)
                 { os << ", \"verb\": \"jittemode\", \"mode\": " << ac.gy_exile_mode; }
@@ -2018,8 +2025,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
                 // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
                 // without this the viewer would look for a board thumb that isn't there.
-                if (ac.kind == Action::Kind::PutFromHandAbility)
+                if (ac.kind == Action::Kind::PutFromHandAbility || ac.kind == Action::Kind::AuraSwap)
                 {
+                    // The swap's source is the Wings PERMANENT (clicked on the board); its card_name
+                    // is the hand Aura brought in.
                     os << ", \"activate_source\": ";
                     JsonStr(os, EnchantTargetName(s, ac.sac_source_id));
                 }
@@ -3723,6 +3732,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "sacout")    { ls.sac_outlets.push_back(val); }   // one token per activation
         else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
+        else if (key == "auraswap")  { ls.aura_swaps.push_back(val); }    // Arcanum Wings' swap (Aura in)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
         // "equipallfree=<host m_number>": the mass-attach bundle. 0 (or an unparseable value) is
         // the "any host" wildcard every other verb already honours, which is what lets a scenario

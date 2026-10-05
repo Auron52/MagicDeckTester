@@ -407,6 +407,14 @@ MANIFEST = {
     # main_phase plan lines (AttachAllEquipment / PutFromHandAbility; attachall=/sfput= verbs).
     "attach_all_equipment_cost": ("main_phase",       truthy),
     "tap_put_from_hand_cost":    ("main_phase",       truthy),
+    # ---- Bruna (2026-10-05) ----
+    # Bruna, Light of Alabaster's attack trigger: WHICH Auras (any number, per zone) reuses the
+    # generic `dragon` multi-pick at FireAttackGatherAuras (one ask per zone, provider subset
+    # preselected). Arcanum Wings' aura swap: the MAIN-PHASE swap is an Action::Kind::AuraSwap plan
+    # line (`auraswap=` verb); the IN-COMBAT swap asks via the reused `dig` shape at
+    # ApplyCombatAuraSwap.
+    "attack_gather_auras":       ("dragon",           truthy),
+    "aura_swap_cost":            ("main_phase",       truthy),
     # Unexpectedly Absent: target rides the shared `target` decision (tuck branch consults
     # g_play_target_chooser); X rides the chosen_x plan-variant axis.
     "tuck_to_library":       ("target",               truthy),
@@ -475,6 +483,7 @@ BOARD_ACTIVATIONS = {
     "firebreathing_discard":                     ("activate",       truthy,   "firebreathing_cost"),
     "attach_all_equipment_cost":                 ("verb:attachall", truthy,   "attach_all_equipment_cost"),
     "tap_put_from_hand_cost":                    ("verb:sfput",     truthy,   "tap_put_from_hand_cost"),
+    "aura_swap_cost":                            ("verb:auraswap",  truthy,   "aura_swap_cost"),
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
     "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
     "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
@@ -871,6 +880,12 @@ INERT_PARAMS = {
     "endstep_token_keywords": "end-step token spec constant (flying + vigilance)",
     "firebreathing_tough": "self-pump spec constant (the +2 toughness half); the activation itself is surfaced as a main_phase ActivatePump variant",
     "wish_requires_name": "NAME filter on an already-mapped tutor (rides tutor_to_hand -> main_phase plan variants); narrows the pool, adds no decision",
+    # ---- Bruna (2026-10-05) ----
+    "wish_requires_multicolored": "COLOUR-COUNT filter on an already-mapped tutor (Glittering Wish; rides tutor_to_hand -> main_phase plan variants); narrows the pool, adds no decision",
+    "produces_one_color": "mana-ability shape (Somberwald Sage: three of ONE colour) -- the colour is allocated at payment like every mana source; no viewer decision of its own (a creature-only source is never hand pre-tapped, disclosed 6a)",
+    "aura_etb_tap_host": "Colossification's mandatory, untargeted ETB tap of its own host -- no choice (the host was chosen when the Aura was cast/put)",
+    "aura_set_base_power": "Almost Perfect's static base-P/T set -- continuous, no choice (the host is the Aura's already-mapped enchant target)",
+    "aura_set_base_toughness": "Almost Perfect's static base-P/T set -- continuous, no choice",
     "opp_creature_enters_life_loss": "automatic enter trigger (Suture Priest, may-always-taken)",
     "etb_opp_creatures_debuff": "automatic ETB sweep, hits every qualifying opponent creature",
     "opp_dies_life_loss": "automatic death trigger",

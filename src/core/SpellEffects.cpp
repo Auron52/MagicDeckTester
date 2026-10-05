@@ -1369,6 +1369,20 @@ void FireAttackGatherAuras(GameState& state, int controller, const std::vector<i
             { k = state.scripted_bruna_gather; }
             chosen = ranked[static_cast<std::size_t>(k)];
         }
+        // PROOF INSTRUMENT (MTG_TRACE=gatherproof; real resolutions only): which ranked subset the
+        // committed line took. Under the MTG_BRUNA_GATHER_FULL control arm a k > 0 is the search
+        // preferring a subset the dominance collapse would never have offered -- the counterexample
+        // the proof looks for.
+        if (TRACE_ON("gatherproof") && g_real_resolution)
+        {
+            auto names = [&](const std::vector<int>& sub)
+            { std::string t; for (int i : sub) { t += (t.empty() ? "" : ",") + cands[static_cast<std::size_t>(i)].name; } return t; };
+            const int k = (state.scripted_bruna_gather >= 0
+                           && state.scripted_bruna_gather < static_cast<int>(ranked.size()))
+                        ? state.scripted_bruna_gather : 0;
+            TRACE("gatherproof", "T%d k=%d n=%zu took={%s} top={%s}", state.turn_number, k, ranked.size(),
+                  names(chosen).c_str(), ranked.empty() ? "" : names(ranked.front()).c_str());
+        }
         state.scripted_bruna_gather = -1;   // consumed by the first gather (the Tectonic convention)
         if (g_play_dragon_chooser != nullptr)
         {
@@ -1639,6 +1653,18 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
             pick = c;
         }
         if (pick < 0) { continue; }
+        // PROOF INSTRUMENT (MTG_TRACE=swapproof; real resolutions only): the committed in-combat swap
+        // vs the damage-max pick. Under MTG_AURA_SWAP_BRANCH a rank > 0 is the search preferring a
+        // non-damage-max Aura.
+        if (TRACE_ON("swapproof") && g_real_resolution && !human)
+        {
+            const int top = AuraSwapPick(state, controller, wnum, host_attacking);
+            const std::vector<Card>& hh = state.players[controller].hand;
+            TRACE("swapproof", "T%d combat rank=%d took=%s top=%s attacking=%d", state.turn_number,
+                  pin / kAuraSwapRankStride, hh[static_cast<std::size_t>(pick)].m_name.str().c_str(),
+                  top >= 0 ? hh[static_cast<std::size_t>(top)].m_name.str().c_str() : "-",
+                  host_attacking ? 1 : 0);
+        }
         // Pay {2}{U} from what is untapped now (the plan left it up). A swap that cannot be paid
         // does not happen -- the variant then scores like declining it.
         if (!TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false)) { continue; }

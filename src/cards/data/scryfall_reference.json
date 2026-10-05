@@ -146,6 +146,17 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Almost Perfect": {
+    "cmc": 6.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{4}{G}{W}",
+    "oracle_text": "Enchant creature\nEnchanted creature has base power and toughness 9/10 and has indestructible.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Alpha Authority": {
     "cmc": 2.0,
     "keywords": [
@@ -256,6 +267,18 @@
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
   },
+  "Arcanum Wings": {
+    "cmc": 2.0,
+    "keywords": [
+      "Aura Swap",
+      "Enchant"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Enchant creature\nEnchanted creature has flying.\nAura swap {2}{U} ({2}{U}: Exchange this Aura with an Aura card in your hand.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Archangel of Thune": {
     "cmc": 5.0,
     "keywords": [
@@ -342,6 +365,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Cleric"
+  },
+  "Avacyn's Pilgrim": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "{T}: Add {W}.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Monk"
   },
   "Azorius Chancery": {
     "cmc": 0.0,
@@ -624,6 +656,26 @@
     "toughness": "3",
     "type_line": "Creature — Minotaur Wizard"
   },
+  "Boseiju, Who Endures": {
+    "cmc": 0.0,
+    "keywords": [
+      "Channel"
+    ],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {G}.\nChannel — {1}{G}, Discard this card: Destroy target artifact, enchantment, or nonbasic land an opponent controls. That player may search their library for a land card with a basic land type, put it onto the battlefield, then shuffle. This ability costs {1} less to activate for each legendary creature you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Land"
+  },
+  "Botanical Sanctum": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {G} or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Braingeyser": {
     "cmc": 2.0,
     "keywords": [],
@@ -668,6 +720,18 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Creature — Badger Druid"
+  },
+  "Bruna, Light of Alabaster": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying",
+      "Vigilance"
+    ],
+    "mana_cost": "{3}{W}{W}{U}",
+    "oracle_text": "Flying, vigilance\nWhenever Bruna attacks or blocks, you may attach to it any number of Auras on the battlefield and you may put onto the battlefield attached to it any number of Aura cards that could enchant it from your graveyard and/or hand.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Angel"
   },
   "Brushland": {
     "cmc": 0.0,
@@ -882,6 +946,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Snow Artifact"
+  },
+  "Colossification": {
+    "cmc": 7.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "Enchant creature\nWhen this Aura enters, tap enchanted creature.\nEnchanted creature gets +20/+20.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Colossus Hammer": {
     "cmc": 1.0,
@@ -1307,6 +1382,17 @@
     "power": "7",
     "toughness": "7",
     "type_line": "Creature — Wurm"
+  },
+  "Eldrazi Conscription": {
+    "cmc": 8.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{8}",
+    "oracle_text": "Enchant creature\nEnchanted creature gets +10/+10 and has trample and annihilator 2. (Whenever it attacks, defending player sacrifices two permanents of their choice.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Kindred Enchantment — Eldrazi Aura"
   },
   "Eldrazi Displacer": {
     "cmc": 3.0,
@@ -1778,6 +1864,15 @@
     "toughness": null,
     "type_line": "Land — Mountain Plains"
   },
+  "Glittering Wish": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "You may reveal a multicolored card you own from outside the game and put it into your hand. Exile Glittering Wish.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Glorybringer": {
     "cmc": 5.0,
     "keywords": [
@@ -2205,6 +2300,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Indrik Umbra": {
+    "cmc": 6.0,
+    "keywords": [
+      "Enchant",
+      "Umbra armor"
+    ],
+    "mana_cost": "{4}{G}{W}",
+    "oracle_text": "Enchant creature\nEnchanted creature gets +4/+4 and has first strike, and all creatures able to block it do so.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Inferno Titan": {
     "cmc": 6.0,
@@ -2927,6 +3034,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Mother of Runes": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "{T}: Target creature you control gains protection from the color of your choice until end of turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
   "Mountain": {
     "cmc": 0.0,
     "keywords": [],
@@ -2993,6 +3109,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Mythic Proportions": {
+    "cmc": 7.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{4}{G}{G}{G}",
+    "oracle_text": "Enchant creature\nEnchanted creature gets +8/+8 and has trample.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Natural Order": {
     "cmc": 4.0,
@@ -3075,6 +3202,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Planeswalker — Oko"
+  },
+  "Open the Armory": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Search your library for an Aura or Equipment card, reveal it, put it into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Oracle's Restoration": {
     "cmc": 1.0,
@@ -3232,6 +3368,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Prodigious Growth": {
+    "cmc": 6.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{4}{G}{G}",
+    "oracle_text": "Enchant creature\nEnchanted creature gets +7/+7 and has trample.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Progenitus": {
     "cmc": 10.0,
@@ -3728,6 +3875,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Seaside Citadel": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {G}, {W}, or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Secluded Courtyard": {
     "cmc": 0.0,
     "keywords": [],
@@ -3983,6 +4139,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Skycloud Expanse": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{1}, {T}: Add {W}{U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Skyshroud Cutter": {
     "cmc": 4.0,
     "keywords": [],
@@ -4076,6 +4241,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Somberwald Sage": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "{T}: Add three mana of any one color. Spend this mana only to cast creature spells.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Human Druid"
   },
   "Soul Warden": {
     "cmc": 1.0,
@@ -4639,6 +4813,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Unflinching Courage": {
+    "cmc": 3.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{1}{G}{W}",
+    "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Unite the Coalition": {
     "cmc": 7.0,

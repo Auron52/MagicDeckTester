@@ -1649,6 +1649,7 @@ function queueActivation(src, opt){
   flashHint(sac
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
+    : opt.verb==='auraswap' ? `${src}: aura swap — ${opt.name} comes in from your hand, ${src} returns to your hand. Commit the phase to resolve it. (To swap AFTER attackers are declared instead, skip this: you are asked in combat.)`
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
     : opt.verb==='gyexile' ? `${src}: tapping to exile ${opt.mode===2?'a creature card from a graveyard and gain 2 life':'an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
@@ -2561,6 +2562,7 @@ function renderPlanbar() {
               // so the chip reads "Kor Duelist ⚔ equip all free" -- which is the whole gesture.
               : p.verb==='equipallfree' ? ' ⚔ equip all free'
               : p.verb==='sfput'     ? ' ⟳ put from hand'
+              : p.verb==='auraswap'  ? ' ⇄ aura swap'
               : p.verb==='jittemode' ? ' \u27f3 ' + jitteModeLabel(p.mode)
               : p.verb==='sacout'    ? ' ⟳ sacrifice'
               // The two halves of a fused "Investigate & crack" say which half they are, so the
@@ -3966,6 +3968,7 @@ function activationPickerHtml(pick){
   const label = o => o.fuseClue           ? `Investigate & crack — make a Clue and sacrifice it to draw`
                    : o.makesClue          ? `Investigate — make a Clue (crack it later)`
                    : o.verb==='sfput'     ? `Put ${o.name} onto the battlefield`
+                   : o.verb==='auraswap'  ? `Aura swap — bring in ${o.name} (${pick.src} returns to hand)`
                    : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
                    : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'

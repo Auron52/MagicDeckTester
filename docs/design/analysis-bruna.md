@@ -28,5 +28,130 @@ Courage. NOT reachable: Mythic Proportions, Avacyn's Pilgrim (both also mainboar
 Worldfire (sideboard-only, never castable in a game here -> not implemented; analyze_deck.py's
 wish detection to be fixed to honour the wish's restriction).
 
-## Stage 2 — cards
-(drafts in logs/bruna_drafts/, integrator fills this table)
+## Stage 2 — cards (integrated 2026-10-05, branch `bruna-analysis`)
+
+Drafts: `logs/bruna_drafts/*.json` (18 cards). Elgaud Shieldmate and Worldfire are NOT implemented --
+unreachable (Glittering Wish fetches only multicolored cards; both are mono-coloured), now proven by
+the restriction-aware coverage scan (below).
+
+### USER RULINGS (signed off 2026-10-05, relayed by the orchestrator)
+1. **All provisional deferrals SIGNED OFF**: trample (Mythic Proportions, Prodigious Growth, Unflinching
+   Courage, Eldrazi Conscription), annihilator 2 (Conscription), flying (Arcanum Wings, Bruna), Indrik
+   Umbra's first strike / lure / umbra armor, Almost Perfect's indestructible, Boseiju's channel, Bruna's
+   "or blocks" half, Wings' opponent's-turn window collapse, Glittering Wish's autonomous-decline /
+   reveal partials. **Mother of Runes' protection ability: DEFERRED for now** (no viewer wiring).
+2. Colossification's tap is mitigated by IN-COMBAT entry (Wings' combat swap, Bruna's gather): both lines
+   must be expressible and their +20 must count. Done + scenario-tested (both).
+3. Wings swap pick: **rank on damage, take the top one** (provider-owned prune) -- PROVEN against the
+   fully-branched control arm; counterexamples must be root-caused and the ranking fixed, never left
+   branched. Same policy for Bruna's dominance collapse. Results below.
+4. Viewer choices are mine (recorded below); user will give feedback.
+5. KeepModel's power feature: NOT changed here -- open question with options (below).
+
+### Card table
+
+| Card | Tier | C++ / data summary | Deferrals (status) |
+|---|---|---|---|
+| Bruna, Light of Alabaster | 3 | `attack_gather_auras` -> `FireAttackGatherAuras` (both combat worlds, after pumps, before power is read): battlefield Auras + hand/graveyard Aura cards that COULD enchant her (`AuraCouldEnchant`, non-targeting -- Greaves' shroud does not stop it, Wild Growth never qualifies); attach first (no enter), then put (enters; Colossification taps her, harmless on an attacker). Subset = provider `BrunaGatherCandidates` (exact dominance collapse, take/skip only for base-setters), searched pin `Plan::bruna_gather_choice`; projection twin `CountAttackGatherPump` in `PendingAttackDamage`. Routing signature for `BrunaProvider`. | "or blocks" -- signed off. Flying -- signed off. |
+| Eldrazi Conscription | 2 | `CardType::Kindred` (CR 308); flat +10/+10 aura. | trample, annihilator 2 -- signed off. |
+| Somberwald Sage | 3 | `produces_one_color` (IsSingleColorBurstSource); `GameState::floating_creature_mana` (restricted leftover, creature payments drain it first, noncreature never; batch prepay too); colour-exact gate brute-forces a burst's ONE colour; never feeds a filter's {1}. | none |
+| Prodigious Growth / Mythic Proportions | 1 | flat auras (+7/+7, +8/+8). | trample -- signed off. |
+| Skycloud Expanse | 1 | `ramp_filter`. Integrator checks: (1) greedy ramp step now credits a land Aura (Wild Growth) -- REAL, fixed; (2) the pool no longer credits Wild Growth on an UNFEEDABLE ramp filter -- REAL, fixed; (3) creature-only mana can no longer feed the {1} (greedy `feeding` flag + `restricted_in_float`; backtracker `g_bt_restricted`; `HasUntappedRampFeeder` excludes creature-only) -- REAL, fixed. | none |
+| Seaside Citadel / Botanical Sanctum / Avacyn's Pilgrim | 1 | existing templates. | none |
+| Glittering Wish | 2 | `wish_requires_multicolored` (TutorNumericFilterOk conjunct + PerformTutor guard); `exiles_self_on_resolve`. | autonomous decline / reveal partials -- signed off. |
+| Colossification | 2 | `aura_etb_tap_host` -> `ResolveAuraEnterTapHost` at EVERY aura-enter site (cast executor+rollout, Light-Paws, Skyhunter dig-put, Bruna put, Wings swap). Main-phase respond window: an able mana-dork host keeps its mana ability this phase (`Permanent::etb_tap_pending`, not an attacker, tapped at beginning of combat in both worlds). | none |
+| Arcanum Wings | 3 | `aura_swap_cost` + `Keyword::AuraSwap`. Main phase: `Action::Kind::AuraSwap` (autonomous: damage-max Aura re-picked AT RESOLUTION; human: every legal Aura), site-9 key (cast-then-swap) + site-10 route (swap-then-recast). In combat: `Plan::combat_aura_swap_choice` -> `ApplyCombatAuraSwap` (both worlds, pays via TapForCostDirect, repairs atk_idx). `DeckUsesSecondMain` detects it. | flying; opponent's-turn window collapsed -- signed off. |
+| Boseiju, Who Endures | 1 | G land, legendary. | channel (no legal target in goldfish) -- signed off. |
+| Mother of Runes | 1 | vanilla 1/1 body. | protection {T} ability -- DEFERRED (user, 2026-10-05). Viewer cannot activate it (disclosed). |
+| Open the Armory | 1 | tutor_to_hand Aura/Equipment; `BrunaProvider::TutorSearchWidth` 8 (7 distinct library names). | none |
+| Indrik Umbra | 1 | +4/+4 aura. | first strike, lure, umbra armor -- signed off. |
+| Almost Perfect | 2 | `aura_set_base_power/_toughness` -> layer-7b delta inside `AuraBonusFor` (Sage + AP + Conscription = 19/20, unit-tested); feeds_combat detects it. | indestructible -- signed off. |
+| Unflinching Courage | 1 | +2/+2 + `aura_grants_lifelink`. | trample -- signed off. |
+
+### Engine rules fixes (cross-deck) and decks expected to move at the next suite run
+Each is its own commit; per-game verdicts are owed at the next smoke/regression/overnight.
+* **Shroud vs Aura spells** (`CreatureTargetableByAuraSpell` in LegalEnchantTargets / ResolveEnchantTarget;
+  hatch `MTG_LEGACY_SHROUD=1`). Deck scan: no suite deck pairs Lightning Greaves with a creature Aura ->
+  expected byte-identical outside Bruna.
+* **CR 704.5m orphaned-Aura SBA** (`SweepOrphanedAuras`: inside EnforceLegendRule + beginning of combat +
+  turn start, both worlds; bestow faces exempt). Decks that can orphan an Aura and MAY MOVE: **Auras**
+  (14 creature Auras, legendary Light-Paws -- an Aura on a doomed copy now hits the graveyard; Ethereal
+  Armor's enchantment count drops), **Fungus** (Wild Growth + Simic Growth Chamber bounce),
+  **EldraziDisplacerFlicker** (four land-Aura types + a Karoo). Disclosed approximation: between a detach
+  and the next checkpoint an orphan still sits on the battlefield (it contributes no P/T).
+* **AttackPowerOf counts Aura/Equipment power.** Deck scan: no exalted deck carries attachments, and the
+  Hinata / Goblins / CreatureGiving readers' decks carry none -> expected byte-identical outside Bruna.
+* **Creature-only leftover** (any `creature_mana_only` source): **Angels** (Giada) and **slivers_vial**
+  (Ancient Ziggurat) may move only where a payment over-taps one (rare; previously the leftover went
+  to the general float -- laundering). **SelesnyaLifegain** (Accomplished Alchemist): the colour-exact
+  gate now models its X mana as ONE colour -- expected inert (no two-colour cost in that list).
+* **Armored Skyhunter's dig-put uses the non-targeting host list** -- KittyEquipment has no Auras -> inert.
+
+### Proofs for the two provider prunes (USER rulings 3 + clarification)
+Method: same 400 seeds (7000+, default play d5/b20, `--threads 20`), the shipped arm vs a CONTROL arm
+with the prune removed; `MTG_TRACE=swapproof,gatherproof` records every COMMITTED choice (real
+resolutions only) against the pruned pick.
+* **Bruna gather (control `MTG_BRUNA_GATHER_FULL=1`, full powerset, subset lists up to 64 wide):
+  248 committed gathers, 248/248 took the collapse's subset (k = 0).** Avg 5.2625 (control) vs 5.2575;
+  3 games differ (gi 14, 62, 334) and none can be the gather choice (k = 0 in every commit) -- they are
+  the wider variant set re-allocating the fixed b20 budget.
+* **Arcanum Wings swap (control `MTG_AURA_SWAP_BRANCH=1`, every legal Aura branched, main + combat):
+  181 committed swaps, 178 = the damage-max pick.** The 3 others: two were ENUMERATION-time picks
+  diverging from the APPLY-time ranking after an earlier cast in the same plan changed the hand
+  (Glittering Wish -> Almost Perfect) -- ROOT-CAUSED and FIXED (the autonomous main-phase swap now
+  re-takes the damage-max pick at resolution, `Action::hand_index = -2`, exactly as the combat window
+  already did); one (T6 main: Colossification over Indrik Umbra) is in a game won on the same turn in both
+  arms (no outcome difference). Avg 5.2575 vs 5.2575; 4 games differ (2 each way); re-run with traces:
+  in the two control-arm-better games (gi 197, 320) the control arm's winning line uses the SAME
+  damage-max pick (rank 0, Colossification in combat) a turn earlier -- a line inside the pruned arm's
+  own space that the pruned arm's b20 search did not reach, i.e. budget allocation, not the ranking.
+  No ranking counterexample found. (Re-run after the resolution-time fix: see the commit log.)
+
+### Viewer wiring (2c-ter) -- my choices, user feedback pending
+* Bruna's gather: the generic **`dragon` multi-pick**, asked once per zone (battlefield / hand /
+  graveyard), provider subset preselected; a battlefield Aura's host is named in the source line.
+* Arcanum Wings, main phase: an **`auraswap=<Aura>` plan line** (LineSpec verb, CheckLine always-own-verb
+  matching, board activation on the Wings permanent, picker/flash/chip labels). Human play offers every
+  legal hand Aura (never narrowed).
+* Arcanum Wings, in combat: the reused **`dig`** modal at `ApplyCombatAuraSwap` (hand shown, legal = Auras
+  that could enchant the host, decline = no swap), asked only when the {2}{U} is affordable (probed).
+  (USER: "not the dig chooser" referred to the SEARCH pick -- the search uses the damage ranking; the
+  human still needs a prompt and the dig shape is the closest existing modal. Say if a dedicated
+  `aura_swap` type is wanted.)
+* DECISIONS.md rows + `audit_viewer_decisions.py` manifest entries added (`attack_gather_auras -> dragon`,
+  `aura_swap_cost -> main_phase` / `verb:auraswap`, inert classifications for the rest). Static audit
+  rc 0; the live sweep is Stage 5h.
+
+### Stage 2d-bis / 2e / Stage 3 results
+* `audit_card_costs.py`: the full run 429'd on 15 cards; a slow (1 s) re-run of those + every new card:
+  **22/22 compared, all match**. `audit_card_fields.py` (snapshot refreshed for the 18 new cards):
+  **all hard fields match** (one pre-existing STALE allowlist entry, Glorybringer, not ours).
+* Build: `./build.sh` clean (no warnings). `mtg-test`: all pass (incl. 10 new `test_bruna.cpp` cases).
+  Scenarios: all pass incl. 3 new Bruna fixtures, each with a control (one more opponent life must NOT
+  be won) that fails as required.
+* **Coverage: `missing` = [] (0); 26/26 scanned cards `full`.** Every bracket note is a signed-off
+  goldfish-inert deferral or a description of modelled behaviour.
+* Scanner fix: `scripts/analyze_deck.py` sideboard reachability is restriction-aware (Scryfall cache under
+  `logs/scryfall_cache/`, `--offline`).
+
+### Defects recorded for later (docs/design)
+* `antilifegain-tutor-single-pick-defect.md` -- AntiLifegainProvider's tutor target is a ONE-option pick
+  whose ranking lives in an ENGINE file (SpellEffects.h `::TutorCandidates`), untested, with a
+  shuffle-order `any_name` fallback: a violation of the 2026-09-30 no-greedy rule. Not changed here.
+* `wish-restriction-in-finisher-scans.md` -- the EDF finisher-wish sideboard scans apply no wish filter
+  (inert today).
+* Greedy legacy filter step (3) / scarcity kind-2 omit the land-Aura credit for an `is_filter` land
+  (sibling of the fixed ramp-filter case; no suite deck pairs them -- not changed to avoid moving GT).
+
+### Open user questions (none block anything)
+1. **KeepModel power feature** (`ExtractMidGameFeatures` sums bare EffectivePower -- blind to Auras,
+   Equipment, lords, CDA). For Bruna the value leaf would read Bruna+Conscription as 5 power. Options:
+   (a) leave it (disclose for Bruna's value-leaf stage); (b) add a NEW feature (aura/equip-inclusive power)
+   beside the old one -- refit only decks that adopt it; (c) change the existing feature -- every fitted
+   value model must be regenerated. Default taken: (a) until you choose.
+2. Colossification's in-response mana credit: implemented as a deferred tap (mana abilities only, this
+   phase). OK as modelled?
+3. Combat-swap viewer prompt reuses `dig` -- want a dedicated decision type instead?
+4. Cast order / range / main split for Bruna: still generic (user-owned; to be proposed at Stage 4).
+5. Discard policy (§5i, gated): not yet authored for Bruna (a later stage); the Bruna payload Auras
+   (Mythic Proportions, Indrik Umbra, Colossification) should not be max-MV-first discards.

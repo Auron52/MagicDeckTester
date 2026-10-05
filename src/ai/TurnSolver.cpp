@@ -23273,6 +23273,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                                /*host_attacking=*/false);
                     if (k >= 0) { picks.push_back(k); }
                 }
+                const bool repick = !(HumanPlayActive() || s_swap_branch);
                 for (int k : picks)
                 {
                     const Card& hc = ap.hand[static_cast<std::size_t>(k)];
@@ -23280,7 +23281,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     Action a;
                     a.kind           = Action::Kind::AuraSwap;
                     a.card_name      = hc.m_name;         // the Aura brought IN; the swap source rides sac_source_id
-                    a.hand_index     = -1;                // resolved by name at apply (hand shifts)
+                    // -1 = resolve the named Aura at apply (hand shifts). -2 (autonomous, ruling
+                    // 2026-10-05) = re-take the damage-max pick AT RESOLUTION: an earlier cast in
+                    // the same plan (Glittering Wish -> Almost Perfect) can change the best Aura,
+                    // and the combat window already picks at resolution -- the proof run caught the
+                    // enumeration-time name diverging from the apply-time pick. card_name is then
+                    // the enumeration-time pick, kept for labels and the plan signature only.
+                    a.hand_index     = repick ? -2 : -1;
                     a.cost           = *pd->params.aura_swap_cost;
                     a.sac_source_id  = p.card.m_number;
                     a.eval           = std::max(1, (cd ? cd->card.m_mana_cost.ManaValue() : 0)
@@ -38078,6 +38085,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Colossification respond window applies. Executor twin: AIEngine's AuraSwap branch.
             int hi = -1;
             const std::vector<Card>& hh = state.players[state.active_player_index].hand;
+            if (a.hand_index == -2)   // the damage-max pick at resolution (see CollectActions)
+            { hi = AuraSwapPick(state, state.active_player_index, a.sac_source_id, /*host_attacking=*/false); }
+            else
             for (int i = 0; i < static_cast<int>(hh.size()); ++i)
             { if (!hh[static_cast<std::size_t>(i)].m_is_staged && hh[static_cast<std::size_t>(i)].m_name == a.card_name) { hi = i; break; } }
             if (hi >= 0 && TapForCostDirect(state, a.cost, /*for_creature=*/false))
@@ -63301,7 +63311,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       // ONLY of it silently grades `accept / plan_index -1 / "pass / cast nothing"`
                       // -- an ACCEPT for a line the engine then does not play, which is strictly
                       // worse than a reject because the human sees no error at all.
-                      spec.tap_lifes.empty()))
+                      spec.tap_lifes.empty() && spec.aura_swaps.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -63327,6 +63337,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::sort(sortedAttachAll.begin(), sortedAttachAll.end());
     std::vector<std::string> sortedSfPut = spec.sf_puts;
     std::sort(sortedSfPut.begin(), sortedSfPut.end());
+    std::vector<std::string> sortedAuraSwap = spec.aura_swaps;
+    std::sort(sortedAuraSwap.begin(), sortedAuraSwap.end());
     std::vector<int> sortedJitteModes = spec.jitte_modes;
     std::sort(sortedJitteModes.begin(), sortedJitteModes.end());
     const bool attachall_declared = !spec.attach_all.empty();
@@ -63440,6 +63452,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // >= 2) -- the flexible sacout fallback below only bends counts for these.
         std::vector<std::string> sacLoopNames;
         std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
+        std::vector<std::string> auraSwapNames;   // Arcanum Wings' swap: ALWAYS its own verb
         std::vector<std::string> adventureNames;
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
@@ -63478,6 +63491,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { attachAllNames.push_back(a.card_name); continue; }
             if (sfput_declared && a.kind == Action::Kind::PutFromHandAbility)
             { sfPutNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::AuraSwap)
+            { auraSwapNames.push_back(a.card_name); continue; }
             if (jitte_declared && a.kind == Action::Kind::JitteModeAbility)
             { jitteModes.push_back(a.gy_exile_mode); continue; }
             if (a.kind == Action::Kind::Equip)
@@ -63574,6 +63589,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = sfPutNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedSfPut) { continue; }
+        }
+        {
+            std::vector<std::string> v2 = auraSwapNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedAuraSwap) { continue; }
         }
         if (jitte_declared)
         {

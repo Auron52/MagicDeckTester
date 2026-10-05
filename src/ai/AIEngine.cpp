@@ -5460,9 +5460,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Arcanum Wings' main-phase swap (executor mirror -- same shared ApplyAuraSwap).
             int hi = -1;
             const std::vector<Card>& hh = state.players[state.active_player_index].hand;
+            if (a.hand_index == -2)   // the damage-max pick at resolution (lockstep with the rollout)
+            { hi = AuraSwapPick(state, state.active_player_index, a.sac_source_id, /*host_attacking=*/false); }
+            else
             for (int i = 0; i < static_cast<int>(hh.size()); ++i)
             { if (!hh[static_cast<std::size_t>(i)].m_is_staged && hh[static_cast<std::size_t>(i)].m_name == a.card_name) { hi = i; break; } }
             ManaPool avail = AvailableManaPool(state);
+            // PROOF INSTRUMENT (MTG_TRACE=swapproof): the committed main-phase swap vs the damage-max
+            // pick (they differ only under the MTG_AURA_SWAP_BRANCH control arm or in human play).
+            if (hi >= 0 && TRACE_ON("swapproof"))
+            {
+                const int top = AuraSwapPick(state, state.active_player_index, a.sac_source_id, false);
+                TRACE("swapproof", "T%d main took=%s top=%s", state.turn_number, hh[static_cast<std::size_t>(hi)].m_name.str().c_str(),
+                      top >= 0 ? hh[static_cast<std::size_t>(top)].m_name.str().c_str() : "-");
+            }
             if (hi >= 0 && TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
                 const std::string in_name = a.card_name.str();
