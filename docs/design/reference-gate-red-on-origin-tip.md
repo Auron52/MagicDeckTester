@@ -1,5 +1,33 @@
 # The reference reproducibility gate is RED on `origin/phase-1-2-deck-analyzer`
 
+## UPDATE 2026-10-05 — all three ROOT-CAUSED; one fixed, two owed a payment heuristic
+
+Found by following each recorded line to the frame where the engine refuses it (no bisect needed).
+**None of the three is from the 10-01..10-04 executor block named under "Suspects" below.** All
+predate it, and the `f20b2f88` "reference gate pass" was measured before that commit was rebased
+onto `68a21c31`, the first commit to gate archived-list references at all.
+
+* **Hinata2 `s1_gi0` — FIXED (checker).** The recorded 5-target Soulfire option is still offered
+  verbatim (option 15). `58b3a7e8` (10-01) unified the protocol's P/T label sites on
+  `ProtocolPTLabel`, so the label went from `Hinata, Dawn-Crowned (4/4, yours)` to
+  `… (4/4) (yours)`; `_LABEL_VOLATILE` stripped one trailing group, left `(4/4)`, and reported an
+  ENUM-GAP. The normaliser now strips repeatedly. Full sweep after: `74 ok, 365 repaired,
+  1 play-drift, 1 shuffle-dead, 1 board-diverged, 0 enum-gap` — only Hinata2 moved.
+* **Mirrorwing v2 `s51_gi50` — payment heuristic (play-drift).** T4 pays Luxurious Libation X=5;
+  every creature then gets +5/+5 via Mirrorwing copies and attacks. The 08-29 engine tapped one
+  Elvish Mystic + one Ignoble Hierarch, leaving Mystic 6 + Hierarch 5 + Dragon 9 = **20, lethal**.
+  HEAD taps **both Mystics** (the scarcity-first rank spends the mono-G source before the tri-colour
+  one), leaving 5 + 5 + 9 = **19**. The reference records no `--tap-pref`, so the human never chose
+  these taps — the 08-29 split was luck, not a rule. No existing lever (`MTG_DORK_TAP_LAST`,
+  `MTG_SCALER_PLAN_BIAS`, `MTG_PUMP_TARGET_HOLD`, `MTG_ONESHOT_RESERVE`, `MTG_M2_PAYLOAD_RESERVE`)
+  changes it. Owed: on an attack turn, among creatures that CAN tap for mana, tap the ones that will
+  not attack first, then the lowest attack value; colour flexibility only as a needs-based tiebreak.
+* **Snow `s4_gi3` — payment heuristic (board-diverged); has NEVER replayed** (fails at 09-06, at
+  `cac41b5f` which added it, and at HEAD). T5: the human activated the new Scrying Sheets #38 and
+  paid `{1}{S}` with Sheets #39's `{C}` + one Island, keeping Island #56 for the Frost Augur the dig
+  found. The engine activates #39 and pays with both Islands, stranding `{U}`. Needs-based generic
+  payment — see `mana-payment-rollback.md`, which uses this game as its worked example.
+
 **Status: OPEN defect, found 2026-10-04, NOT introduced by the finder.** Four of 442 saved
 references no longer replay. One of them is a **play-drift**, which the standing user rule treats as
 an engine bug rather than an aged-out reference.

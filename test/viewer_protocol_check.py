@@ -779,7 +779,19 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None, mdfc_face=None)
 # (the copy chooser's "(yours -- copy would immediately die to the legend rule!)", 2026-09-04).
 # Warnings are display, not identity -- the recorded intent is the card name + side, so a label
 # gaining an advisory must keep matching its warning-less recording (2 false enum-gaps otherwise).
+# Stripped REPEATEDLY, not once: the volatile tail can be one combined group "(4/4, yours)" or
+# separate groups "(4/4) (yours)". 58b3a7e8 (2026-10-01) unified the protocol's P/T label sites on
+# ProtocolPTLabel, which moved the Soulfire target chooser from the first form to the second; a
+# single strip left "(4/4)" behind and reported Hinata2 s1_gi0 as an ENUM-GAP while the recorded
+# five-target option was still offered verbatim.
 _LABEL_VOLATILE = re.compile(r"\s*\((?:\d+/\d+)?(?:,\s*)?(?:yours)?(?:\s*--[^)]*)?\)$")
+
+
+def _strip_label_volatile(part):
+    prev = None
+    while prev != part:
+        prev, part = part, _LABEL_VOLATILE.sub("", part)
+    return part
 
 
 def option_key(o):
@@ -806,7 +818,7 @@ def option_key(o):
         return ("name", o.get("name"))
     if isinstance(o.get("label"), str) and o["label"]:
         parts = [p.strip() for p in o["label"].split(" + ")]
-        return ("label", tuple(_LABEL_VOLATILE.sub("", p) for p in parts))
+        return ("label", tuple(_strip_label_volatile(p) for p in parts))
     return None
 
 
