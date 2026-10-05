@@ -495,3 +495,40 @@ TEST_CASE("Bruna sweep F: Wild Growth's same-turn ramp is cast before the spells
     CHECK(CountOnBf(after, "Mother of Runes") == 1);
     CHECK_MESSAGE(CountOnBf(after, "Wild Growth") == 1, "the plan dropped Wild Growth");
 }
+
+// B (destination half): "Courage -> Pilgrim, move Greaves Mother -> Pilgrim, Wings -> Mother" is legal
+// in that order (the Aura onto the move's destination resolves before the Greaves arrives).
+TEST_CASE("Bruna sweep B: an Aura on the Greaves move's destination resolves before the move")
+{
+    GreavesOnMother g;
+    const int pilgrim = g.b.Put("Avacyn's Pilgrim");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Botanical Sanctum");
+    g.b.Put("Island");
+    g.b.Put("Forest");
+    g.b.Hand("Unflinching Courage");
+    g.b.Hand("Arcanum Wings");
+    g.b.s.players[0].lands_played_this_turn = 1;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool c_on_p = false, w_on_m = false, move = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Unflinching Courage" && a.enchant_target == pilgrim) { c_on_p = true; }
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Arcanum Wings" && a.enchant_target == g.mother) { w_on_m = true; }
+            if (a.kind == Action::Kind::Equip && a.sac_victim_id == pilgrim) { move = true; }
+        }
+        if (c_on_p && w_on_m && move) { line = &p; }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "Courage -> Pilgrim + move Greaves -> Pilgrim + Wings -> Mother was not enumerated");
+    const long long before = g_enchant_retargets.load();
+    GameState after = g.b.s;
+    TurnSolver::ApplyPlan(after, *line, /*is_pre_combat=*/true);
+    CHECK(AuraHostOf(after, "Unflinching Courage") == pilgrim);
+    CHECK(AuraHostOf(after, "Arcanum Wings") == g.mother);
+    CHECK(EquipHostOf(after, g.greaves) == pilgrim);
+    CHECK(g_enchant_retargets.load() == before);
+}

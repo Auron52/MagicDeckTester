@@ -8959,7 +8959,7 @@ static bool SubsetHasShroudBlockedEquip(const GameState& state,
 // The candidates this admits are injected by CollectActions (Equipment-shrouded hosts); every
 // other aura candidate has aura_shroud_src 0 and is untouched. `src` empty => nothing to check.
 static bool SubsetHasShroudBlockedAura(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                       const std::vector<int>& src)
+                                       const std::vector<int>& src, bool dest_aura_ordered = false)
 {
     if (src.size() != cands.size()) { return false; }
     for (int idx : sel)
@@ -8975,6 +8975,11 @@ static bool SubsetHasShroudBlockedAura(const std::vector<Action>& cands, const s
             { y = d.sac_victim_id; break; }
         }
         if (y == 0) { return true; }                       // nothing moves the shroud off X
+        // EnumeratePlans orders an Aura onto Y BEFORE the shroud-target Aura (plan-action order,
+        // which both apply worlds honour), and the release waits while an Aura on Y is pending --
+        // so "Aura -> Y, move Greaves X -> Y, Aura -> X" is legal there. Solve's plan builder has
+        // no such sort, so it keeps the conservative reject.
+        if (dest_aura_ordered) { continue; }
         for (int jdx : sel)
         {
             const Action& d = cands[jdx];
@@ -41655,7 +41660,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                                        pre.equip_shroud_src, pre.any_equip_shroud))
         { return; }
         // ...and an Aura SPELL onto a Greaves-shrouded creature without that move (CR 303.4a).
-        if (!pre.aura_shroud_src.empty() && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src))
+        // Destination Auras are legal here: the plan sorts them first (see the push site).
+        if (!pre.aura_shroud_src.empty()
+            && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src, /*dest_aura_ordered=*/true))
         { return; }
         // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
@@ -42815,6 +42822,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             std::stable_sort(plan.actions.begin(), plan.actions.end(),
                 [&](const Action& x, const Action& y)
                 { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); });
+        }
+        // Shroud-target Auras (aura_shroud_src != 0: the host is Greaves'd NOW and the plan moves the
+        // Greaves) resolve AFTER every other Aura, so one onto the move's DESTINATION is cast while
+        // that creature is still unshrouded (SubsetHasShroudBlockedAura's dest_aura_ordered). Keyed
+        // on the action's target, matched against the precomputed table; empty table -> no sort.
+        if (!pre.aura_shroud_src.empty())
+        {
+            std::vector<int> shrouded_hosts;
+            for (int j : sel)
+            { if (pre.aura_shroud_src[static_cast<std::size_t>(j)] != 0) { shrouded_hosts.push_back(cands[j].enchant_target); } }
+            if (!shrouded_hosts.empty())
+            {
+                auto key = [&](const Action& x) -> int
+                {
+                    if (x.kind != Action::Kind::CastFromHand || x.enchant_target <= 0) { return 0; }
+                    return std::find(shrouded_hosts.begin(), shrouded_hosts.end(), x.enchant_target)
+                           != shrouded_hosts.end() ? 1 : 0;
+                };
+                std::stable_sort(plan.actions.begin(), plan.actions.end(),
+                    [&](const Action& x, const Action& y) { return key(x) < key(y); });
+            }
         }
         // An Aura targeting a creature CAST this turn must resolve after that creature (the apply honours
         // plan-action order), so stable-sort such Auras to the end (key 1 vs 0). No-op unless the injector

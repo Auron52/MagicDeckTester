@@ -3497,6 +3497,15 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
         static const bool s_abort = EnvOn("MTG_ENCHANT_RETARGET_ABORT");
         if (s_abort)
         {
+            for (const Permanent& p : state.battlefield)
+            {
+                int ss = 0; CreatureHasShroud(p, state, &ss);
+                std::fprintf(stderr, "  bf #%d %s ctrl=%d shroudsrc=%d attached=%d equipped=%d\n", p.card.m_number,
+                             p.card.m_name.str().c_str(), p.controller_index, ss, p.aura_attached_to, p.equipped_to);
+            }
+            for (const Card& c : state.players[controller].hand)
+            { std::fprintf(stderr, "  hand #%d %s\n", c.m_number, c.m_name.str().c_str()); }
+            std::fprintf(stderr, "  turn=%d stack=%zu\n", state.turn_number, state.stack.size());
             std::fprintf(stderr, "[enchant-retarget] ABORT: Aura target #%d illegal at resolution\n", enchant_target);
             std::abort();
         }
