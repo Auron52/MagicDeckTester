@@ -18742,6 +18742,9 @@ static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, 
 // signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO),
 // and by FoldInterchangeableAuraHosts below for the same reason.
 static thread_local bool g_enum_karoo_drop = false;
+// ...and WHICH card that deferred karoo is (its m_number, 0 = none): a land Aura may name it as its
+// host (Bruna sweep D -- Wild Growth on a same-turn Azorius Chancery), cast after the karoo lands.
+static thread_local int  g_enum_karoo_num  = 0;
 
 // MTG_LAND_AURA_HOST_FOLD -- collapse interchangeable "Enchant land" hosts. DEFAULT ON; =0 restores
 // one variant per legal land.
@@ -20559,6 +20562,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     && ResolveProvider(state).UsesLandAuraHostHeuristic())
                 { aura_hosts = PickLandAuraHosts(state, aura_hosts, def); }
             }
+            // SAME-TURN KAROO HOST (Bruna sweep D, seed 77001 T2). On the deferred-karoo branch the
+            // karoo is not on the battlefield at enumeration (the apply plays it after the casts), so
+            // "Wild Growth -> the Azorius Chancery played this turn" was inexpressible at any budget:
+            // the real line plays the Chancery, taps the land it returns for mana in response to the
+            // trigger, and enchants the Chancery. The deferred order realises the same mana exactly
+            // (the bounce takes a land already tapped for this turn's casts), provided the Aura is
+            // cast AFTER the karoo lands -- which both apply worlds now do for an Aura naming the
+            // pending karoo (ApplyPlanDirect / AIEngine::TakeTurn). The host is a real decision
+            // (three mana from one land next turn vs the land it might otherwise bounce), so it is
+            // its own variant; the karoo-branch host signature keeps it distinct.
+            if (def.params.is_land_aura && g_enum_karoo_num > 0
+                && std::find(aura_hosts.begin(), aura_hosts.end(), g_enum_karoo_num) == aura_hosts.end())
+            { aura_hosts.push_back(g_enum_karoo_num); }
             for (int tgt_num : aura_hosts)
             {
                 Action a;
@@ -34299,6 +34315,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool        karoo_deferred = false;
     std::string karoo_land_name;
     std::string karoo_fetch;
+    // Land Auras whose host is the deferred karoo (name, host number), cast right after it lands.
+    std::vector<std::pair<std::string, int>> karoo_host_auras;
 
     // Human-play mode (tools/play GUI): execute EXACTLY the committed plan -- suppress every
     // auto-heuristic that would play cards the human didn't choose (draw-breakpoint re-solve,
@@ -35106,6 +35124,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
         // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
         if (bp_truncate) { return; }
+        // A land Aura naming the DEFERRED karoo as its host (Bruna sweep D) waits until the karoo is
+        // played below; its pre-paid mana stays in the float. Lockstep: AIEngine::TakeTurn's
+        // cast_by_name holds it the same way. Inert unless a karoo is deferred this apply.
+        if (karoo_deferred && enchant_target > 0 && !from_graveyard && !is_sacrifice)
+        {
+            const CardDefinition* kd = CardDatabase::Instance().Lookup(name);
+            bool host_on_bf = false;
+            for (const Permanent& hp : state.battlefield)
+            { if (hp.card.m_number == enchant_target && !hp.is_token) { host_on_bf = true; break; } }
+            if (kd && kd->params.is_land_aura && !host_on_bf)
+            { karoo_host_auras.emplace_back(name, enchant_target); return; }
+        }
         const int cast_loyalty = cast_loyalty_ability;   // consume the caller's same-cast activation
         cast_loyalty_ability = -1;
         const int cast_devour = cast_devour_count;       // ditto, for Mycoloth's devour count
@@ -38635,6 +38665,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         karoo_deferred = false;
         PlayLandByName(state, karoo_land_name, karoo_fetch);
+        // ...then the land Auras that named it (Bruna sweep D): cast now, on the karoo.
+        std::vector<std::pair<std::string, int>> held;
+        held.swap(karoo_host_auras);
+        for (const std::pair<std::string, int>& ha : held)
+        {
+            apply_one(ha.first, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false);
+        }
     }
     }   // end of the bp_resume prefix skip
 
@@ -40702,8 +40740,11 @@ static bool HumanEnumSaturated(const GameState& state,
 struct KarooDropEnumScope
 {
     bool prev;
-    explicit KarooDropEnumScope(bool on) : prev(g_enum_karoo_drop) { g_enum_karoo_drop = on; }
-    ~KarooDropEnumScope() { g_enum_karoo_drop = prev; }
+    int  prev_num;
+    explicit KarooDropEnumScope(bool on, int num = 0)
+        : prev(g_enum_karoo_drop), prev_num(g_enum_karoo_num)
+    { g_enum_karoo_drop = on; g_enum_karoo_num = on ? num : 0; }
+    ~KarooDropEnumScope() { g_enum_karoo_drop = prev; g_enum_karoo_num = prev_num; }
 };
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
@@ -48649,6 +48690,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // it. Rides the apply's MTG_NO_KAROO_DEFER hatch: with the hatch set both sides play
         // land-first again, byte-identically.
         bool karoo_drop = false;   // this branch's drop is a deferred karoo (see g_enum_karoo_drop)
+        int  karoo_num  = 0;       // ...and its card number (a land Aura may target it -- sweep D)
         {
             static const bool s_karoo_defer_enum = !EnvOn("MTG_NO_KAROO_DEFER");
             const CardDefinition* fold_ld =
@@ -48659,7 +48701,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 copy = state;   // the PlayLandByName above was the legality probe only
                 std::vector<Card>& h = copy.ActivePlayer().hand;
                 for (auto it = h.begin(); it != h.end(); ++it)
-                { if (it->m_name == land_name) { h.erase(it); break; } }
+                { if (it->m_name == land_name) { karoo_num = it->m_number; h.erase(it); break; } }
             }
         }
 
@@ -48678,7 +48720,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
 
         std::vector<TurnSolver::Plan> plans;
         {
-            KarooDropEnumScope _kd(karoo_drop);   // the host signature reads it (EnumeratePlans)
+            KarooDropEnumScope _kd(karoo_drop, karoo_num);   // the host signature reads it (EnumeratePlans)
             plans = EnumeratePlans(copy, is_pre_combat);
         }
         for (TurnSolver::Plan& p : plans)

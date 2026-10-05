@@ -375,3 +375,29 @@ TEST_CASE("Bruna sweep C: an Azorius Chancery bouncing the Wild Growth'd land se
     for (const Permanent& p : b.s.battlefield) { if (p.card.m_number == chancery) { chancery_ok = true; } }
     CHECK(chancery_ok);
 }
+
+// ---- D: Wild Growth on the Azorius Chancery played this same turn -------------------------------
+// Seed 77001 T2: the karoo is played AFTER the casts (deferred), so it was never on the battlefield at
+// enumeration and "Wild Growth -> the new Chancery" was inexpressible at any budget. The plan now
+// names the in-hand karoo as the host and both worlds cast the Aura right after the karoo lands.
+TEST_CASE("Bruna sweep D: Wild Growth can enchant the Azorius Chancery played this turn")
+{
+    BoardBs b;
+    b.Put("Birds of Paradise");
+    b.Put("Botanical Sanctum");
+    const int chancery = b.Hand("Azorius Chancery");
+    b.Hand("Wild Growth");
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_to_play != "Azorius Chancery") { continue; }
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.enchant_target == chancery) { line = &p; } }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "land=Chancery + Wild Growth -> Chancery was not enumerated");
+    GameState after = b.s;
+    TurnSolver::ApplyPlan(after, *line, /*is_pre_combat=*/true);
+    CHECK(AuraHostOf(after, "Wild Growth") == chancery);
+    CHECK(CountOnBf(after, "Azorius Chancery") == 1);
+}

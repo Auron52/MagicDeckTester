@@ -2998,6 +2998,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     bool        karoo_deferred = false;
     std::string karoo_land_name;
     std::string karoo_fetch;
+    // Land Auras whose host is the deferred karoo (name, host number) -- lockstep twin of
+    // ApplyPlanDirect's karoo_host_auras (Bruna sweep D): held by cast_by_name, cast after the karoo.
+    std::vector<std::pair<std::string, int>> karoo_host_auras;
 
     if (play_this_phase)
     {
@@ -3866,6 +3869,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             bool evoke = false,          // Evoke (Reveillark): alternate-cost self-sac cast
                             bool adventure = false)      // Adventure (Brightcap Badger): cast the SPELL half
     {
+        // Bruna sweep D: a land Aura naming the DEFERRED karoo waits for it (see karoo_host_auras;
+        // lockstep with ApplyPlanDirect's apply_one).
+        if (karoo_deferred && enchant_target > 0)
+        {
+            const CardDefinition* kd = CardDatabase::Instance().Lookup(name);
+            bool host_on_bf = false;
+            for (const Permanent& hp : state.battlefield)
+            { if (hp.card.m_number == enchant_target && !hp.is_token) { host_on_bf = true; break; } }
+            if (kd && kd->params.is_land_aura && !host_on_bf)
+            { karoo_host_auras.emplace_back(name, enchant_target); last_cast_paid = false; return; }
+        }
         Player& ap = state.ActivePlayer();
         // PRE-CAST hand snapshot for the breakpoint drawn-card exemption (lockstep twin of
         // ApplyPlanDirect's apply_one capture). It MUST be taken here rather than where rdb_site is
@@ -6322,6 +6336,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         karoo_deferred = false;
         TryPlaySpecificLand(state, karoo_land_name, karoo_fetch);
+        // ...then the land Auras that named it (Bruna sweep D), on the karoo.
+        std::vector<std::pair<std::string, int>> held;
+        held.swap(karoo_host_auras);
+        for (const std::pair<std::string, int>& ha : held)
+        {
+            cast_by_name(ha.first, "", 0, 0, -1, -1, 0, "", ha.second);
+            resolve_now();
+        }
     }
 
     // Commit-the-line: replay any recorded dig (Kind::DigDraw) the draw-engine breakpoint
