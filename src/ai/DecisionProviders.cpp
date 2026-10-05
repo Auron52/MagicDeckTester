@@ -15541,6 +15541,346 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- BrunaProvider::CastOrderRank (MTG_BRUNA_ORDER, PROPOSED, default OFF) ----------------
+// A USER QUESTION, not an adoption (docs/design/analysis-bruna.md, Stage 4). Off =>
+// GenericProvider::CastOrderRank, i.e. Sol Ring 5, creatures 10, every other spell 20 (the tutors, the
+// payload Auras, Wild Growth, Arcanum Wings and Lightning Greaves all tied, plan order).
+// Role classes are read from PARAMS only:
+//    4 same-turn mana: a non-creature rock or a land Aura (Wild Growth adds {G} THIS turn)
+//    6 tutor_to_hand (Glittering Wish / Open the Armory): before what it might fetch
+//   10 creatures (hosts, dorks, Bruna) -- generic
+//   15 aura_swap_cost (Arcanum Wings): on the host before the payloads, so a later swap has it
+//   20 flat payload Auras
+//   22 aura_etb_tap_host (Colossification): after the other Auras -- its ETB taps the host
+//   25 equip_grants_shroud (Lightning Greaves): LAST -- once it is attached, an Aura SPELL can no
+//      longer target the host (CR 303.4a / 702.18a)
+static bool BrunaOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_BRUNA_ORDER");   // default OFF; =1 enables (A/B lever)
+    return heurarm::Flag(heurarm::BRUNA_ORDER, on);
+}
+
+int BrunaProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!BrunaOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (def.card.IsCreature())                             { return 10; }
+    if (p.is_land_aura || (p.mana_rock && !p.produces.empty())) { return 4; }
+    if (p.tutor_to_hand)                                   { return 6; }
+    if (p.aura_swap_cost.has_value())                      { return 15; }
+    if (p.aura_etb_tap_host)                               { return 22; }
+    if (p.is_aura)                                         { return 20; }
+    if (p.equip_grants_shroud)                             { return 25; }
+    return DeckProvider::CastOrderRank(s, def);
+}
+
+const char* BrunaProvider::CastOrderTierName(int rank) const
+{
+    if (!BrunaOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case 4:  return "SAME-TURN MANA (rock / land Aura): first";
+        case 6:  return "TUTOR TO HAND: before what it can fetch";
+        case 10: return "CREATURE (host / dork / Bruna)";
+        case 15: return "AURA SWAP (Arcanum Wings): on the host before the payloads";
+        case 20: return "PAYLOAD AURA";
+        case 22: return "ETB-TAP-HOST AURA (Colossification): after the other Auras";
+        case 25: return "SHROUD EQUIPMENT (Lightning Greaves): LAST -- shroud stops Aura spells";
+        default: return DeckProvider::CastOrderTierName(rank);
+    }
+}
+
+// ---- BrunaProvider::CleanupDiscardCandidates --------------------------------
+//
+// AI-AUTHORED role-bucket policy, PENDING USER REVIEW (authored 2026-10-05; the card-by-card role
+// table, rationale and doubts are in docs/design/bruna-discard-policy-proposal.md). Adoption is a
+// user review, the same gate as cast order -- this ships default-on (the Pirates onboarding
+// precedent) only so the rollout and the verify gate see the deck's own buckets rather than max-MV;
+// MTG_BRUNA_BUCKET_DISCARD=0 is the A/B hatch.
+//
+// WHY THIS DECK NEEDS ONE. The fallback's tier B is descending mana value, and on this list the
+// most expensive cards are the KILL: Eldrazi Conscription {8}, Colossification / Mythic Proportions
+// {7}, Bruna {6}, Prodigious Growth {6}. Max-MV pitches a Conscription and keeps a third land in a
+// hand that already has five on the battlefield.
+//
+// SHAPE: VOLTRON-RAMP -> three groups. MANA (sub-split LANDS / ACCEL -- dorks, Sol Ring, Wild
+// Growth), the KILL (one bucket per role: a payload Aura, the haste enabler, the gatherer, a host),
+// and everything else as value-ordered overflow (tutors, Arcanum Wings, extra payloads).
+//
+//   MANA, NET OF BOARD. "Mana" = mana for ANY spell (lands' produces_amount, rocks, unrestricted
+//     dorks, a land Aura's extra), because the payloads are non-creature spells -- Somberwald Sage's
+//     creature-only mana is counted toward Bruna, not toward an Aura. Target 7 (the {7} payloads;
+//     Conscription's 8th usually comes off the turn's land drop). LANDS: keep while board + kept
+//     mana < 7, at most THREE (three land drops of runway), colour coverage first (W, U, G as the
+//     hand needs them), then produces_amount, then untapped. A Karoo (etb_bounce_land) with no other
+//     land on the battlefield or in hand is a blank (it bounces itself). ACCEL: ONE while board +
+//     kept-land mana < 6 (sub-quotas fungible: a dork-less hand keeps its lands).
+//   KILL, NET OF BOARD.
+//     GATHERER (attack_gather_auras): 1 while none is on the battlefield.
+//     PAYLOAD (a non-land creature Aura with a power grant): 1, +1 more while no gather path exists
+//       (no gatherer on board or kept). A payload already attached on the battlefield fills a slot.
+//     HASTE (equip_grants_haste): 1 while none is on the battlefield.
+//     HOST: 1 creature while no creature is on the battlefield or kept.
+//   OVERFLOW value (higher = kept longer): tutor_to_hand 70; aura_swap_cost 64 (30 once one is on
+//     board); payload 40 + 2*bonus (Colossification 80, Conscription 60, Mythic 56, Prodigious 54),
+//     -30 if FAR (mana value >= reach + 2, reach = board mana + hand lands/accel) and no gather or
+//     swap path; extra gatherer 50; other creature 35; accel 30.
+//
+// STATE PROMOTION (the one a cleanup can act on honestly): with Bruna ON OUR BATTLEFIELD, a hand
+// Aura that could enchant her is GRAVEYARD-EQUIVALENT -- her attack trigger takes Aura cards from
+// the hand AND the graveyard -- so payloads shed FIRST (quota 0). NOT here, deliberately
+// (search-owned): "this Aura is lethal next turn" (a damage projection) and which Aura Wings should
+// swap in (the provider's damage ranking at the swap site already owns it).
+//
+// SHED ORDER: S0 dead legend (its name already on our battlefield or earlier in hand); S1 the
+// graveyard-equivalent payloads (Bruna on board); S2 blank Karoos; S3 surplus lands (reverse keep
+// order); S4 surplus accel; S5 overflow, lowest value first; tail: every quota-kept card, last-taken
+// first -- every non-staged hand card is named, so max-MV never decides.
+std::vector<int> BrunaProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket_env = EnvOn("MTG_BRUNA_BUCKET_DISCARD", true);
+    if (!heurarm::Flag(heurarm::BRUNA_BUCKET_DISCARD, s_bucket_env)) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    auto def_at = [&](int i) { return CardDatabase::Instance().LookupCached(ap.hand[i]); };
+    auto colour_bit = [](Color c) -> unsigned
+    {
+        switch (c)
+        {
+            case Color::White: return 1u << 0;
+            case Color::Blue:  return 1u << 1;
+            case Color::Black: return 1u << 2;
+            case Color::Red:   return 1u << 3;
+            case Color::Green: return 1u << 4;
+            default:           return 0u;
+        }
+    };
+    auto prod_bits = [&](const CardDefinition* d)
+    {
+        unsigned b = 0;
+        if (d) { for (Color c : d->params.produces) { b |= colour_bit(c); } }
+        return b;
+    };
+    auto is_payload = [](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        const CardParams& p = d->params;
+        return p.is_aura && !p.is_land_aura && !p.aura_swap_cost.has_value()
+            && (p.aura_power_bonus > 0 || p.aura_set_base_power >= 0);
+    };
+    // The power an Aura adds. A base-setter (Almost Perfect: 9/10) is read as its base minus a 1-power
+    // host, the deck's usual pre-Bruna carrier (Mother of Runes / a dork).
+    auto payload_bonus = [](const CardDefinition* d)
+    {
+        const CardParams& p = d->params;
+        return std::max(p.aura_power_bonus, p.aura_set_base_power >= 0 ? p.aura_set_base_power - 1 : 0);
+    };
+    auto is_accel = [](const CardDefinition* d)
+    {
+        if (d == nullptr || d->card.IsLand()) { return false; }
+        const CardParams& p = d->params;
+        return p.mana_rock || p.is_land_aura || (d->card.IsCreature() && !p.produces.empty());
+    };
+    // Mana for ANY spell a source adds (creature-only mana is 0 here).
+    auto any_mana = [](const CardDefinition* d)
+    {
+        if (d == nullptr) { return 0; }
+        const CardParams& p = d->params;
+        if (p.is_land_aura) { return std::max(1, p.land_aura_extra_mana); }
+        if (p.creature_mana_only) { return 0; }
+        return std::max(1, p.produces_amount);
+    };
+
+    // ---- board census ----------------------------------------------------------------------------
+    int board_mana = 0, board_lands = 0, board_creatures = 0, board_payloads = 0;
+    bool board_gatherer = false, board_haste = false, board_swap = false;
+    unsigned board_cols = 0;
+    std::vector<std::string> seen_legends;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.HasSupertype(Supertype::Legendary)) { seen_legends.push_back(p.card.m_name.str()); }
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        if (p.card.IsLand()) { ++board_lands; board_mana += any_mana(d); board_cols |= prod_bits(d); }
+        else if (is_accel(d)) { board_mana += any_mana(d); if (!pp.creature_mana_only) { board_cols |= prod_bits(d); } }
+        if (pp.is_land_aura) { board_cols |= prod_bits(d); for (Color c : pp.land_aura_produces) { board_cols |= colour_bit(c); } }
+        if (p.card.IsCreature()) { ++board_creatures; }
+        if (pp.attack_gather_auras) { board_gatherer = true; }
+        if (pp.equip_grants_haste) { board_haste = true; }
+        if (pp.aura_swap_cost.has_value()) { board_swap = true; }
+        if (is_payload(d)) { ++board_payloads; }
+    }
+
+    // ---- partition the hand ------------------------------------------------------------------------
+    std::vector<int> lands, accel, gatherers, payloads, haste, swaps, tutors, hosts, other, dead;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        const CardDefinition* d = def_at(i);
+        if (CleanupDiscardIsLand(ap.hand[i])) { lands.push_back(i); continue; }
+        if (d && d->card.HasSupertype(Supertype::Legendary))
+        {
+            const std::string nm = ap.hand[i].m_name.str();
+            if (std::find(seen_legends.begin(), seen_legends.end(), nm) != seen_legends.end())
+            { dead.push_back(i); continue; }
+            seen_legends.push_back(nm);
+        }
+        if (d == nullptr)                     { other.push_back(i); continue; }
+        const CardParams& p = d->params;
+        if (p.attack_gather_auras)            { gatherers.push_back(i); continue; }
+        if (is_accel(d))                      { accel.push_back(i); continue; }
+        if (is_payload(d))                    { payloads.push_back(i); continue; }
+        if (p.equip_grants_haste)             { haste.push_back(i); continue; }
+        if (p.aura_swap_cost.has_value())     { swaps.push_back(i); continue; }
+        if (p.tutor_to_hand)                  { tutors.push_back(i); continue; }
+        if (d->card.IsCreature())             { hosts.push_back(i); continue; }
+        other.push_back(i);
+    }
+
+    // ---- land keep order: colour coverage, then amount, then untapped ------------------------------
+    unsigned need = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged || CleanupDiscardIsLand(ap.hand[i])) { continue; }
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.white > 0) { need |= 1u << 0; }
+        if (mc.blue  > 0) { need |= 1u << 1; }
+        if (mc.green > 0) { need |= 1u << 4; }
+    }
+    auto popcount = [](unsigned x) { int k = 0; while (x) { x &= x - 1; ++k; } return k; };
+    std::vector<int> blank_karoos, land_order;
+    {
+        // A Karoo with no OTHER land (battlefield or hand) to return bounces itself: a blank.
+        std::vector<int> pool;
+        for (int i : lands)
+        {
+            const CardDefinition* d = def_at(i);
+            if (d && d->params.etb_bounce_land && board_lands == 0 && lands.size() == 1)
+            { blank_karoos.push_back(i); continue; }
+            pool.push_back(i);
+        }
+        unsigned cov = board_cols;
+        while (!pool.empty())
+        {
+            int best = -1, bg = -1, ba = -1, bu = -1;
+            for (int i : pool)
+            {
+                const CardDefinition* d = def_at(i);
+                const int g = popcount(need & ~cov & prod_bits(d));
+                const int a = any_mana(d);
+                const int u = (d && d->params.enters_tapped) ? 0 : 1;
+                if (g > bg || (g == bg && (a > ba || (a == ba && u > bu)))) { best = i; bg = g; ba = a; bu = u; }
+            }
+            land_order.push_back(best);
+            cov |= prod_bits(def_at(best));
+            pool.erase(std::find(pool.begin(), pool.end(), best));
+        }
+    }
+    // Accel keep order: most any-spell mana, then most colours (Sol Ring, Birds, Pilgrim, Wild
+    // Growth, Somberwald Sage).
+    std::stable_sort(accel.begin(), accel.end(), [&](int a, int b)
+    {
+        const int ma = any_mana(def_at(a)), mb = any_mana(def_at(b));
+        if (ma != mb) { return ma > mb; }
+        return popcount(prod_bits(def_at(a))) > popcount(prod_bits(def_at(b)));
+    });
+    // Payloads best first (largest bonus).
+    std::stable_sort(payloads.begin(), payloads.end(), [&](int a, int b)
+    { return payload_bonus(def_at(a)) > payload_bonus(def_at(b)); });
+
+    // ---- quotas, quota-first ---------------------------------------------------------------------
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken;
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
+    constexpr int kManaTarget = 7, kAccelBelow = 6, kMaxKeptLands = 3;
+    int kept_mana = board_mana, kept_lands = 0;
+    std::size_t li = 0;
+    auto take_lands_until = [&](int max_lands)
+    {
+        while (li < land_order.size() && kept_lands < max_lands && kept_mana < kManaTarget)
+        { const int i = land_order[li++]; take(i); ++kept_lands; kept_mana += any_mana(def_at(i)); }
+    };
+    take_lands_until(2);                                                       // the next two drops
+    const bool gather_path = board_gatherer || !gatherers.empty();
+    if (!board_gatherer && !gatherers.empty()) { take(gatherers.front()); }   // GATHERER
+    const int payload_quota = std::max(0, (gather_path ? 1 : 2) - board_payloads);
+    const bool graveyard_equiv = board_gatherer;   // the state promotion: payload quota 0
+    if (!graveyard_equiv)
+    { for (int k = 0; k < payload_quota && k < static_cast<int>(payloads.size()) && k < 1; ++k) { take(payloads[k]); } }
+    if (!board_haste && !haste.empty()) { take(haste.front()); }               // HASTE
+    bool have_host = board_creatures > 0 || (!board_gatherer && !gatherers.empty());
+    if (!accel.empty() && kept_mana < kAccelBelow)                             // ACCEL
+    {
+        const int i = accel.front(); take(i); kept_mana += any_mana(def_at(i));
+        if (def_at(i) && def_at(i)->card.IsCreature()) { have_host = true; }
+    }
+    if (!have_host && !hosts.empty()) { take(hosts.front()); have_host = true; } // HOST
+    if (!have_host)
+    { for (int i : accel) { if (!keep[i] && def_at(i) && def_at(i)->card.IsCreature()) { take(i); have_host = true; break; } } }
+    take_lands_until(kMaxKeptLands);                                           // the third drop
+    if (!graveyard_equiv && payload_quota >= 2 && payloads.size() >= 2) { take(payloads[1]); }
+
+    // ---- overflow value ----------------------------------------------------------------------------
+    int reach = board_mana;
+    for (int i : lands) { reach += any_mana(def_at(i)); }
+    for (int i : accel) { reach += any_mana(def_at(i)); }
+    const bool swap_path = board_swap || !swaps.empty();
+    auto value = [&](int i) -> int
+    {
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { return 20; }
+        const CardParams& p = d->params;
+        if (p.tutor_to_hand) { return 70; }
+        if (p.aura_swap_cost.has_value()) { return board_swap ? 30 : 64; }
+        if (is_payload(d))
+        {
+            int v = 40 + 2 * payload_bonus(d);
+            if (!gather_path && !swap_path && CleanupDiscardManaValue(ap.hand[i]) >= reach + 2) { v -= 30; }
+            return v;
+        }
+        if (p.attack_gather_auras) { return 50; }
+        if (p.equip_grants_haste) { return 40; }
+        if (is_accel(d)) { return 30; }
+        if (d->card.IsCreature()) { return 35; }
+        return 20;
+    };
+    std::vector<int> overflow;
+    for (const auto* v : { &gatherers, &payloads, &haste, &swaps, &tutors, &hosts, &other })
+    { for (int i : *v) { if (!keep[static_cast<std::size_t>(i)]) { overflow.push_back(i); } } }
+    std::vector<int> ov(static_cast<std::size_t>(n), 0);
+    for (int i : overflow) { ov[static_cast<std::size_t>(i)] = value(i); }
+    std::stable_sort(overflow.begin(), overflow.end(), [&](int a, int b) { return ov[a] < ov[b]; });
+
+    // ---- shed order ----------------------------------------------------------------------------------
+    std::vector<int>  shed;
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (listed[static_cast<std::size_t>(i)] || ap.hand[i].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
+    for (int i : dead) { put(i); }                                                          // S0
+    if (graveyard_equiv)                                                                    // S1
+    { for (auto it = payloads.rbegin(); it != payloads.rend(); ++it) { put(*it); } }
+    for (int i : blank_karoos) { put(i); }                                                  // S2
+    for (auto it = land_order.rbegin(); it != land_order.rend(); ++it) { put_unkept(*it); } // S3
+    for (auto it = accel.rbegin(); it != accel.rend(); ++it) { put_unkept(*it); }           // S4
+    for (int i : overflow) { put(i); }                                                      // S5
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }                  // tail
+
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- DragonsProvider::CleanupDiscardCandidates ------------------------------
 //
 // USER-AUTHORED role-bucket policy (approved 2026-08-30; see

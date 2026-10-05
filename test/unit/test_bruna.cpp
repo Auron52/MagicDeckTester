@@ -276,3 +276,89 @@ TEST_CASE("Bruna: Arcanum Wings' swap -- simultaneous exchange, damage-max pick,
     CHECK_FALSE(ApplyAuraSwap(b.s, 0, wings2, wg, /*respond_window=*/false));
     CHECK(b.ByNum(wings2) != nullptr);
 }
+
+// ---- the authored cleanup-discard BUCKET policy (docs/design/bruna-discard-policy-proposal.md) ----
+namespace
+{
+// A hand card is a NAME-ONLY placeholder in real play, so the policy is tested that way.
+Card PlaceholderBr(const std::string& name, int number)
+{
+    Card c;
+    c.m_name = name;
+    c.RehashName();
+    c.m_number = number;
+    return c;
+}
+GameState DiscardState(const std::vector<std::string>& hand, const std::vector<std::string>& board)
+{
+    BoardBr b;
+    for (const std::string& n : board) { b.Put(n); }
+    for (const std::string& n : hand) { b.s.players[0].hand.push_back(PlaceholderBr(n, b.next++)); }
+    return b.s;
+}
+std::vector<std::string> ShedNames(const GameState& s)
+{
+    std::vector<std::string> out;
+    for (int i : BrunaProvider().CleanupDiscardCandidates(s, nullptr))
+    { out.push_back(s.players[0].hand[i].m_name.str()); }
+    return out;
+}
+int PosOf(const std::vector<std::string>& v, const std::string& n)
+{
+    const auto it = std::find(v.begin(), v.end(), n);
+    return it == v.end() ? -1 : static_cast<int>(it - v.begin());
+}
+}   // namespace
+
+TEST_CASE("Bruna discard: max-MV is NOT the policy -- a surplus land sheds before Eldrazi Conscription")
+{
+    const GameState s = DiscardState(
+        {"Eldrazi Conscription", "Forest", "Forest", "Forest", "Botanical Sanctum", "Lightning Greaves",
+         "Mother of Runes", "Glittering Wish"},
+        {"Forest", "Forest", "Seaside Citadel", "Botanical Sanctum"});
+    const auto shed = ShedNames(s);
+    REQUIRE(shed.size() == 8);                    // every hand card named
+    // 4 on board + 3 kept reach the target of 7: the fourth hand land is surplus and sheds first.
+    CHECK((shed[0] == "Forest" || shed[0] == "Botanical Sanctum"));
+    CHECK(PosOf(shed, "Eldrazi Conscription") > PosOf(shed, "Glittering Wish"));
+    CHECK(PosOf(shed, "Eldrazi Conscription") > PosOf(shed, "Mother of Runes"));
+}
+
+TEST_CASE("Bruna discard: with Bruna on our battlefield, a hand payload Aura is graveyard-equivalent")
+{
+    const GameState s = DiscardState(
+        {"Colossification", "Glittering Wish", "Forest", "Lightning Greaves"},
+        {"Bruna, Light of Alabaster", "Forest", "Forest"});
+    const auto shed = ShedNames(s);
+    CHECK(shed[0] == "Colossification");
+}
+
+TEST_CASE("Bruna discard: a second Bruna with one on the battlefield is dead and sheds first")
+{
+    const GameState s = DiscardState(
+        {"Forest", "Bruna, Light of Alabaster", "Eldrazi Conscription"},
+        {"Bruna, Light of Alabaster", "Forest"});
+    CHECK(ShedNames(s)[0] == "Bruna, Light of Alabaster");
+}
+
+TEST_CASE("Bruna discard: kill quotas -- the biggest payload, Greaves and the first lands are kept last")
+{
+    const GameState s = DiscardState(
+        {"Colossification", "Prodigious Growth", "Lightning Greaves", "Lightning Greaves", "Forest",
+         "Open the Armory", "Mother of Runes", "Arcanum Wings"},
+        {"Forest", "Botanical Sanctum"});
+    const auto shed = ShedNames(s);
+    REQUIRE(shed.size() == 8);
+    // No gather path: two payload slots, Colossification taken first, so it is shed after Prodigious.
+    CHECK(PosOf(shed, "Prodigious Growth") < PosOf(shed, "Colossification"));
+    // The second Greaves is overflow; the kept one is in the tail.
+    CHECK(PosOf(shed, "Lightning Greaves") < PosOf(shed, "Open the Armory"));
+    // The only land in hand is a quota land: it is in the tail, behind every overflow card.
+    CHECK(PosOf(shed, "Forest") > PosOf(shed, "Open the Armory"));
+}
+
+TEST_CASE("Bruna discard: a lone Azorius Chancery with no other land anywhere is a blank")
+{
+    const GameState s = DiscardState({"Azorius Chancery", "Colossification", "Birds of Paradise"}, {});
+    CHECK(ShedNames(s)[0] == "Azorius Chancery");
+}

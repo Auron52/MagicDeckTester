@@ -1,0 +1,94 @@
+{
+  "card_scores": {
+    "Arcanum Wings": [
+      0.20903513866705392
+    ],
+    "Avacyn's Pilgrim": [
+      0.5267625207119568
+    ],
+    "Azorius Chancery": [
+      0.16528086321802604,
+      -0.16590198123044875
+    ],
+    "Birds of Paradise": [
+      0.2233530717986678
+    ],
+    "Boseiju, Who Endures": [
+      -0.06179113271468584
+    ],
+    "Botanical Sanctum": [
+      0.2631578947368425,
+      -0.08373205741626855
+    ],
+    "Bruna, Light of Alabaster": [
+      -0.010977263245724345
+    ],
+    "Colossification": [
+      0.14784667893848713
+    ],
+    "Eldrazi Conscription": [
+      -0.1373421489675053,
+      -0.20212765957446788
+    ],
+    "Forest": [
+      -0.048612109880627585,
+      -0.6356276237486735
+    ],
+    "Glittering Wish": [
+      -0.1558968442810107,
+      -0.3001913509376193
+    ],
+    "Lightning Greaves": [
+      -0.12349896480331246,
+      -0.6214285714285719
+    ],
+    "Mother of Runes": [
+      -0.3246181435903779
+    ],
+    "Mythic Proportions": [
+      -0.23143755144802824
+    ],
+    "Open the Armory": [
+      0.5920398009950247
+    ],
+    "Prodigious Growth": [
+      -0.23111111111111082
+    ],
+    "Razorverge Thicket": [
+      -0.02543122512162732,
+      -0.4419642857142856
+    ],
+    "Remote Farm": [
+      0.1650466270098967,
+      -0.2547820284697506
+    ],
+    "Seaside Citadel": [
+      0.0943479144578907
+    ],
+    "Skycloud Expanse": [
+      0.04373865869366966
+    ],
+    "Sol Ring": [
+      0.3662261475684865
+    ],
+    "Somberwald Sage": [
+      0.35293308170165894,
+      -0.4824002681863897
+    ],
+    "Wild Growth": [
+      -0.13694507148231683
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

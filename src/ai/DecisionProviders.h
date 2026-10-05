@@ -453,6 +453,16 @@ public:
     // precedent). Glittering Wish's pool is at most 4 names. 8 = every legal name, so the target is
     // fully searched.
     int TutorSearchWidth() const override { return 8; }
+    // MTG_BRUNA_ORDER -- a PROPOSED cast order (analyze-deck Stage 4, 2026-10-05), DEFAULT OFF: cast
+    // order is USER-OWNED (docs/design/analysis-bruna.md, "Stage 4 -- proposed cast order"). Off =>
+    // DeckProvider (Generic) byte-for-byte.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // Cleanup discard: the analyze-deck 5i BUCKET policy (MANA / KILL / overflow), AI-AUTHORED
+    // 2026-10-05, PENDING USER REVIEW (docs/design/bruna-discard-policy-proposal.md).
+    // MTG_BRUNA_BUCKET_DISCARD=0 restores GenericProvider's max-MV fallback (the A/B hatch).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
