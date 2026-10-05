@@ -7647,7 +7647,26 @@ static int CountAttackGatherPump(const GameState& state, int active,
     return after - before;
 }
 
+static int PendingAttackDamageImpl(const GameState& state);
+
+// Ardenn, Intrepid Archaeologist (begin_combat_attach_all): the realised combat re-attaches the
+// board's Auras/Equipment for free at the beginning of combat (FireBeginCombatAttach, before
+// attackers are declared), so the projection must price the SAME board or the search under-rates
+// every attack on an Ardenn board -- the Dwalin addend lesson, except that here the pump is a
+// re-arrangement no closed form captures (haste, ds thresholds, scaling, the min-power gate), so
+// the trigger is simply APPLIED on a scratch copy with the same provider pick the combat will take
+// (`live=false`: no chooser, no play event) and the ordinary projection runs on it. Gated on the
+// source being present: every other deck takes the no-copy path and is byte-identical.
 static int PendingAttackDamage(const GameState& state)
+{
+    const int active = state.active_player_index;
+    if (!HasBeginCombatAttachSource(state, active)) { return PendingAttackDamageImpl(state); }
+    GameState pre = state;
+    FireBeginCombatAttach(pre, active, /*live=*/false);
+    return PendingAttackDamageImpl(pre);
+}
+
+static int PendingAttackDamageImpl(const GameState& state)
 {
     int dmg = 0;
     int active = state.active_player_index;
@@ -41228,6 +41247,12 @@ static void SimulateCombat(GameState& state)
     EnforceLegendRule(state, active);
     // CR 704.5m orphaned-Aura SBA checkpoint -- mirror GameEngine::CombatPhase (lockstep).
     SweepOrphanedAuras(state);
+
+    // Ardenn's beginning-of-combat attach (begin_combat_attach_all): BEFORE attackers are declared,
+    // so the moved pieces pump this combat and a moved haste piece makes a sick creature eligible.
+    // Mirrors GameEngine::CombatPhase (lockstep, ONE shared body); the human chooser inside is
+    // nulled by RevealLogPause, so rollouts always take the provider's pick. Param-gated inert.
+    FireBeginCombatAttach(state, active, /*live=*/true);
 
     // Eligible attacker indices BEFORE any token creation (push_back keeps indices stable).
     std::vector<int> atk_idx = DeclareAttackerIndices(state);

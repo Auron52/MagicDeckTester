@@ -639,6 +639,14 @@ void GameEngine::CombatPhase(GameState& state)
     // Bruna, Light of Alabaster's trigger can return it). Lockstep with TurnSolver::SimulateCombat.
     SweepOrphanedAuras(state);
 
+    // Ardenn, Intrepid Archaeologist (begin_combat_attach_all): "at the beginning of combat on your
+    // turn, you may attach any number of Auras and Equipment you control to target permanent or
+    // player". Resolves in the beginning-of-combat step, BEFORE attackers are declared (CR 507 then
+    // 508): a moved Colossus Hammer swings this combat and a moved Lightning Greaves lets a
+    // summoning-sick creature attack. Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared
+    // body). Param-gated inert for every other deck.
+    FireBeginCombatAttach(state, state.active_player_index, /*live=*/true);
+
     state.step = Step::DeclareAttackers;
     std::vector<Permanent*> declared = m_ai.DeclareAttackers(state);
     ResolveStack(state);

@@ -1232,6 +1232,197 @@ int DecisionProvider::AttackDigAttachHost(
     return best_num;
 }
 
+// Ardenn's beginning-of-combat attach -- see the DecisionProvider.h note. The objective is THIS
+// combat's realised damage (BeginCombatHostDamage per host); per candidate target it is a greedy
+// ascent over moves, each move scored on a scratch board (equipped_to / aura_attached_to re-pointed
+// directly -- ApplyEquip is for the real apply) and undone, so haste from a moved Lightning Greaves,
+// Kor Duelist's double strike flipping ON (or OFF, on the host a piece leaves), Balan's two-piece
+// threshold, Golem-Skin Gauntlets' per-piece scaling and O-Naginata's power gate are all read from
+// the board the move would produce, never estimated. Two move shapes: a single piece, and a BLOCK
+// (every remaining piece on one other host, or every loose piece) -- the block is what lets a
+// threshold no single piece crosses (two 0-power shields onto a bare Balan) register. A move only
+// changes the target's and the leaving hosts' terms, so each score is O(board), not O(board^2).
+DecisionProvider::BeginCombatAttachChoice DecisionProvider::BeginCombatAttach(
+    const GameState& s, int controller, int /*source_num*/,
+    const std::vector<int>& host_bf_indices, int pinned_host_num) const
+{
+    BeginCombatAttachChoice out;
+    const int bf_size = static_cast<int>(s.battlefield.size());
+    struct Piece { int num; bool aura; int flat_pw; int min_power; int from; const CardParams* pp; };
+    std::vector<Piece> pieces;
+    for (int i = 0; i < bf_size; ++i)
+    {
+        const Permanent& e = s.battlefield[i];
+        if (e.controller_index != controller || e.def_absent || e.is_animated) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (d == nullptr) { continue; }
+        if (d->params.is_equipment)
+        {
+            // Grafted Wargear ON a host: its re-host sacrifices that host -- a body traded for a few
+            // points this turn, which this scorer cannot price. Never moved. A LOOSE Wargear attaches
+            // like any other piece (a first attach is a no-op for its clause).
+            if (d->params.equip_sacrifices_prior_host && e.equipped_to != 0) { continue; }
+            pieces.push_back({ e.card.m_number, false, d->params.equip_power_bonus,
+                               d->params.equip_min_power, e.equipped_to, &d->params });
+        }
+        else if (d->params.is_aura && !d->params.is_land_aura)
+        {
+            pieces.push_back({ e.card.m_number, true, d->params.aura_power_bonus, 0,
+                               e.aura_attached_to, &d->params });
+        }
+    }
+    if (pieces.empty() || host_bf_indices.empty()) { return out; }
+
+    auto find_perm = [&](GameState& b, int num) -> Permanent*
+    {
+        for (Permanent& p : b.battlefield)
+        { if (p.controller_index == controller && p.card.m_number == num) { return &p; } }
+        return nullptr;
+    };
+    auto host_dmg = [&](GameState& b, int num) -> int
+    {
+        if (num == 0) { return 0; }
+        const Permanent* p = find_perm(b, num);
+        return p ? BeginCombatHostDamage(b, *p) : 0;
+    };
+    auto set_host = [&](GameState& b, const Piece& pc, int to)
+    {
+        Permanent* p = find_perm(b, pc.num);
+        if (p == nullptr) { return; }
+        if (pc.aura) { p->aura_attached_to = to; } else { p->equipped_to = to; }
+    };
+    // Legal on the board AS IT STANDS (the min-power gate reads the host's power with everything
+    // attached so far, which is why a gated piece is ordered after the bonuses that lift it).
+    auto legal_on = [&](GameState& b, const Piece& pc, int host_num) -> bool
+    {
+        if (pc.aura)
+        {
+            const std::vector<int> lt = LegalEnchantTargets(b, controller, *pc.pp);
+            return std::find(lt.begin(), lt.end(), host_num) != lt.end();
+        }
+        if (pc.min_power <= 0) { return true; }
+        const Permanent* h = find_perm(b, host_num);
+        return h != nullptr && EquipGatePowerOf(*h, b) >= pc.min_power;
+    };
+
+    const int base_total = BeginCombatProjectedDamage(s, controller);
+    int best_total = base_total, best_host = 0;
+    std::size_t best_moves = 0;
+    std::vector<int> best_order;
+    // ONE scratch board for the whole call (this runs inside every attack projection on an Ardenn
+    // board, so a GameState copy per candidate host would be the dominant cost): each host's moves
+    // are applied to it and reverted before the next host is tried.
+    GameState scratch = s;
+    for (int hi : host_bf_indices)
+    {
+        if (hi < 0 || hi >= bf_size) { continue; }
+        const Permanent& host = s.battlefield[hi];
+        if (host.controller_index != controller) { continue; }
+        if (!host.card.IsCreature() && !host.is_animated) { continue; }
+        const int host_num = host.card.m_number;
+        if (pinned_host_num != 0 && host_num != pinned_host_num) { continue; }
+        std::vector<char> done(pieces.size(), 0);
+        std::vector<int> order;
+        int total = base_total;
+        // Gain of moving `ks` onto host_num: applied on the scratch board in order, scored, undone.
+        // INT_MIN = not a legal move (some piece could not attach at its turn).
+        auto gain_of = [&](const std::vector<std::size_t>& ks) -> int
+        {
+            std::vector<int> touched{ host_num };
+            for (std::size_t k : ks)
+            {
+                if (pieces[k].from != 0
+                    && std::find(touched.begin(), touched.end(), pieces[k].from) == touched.end())
+                { touched.push_back(pieces[k].from); }
+            }
+            int before = 0;
+            for (int t : touched) { before += host_dmg(scratch, t); }
+            std::vector<std::size_t> applied;
+            for (std::size_t k : ks)
+            {
+                if (!legal_on(scratch, pieces[k], host_num)) { continue; }
+                set_host(scratch, pieces[k], host_num);
+                applied.push_back(k);
+            }
+            int after = 0;
+            for (int t : touched) { after += host_dmg(scratch, t); }
+            for (std::size_t k : applied) { set_host(scratch, pieces[k], pieces[k].from); }
+            if (applied.size() != ks.size()) { return std::numeric_limits<int>::min(); }
+            return after - before;
+        };
+        for (;;)
+        {
+            std::vector<std::size_t> cand;
+            for (std::size_t k = 0; k < pieces.size(); ++k)
+            { if (!done[k] && pieces[k].from != host_num) { cand.push_back(k); } }
+            if (cand.empty()) { break; }
+            // Ungated pieces first, then by rising gate, biggest flat bonus first within a tier: the
+            // order a block applies in, and the tie-break among equal gains.
+            std::stable_sort(cand.begin(), cand.end(), [&](std::size_t a, std::size_t b)
+            {
+                if (pieces[a].min_power != pieces[b].min_power) { return pieces[a].min_power < pieces[b].min_power; }
+                if (pieces[a].flat_pw   != pieces[b].flat_pw)   { return pieces[a].flat_pw   > pieces[b].flat_pw; }
+                return pieces[a].num < pieces[b].num;
+            });
+            int best_gain = 0;
+            std::vector<std::size_t> best_ks;
+            for (std::size_t k : cand)
+            {
+                const int g = gain_of({ k });
+                if (g > best_gain) { best_gain = g; best_ks = { k }; }
+            }
+            std::vector<int> froms;
+            for (std::size_t k : cand)
+            { if (std::find(froms.begin(), froms.end(), pieces[k].from) == froms.end()) { froms.push_back(pieces[k].from); } }
+            for (int f : froms)
+            {
+                std::vector<std::size_t> ks;
+                for (std::size_t k : cand) { if (pieces[k].from == f) { ks.push_back(k); } }
+                if (ks.size() < 2) { continue; }
+                const int g = gain_of(ks);
+                if (g > best_gain) { best_gain = g; best_ks = ks; }
+            }
+            if (best_gain <= 0) { break; }
+            for (std::size_t k : best_ks)
+            {
+                set_host(scratch, pieces[k], host_num);
+                done[k] = 1;
+                order.push_back(pieces[k].num);
+            }
+            total += best_gain;
+        }
+        if (pinned_host_num != 0)
+        {
+            // The human chose this host: also bring every LOOSE piece that costs nothing this combat
+            // (gain 0 -- a shield onto the attacker), the natural reading of "attach any number ...
+            // to target" once the target is given. Attached pieces still move only on a gain.
+            for (std::size_t k = 0; k < pieces.size(); ++k)
+            {
+                if (done[k] || pieces[k].from != 0) { continue; }
+                if (gain_of({ k }) < 0) { continue; }   // illegal (INT_MIN) or harmful
+                set_host(scratch, pieces[k], host_num);
+                done[k] = 1;
+                order.push_back(pieces[k].num);
+            }
+        }
+        const bool better =
+               total > best_total
+            || (total == best_total && best_host != 0 && order.size() < best_moves)
+            || (total == best_total && best_host != 0 && order.size() == best_moves && host_num < best_host);
+        if ((pinned_host_num != 0 && !order.empty()) || (total > base_total && better))
+        {
+            best_total = total; best_host = host_num; best_moves = order.size(); best_order = order;
+        }
+        // Revert this host's moves so the next candidate starts from the real board.
+        for (std::size_t k = 0; k < pieces.size(); ++k)
+        { if (done[k]) { set_host(scratch, pieces[k], pieces[k].from); } }
+    }
+    if (best_host == 0) { return out; }
+    out.host_num   = best_host;
+    out.piece_nums = best_order;
+    return out;
+}
+
 int DecisionProvider::SoulbondPartner(
     const GameState& s, int controller, const Permanent& source,
     const std::vector<int>& candidate_bf_indices) const
@@ -12906,7 +13097,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             // deck's routing moves.
             || p.attach_equipment_on_etb || p.hone_counters_on_enter_or_attack > 0
             || !p.draw_on_cast_subtypes.empty() || p.equip_grants_vigilance
-            || p.equip_scale_power_per_equipment > 0)
+            || p.equip_scale_power_per_equipment > 0
+            // Ardenn, Intrepid Archaeologist (2026-10-05 swap screen): new + gated, same argument.
+            || p.begin_combat_attach_all)
         {
             equipment = true;
         }
@@ -18850,7 +19043,8 @@ static int KittyFullOrderRank(const CardDefinition& def)
     if (p.double_strike_while_equipped)                           { return 16; }  // Kor Duelist
     if (p.upkeep_tokens_per_equipment)                            { return 17; }  // Kemba
     if (p.double_strike_min_equipment > 0
-        || p.attach_all_equipment_cost.has_value())               { return 18; }  // Balan
+        || p.attach_all_equipment_cost.has_value()
+        || p.begin_combat_attach_all)                             { return 18; }  // Balan / Ardenn (mass-attach hosts)
     if (p.attack_dig_attach_count > 0)                            { return 19; }  // Armored Skyhunter
     // 30-31: removal, near-inert in a goldfish. Cheaper first.
     if (def.tmpl == CardTemplate::Removal)

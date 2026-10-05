@@ -542,6 +542,31 @@ public:
         const GameState& s, int controller, const Card& equip_card,
         const std::vector<int>& candidate_bf_indices) const;
 
+    // BeginCombatAttach -- Ardenn, Intrepid Archaeologist: "at the beginning of combat on your turn,
+    // you MAY attach ANY NUMBER of Auras and Equipment you control to target permanent or player".
+    // Two choices in one trigger: WHICH target (host_num; 0 = decline the "may") and WHICH pieces
+    // (piece_nums, in the order they will be attached -- a min-power-gated piece after the bonuses
+    // that make it legal). `host_bf_indices` is the rules-legal target set the CALLER built
+    // (controlled creatures, shroud excluded because the trigger TARGETS); the provider only ORDERS
+    // and SELECTS within it, never widens it. `pinned_host_num` != 0 means the human already chose
+    // the target through the attach_host chooser and the provider decides only the pieces for it.
+    // Base rule (out-of-line): per candidate host, a greedy ascent over single-piece and whole-host
+    // BLOCK moves on THIS combat's projected damage (BeginCombatHostDamage: an attacker's gate power
+    // x double strike, with haste and the min-power gate re-read on the board each move would
+    // produce), then the host with the best total; declines when no move adds damage. Grafted
+    // Wargear sitting on a host is never moved (its re-host SACRIFICES that host -- a price this
+    // scorer cannot see). Provider-owned per the core invariant: the trigger resolves inside combat,
+    // where no plan-variant branching exists, so this pick IS the decision (disclosed 6a; the human
+    // overrides the target in the viewer).
+    struct BeginCombatAttachChoice
+    {
+        int              host_num = 0;      // 0 = decline (nothing moves)
+        std::vector<int> piece_nums;        // attach order
+    };
+    virtual BeginCombatAttachChoice BeginCombatAttach(
+        const GameState& s, int controller, int source_num,
+        const std::vector<int>& host_bf_indices, int pinned_host_num) const;
+
     // SoulbondPartner -- CR 702.46b's "you MAY pair this creature with another unpaired creature":
     // WHICH of the legal unpaired creatures to pair with (0 = decline the optional pairing).
     // `candidate_bf_indices` is the rules-legal set the caller built (other unpaired creatures under

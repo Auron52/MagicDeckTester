@@ -3642,6 +3642,34 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 // as on a normal Equip, and equip costs are bypassed (attach, not the Equip action).
 void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id);
 
+// FireBeginCombatAttach -- body in SpellEffects.cpp. Ardenn, Intrepid Archaeologist's "at the
+// beginning of combat on your turn, you may attach any number of Auras and Equipment you control to
+// target permanent or player" (CardParams::begin_combat_attach_all). Called from
+// GameEngine::CombatPhase AND the rollout's SimulateCombat, after the legend rule and BEFORE
+// attackers are declared (CR 507 precedes 508), so what it moves pumps THIS combat and can make a
+// summoning-sick creature an attacker (an equip_grants_haste piece). Also run on a scratch copy by
+// the attack projection (PendingAttackDamage), so the search prices the free re-attach the realised
+// combat will perform. One trigger per controlled source, in battlefield order. WHICH target and
+// WHICH pieces are provider-owned (DecisionProvider::BeginCombatAttach); the human picks the target
+// via the attach_host chooser (-1 declines the "may"). `live` = a real resolution: consult the
+// chooser and emit the play event; false = a projection: provider only, no side channel.
+void FireBeginCombatAttach(GameState& state, int controller, bool live);
+
+// The projection's gate: does `controller` control a begin_combat_attach_all source? One pass over
+// the controller's creatures (the source is a creature), so a deck without one pays a scan and never
+// a GameState copy.
+inline bool HasBeginCombatAttachSource(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        if (!p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.begin_combat_attach_all) { return true; }
+    }
+    return false;
+}
+
 // ApplyAttachAllFreeEquipment -- body in SpellEffects.cpp. The HUMAN-PLAY bundle gesture "equip
 // everything that is free onto this creature": a shorthand for N separate Equip ACTIVATIONS, not a
 // printed ability, so unlike Balan's attach-all above it may NOT bypass an equip cost. Every piece
@@ -9887,6 +9915,37 @@ inline bool EquipmentAttachedTo(const GameState& state, int controller, int equi
         if (p.card.m_number == equip_id) { return p.equipped_to == creature_id; }
     }
     return false;
+}
+
+// THIS combat's damage from one controlled creature, as DeclareAttackerIndices + ResolveCombatDamage
+// will realise it: 0 unless it can attack (CanAttackFull -- haste from an attached equip_grants_haste
+// piece included) and the provider would declare it (AttackWith); otherwise its gate power (base +
+// lords + auras + equipment, EquipGatePowerOf) doubled for double strike (CreatureHasDoubleStrike --
+// Kor Duelist's and Balan's equipment-conditional ds included). The Jitte rider, exalted and the
+// attack triggers are deliberately absent: this is the OBJECTIVE of the begin-combat attach planner
+// (DecisionProvider::BeginCombatAttach), which only ever COMPARES attachment configurations of one
+// board, and those terms do not depend on where a piece sits. The full projection
+// (PendingAttackDamage) then prices the chosen configuration exactly.
+inline int BeginCombatHostDamage(const GameState& state, const Permanent& host)
+{
+    if (!host.card.IsCreature() && !host.is_animated) { return 0; }
+    if (!CanAttackFull(host, state.battlefield, host.controller_index)) { return 0; }
+    if (!ResolveProvider(state).AttackWith(state, host)) { return 0; }
+    const int pw = EquipGatePowerOf(host, state);
+    if (pw <= 0) { return 0; }
+    return pw * (CreatureHasDoubleStrike(host, state) ? 2 : 1);
+}
+
+// Sum of BeginCombatHostDamage over every creature `controller` controls.
+inline int BeginCombatProjectedDamage(const GameState& state, int controller)
+{
+    int total = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        total += BeginCombatHostDamage(state, p);
+    }
+    return total;
 }
 
 // ---- Deathrite Shaman graveyard-exile value outlets (abilities 2/3) -----------------------------

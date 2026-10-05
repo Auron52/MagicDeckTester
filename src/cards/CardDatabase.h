@@ -1482,6 +1482,24 @@ struct CardParams
     // already paid for once).
     int  hone_counters_on_enter_or_attack = 0;
 
+    // Ardenn, Intrepid Archaeologist: "At the beginning of combat on your turn, you may attach any
+    // number of Auras and Equipment you control to target permanent or player." A BEGINNING-OF-
+    // COMBAT trigger: it resolves BEFORE attackers are declared (CR 507 precedes 508), so the pieces
+    // it moves pump THIS combat, can land on a creature that then attacks, and (Lightning Greaves)
+    // can give a summoning-sick creature the haste to attack at all. Fired by FireBeginCombatAttach
+    // from GameEngine::CombatPhase AND the rollout's SimulateCombat (lockstep, ONE shared body), and
+    // applied on a scratch copy inside PendingAttackDamage so the attack PROJECTION prices the free
+    // re-attach the realised combat will perform -- the Dwalin lesson: a combat-step pump the
+    // projection cannot see is an fd-diverge generator.
+    // WHICH target and WHICH pieces ("any number") are provider-owned (BeginCombatAttach; the human
+    // picks the target through the attach_host board-click, -1 = the printed "may"). The trigger
+    // TARGETS, so a shroud host is not legal (CR 702.18b). The target is collapsed to a controlled
+    // creature: an opponent's permanent or a player is legal on paper, but our Equipment there only
+    // ever helps them, and an Equipment attached to a non-creature or a player is illegal and does
+    // not move (CR 301.5c; the 2020-11-10 ruling). "Attach" is not the Equip ability -- equip costs
+    // are bypassed, equip_min_power still binds. Partner is a Commander-format ability: inert here.
+    bool begin_combat_attach_all = false;
+
     // Kemba, Kha Regent: at the controller's upkeep, create upkeep_token_power/toughness tokens
     // -- one per Equipment attached to THIS permanent (counted via Permanent::equipped_to).
     // Rides the existing upkeep_token_* machinery; lockstep GameEngine::UpkeepStep +

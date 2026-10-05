@@ -5051,6 +5051,28 @@
    }
   },
   {
+   "name": "Ardenn, Intrepid Archaeologist",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Kor",
+    "Scout"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "At the beginning of combat on your turn, you may attach any number of Auras and Equipment you control to target permanent or player.\nPartner (You can have two commanders if both have partner.) [begin_combat_attach_all: fired by FireBeginCombatAttach in BOTH worlds (GameEngine::CombatPhase + the rollout's SimulateCombat) after the legend rule and BEFORE attackers are declared (CR 507 precedes 508), so the moved pieces pump THIS combat and a moved Lightning Greaves lets a summoning-sick creature attack; the attack PROJECTION (PendingAttackDamage) applies the same trigger on a scratch copy so the search prices the free re-attach the realised combat will perform (the Dwalin addend lesson). WHICH target + WHICH pieces ('any number') = provider BeginCombatAttach: a greedy ascent on this combat's projected damage over single-piece and whole-host block moves, with haste, the Duelist/Balan double-strike thresholds, Golem-Skin scaling and the O-Naginata power gate re-read on the board each move would produce; declines when nothing gains. The human picks the TARGET through the attach_host board-click (-1 = the printed 'may'); the pieces for a human-chosen host are the provider's selection for it -- the 'any number' subset itself is not surfaced (disclosed gap). The trigger TARGETS (CR 702.18b): a shroud host is excluded. Target collapsed to a controlled creature: an opponent's permanent or a player is legal on paper, but our Equipment there only helps them, and an Equipment attached to a non-creature or a player is illegal and does not move (CR 301.5c; 2020-11-10 ruling) -- approved-inert. 'Attach' is not the Equip ability: equip costs are bypassed, equip_min_power still binds. Grafted Wargear sitting on a host is never moved by the planner (its re-host sacrifices that host). Aura half implemented through the enchant-legality oracle (LegalEnchantTargets) but structurally dead here: the deck holds zero Auras. Partner is a Commander-format ability -- inert in a 60-card game, and NOT listed under keywords because KeywordFromString throws on an unmapped keyword. Legend rule engine-enforced.]",
+   "template": "custom",
+   "parameters": {
+    "begin_combat_attach_all": true
+   }
+  },
+  {
    "name": "Umezawa's Jitte",
    "mana_cost": "{2}",
    "types": [

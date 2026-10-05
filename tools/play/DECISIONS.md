@@ -125,6 +125,18 @@ untargeted, so they surface only as a board **counter badge** (`hone`) — which
 requirement, not an option: the counter total *is* each Equipment's hidden power bonus, exactly the
 reason the spore and quest badges are documented as required.
 
+KittyEquipment swap-screen reuse note (2026-10-05): **Ardenn, Intrepid Archaeologist**, "at the
+beginning of combat on your turn, you may attach any number of Auras and Equipment you control to
+target permanent or player" → the **target** reuses **`attach_host`**, consulted from
+`FireBeginCombatAttach` (SpellEffects.cpp, shared executor+rollout combat, fired after the legend rule
+and before attackers are declared). Legal set = controlled non-shroud creatures (the trigger TARGETS;
+an opponent's permanent / a player is legal on paper but can only ever carry our Equipment to our
+detriment, so it is not offered), the provider's `BeginCombatAttach` pick preselected, `-1` = the
+printed "may". **The "any number" SUBSET is not surfaced**: for a human-chosen host the provider's
+selection for that host moves (every piece whose move does not lower this combat's damage, loose
+pieces included). A piece-by-piece multi-select would need a new decision shape; disclosed in the
+deck's Stage 6a as a known gap rather than wired.
+
 Turntimber Symbiosis reuse note (2026-08-21): the `look_top_put_creature_count` put also reuses the
 `dig` type (`PerformLookTopPutCreature` → `g_play_dig_chooser`, source = `"<card> (put)"` — the
 marker keys the onto-the-battlefield wording in both the emitter note and `digPanelHtml`). Under

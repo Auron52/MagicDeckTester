@@ -394,6 +394,12 @@ MANIFEST = {
     # creature you control" -- REUSES the same attach_host board-click as soulbond and the
     # attack-dig attach (the -1 reply is the printed "may"). No new decision type.
     "attach_equipment_on_etb": ("attach_host",        truthy),
+    # Ardenn, Intrepid Archaeologist: "at the beginning of combat on your turn, you may attach any
+    # number of Auras and Equipment you control to target permanent or player" -- the TARGET reuses
+    # the attach_host board-click (legal set = controlled non-shroud creatures, provider pick
+    # preselected, -1 = the printed "may"). The "any number" SUBSET is not surfaced: for a chosen
+    # host the provider's selection moves (disclosed 6a as a known gap). No new decision type.
+    "begin_combat_attach_all": ("attach_host",        truthy),
     # Skateboard: "when this Equipment enters, tap target permanent" -- MANDATORY and targeted
     # over BOTH sides, so it reuses the `target` board-click the mandatory ETB destroys use.
     # Deliberately NOT in INERT_PARAMS: the payoff against this opponent is zero, but our OWN

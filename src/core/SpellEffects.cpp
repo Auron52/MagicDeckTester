@@ -1039,6 +1039,117 @@ void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id)
     for (int id : to_move) { ApplyEquip(state, controller, id, balan_id); }
 }
 
+// Ardenn's beginning-of-combat attach (see the SpellEffects.h declaration note). One trigger per
+// controlled source, in battlefield order (the approved trigger-order collapse; the legend rule has
+// already run, so a legendary source fires once). Source numbers are collected FIRST and every piece
+// is re-found by number before it moves: ApplyEquip can reallocate the battlefield.
+void FireBeginCombatAttach(GameState& state, int controller, bool live)
+{
+    std::vector<int> sources;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.begin_combat_attach_all) { sources.push_back(p.card.m_number); }
+    }
+    if (sources.empty()) { return; }
+    for (int src_num : sources)
+    {
+        std::string src_name;
+        bool src_here = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == src_num)
+            { src_here = true; src_name = p.card.m_name.str(); break; }
+        }
+        if (!src_here) { continue; }   // left the battlefield mid-resolution
+        // The legal TARGETS: controlled creatures (an animated land included), minus shroud -- this
+        // trigger TARGETS (CR 702.18b), unlike Balan's attach-all. An opponent's permanent or a
+        // player is a legal target on paper and never a useful one here: our Equipment on their
+        // creature only helps them, and an Equipment on a non-creature or a player is illegal and
+        // simply does not move (CR 301.5c; 2020-11-10 ruling) -- so the set is our creatures.
+        std::vector<int> hosts;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& h = state.battlefield[i];
+            if (h.controller_index != controller) { continue; }
+            if (!h.card.IsCreature() && !h.is_animated) { continue; }
+            if (CreatureHasShroud(h, state)) { continue; }
+            hosts.push_back(i);
+        }
+        if (hosts.empty()) { continue; }
+        const DecisionProvider& prov = ResolveProvider(state);
+        DecisionProvider::BeginCombatAttachChoice ch =
+            prov.BeginCombatAttach(state, controller, src_num, hosts, /*pinned_host_num=*/0);
+        // HUMAN PLAY: the target through the same attach_host board-click Sigarda's Aid and the
+        // Skyhunter attach use -- the full legal set, the provider's pick preselected, -1 declines
+        // (the printed "may"). The pieces for a human-chosen host are the provider's selection FOR
+        // THAT HOST (every piece whose move does not lower this combat's damage, loose pieces
+        // included); the "any number" subset itself is not surfaced (disclosed). Nulled by
+        // RevealLogPause, so rollouts never reach it, and `live` keeps the projection off it too.
+        if (live && g_play_attach_host_chooser)
+        {
+            int heur = -1;
+            for (int i = 0; i < static_cast<int>(hosts.size()); ++i)
+            { if (state.battlefield[hosts[i]].card.m_number == ch.host_num) { heur = i; } }
+            const int picked = (*g_play_attach_host_chooser)(state, controller, src_name, hosts, heur);
+            if (picked == -1) { ch = DecisionProvider::BeginCombatAttachChoice{}; }
+            else if (picked >= 0 && picked < static_cast<int>(hosts.size()))
+            {
+                const int hn = state.battlefield[hosts[picked]].card.m_number;
+                if (hn != ch.host_num)
+                { ch = prov.BeginCombatAttach(state, controller, src_num, hosts, hn); }
+            }
+        }
+        if (ch.host_num == 0 || ch.piece_nums.empty()) { continue; }
+        std::string host_name = "creature #" + std::to_string(ch.host_num);
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == controller && q.card.m_number == ch.host_num)
+            { host_name = q.card.m_name.str(); break; }
+        }
+        int moved = 0;
+        for (int pn : ch.piece_nums)
+        {
+            const CardDefinition* pd = nullptr;
+            int pidx = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& e = state.battlefield[i];
+                if (e.controller_index == controller && e.card.m_number == pn)
+                { pd = CardDatabase::Instance().LookupCached(e.card); pidx = i; break; }
+            }
+            if (pd == nullptr || pidx < 0) { continue; }
+            if (pd->params.is_equipment)
+            {
+                const int before = state.battlefield[pidx].equipped_to;
+                if (before == ch.host_num) { continue; }
+                // The SHARED attach path: the min-power gate is re-checked there (defense in depth)
+                // and Grafted Wargear's re-host sacrifice would fire as on any attach -- the planner
+                // never selects an attached Wargear, so that branch is unreachable from here.
+                ApplyEquip(state, controller, pn, ch.host_num);
+                if (EquipmentAttachedTo(state, controller, pn, ch.host_num)) { ++moved; }
+            }
+            else if (pd->params.is_aura)
+            {
+                // "attach ... Auras": an Aura moved onto a permanent it cannot enchant does not
+                // move (CR 701.3b). LegalEnchantTargets is the one enchant-legality oracle.
+                const std::vector<int> legal = LegalEnchantTargets(state, controller, pd->params);
+                if (std::find(legal.begin(), legal.end(), ch.host_num) == legal.end()) { continue; }
+                Permanent& a = state.battlefield[pidx];
+                if (a.aura_attached_to == ch.host_num) { continue; }
+                a.aura_attached_to = ch.host_num;
+                ++moved;
+            }
+        }
+        if (live && moved > 0 && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + ": attach " + std::to_string(moved) + " -> " + host_name);
+        }
+    }
+}
+
 // The human-play "equip all free to X" bundle (see the SpellEffects.h declaration note). Shares
 // Balan's collect-ids-first discipline for the same reason -- ApplyEquip can reallocate the
 // battlefield -- but shares NOTHING of its cost handling: each piece is re-priced here and skipped
