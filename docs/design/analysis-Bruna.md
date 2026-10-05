@@ -969,6 +969,13 @@ Every deck is net <= 0. Bruna / bruna2hg are new keys (no GT): smoke d0 6.6130, 
 ### Not caused by this branch (blocker for a clean regression run, not for the accept)
 * Reference reproducibility `--strict`: **Hinata2/claude_s1_gi0 ENUM-GAP** (Soulfire Eruption target
   label). Reproduces identically on the base build of origin `c7487fb9` (`logs/basewt`) -- pre-existing.
+* Reference reproducibility `--strict`: **Mirrorwing_Dragon/v2-instigator-entrance/claude_s51_gi50
+  PLAY-DRIFT** (replay wins T5 vs recorded T4; 9 decisions the ref predates answered by engine
+  default). **Verdict: not this branch.** `viewer_protocol_check.py --strict --only
+  Mirrorwing_Dragon/v2-instigator-entrance/claude_s51_gi50` gives the byte-identical line on a fresh
+  `./build.sh` of origin `c7487fb9` (scratch worktree, removed) and on the branch build at HEAD
+  `cbca43b8` (src = `ff792be6`). The branch touches neither the reference nor the checker. The ref is
+  on an ARCHIVED list (v2, archived 3faf5c76); its drift belongs to whoever owns Mirrorwing, not Bruna.
 * Overnight was not run (out of scope for this pass) -- Bruna's overnight GT is still owed (`regression_tiers`).
 
 ### ff792be6 re-run + ACCEPT (2026-10-05, GT commit 2faab457)
