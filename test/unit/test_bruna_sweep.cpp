@@ -557,3 +557,34 @@ TEST_CASE("Bruna sweep G: an attack-capable creature-only source is not tapped f
     CHECK_MESSAGE(!giada_tapped, "an attack-capable creature paid a pre-combat creature spell first");
     CHECK(lands_tapped == 3);
 }
+
+// ---- A-iii follow-up: the mana-unlock host is a SEARCHED widening only ---------------------------
+// Suite verdict 2026-10-05, FiveColour d0 (reg s2002 gi445 / gi953, smoke gi188): the kept unlock
+// host was also offered to Solve's greedy (d0 decision + rollout leaves), which has no haste-dork
+// mana credit, so it was taken on its DMG haste eval -- Greaves -> Birds of Paradise (a 0-power
+// dork whose mana funded nothing) over the attack host, one damage short. The greedy must equip the
+// attack pick; the search (EnumerateMainPlans) still offers the dork.
+TEST_CASE("Bruna sweep A-iii: the greedy Solve does not haste a mana dork the attack ranking passed over")
+{
+    BoardBs b;
+    b.Put("Forest");
+    b.Put("Forest");
+    const int greaves = b.Put("Lightning Greaves");
+    const int birds   = b.Put("Birds of Paradise", /*tapped=*/false, /*sick=*/true);
+    const int shaman  = b.Put("Deathrite Shaman", /*tapped=*/false, /*sick=*/true);
+    const TurnSolver::Plan plan = TurnSolver::Solve(b.s, /*is_pre_combat=*/true,
+        TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    int host = 0;
+    for (const Action& a : plan.actions)
+    { if (a.kind == Action::Kind::Equip && a.sac_source_id == greaves) { host = a.sac_victim_id; } }
+    CHECK_MESSAGE(host != birds, "greedy hasted Birds of Paradise (unlock-only host)");
+    CHECK(host == shaman);
+    // The searched enumeration still carries the unlock host.
+    bool offered = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true))
+    {
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::Equip && a.sac_victim_id == birds) { offered = true; } }
+    }
+    CHECK(offered);
+}

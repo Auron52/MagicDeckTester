@@ -22441,8 +22441,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // model -- so the best such host (most mana per tap, then lowest id) is always KEPT
                 // alongside the attack pick, as the unpark / Stoneforge enables are. A widening, never
                 // a prune; affordability still decides whether any subset can use it.
+                //
+                // SEARCHED SCOPE ONLY (g_search_candidate_enum). The haste-dork mana credit that is
+                // this host's whole value lives in EnumeratePlans; Solve's greedy (the d0 decision
+                // and every rollout leaf) has none, so there the kept host could only be taken on
+                // its DMG haste eval -- tied with the real attack pick and winning on enumeration
+                // order, or opening a pre-combat dork cast that taps an attacker the greedy's
+                // ranking does not price. FiveColour d0, suite 2026-10-05: smoke gi188 (T7 -> T8:
+                // Greaves + Bloom Tender pre-combat tapped Faeburrow Elder, no attack), reg gi445 /
+                // gi953 (T5 -> T6: Greaves -> Birds of Paradise over Bloom Tender / Deathrite, one
+                // damage short) -- none of them used the hasted dork's mana. MTG_UNLOCK_HOST_GREEDY=1
+                // restores the greedy-scope offer (A/B hatch).
+                static const bool s_unlock_greedy = EnvOn("MTG_UNLOCK_HOST_GREEDY");
                 int unlock_id = 0;
-                if (ed->params.equip_grants_haste && HasteDorkCreditEnabled())
+                if (ed->params.equip_grants_haste && HasteDorkCreditEnabled()
+                    && (g_search_candidate_enum || s_unlock_greedy || HumanPlayActive()))
                 {
                     int best_amt = 0;
                     for (const Host& h : hosts)
