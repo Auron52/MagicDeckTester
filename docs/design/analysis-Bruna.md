@@ -315,6 +315,71 @@ removes. **No structural deletion -> default ON stands; no provider override add
 4. The analyzer's unbudgeted-d3 cost diagnostic cannot finish on this deck (and decks like it) -- should
    `analyze_deck.py` run it budgeted?
 
+## Claude-play sweep
+
+commit: `a0b8e7ab` (code HEAD after every fix below; the ledger commit follows it)
+seeds: 77001-77020 (one game per seed, `--claude-play --max-turns 8 --reveal 6`)
+games: 20
+flags: 0 unresolved
+
+Every flag the 5d sweep raised, its verdict and the commit that closes it. Each fix carries a unit or
+scenario test (`test/unit/test_bruna_sweep.cpp`, 14 cases; `test/scenarios/bruna_wings_swap_chain.json`)
+and every one of those FAILS on the pre-fix tree `71893246` (14/14 unit cases fail there; the scenario
+reads T5 there, and its opponent-22 control does not win T4 on the fixed tree).
+
+| # | Finding | Verdict | Fix |
+|---|---|---|---|
+| A-i | 77012: Sage's creature-only surplus in a MIXED batch ended as general float | CONFIRMED -- the mixed two-stage prepay pays its creature stage with for_creature=true; surplus was booked general. Creature stage's pre-paid pool now goes to floating_creature_mana | `a80ebbb8` |
+| A-ii | 77003: Sage + Colossification/Mythic Proportions + equip offered (10 mana vs 7) | CONFIRMED -- the hasted-dork credit let restricted units "pay" the enablers in the joint check. Restricted credit capped at the subset's other creature MV; credited dork colours widen the colour-presence gate (Forests + Sage -> Mother of Runes was rejected) | `a80ebbb8` |
+| A-iii | (found fixing A) Greaves -> Sage never offered beside a bigger creature | CONFIRMED legal line inexpressible (width-1 haste ranking is attack-only). Best locked mana-dork host always kept | `a80ebbb8` |
+| B | 77002: "Courage -> Pilgrim" priced but realised on Mother (silent retarget); 77014 equip-then-Aura | CONFIRMED -- shrouded hosts never Aura candidates; equips trail casts; and the autonomous dedup keyed creature Auras by NAME (host never searched). Inject Greaves-shrouded hosts + co-selected-move reject, shroud-release fires before the Aura (both worlds), unlock equip onto an Aura target deferred, Bruna opts into a host-keyed signature (`MTG_BRUNA_AURA_HOST_SIG`), retargets counted/reported (`[enchant-retarget]`, `MTG_ENCHANT_RETARGET_ABORT`). Host axis measured 400 paired d5/b20: 5.0575 -> 5.0425 (7 better / 1 worse, t=-2.13; gi370 recovers at b100), +5.6% ms | `aee1aa79`, `7414e9c8` |
+| C | 77001: Wild Growth stays attached to a land that left until combat | CONFIRMED (CR 704.5m). Sweep inside SacrificeDepletedLands (when it sacked) and BounceKarooLand (shared by both worlds); karoo re-located by identity | `4f803e5a` |
+| D | 77001: Wild Growth on a same-turn Azorius Chancery inexpressible | CONFIRMED -- the deferred karoo is never on the battlefield at enumeration. The karoo branch publishes its card number as a land-Aura host; both worlds hold that Aura until the deferred karoo lands (same mana as the in-response tap) | `70807259` |
+| E1 | 77008: Claude T4, AI T5 | (b) BUDGET STARVATION -- expressible: from the T2 handoff T4 at b1600 (T5 at b200); game start T4 at b800. Contributing: the horizon leaf never swaps in combat. A rollout swap pin (`MTG_ROLLOUT_AURA_SWAP`) found T4 at b200 and measured 1 better/0 worse over 400, but its trajectory exposed a latent executor/rollout site-9 mismatch (seed 4205) -> shipped DEFAULT OFF, deferred in `docs/design/site9-continuation-index-mismatch.md`. Final binary: T4 in the d5/b200 batch cell | `c9f2291b`, `a0b8e7ab` |
+| E2 | 77001: Claude T4 by DOUBLE Wings swap, AI T5 | (a) INEXPRESSIBLE at any budget (T5 at b3200; old binary T5 at b1600) -- swap->recast->swap needs a site-9 continuation inside a site-10 continuation. Compound AuraSwap chain (chosen_x = 2..3), recast through each world's cast path, shroud-guarded. Now: T4-start handoff T4 at b20; game start T4 at b800 (b200 T5 = budget) | `c9f2291b`, `a0b8e7ab` |
+| F | 77004 / 77015: plans whose canonical order cannot pay drop a cast | CONFIRMED for the SEARCH (the `drops` field on human ORDER variants is by design): the enumerator credits Wild Growth's ramp, the generic rank cast it after the creatures. Ramp land Auras ranked with rocks (5) | `787fefdd` |
+| G | 77019: 8 mana tapped for 6-cost Bruna; 77012 Pilgrims | CONFIRMED (77019) -- Sage ranked last. Creature-only source first for a creature payment (shared payer). 77012 was the A-i laundering; the old Pilgrim now taps only to feed Skycloud Expanse, which the line needs | `4e14d50c` |
+| H | combat-swap `heuristic_default` -1, "into your hand" note | CONFIRMED cosmetic. Default = AuraSwapPick; note rewritten (verified 77008 T4 combat: default 2 = Colossification) | `5f4d7a78` |
+
+Re-verified after the fixes (final binary):
+* Mismatch harness (Stage-5a set: seeds 1001/2002/3003/4004 x {d3 b10, d5 b20} x 300 = 2,400 games,
+  `MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1`): **0 `[fd-diverge]`, 0 `[nonconv]`.** (With the E rollout pin ON it
+  read 1 -- the reason that lever ships OFF.)
+* play_invariants (verify_deck's seeds 7001/7002 x 4): ok, 8 games / 180 decisions. Over 77001-77020 x 1 the
+  auto-follower runs away on 7 seeds -- free `equip Lightning Greaves` {0} re-points ping-ponging forever
+  in a post-combat main (follower policy picks plan 0 among zero-cast plans); identical on the pre-fix
+  binary (71893246), not an engine regression.
+* `mtg-test`: 427/427. Bruna scenarios 4/4.
+* Sweep seeds, d5/b200 batch cell, pre-fix -> fixed: 77001 5->4, 77008 5->4, 77016 4->5 (recovers T4 at
+  d5 b400 -- budget churn from the wider host/chain plan space), the other 17 unchanged.
+
+Residual, recorded (not sweep flags):
+* `[enchant-retarget]` still counts in rollouts when an ENABLER cast is dropped at apply for mana (e.g. a
+  Pilgrim whose {G} a karoo-as-wild pool over-credited, so the Greaves move it hosts never fires). Counted,
+  never silent; no plan label lies about a legal line.
+* B keeps a conservative reject in Solve's (d0) plan builder for "Aura onto the Greaves move's destination"
+  (EnumeratePlans orders it legally; Solve has no such sort).
+
+Decks other than Bruna whose play may change (for the GT verdicts):
+* A: **Angels** (Giada creature-only mana in a mixed prepay; Greaves + dork unlock host / colour presence),
+  **FiveColour** (Greaves + dorks: unlock host kept, colour-presence widening), **slivers_vial** (Ancient
+  Ziggurat in a mixed prepay).
+* C: **Fungus** (Wild Growth + Simic Growth Chamber), **EldraziDisplacerFlicker** (land Auras + a Karoo).
+* D: **Fungus**, **EldraziDisplacerFlicker**.
+* F: **Fungus** (generic rank; EDF has its own).
+* G: **Angels**, **slivers_vial** (tap ORDER on creature payments).
+* B / E / H: none (Bruna-only opt-in / no other Wings / display only). MTG_UNPRUNED oracle arms of
+  creature-Aura decks (Auras) widen (diagnostic only).
+
+Open questions for the user (none blocked anything; defaults taken):
+1. The autonomous dedup folds a creature Aura's HOST by name in every deck -- a heuristic substitute in the
+   search window. Bruna opts in to a searched host; extend to Auras (Bogles) and the rest? Default: Bruna only.
+2. F changes the GENERIC cast rank (ramp land Auras with rocks) -- Fungus moves. Cast order is user-owned;
+   I treated it as the same realisation rule as rocks. Approve, or restrict to Bruna?
+3. `MTG_ROLLOUT_AURA_SWAP` (future-turn leaf pins the damage-max combat swap): measured non-inferior and fixes
+   77008 at b200, but ships OFF until the site-9 mismatch it exposed is fixed. Want that mismatch prioritised?
+4. G (creature-only source first) moves Angels/slivers tap order -- approve.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-10-05)
 
