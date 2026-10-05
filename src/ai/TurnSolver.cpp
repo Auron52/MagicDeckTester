@@ -38713,6 +38713,8 @@ static void SimulateCombat(GameState& state)
     // Legend rule before declaring attackers (mirror GameEngine::CombatPhase): a duplicate
     // legendary lord cannot double-count its buff. No-op without legendaries.
     EnforceLegendRule(state, active);
+    // CR 704.5m orphaned-Aura SBA checkpoint -- mirror GameEngine::CombatPhase (lockstep).
+    SweepOrphanedAuras(state);
 
     // Eligible attacker indices BEFORE any token creation (push_back keeps indices stable).
     std::vector<int> atk_idx = DeclareAttackerIndices(state);
@@ -39022,6 +39024,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
     DrainPendingSagaEnters(state);                 // safety net: an off-cascade Saga enter takes its counter by turn start
+    SweepOrphanedAuras(state);                     // CR 704.5m SBA checkpoint (lockstep w/ GameEngine::UntapStep)
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start

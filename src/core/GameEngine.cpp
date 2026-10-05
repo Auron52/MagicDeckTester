@@ -243,6 +243,7 @@ void GameEngine::UntapStep(GameState& state)
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
+    SweepOrphanedAuras(state);          // CR 704.5m SBA checkpoint (lockstep w/ SimulateEndAndStartNextTurn)
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
@@ -621,6 +622,10 @@ void GameEngine::CombatPhase(GameState& state)
     // put into the graveyard before attackers are declared, so duplicate legendary lords
     // cannot double-count their continuous buffs. No-op for decks with no legendaries.
     EnforceLegendRule(state, state.active_player_index);
+    // CR 704.5m (orphaned Auras -> graveyard): the beginning-of-combat SBA checkpoint, so an Aura that
+    // fell off a creature during main 1 is in the graveyard before attackers are declared (where
+    // Bruna, Light of Alabaster's trigger can return it). Lockstep with TurnSolver::SimulateCombat.
+    SweepOrphanedAuras(state);
 
     state.step = Step::DeclareAttackers;
     std::vector<Permanent*> declared = m_ai.DeclareAttackers(state);

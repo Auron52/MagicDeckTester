@@ -15622,6 +15622,56 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
     return start;
 }
 
+// CR 704.5m: "If an Aura is attached to an illegal object or player, or is not attached to an
+// object or player, that Aura is put into its owner's graveyard." Until 2026-10-05 the engine had NO
+// such SBA: every leaves-the-battlefield site (combat death, sacrifice, the legend rule, bounce,
+// exile) zeroed aura_attached_to and LEFT the Aura on the battlefield as an inert orphan -- it
+// contributed no P/T, but it still counted as an enchantment you control (Ethereal Armor's scaling,
+// devotion), was absent from the graveyard (Bruna, Light of Alabaster's "Aura cards ... from your
+// graveyard"), and could never be re-cast. This sweep is that SBA.
+//
+// Run at SBA checkpoints that BOTH worlds cross identically (lockstep by construction, one function):
+// EnforceLegendRule (directly, for the Auras on a doomed legend), the beginning of combat (beside the
+// legend rule, GameEngine::CombatPhase / TurnSolver::SimulateCombat), the start of each turn, and
+// Bruna's attack trigger. Deliberately NOT inlined at each of the ~16 detach sites: several of them
+// erase inside index-holding loops, and an extra erase there is the index-shift crash class (see the
+// fb-paysac note). Between a detach and the next checkpoint an orphan still behaves as before (no
+// P/T, still on the battlefield) -- a disclosed timing approximation, not a missing rule.
+//
+// "Not attached to an object" = aura_attached_to == 0, or naming a permanent no longer on the
+// battlefield. A bestowed Aura face is exempt: unattached it becomes a creature again (CR 702.103e),
+// which the engine models as the historical inert orphan. Returns the number of Auras moved.
+inline int SweepOrphanedAuras(GameState& state)
+{
+    int moved = 0;
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        const Permanent& a = state.battlefield[static_cast<std::size_t>(i)];
+        if (a.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d == nullptr || !d->params.is_aura || d->params.aura_is_bestow_face) { continue; }
+        bool attached = false;
+        if (a.aura_attached_to != 0)
+        {
+            for (const Permanent& h : state.battlefield)
+            { if (h.card.m_number == a.aura_attached_to) { attached = true; break; } }
+        }
+        if (attached) { continue; }
+        const Card dead  = a.card;
+        const int  owner = a.owner_index;
+        const bool token = a.is_token;   // `a` dangles after the erase below
+        if (g_play_event_sink != nullptr)
+        {
+            EmitPlayEvent(state.turn_number, "sba",
+                          dead.m_name.str() + " is not attached to anything -- put into the graveyard");
+        }
+        state.battlefield.erase(state.battlefield.begin() + i);
+        if (!token) { state.players[owner].graveyard.push_back(dead); }
+        ++moved;
+    }
+    return moved;
+}
+
 // Legend rule (CR 704.5j) for `controller_index`: if they control two or more legendary
 // permanents with the same name, all but one are put into the graveyard. Goldfish-minimal:
 // keep the OLDEST (lowest battlefield index) of each name and sacrifice the rest. Decks
@@ -15699,6 +15749,10 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
             if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
         }
     }
+    // ...and an Aura that fell off a doomed legend is itself put into the graveyard by the SAME
+    // state-based-action check (CR 704.5m; 704.3: all applicable SBAs are performed simultaneously),
+    // so it is swept below, AFTER the doomed permanents are erased (see SweepOrphanedAuras for why
+    // the sweep never runs mid-erase). Before 2026-10-05 it stayed on the battlefield as an orphan.
     // A legend-rule "death" IS a death (CR 704.5j puts the permanent into the graveyard; CR 700.4
     // "dies" = battlefield -> graveyard), so a doomed CREATURE must fire the same death cascade as
     // every other death site (OnCreatureDies: LTB triggers, devotion, "another creature you control
@@ -15731,6 +15785,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     }
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
     { state.battlefield.erase(state.battlefield.begin() + *it); }
+    SweepOrphanedAuras(state);
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
     for (const DoomedDeath& dd : doomed_creatures)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
