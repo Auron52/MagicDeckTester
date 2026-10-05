@@ -5519,6 +5519,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         bool in_hand = false;
                         for (const Card& hc : state.players[me].hand) { if (hc.m_number == a.sac_source_id) { in_hand = true; break; } }
                         if (!in_hand) { break; }
+                        bool host_ok = false;   // lockstep: the recast targets the host (shroud stops it)
+                        for (const Permanent& hp : state.battlefield)
+                        { if (hp.card.m_number == host) { host_ok = CreatureTargetableByAuraSpell(hp, state, me); break; } }
+                        if (!host_ok) { break; }
                         cast_by_name(wd->card.m_name.str(), "", 0, 0, -1, -1, 0, "", host);
                         resolve_now();
                         bool attached = false;

@@ -23524,7 +23524,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // variants, never a heuristic: K = 2..min(3, hand Auras the host can take), and
                     // only while the host is a legal target for the recast (not shrouded).
                     // Autonomous only -- a human performs the same chain step by step.
-                    if (repick && !HumanPlayActive() && CreatureTargetableByAuraSpell(*hp, state, state.active_player_index))
+                    static const bool s_chain = EnvOn("MTG_AURA_SWAP_CHAIN", true);   // DEFAULT ON; =0 disables
+                    if (s_chain && repick && !HumanPlayActive() && CreatureTargetableByAuraSpell(*hp, state, state.active_player_index))
                     {
                         int n_in = 0;
                         for (const Card& hc2 : ap.hand)
@@ -29977,12 +29978,19 @@ TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
 // carry; a plan from Solve -- every turn past the search horizon, and the d0 runner -- never swaps, so
 // a line whose kill is "swap Colossification in after attackers" is invisible to the leaf and found
 // only once the search expands that very turn in-tree (77008: T4 at b800, T5 at b200). This pins the
-// SAME damage-max swap (ruling 3's pick, at resolution) on a pre-combat Solve plan whenever a Wings is
-// attached or cast by the plan. Rollout/d0 policy only (the permitted greedy class); the searched
-// tree still branches swap vs no-swap. Executor and rollout both apply Solve's plan -> lockstep.
+// SAME damage-max swap (ruling 3's pick, at resolution) on a pre-combat WHOLE-PHASE greedy plan -- the
+// horizon leaf and the d0 runner's plan -- whenever a Wings is attached or cast by the plan. Rollout/d0
+// policy only (the permitted greedy class); the searched tree still branches swap vs no-swap.
 static void MaybePinRolloutAuraSwap(const GameState& state, bool is_pre_combat, TurnSolver::Plan& plan)
 {
-    static const bool s_on = EnvOn("MTG_ROLLOUT_AURA_SWAP", true);   // DEFAULT ON; =0 disables
+    // DEFAULT OFF (=1 enables) -- an EXPERIMENT lever, not an adoption. Measured with the pin in
+    // Solve(): 400 paired d5/b20 games 5.0400 -> 5.0375 (1 better / 0 worse) and seed 77008 T4 at b200
+    // instead of b800. But its changed trajectories reach a latent executor/rollout mismatch the
+    // pre-change tree never hit on the 5a seeds: seed 4004 gi201 (4205) d5/b20, predicted T5,
+    // realised T6 -- the executor's site-9 continuation is INDEX-addressed into a list built from a
+    // board that differs from the one the scoring rollout saw (docs/design/analysis-Bruna.md,
+    // "Claude-play sweep"). Off until that mismatch is root-caused; MTG_ROLLOUT_AURA_SWAP=1 is its repro.
+    static const bool s_on = EnvOn("MTG_ROLLOUT_AURA_SWAP");
     if (!heurarm::Flag(heurarm::ROLLOUT_AURA_SWAP, s_on) || !is_pre_combat || plan.combat_aura_swap_choice >= 0) { return; }
     const int me = state.active_player_index;
     for (const Permanent& p : state.battlefield)
@@ -30002,14 +30010,12 @@ static void MaybePinRolloutAuraSwap(const GameState& state, bool is_pre_combat, 
     }
 }
 
-TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
+void TurnSolver::PinRolloutAuraSwap(const GameState& state, bool is_pre_combat, Plan& plan)
 {
-    TurnSolver::Plan out = SolveMemo(state, is_pre_combat, permit);
-    MaybePinRolloutAuraSwap(state, is_pre_combat, out);
-    return out;
+    MaybePinRolloutAuraSwap(state, is_pre_combat, plan);
 }
 
-TurnSolver::Plan TurnSolver::SolveMemo(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
+TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
     // claimed depth and the innermost search frame -- see greedywindow in TurnSolver.h). There is
@@ -38477,6 +38483,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         bool in_hand = false;
                         for (const Card& hc : state.players[me].hand) { if (hc.m_number == a.sac_source_id) { in_hand = true; break; } }
                         if (!in_hand) { break; }
+                        // The recast TARGETS the host (CR 303.4a): a Greaves the plan equipped onto it
+                        // since enumeration shrouds it, and the chain stops there (never retargets).
+                        bool host_ok = false;
+                        for (const Permanent& hp : state.battlefield)
+                        { if (hp.card.m_number == host) { host_ok = CreatureTargetableByAuraSpell(hp, state, me); break; } }
+                        if (!host_ok) { break; }
                         apply_one(wd->card.m_name.str(), false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
                                   std::string{}, host, false, -1, 0, 0, 0, false, false);
                         bool attached = false;
@@ -50666,6 +50678,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             pre_plan = TurnSolver::SolveWithLookahead(
                 state, true, turn_depth, max_turns, budget, false, second_main, tt);
         }
+        // ROLLOUT COMBAT SWAP (MTG_ROLLOUT_AURA_SWAP, Bruna sweep E): a FUTURE turn's pre-combat
+        // plan that came from the horizon leaf gets the damage-max Arcanum Wings combat-swap pin.
+        // Here and only here: a future turn of a rollout is never executed as such (the real game
+        // re-searches it, with the swap variants in the tree), whereas a pin on a leaf plan used
+        // INSIDE the root turn -- a breakpoint continuation re-solve -- is applied by the rollout
+        // and not by the executor's action replay: the seed-4205 fd-diverge (predicted T5, realised
+        // T6) when the pin lived in Solve() / the leaf itself.
+        if (pre_plan.horizon_leaf) { TurnSolver::PinRolloutAuraSwap(state, /*is_pre_combat=*/true, pre_plan); }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);   // future turn: no stamp (root-turn authority)
         // OWN DEATH (own_death_live decks only -- Prevent Damage, or MTG_OWN_DEATH_ALL): a line
@@ -59553,6 +59573,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // RELIANCE had no answer at all. NRVO'd; the flag gates only the counter, so play is
         // byte-identical.
         Plan greedy_leaf = Solve(state, is_pre_combat, GreedyPermit(GreedySite::HorizonLeaf, depth));
+        greedy_leaf.horizon_leaf = true;   // SimulateToEnd's future-turn rollout swap pin keys on it
         greedysite::RecordOutcome(90, !greedy_leaf.actions.empty());
         return greedy_leaf;
     }

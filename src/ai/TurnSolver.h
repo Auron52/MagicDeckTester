@@ -1114,6 +1114,10 @@ public:
         // provider's damage-max pick at resolution (USER ruling 2026-10-05). Copied onto
         // GameState::scripted_combat_aura_swap, same route as above.
         int combat_aura_swap_choice = -1;
+        // Set only on the depth<=0 HORIZON LEAF plan (SolveWithLookahead): the one plan the
+        // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
+        // compared or serialised -- a rollout-local marker.
+        bool horizon_leaf = false;
 
         // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
         // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set
@@ -1350,8 +1354,9 @@ public:
     // The uncached greedy solve behind Solve() (which memoizes it per decision under MTG_SOLVE_MEMO
     // -- see namespace solvememo in TurnSolver.cpp). Same permit.
     static Plan SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
-    // Solve()'s memoised core; Solve() adds the rollout Arcanum Wings swap pin on top (Bruna sweep E).
-    static Plan SolveMemo(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+    // The rollout / d0 Arcanum Wings combat-swap pin (MTG_ROLLOUT_AURA_SWAP, Bruna sweep E): applied
+    // ONLY to a whole main-phase greedy plan (the horizon leaf, the d0 runner's plan).
+    static void PinRolloutAuraSwap(const GameState& state, bool is_pre_combat, Plan& plan);
 
     // THE SEARCH'S QUERY INTO THE COMBO OFF RULE TABLE (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK).
     // Index of a candidate `DecisionProvider::ComboOffPossible` says wins this turn, or -1.
