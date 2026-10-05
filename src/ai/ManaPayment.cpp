@@ -1199,8 +1199,22 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // pip: eight mana for a six-cost spell, two of them stranded as creature-only float.
                 // Shared payer -> executor and rollout alike. No creature_mana_only source on the
                 // board -> unreachable (byte-identical).
+                //
+                // EXCEPT A SOURCE WHOSE TAP COSTS AN ATTACK (2026-10-05 suite verdict). "Never worse
+                // for the rest of the turn" holds only for a source with no OTHER use this turn. A
+                // creature that could swing (CanAttackFull + power > 0 -- SacPayFodderCostsAttack,
+                // the same test AvailableManaPoolNoAttackers and the fodder rank use) has one: a
+                // pre-combat tap means it cannot be declared as an attacker, and vigilance does not
+                // help (vigilance skips the attack TAP; it does not let a tapped creature attack).
+                // Angels: Giada, Font of Hope (2/2 flying vigilance, Angel-only {W}) paid Righteous
+                // Valkyrie first on T3 and sat out combat -- 146 slower regression games, +144 turns,
+                // every one back to its GT turn with the rank off. Such a source keeps its provider
+                // rank (the creature band, behind the lands), so it pays only when needed, exactly
+                // as before G. Somberwald Sage (0/1) and Ancient Ziggurat (a land) cost no attack
+                // and keep the creature-first rank.
                 if (for_creature && def->params.creature_mana_only && kind == 1
-                    && CreatureOnlyFirstEnabled()) { rank = -500; }
+                    && CreatureOnlyFirstEnabled()
+                    && !(def->card.IsCreature() && SacPayFodderCostsAttack(state, p))) { rank = -500; }
                 // Reference-replay tap preference (--tap-pref; nulled by RevealLogPause -> real
                 // payments only): a source the RECORDING tapped in this same (turn, phase)
                 // outranks every unpinned source. Order bias only -- never legality; among

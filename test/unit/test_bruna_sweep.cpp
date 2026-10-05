@@ -532,3 +532,28 @@ TEST_CASE("Bruna sweep B: an Aura on the Greaves move's destination resolves bef
     CHECK(EquipHostOf(after, g.greaves) == pilgrim);
     CHECK(g_enchant_retargets.load() == before);
 }
+
+// ---- G follow-up: a creature-only source that could ATTACK keeps its late rank -------------------
+// 2026-10-05 regression verdict, Angels: Giada, Font of Hope (2/2 vigilance, Angel-only {W}) ranked
+// first paid Righteous Valkyrie pre-combat and could not attack -- 146 slower games. A tap that costs
+// an attack is not free: the payer spends the lands and leaves Giada up. (The power-0 Sage case --
+// creature-first still applies -- is the G test above.)
+TEST_CASE("Bruna sweep G: an attack-capable creature-only source is not tapped first")
+{
+    BoardBs b;
+    b.Put("Plains");
+    b.Put("Plains");
+    b.Put("Plains");
+    const int giada = b.Put("Giada, Font of Hope");
+    const CardDefinition& valk = DefBs("Righteous Valkyrie");
+    SpellSubtypePayScope scope(&valk.card);
+    REQUIRE(TapForCostShared(b.s, valk.card.m_mana_cost, /*for_creature=*/true, nullptr, true));
+    bool giada_tapped = false; int lands_tapped = 0;
+    for (const Permanent& p : b.s.battlefield)
+    {
+        if (p.card.m_number == giada) { giada_tapped = p.tapped; continue; }
+        if (p.tapped) { ++lands_tapped; }
+    }
+    CHECK_MESSAGE(!giada_tapped, "an attack-capable creature paid a pre-combat creature spell first");
+    CHECK(lands_tapped == 3);
+}
