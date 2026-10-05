@@ -2219,6 +2219,17 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
         }
     }
     if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()) { return 5; }
+    // A RAMP LAND AURA (Wild Growth: "whenever enchanted land is tapped for mana, add {G}") is the
+    // same same-turn mana source as a rock, for the same reason: the enumerator credits its extra
+    // mana to the subset (the land-Aura ramp credit), so the canonical order must cast it BEFORE the
+    // spells it funds, onto a still-untapped host (the payer reserves the host). Ranked with the
+    // other noncreatures (20) it came AFTER the creatures and the line dropped it -- Bruna sweep F,
+    // seeds 77004 (Sage + Wild Growth) and 77015 (Greaves + Mother + Wild Growth): a payable plan the
+    // search could only realise minus a cast. EldraziFlickerProvider already ranks its land Auras
+    // first ("ramp first: it feeds the rest"). MTG_LAND_AURA_RAMP_FIRST=0 restores rank 20.
+    static const bool s_land_aura_first = EnvOn("MTG_LAND_AURA_RAMP_FIRST", true);
+    if (s_land_aura_first && RockRampEnumEnabled() && def.params.is_land_aura
+        && def.params.land_aura_extra_mana > 0) { return 5; }
     // Goblin Warchief (a subtype cost reducer): cast it just BEFORE other creatures (8 < 10) so a
     // same-turn Goblin it discounts is enumerated after the reducer is online. Gated on the param,
     // so every non-reducer deck keeps creatures at 10 (byte-identical).

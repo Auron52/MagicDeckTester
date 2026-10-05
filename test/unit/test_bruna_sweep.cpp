@@ -465,3 +465,33 @@ TEST_CASE("Bruna sweep G: a creature spell taps the creature-only Sage before ge
     CHECK_MESSAGE(untapped == 2, "general sources wasted on a creature spell the Sage could pay");
 }
 
+// ---- F: a plan's canonical order must realise the casts it was admitted on -----------------------
+// Seed 77015 T3: Lightning Greaves {2} + Mother of Runes {W} + Wild Growth {G} off three lands is
+// payable only with Wild Growth FIRST (its host then taps for two). The enumerator credits that ramp,
+// but the canonical order ranked creatures (10) before the Aura (20), so the apply cast Wild Growth
+// last off nothing and dropped it -- the search could not express the working order at all.
+TEST_CASE("Bruna sweep F: Wild Growth's same-turn ramp is cast before the spells it funds")
+{
+    BoardBs b;
+    b.Put("Botanical Sanctum");
+    b.Put("Razorverge Thicket");
+    b.Put("Boseiju, Who Endures");
+    b.Hand("Lightning Greaves");
+    b.Hand("Mother of Runes");
+    b.Hand("Wild Growth");
+    b.s.players[0].lands_played_this_turn = 1;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool equip = false;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::Equip) { equip = true; } }
+        if (!equip && CastNames(p).size() == 3) { line = &p; break; }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "the three-cast plan was not enumerated");
+    GameState after = b.s;
+    TurnSolver::ApplyPlan(after, *line, /*is_pre_combat=*/true);
+    CHECK(CountOnBf(after, "Lightning Greaves") == 1);
+    CHECK(CountOnBf(after, "Mother of Runes") == 1);
+    CHECK_MESSAGE(CountOnBf(after, "Wild Growth") == 1, "the plan dropped Wild Growth");
+}
