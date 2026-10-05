@@ -144,6 +144,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // the Parish's self-counter watcher) is now keyed on an ["Angel"] filter. Stage 4a gave it
         // SoldiersProvider (an empty derivation of VialProvider) so it no longer shares slivers_vial's.
         {"Soldiers", "Soldiers"},
+        // Bruna (onboarding 2026-10-05): its own `bruna` signature (Bruna, Light of Alabaster's
+        // attack_gather_auras) routes at the TOP -- Open the Armory's and Glittering Wish's
+        // tutor_to_hand would otherwise route it to AntiLifegain (a greedy shuffle-order tutor pick).
+        {"Bruna", "Bruna"},
     };
 
     namespace fs = std::filesystem;

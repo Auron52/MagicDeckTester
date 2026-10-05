@@ -1488,6 +1488,11 @@ inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
     // restriction, so every prior tutor and the unrestricted Living Wish are byte-identical.
     if (!pp.wish_requires_name.empty() && card.m_name.str() != pp.wish_requires_name)
     { return false; }
+    // "...a MULTICOLORED card" (Glittering Wish): two or more colours (CR 105.2c). Every caller
+    // passes the DEFINITION card (`def ? def->card : lc`), whose colour mask is populated from
+    // cards.json; a def-less placeholder (an unimplemented sideboard card) has an empty mask and
+    // correctly fails. false for every other tutor -> byte-identical.
+    if (pp.wish_requires_multicolored && !card.IsMulticolored()) { return false; }
     return true;
 }
 

@@ -10405,6 +10405,7 @@ namespace
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
     const GenericProvider        g_generic;
     const AngelsProvider         g_angels;
+    const BrunaProvider          g_bruna;
     const BreachingDragonstormProvider g_breaching_dragonstorm;
     const KnightsProvider        g_knights;
     const WhiteKnightsProvider   g_white_knights;
@@ -11854,6 +11855,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (verified play-neutral by the smoke audit, play-changed=0). What it adds is a place for a
     // proof and a name in the audit -- see the always-own-a-provider block above the routing chain.
     bool angels = false;
+    // BRUNA (Bant Aura voltron, 2026-10-05). MUST return ABOVE `anti`: Open the Armory's and
+    // Glittering Wish's tutor_to_hand each set that signature alone (the tenth instance of the
+    // archetype-neutral misroute class). Signature = Bruna, Light of Alabaster's own
+    // attack_gather_auras -- carried by no other card, and the card IS the archetype.
+    bool bruna = false;
     // SOLDIERS (W/x Human Soldiers on Aether Vial, 2026-10-04). MUST return ABOVE `goblin`
     // (Ranger-Captain of Eos / Jirina / King Darien carry sac_creature_outlet) and ABOVE `anti`
     // (Recruiter of the Guard / Ranger-Captain carry tutor_to_hand) -- the archetype-neutral
@@ -11897,6 +11903,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        if (p.attack_gather_auras) { bruna = true; }
 
         if (p.noncreature_damage_lifegain || p.land_tap_damage_each_player > 0
             || p.lifegain_target_opp_loses_that_much || p.lifegain_each_opp_loses > 0)
@@ -12328,6 +12335,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Angels FIRST -- above critter, whose signature its 4 Archangel of Thune would otherwise set
     // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
+    // Bruna: at the very top -- its signature is carried by no other card, so the position is free,
+    // and it must beat `anti` (Open the Armory / Glittering Wish tutor_to_hand).
+    if (bruna)       { return g_bruna; }
     if (prevent_damage) { return g_prevent_damage; }
     // SelesnyaLifegain ABOVE BOTH `stompy` and `critter`, and that position is load-bearing twice
     // over -- below EITHER one this deck would silently ride another deck's judgement hooks. It was

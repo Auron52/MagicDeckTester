@@ -242,6 +242,13 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // the right disposition, matching the `idx < 0` guard below: fetch nothing rather than fetch
     // the wrong card.
     if (!pp.wish_requires_name.empty() && want != pp.wish_requires_name) { return; }
+    // MULTICOLORED-WISH resolution guard (Glittering Wish), the same drift guard: whiff rather than
+    // fetch a card the restriction forbids. Read off the DEFINITION (a zone Card is a placeholder).
+    if (pp.wish_requires_multicolored && !want.empty())
+    {
+        const CardDefinition* wd = CardDatabase::Instance().Lookup(want);
+        if (wd == nullptr || !wd->card.IsMulticolored()) { return; }
+    }
     // DIAGNOSTIC (MTG_TUTOR_CHOSEN_RANK, default off): where in the ranking did the SEARCH actually
     // land? Gated on g_real_resolution, so it reports only the target the engine commits to, never
     // the thousands of hypothetical tutors inside rollouts.

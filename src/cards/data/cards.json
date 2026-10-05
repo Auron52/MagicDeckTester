@@ -4007,7 +4007,7 @@
    "keywords": [
     "Equip"
    ],
-   "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0} [Equipment subsystem: Permanent::equipped_to + Action::Kind::Equip (sorcery-speed, one action per (Equipment, controlled creature), mutually exclusive per plan; Equip {0} = free re-point each turn). Haste read by CanAttackFull (attacks) and CanTapNow ({T} abilities) -- CR 302.6 lifts a single restriction covering both, so equip haste now unlocks same-turn tap abilities too (a Greaves'd fresh mana dork taps; a Greaves'd fresh Deathrite Shaman may use its graveyard-exile modes). Shroud documented-inert (the passive opponent never targets our permanents). Falls off a dead host (SBA), never sacrificed.]",
+   "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0} [Equipment subsystem: Permanent::equipped_to + Action::Kind::Equip (sorcery-speed, one action per (Equipment, controlled creature), mutually exclusive per plan; Equip {0} = free re-point each turn). Haste read by CanAttackFull (attacks) and CanTapNow ({T} abilities) -- CR 302.6 lifts a single restriction covering both, so equip haste now unlocks same-turn tap abilities too (a Greaves'd fresh mana dork taps; a Greaves'd fresh Deathrite Shaman may use its graveyard-exile modes). Shroud MODELLED (equip_grants_shroud -> CreatureHasShroud): it binds OUR OWN targeting too (CR 702.18a) -- a Greaves'd creature is not a legal equip target or Aura-spell target (LegalEnchantTargets / ResolveEnchantTarget, CR 303.4a), while a non-targeting attach/put (Balan, Skyhunter, Bruna's attack trigger, Arcanum Wings' aura swap -- CR 303.4f) is unaffected. Falls off a dead host (SBA), never sacrificed.]",
    "template": "custom",
    "parameters": {
     "is_equipment": true,
@@ -10767,6 +10767,374 @@
     ],
     "tap_self_damage": 1,
     "sacrifice_draw_cost": "{1}"
+   }
+  },
+  {
+   "name": "Almost Perfect",
+   "mana_cost": "{4}{G}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature has base power and toughness 9/10 and has indestructible. [Base P/T SET (CR 613.4b, layer 7b) via aura_set_base_power/aura_set_base_toughness: AuraBonusFor returns the delta 9 - (printed + CDA base) so every +N/+N aura, counter, temp pump and lord anthem (layer 7c) still stacks on top -- e.g. Avacyn's Pilgrim + AP + Eldrazi Conscription = 19/20. Host = SEARCHED enchant_target, own creatures only (enchanting a goldfish spawn is strictly dominated: it never attacks or blocks). PROVISIONAL deferral: indestructible not modelled -- inert, nothing in this deck or the passive opponent destroys our creatures (Boseiju hits only opponent artifacts/enchantments/nonbasic lands; sacrifice and 0-toughness SBA ignore indestructible anyway). Toughness 10 likewise inert (no damage is ever dealt to our creatures).]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_set_base_power": 9,
+    "aura_set_base_toughness": 10
+   }
+  },
+  {
+   "name": "Arcanum Wings",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Aura Swap",
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature has flying.\nAura swap {2}{U} ({2}{U}: Exchange this Aura with an Aura card in your hand.) [Enchant creature: is_aura, host = searched enchant_target. AURA SWAP MODELLED (aura_swap_cost) as Action::Kind::AuraSwap, one variant per (Wings on battlefield x DISTINCT hand Aura name that could enchant Wings' host): Wings returns to hand and the hand Aura is PUT (not cast -- no cast triggers, does not target, so shroud/hexproof from Lightning Greaves do NOT stop it, CR 303.4a vs 303.4f) onto the battlefield attached to the same creature; its own ETB fires (Colossification taps the host). Two windows: the main phase (trailing pass) and IN COMBAT after attack triggers resolve (searched plan pin, cost reserved from the main-phase payment), which is where Colossification's tap is free. A hand Aura that cannot enchant the host (Wild Growth: enchant land) is not a legal half -> not emitted (ruling: nothing happens). The opponent's-turn window is collapsed onto the combat window (equivalent vs a passive opponent: same untapped mana, the tapped host untaps in our untap step) -- PROVISIONAL, awaiting user sign-off. Flying grant INERT (no blocker path vs the passive opponent; no card in this deck reads Flying) -- PROVISIONAL.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_power_bonus": 0,
+    "aura_tough_bonus": 0,
+    "aura_swap_cost": "{2}{U}"
+   }
+  },
+  {
+   "name": "Avacyn's Pilgrim",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Monk"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {W}.",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "W"
+    ]
+   }
+  },
+  {
+   "name": "Boseiju, Who Endures",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {G}.\nChannel — {1}{G}, Discard this card: Destroy target artifact, enchantment, or nonbasic land an opponent controls. That player may search their library for a land card with a basic land type, put it onto the battlefield, then shuffle. This ability costs {1} less to activate for each legendary creature you control. [{T}: Add {G} modelled (basic_land, produces G). Legendary supertype carried so EnforceLegendRule applies (deck runs 1 copy; not reachable by Glittering Wish, which fetches only multicolored cards). CHANNEL [PARTIAL -- PROVISIONAL goldfish deferral, awaiting user sign-off]: the ability requires a target 'artifact, enchantment, or nonbasic land an opponent controls'. The goldfish opponent's only possible permanents are OpponentSpawn creatures (GameState.h), and nothing in this deck gives the opponent a permanent, so the ability has NO legal target and cannot be activated at all (CR 601.2c / 602.2b: an ability with a required target cannot be activated without one). Not modelled as an action: no channel_cost param is set, so the engine never enumerates it. The legendary-creature cost reduction (Bruna, Light of Alabaster is legendary) and the opponent's basic-type land search are consequences of an activation that cannot happen. Boseiju therefore plays as a G-producing legendary land whose only other role is being a land card in hand.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G"
+    ]
+   }
+  },
+  {
+   "name": "Botanical Sanctum",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {G} or {U}. [Fastland: fastland_max_other_lands 2 -- LandWouldEnterTapped counts the lands the active player controls (the land being played is still in hand, so each counts as 'other') and it enters tapped iff that count > 2. Same predicate on the executor drop, the rollout drop and the enumerator's priced land copy. Fully modelled (exact sibling of Razorverge Thicket / Spirebluff Canal / Blooming Marsh).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "fastland_max_other_lands": 2
+   }
+  },
+  {
+   "name": "Bruna, Light of Alabaster",
+   "mana_cost": "{3}{W}{W}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Angel"
+   ],
+   "keywords": [
+    "Flying",
+    "Vigilance"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Flying, vigilance\nWhenever Bruna attacks or blocks, you may attach to it any number of Auras on the battlefield and you may put onto the battlefield attached to it any number of Aura cards that could enchant it from your graveyard and/or hand. [Attack half: attack_gather_auras -- resolved at declare-attackers (after pumps, before the damage loop) in BOTH worlds by FireAttackGatherAuras; WHICH Auras is a SEARCHED subset (Plan::bruna_gather_choice -> GameState::scripted_bruna_gather), the provider's BrunaGatherCandidates is the only narrower (exact goldfish dominance collapse: additive / keyword-only Auras always taken; host-dependent base-setting Auras such as Almost Perfect branch take/skip). Non-targeting (CR 303.4f / 701.3): shroud from Lightning Greaves does NOT block it; enchant restrictions + protection do (AuraCouldEnchant). Moved Auras do not re-enter (no ETB); put Auras ENTER (Colossification's 'tap enchanted creature' fires -- harmless on an attacker, CR 506.4/510.1). Put Auras are not CAST (no cast triggers; none in this deck). Opponent-controlled Auras: the goldfish opponent has none. PROVISIONAL deferral: the 'or blocks' half is goldfish-inert (the passive opponent never attacks, so Bruna never blocks). Flying inert (no blockers); vigilance modelled (keyword) but inert (no tap abilities, never blocks).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_gather_auras": true
+   }
+  },
+  {
+   "name": "Colossification",
+   "mana_cost": "{5}{G}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nWhen this Aura enters, tap enchanted creature.\nEnchanted creature gets +20/+20. [FULLY MODELED. +20/+20 via aura_power_bonus/aura_tough_bonus (AuraBonusFor at every combat/projection site). ETB tap via aura_etb_tap_host: a mandatory trigger resolved by the shared ResolveAuraEnterTapHost right AFTER aura_attached_to is set, at EVERY aura-enter site (cast executor + rollout apply_one, Bruna's attack-trigger put, aura swap, dig/tutor-attach, go-off apply) -- CR 603.6a, a PUT triggers it just like a cast. Tapping an ATTACKING host does not remove it from combat (CR 506.4) so Bruna's put still adds 20 this combat; re-attaching via Bruna is not an enter and does not tap. Host-in-response mana: an untapped, non-sick mana creature tapped by this trigger keeps a this-phase float credit (CR 605.3a/106.4). Enchant-creature host is the searched enchant_target plan variant; a shrouded host (Lightning Greaves) is not a legal CAST target (CR 303.4a) but is a legal PUT host (CR 303.4f).]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_power_bonus": 20,
+    "aura_tough_bonus": 20,
+    "aura_etb_tap_host": true
+   }
+  },
+  {
+   "name": "Eldrazi Conscription",
+   "mana_cost": "{8}",
+   "types": [
+    "Kindred",
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Eldrazi",
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature gets +10/+10 and has trample and annihilator 2. (Whenever it attacks, defending player sacrifices two permanents of their choice.) [Flat +10/+10 modelled (aura_power_bonus/aura_tough_bonus; toughness stored, inert vs the passive opponent). Colorless: protection-from-a-colour (Mother of Runes) never makes it fall off. Trample inert (the goldfish opponent never blocks). Annihilator 2 PROVISIONALLY inert: the defending player sacrifices, and the goldfish opponent controls no permanents (no OpponentSpawn for this deck) -- awaiting user sign-off. Kindred/Eldrazi typed faithfully; no card in the pool reads Kindred or Eldrazi.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_power_bonus": 10,
+    "aura_tough_bonus": 10
+   }
+  },
+  {
+   "name": "Glittering Wish",
+   "mana_cost": "{G}{W}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may reveal a multicolored card you own from outside the game and put it into your hand. Exile Glittering Wish. [Bruna's sideboard access (4 mainboard copies). Built EXACTLY as Living Wish: a WISH is a TUTOR whose search ZONE is the sideboard (CR 400.11b), so tutor_to_hand + wish_from_sideboard ride the whole searched-tutor apparatus -- the Plan::tutor_choice index axis, the plan-signature folds, the breakpoint pin, the human tutor chooser -- with only the pool swapped. The ONE difference is the restriction: 'a MULTICOLORED card' (any card type) is tutor_types [] (empty = any type, the Beseech the Queen precedent; the sorcery resolution path is not gated on a non-empty type list) plus wish_requires_multicolored, a conjunct inside TutorNumericFilterOk -- the same move wish_requires_name made for Legion Angel -- so the filter reaches the unpruned branch, the heuristic branch, GenericProvider's GenericTutorList and the cleanup-reach walk at once, plus a resolution guard in PerformTutor so enumeration and resolution cannot drift. Colour is read off the card DEFINITION (a zone Card is a bare placeholder with an empty colour mask, so a raw IsMulticolored() on a sideboard card is always false), and an UNIMPLEMENTED sideboard card (no definition) correctly fails the filter. Multicolored = two or more colours (CR 105.2c); hybrid pips count every colour they show. In this sideboard the legal pool is Bruna, Light of Alabaster (W/U), Indrik Umbra, Almost Perfect and Unflinching Courage (all G/W); Mythic Proportions (G), Avacyn's Pilgrim (G), Elgaud Shieldmate (U) and Worldfire (R) are NOT fetchable and the last two are never in any game. KEY INTERACTION: Bruna's attack trigger puts an Aura from HAND onto the battlefield attached to her for free, so a pre-combat Wish for Indrik Umbra / Almost Perfect turns a 6-mana aura into a 2-mana one -- which is why the wish target must be SEARCHED (in main 1, before attacks) and never pre-picked. Each sideboard card is a SINGLETON consumed on fetch (four Wishes see the pool shrink); a second Bruna fetched while one is on the battlefield is legal and the legend rule applies on cast. NO shuffle: a wish searches no library (CR 701.19c never fires; PerformTutor's wish branch skips ShuffleAfterSearch). Exile on resolution (not the graveyard). [PARTIAL: 'You may' -- declining is offered to a HUMAN (the tutor chooser returns -1) but is not emitted as an autonomous variant. WHY inert: the fetch costs nothing beyond the spell already cast and taking is weakly dominant -- even at 8+ cards the cleanup discard can shed the fetched card, and an Aura in the graveyard is still reachable by Bruna's attack trigger. Disclosed, not silently dropped.] [PARTIAL: 'reveal' -- the information half is inert (the passive opponent makes no decisions and nothing reads 'was revealed'); the viewer half rides PerformTutor's existing '(searched)' reveal.]]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "wish_from_sideboard": true,
+    "wish_requires_multicolored": true,
+    "exiles_self_on_resolve": true
+   }
+  },
+  {
+   "name": "Indrik Umbra",
+   "mana_cost": "{4}{G}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Umbra armor",
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature gets +4/+4 and has first strike, and all creatures able to block it do so.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [+4/+4 modelled (aura_power_bonus/aura_tough_bonus via AuraBonusFor). First strike inert: the passive opponent never blocks, so damage-step ordering never changes damage dealt. Lure clause ('all creatures able to block it do so') inert: it binds the OPPONENT's blockers only, and the goldfish opponent has no creatures and never blocks — it imposes nothing on us. Umbra armor inert: nothing in this deck or from the passive opponent destroys our creatures (Worldfire is not Wish-reachable; Boseiju targets opponent permanents only).]",
+   "template": "custom",
+   "parameters": {
+    "aura_power_bonus": 4,
+    "aura_tough_bonus": 4,
+    "is_aura": true
+   }
+  },
+  {
+   "name": "Mother of Runes",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Target creature you control gains protection from the color of your choice until end of turn. [Activated protection NOT modelled -- PROVISIONAL goldfish-inert deferral, pending user sign-off. Activating is weakly DOMINATED by not activating on every DEBT axis here: Damage -- nothing deals damage to our creatures (passive opponent; deck has no self-damage; Worldfire is wish-unreachable). Enchant/Equip -- protection from colour C can only HURT us: our C-coloured Auras fall off (SBA 704.5m) and can no longer be cast on / attached to it, including via Bruna's attack trigger ('Aura cards that could enchant it'); colourless Lightning Greaves and colourless Eldrazi Conscription are unaffected. Knocking an Aura into the graveyard so Bruna can return it is never better than leaving it on the battlefield, because Bruna's trigger already attaches ANY NUMBER of battlefield Auras to her at no cost; no Aura in the list has a beneficial ETB (Colossification's ETB TAPS the enchanted creature) or a leaves/dies trigger; and no Aura ever lowers power (Almost Perfect sets base 9/10, above every creature's base). Block -- the opponent never blocks (Indrik Umbra's lure has nothing to force). Targeting -- the opponent never targets; only our own targeting is affected, again harmfully. The activation also costs Mother's tap, i.e. her 1-power attack. Choosing a colour no object of ours has makes it an exact no-op, so 'never activate' loses nothing.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Mythic Proportions",
+   "mana_cost": "{4}{G}{G}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature gets +8/+8 and has trample. [+8/+8 modelled (toughness stored, inert vs the passive opponent like every aura_tough_bonus). Trample inert: the goldfish opponent never blocks, so trample cannot change damage dealt.]",
+   "template": "custom",
+   "parameters": {
+    "aura_power_bonus": 8,
+    "aura_tough_bonus": 8,
+    "is_aura": true
+   }
+  },
+  {
+   "name": "Open the Armory",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for an Aura or Equipment card, reveal it, put it into your hand, then shuffle. [tutor_to_hand + tutor_types [Aura, Equipment] -- both are SUBTYPES, matched by CardMatchesTypeName's subtype fallback (the Dragonstorm 'Dragon' path), so a Kindred Enchantment -- Eldrazi Aura (Eldrazi Conscription) and an Enchant-land Aura (Wild Growth) are legal targets, exactly as printed. The target is the SEARCHED tutor axis (one plan variant per distinct library Aura/Equipment name; human play: one tutor_target main_phase variant per name). 'Reveal it' is unobservable vs the passive opponent. The shuffle is PerformTutor's unconditional deterministic ShuffleAfterSearch (CR 701.19). Searches the LIBRARY only -- sideboard Auras (Indrik Umbra / Almost Perfect / Unflinching Courage) are reachable via Glittering Wish, never via this card.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Aura",
+     "Equipment"
+    ],
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Prodigious Growth",
+   "mana_cost": "{4}{G}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature gets +7/+7 and has trample. [+7/+7 modelled (aura_power_bonus/aura_tough_bonus; +T stored, inert vs the passive opponent). Trample inert: the goldfish opponent never blocks, so trample never changes damage dealt (same disclosure as Rancor/Armadillo Cloak). No cast-dependent clause: the bonus applies identically when Bruna, Light of Alabaster puts it onto the battlefield attached to her.]",
+   "template": "custom",
+   "parameters": {
+    "aura_power_bonus": 7,
+    "aura_tough_bonus": 7,
+    "is_aura": true
+   }
+  },
+  {
+   "name": "Seaside Citadel",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {G}, {W}, or {U}. [Tapped tri-land, the Mystic Monastery shape; both clauses modelled, nothing deferred. (1) 'This land enters tapped' -> enters_tapped, via the shared LandEntersTapped / LandWouldEnterTapped predicate so enumeration and the real drop agree (no condition, no choice). (2) '{T}: Add {G}, {W}, or {U}' -> produces [G,W,U] with produces_amount left at its default 1: ONE mana of a chosen colour per tap (NOT a Karoo-style one-of-each bundle). No basic land types (not a Triome) and no cycling.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W",
+     "U"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Skycloud Expanse",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{1}, {T}: Add {W}{U}. [Ramp filter, the Ferrous Lake / Mossfire Valley shape (ramp_filter): the {1} activation cost is GENERIC (any mana pays it -- a basic, a dork, Sol Ring's {C}, a Karoo's output, or floating mana) and one activation yields ONE {W} AND ONE {U} (net +1 mana). There is NO free '{T}: Add {C}' mode -- with no feeder the land makes nothing, which is exactly what ramp_filter models (the pool credits +1 wild iff HasUntappedRampFeeder or floating mana, else 0; the backtracker branches the feed off ConsumeFloatingAny and adds one of each produces colour). Does NOT enter tapped. Single clause; nothing deferred. Pool credit is 1 wild (colour-optimistic: it cannot actually make {G}); the authoritative payer is exact.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U"
+    ],
+    "ramp_filter": true
+   }
+  },
+  {
+   "name": "Somberwald Sage",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "{T}: Add three mana of any one color. Spend this mana only to cast creature spells. [mana_dork + produces WUBRG + produces_amount 3 + produces_one_color (the Accomplished Alchemist single-colour-burst shape: three units of ONE search/payer-chosen colour, NOT a Karoo one-of-each bundle -- both payers suppress the bundle rule via IsSingleColorBurstSource) + creature_mana_only (RestrictedManaUsable: refused for every noncreature spell and every activated ability, e.g. Lightning Greaves' equip, Boseiju's channel, Colossification, Eldrazi Conscription -- a KINDRED Enchantment Aura is NOT a creature spell). Unspent units of a Sage tap float in the CREATURE-ONLY reserve (floating_creature_mana), spendable only by a later creature cast this phase and emptied with floating_mana, so a Sage paying Mother of Runes {W} leaves {W}{W} for another creature, never for Colossification. Summoning sickness applies to {T}; Lightning Greaves' haste unlocks it the turn it enters (CR 302.6). In this deck the restricted mana can pay: Bruna, Light of Alabaster {3}{W}{W}{U} (incl. a wished sideboard copy), Somberwald Sage, Birds of Paradise, Avacyn's Pilgrim, Mother of Runes. Colour choice is engine-owned at payment (same as Ancient Ziggurat / Giada): a creature-only source cannot be hand pre-tapped into the general float.]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "produces_amount": 3,
+    "produces_one_color": true,
+    "creature_mana_only": true
+   }
+  },
+  {
+   "name": "Unflinching Courage",
+   "mana_cost": "{1}{G}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.) [+2/+2 modelled (aura_power_bonus/aura_tough_bonus via AuraBonusFor; toughness stored, inert vs the passive opponent). Lifelink modelled (aura_grants_lifelink -> CreatureHasLifelink; our life total is not read by any card in this deck, so it is faithful but outcome-inert). Trample inert: the goldfish opponent never blocks, so all combat damage reaches the player regardless (precedent Rancor / Armadillo Cloak / Audacity).]",
+   "template": "custom",
+   "parameters": {
+    "aura_power_bonus": 2,
+    "aura_tough_bonus": 2,
+    "aura_grants_lifelink": true,
+    "is_aura": true
    }
   }
  ]

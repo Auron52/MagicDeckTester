@@ -428,6 +428,33 @@ public:
     const char* Name() const override { return "Angels"; }
 };
 
+// Bruna, Light of Alabaster (Bant Auras/Equipment voltron, Glittering Wish sideboard; onboarded
+// 2026-10-05). Its OWN provider from day one, routed at the TOP of DetectDecisionProvider by Bruna's
+// own `attack_gather_auras` param. Without that it is the TENTH instance of the archetype-neutral
+// misroute class: Open the Armory's and Glittering Wish's `tutor_to_hand` each set `anti` alone, and
+// AntiLifegainProvider's TutorCandidates resolves to the free ::TutorCandidates, which (no
+// lifegain_to_loss / verse_damage card here) returns ONE candidate -- the first matching card in
+// SHUFFLED library order -- a greedy shuffle-chosen tutor pick inside the search window.
+// Derived from GenericProvider (via DeckProvider): every judgement hook is the Generic one.
+class BrunaProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat is the only route to the opponent's "
+               "life, but Lightning Greaves GRANTS HASTE and Bruna's attack trigger / Arcanum "
+               "Wings' in-combat aura swap add power AFTER attackers are declared, so a bound must "
+               "price every Aura that can reach an attacker this combat." }; }
+    const char* Name() const override { return "Bruna"; }
+    // Tutor axis width: a COVERAGE fix, not a heuristic. Open the Armory's library pool holds SEVEN
+    // distinct Aura/Equipment names (Eldrazi Conscription, Lightning Greaves, Prodigious Growth,
+    // Mythic Proportions, Colossification, Arcanum Wings, Wild Growth) against the base width 6, and
+    // GenericProvider::TutorCandidates returns LIBRARY (shuffle) order -- so one legal target went
+    // unscored every cast, chosen by shuffle rather than merit (the KittyEquipment width-8
+    // precedent). Glittering Wish's pool is at most 4 names. 8 = every legal name, so the target is
+    // fully searched.
+    int TutorSearchWidth() const override { return 8; }
+};
+
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
 // signature, so this routing is additive.
 class BreachingDragonstormProvider : public DeckProvider
