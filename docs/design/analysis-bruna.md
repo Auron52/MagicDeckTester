@@ -95,17 +95,27 @@ resolutions only) against the pruned pick.
   248 committed gathers, 248/248 took the collapse's subset (k = 0).** Avg 5.2625 (control) vs 5.2575;
   3 games differ (gi 14, 62, 334) and none can be the gather choice (k = 0 in every commit) -- they are
   the wider variant set re-allocating the fixed b20 budget.
-* **Arcanum Wings swap (control `MTG_AURA_SWAP_BRANCH=1`, every legal Aura branched, main + combat):
-  181 committed swaps, 178 = the damage-max pick.** The 3 others: two were ENUMERATION-time picks
-  diverging from the APPLY-time ranking after an earlier cast in the same plan changed the hand
-  (Glittering Wish -> Almost Perfect) -- ROOT-CAUSED and FIXED (the autonomous main-phase swap now
-  re-takes the damage-max pick at resolution, `Action::hand_index = -2`, exactly as the combat window
-  already did); one (T6 main: Colossification over Indrik Umbra) is in a game won on the same turn in both
-  arms (no outcome difference). Avg 5.2575 vs 5.2575; 4 games differ (2 each way); re-run with traces:
-  in the two control-arm-better games (gi 197, 320) the control arm's winning line uses the SAME
-  damage-max pick (rank 0, Colossification in combat) a turn earlier -- a line inside the pruned arm's
-  own space that the pruned arm's b20 search did not reach, i.e. budget allocation, not the ranking.
-  No ranking counterexample found. (Re-run after the resolution-time fix: see the commit log.)
+* **Arcanum Wings swap (control `MTG_AURA_SWAP_BRANCH=1`, every legal Aura branched, main + combat).**
+  Three iterations, each divergence root-caused and the ranking FIXED (never left branched):
+  1. Run 1: 181 committed swaps in the control arm, 178 = the damage-max pick. Two were the
+     ENUMERATION-time pick diverging from the APPLY-time ranking after an earlier cast in the same plan
+     changed the hand (Glittering Wish -> Almost Perfect) -> FIXED: the autonomous main-phase swap
+     re-takes the damage-max pick AT RESOLUTION (`Action::hand_index = -2`, both worlds), as the combat
+     window already did. (Shipped arm: game 316 then won T5 instead of T6.)
+  2. The third: a T6 main-phase swap where the branched search took Colossification over Indrik Umbra --
+     the this-turn-only ranking undervalued Colossification (its ETB tap costs this turn's attack, but
+     +20 next turn beats +4 now when nothing is lethal) -> FIXED: rank lethal-this-turn first (team
+     attack on the post-swap board vs opponent life), else the host's damage over this turn + next.
+     Unit-tested both ways.
+  3. **Final run (same 400 seeds): shipped arm avg 5.2525, control 5.2575. Control arm: 181 committed
+     swaps, 179 = the shipped ranking's pick; the 2 others (seeds 7218, 7377) are the control arm's own
+     enumeration-time names (Mythic Proportions) where the resolution-time damage-max is Almost Perfect
+     -- the shipped arm takes Almost Perfect; both games end on the same turn in both arms.** 4 games
+     differ: the shipped arm is better in 3 (gi 6, 62, 316), the control in 1 (gi 197), whose winning
+     line (traced) is the SAME rank-0 damage-max combat swap (Colossification) one turn earlier -- a line
+     inside the shipped arm's own space that its b20 search did not reach: budget allocation, not the
+     ranking. **No remaining ranking counterexample.**
+  Artifacts: `logs/proof/{A,B,C,A2,B2,A3,B3}` (gitignored), `MTG_TRACE=swapproof,gatherproof`.
 
 ### Viewer wiring (2c-ter) -- my choices, user feedback pending
 * Bruna's gather: the generic **`dragon` multi-pick**, asked once per zone (battlefield / hand /
