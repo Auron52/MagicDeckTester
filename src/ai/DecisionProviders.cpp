@@ -3822,7 +3822,16 @@ bool AntiLifegainProvider::OpponentLifegainUseful(const GameState& s, int contro
 
 // Effective ATTACKING power of a permanent, computed like the combat sites (PendingAttackDamage /
 // SimulateCombat / GameEngine): base + temp pump (Invigorate) + counters + lord anthem + animate +
-// dynamic. Used only to decide whether swinging a creature adds damage.
+// dynamic + attached Auras + attached Equipment. Used only to decide whether swinging a creature
+// adds damage.
+//
+// The Aura and Equipment terms were MISSING until 2026-10-05 (found onboarding Bruna, whose natural
+// Aura hosts include 0-power dorks: a Somberwald Sage under Eldrazi Conscription is a 10/11, and the
+// 0-power hold rules below -- ExaltedAwareShouldAttack, HinataProvider::ShouldAttackWith, the
+// echo-keep lethal check -- read it as 0 and could HOLD it). Every combat site sums AuraBonusFor +
+// EquipBonusFor (Combat.cpp, PendingAttackDamage), so the omission made this the one power reader
+// that disagreed with the damage the creature would actually deal. A correctness fix in an allowed
+// attack heuristic: byte-identical for any board with nothing attached to a creature.
 static int AttackPowerOf(const GameState& s, const Permanent& p)
 {
     const int active = s.active_player_index;
@@ -3835,6 +3844,8 @@ static int AttackPowerOf(const GameState& s, const Permanent& p)
         if (animated) { base += d->params.animate_power; }
         base += DynamicBasePower(*d, s, active);
     }
+    base += AuraBonusFor(p, s).first;
+    base += EquipBonusFor(p, s).first;
     return base;
 }
 
