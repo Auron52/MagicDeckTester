@@ -2993,7 +2993,7 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
     if (!td.card.IsLand() && prov.NeverCast(td)) { return { 0, false }; }
 
     int board_mana = 0, draw_sources = 0, board_accel = 0;
-    bool same_name = false, threat_present = false;
+    bool same_name = false, threat_present = false, count_payoff = false;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -3007,6 +3007,8 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
         // add, so an accelerant (itself snow) feeds them. USER 2026-10-06: the snow permanents "can
         // even just help Marit-Lage's Slumber themselves and get the 20/20 token".
         if (is_threat(*d)) { threat_present = true; }
+        if (d->params.upkeep_sac_creates_token || d->params.pt_equals_snow_permanents_you_control
+            || d->params.pt_equals_snow_permanents_on_battlefield) { count_payoff = true; }
     }
     int lands_in_hand = 0, hand_demand = 0;
     for (const Card& c : ap.hand)
@@ -3065,6 +3067,10 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
     if (is_accel(td))
     {
         if (ablate & 2) { return { -1, CleanupDiscardManaValue(top_card) <= next_mana + 1 }; }
+        // The alternative (MTG_SNOW_SCRY_ACCEL_COUNT): an accelerant is itself a snow permanent, so with
+        // a payoff that counts them in play (Slumber's ten, the Treefolk's P/T) it is never "nothing".
+        static const bool s_accel_count = EnvOn("MTG_SNOW_SCRY_ACCEL_COUNT");
+        if (heurarm::Flag(heurarm::SNOW_SCRY_ACCEL_COUNT, s_accel_count) && count_payoff) { return { -1, true }; }
         if (ablate & 16) { return { -1, (threat_present || board_accel == 0) && hand_demand > next_mana }; }
         return { -1, threat_present && hand_demand > next_mana };
     }
