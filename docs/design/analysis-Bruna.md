@@ -1287,3 +1287,68 @@ affordance" (`act=Utopia Mycon` where `cast=` expected) -- both reproduce identi
 `./build.sh` of pure origin `584efea3` (scratch worktree, removed), so they are origin's, not this
 branch's; the Aura-host mark touches neither path. `viewer_linebuild_check.js` and
 `viewer_decision_types_check.js` pass; the sample protocol sweep is 12 ok / 24 repaired / 0 drift.
+
+## Suite verdicts 2026-10-06c -- smoke + regression after rebase onto origin `9f3b5b13`
+
+Origin moved to `7173178f` (`b2142090` user references + "Aether Vial puts are sequenced like CASTS",
+an engine change with its own smoke + regression GT accept), then, while that suite was being accepted,
+to `9f3b5b13` (Genesis Wave X counts same-plan Elf growth + the Wirewood Lodge burst; selesnya GT
+re-accepted). Both suites were run: first on the `7173178f` base (same Bruna result as below; that
+accept was discarded), then everything below on the `9f3b5b13` base. Rebased each time (no merge); the only conflict was
+`test/regression_gt.txt` in the GT commit -- took ORIGIN's GT and `gt_logs` wholesale, so the replayed
+commit carries only the ledger; `check_gt_logs.py` 668 / 0 stale. `test/ref_bench.json` (a generated
+bench rewrite left by the previous regression run, not a reference) was discarded before rebasing.
+`./build.sh`, smoke then regression serially at `THREADS=20`. Durable copy:
+`/workspaces/MagicDeckTester/logs/durable/bruna_suite_2026-10-06c/r2/{smoke,smoke_rerun,regression}/`
+(the `7173178f`-base runs are the top-level `smoke/`, `regression/`).
+
+**Result:** only Bruna cells differ from origin's GT, and every Bruna fingerprint (avg AND digest, all
+9 keys, both tiers) is **byte-identical to the 06b run** -- so every difference is one already
+verdicted in "Suite verdicts 2026-10-06b" above. Every Vial deck (soldiers, slivers, knights,
+whiteknights, pirates, goblins, minotaur, incl. 2HG) PASSES against origin's freshly accepted Vial GT:
+no interaction between the Vial sequencing change and this branch's swap-timing / Aura-host changes.
+Selesnya PASSES against origin's Genesis Wave GT too.
+
+**One non-reproducible flicker (not accepted):** the first full smoke on the `9f3b5b13` base had
+`selesnya_smoke_d3_s1001` 5.4200 -> 5.4267 (gi74 5->6, kept hand + draws identical; i.e. back to the
+pre-`9f3b5b13` value). It does NOT reproduce: a solo `--game-index 74` run, two standalone batches of
+the cell (both exactly origin's 5.4200 / `64d71f6b`), and a full smoke re-run all give origin's T5.
+That smoke re-run is the one accepted. **Open (surfaced, not blocking):** the budget is unit-counted,
+yet the cell's `units` drift run-to-run (11216049 / 11216045 / 11216039 with identical play), so
+some search state depends on scheduling; a full pooled run can apparently tip gi74's d3 b10 line. It
+is not attributable to this branch (the cell matches origin byte-for-byte
+in 3 of 4 runs of this binary), but it is a determinism leak worth an owner.
+
+| Tier | Cell | net | better | worse | verdict |
+|---|---|---|---|---|---|
+| smoke | bruna d0 / d3 / d5 | -89 / -3 / -2 | 60 / 3 / 2 | 0 | as 06b (swap timing) |
+| smoke | bruna2hg d3 | **+1** | 0 | 1 | gi43 5->6, as 06b: stage 1 (d5 b100) T5 = budget churn |
+| regression | bruna d0 | -75 | 61 | 0 | as 06b |
+| regression | bruna d3 / d5 s2002 | 0 / 0 | 0 | 0 | digest-only, as 06b |
+| regression | bruna d3 / d5 s3003 | 0 / 0 | 1 / 1 | 1 / 1 | gi35 4->5, as 06b: stage 1 (d4 b100) T5, stage 2 (d8 b0) T4 = budget churn |
+
+**Deck nets:** Bruna smoke -94 on the 1P keys; **bruna2hg +1 on its own** (deck incl. 2HG -93);
+regression -75. Same open question as 06b, same default taken (2HG treated as a variant of deck Bruna).
+
+**Reference gate (`--strict`):** 120 ok / 369 repaired / 1 play-drift / 0 enum-gap / 0 contract-fail
+(490 refs). The play-drift is the pre-existing Mirrorwing v2 `claude_s51_gi50` (T5 vs T4), unchanged.
+
+**Accepted** smoke then regression with `--accept-with-regressions` (the overnight 2026-10-05 note is
+kept; smoke/regression had no prior notes on origin). `check_gt_logs.py` 668 consistent / 0 stale.
+
+**Re-run after origin moved a third time (to `590e8ee6`+refs, tip `96be1248`):** `590e8ee6` turns
+`MTG_ATTACK_BODY_TAP_ORDER` on in HUMAN PLAY only (autonomous play and rollouts unchanged). Rebased
+cleanly (no GT conflict: origin did not touch GT), `./build.sh`, smoke + regression again
+(`.../bruna_suite_2026-10-06c/r3/`): **smoke 118/118 PASS** against the GT accepted above;
+**regression 164/165**, the reference gate now **fully clean** -- 123 ok / 371 repaired / **0
+play-drift** / 0 enum-gap / 0 contract-fail (494 refs, incl. the user's new Bruna refs; the Mirrorwing
+v2 s51_gi50 drift is fixed by `590e8ee6`). The one FAIL is `selesnya_regression_d0_s2002`
+digest-only (avg 6.2390 unchanged): gi984 T6 -> T6 with a different line. It does NOT reproduce --
+two standalone batches of the cell give GT's exact digest `1c4dcd7e` and gi984's GT line -- so,
+like the smoke gi74 flicker above, it is a pooled-run-only Selesnya effect. Nothing was accepted
+from this run (GT already holds the accepted values; accepting would record the flicker).
+**Open (surfaced, not blocking):** two Selesnya cells, at d3 AND at d0 (greedy, `units=0`), have now
+each produced a non-reproducible play change in a full pooled run, both in cells `9f3b5b13` (Genesis
+Wave X growth) moved; that commit adds no static/thread-local state, so the leak is elsewhere --
+some per-worker state carried between games of different decks. Worth an owner; not this branch's
+to fix and it changes no Bruna result.
