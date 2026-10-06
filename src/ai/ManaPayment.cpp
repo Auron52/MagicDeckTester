@@ -841,6 +841,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
     PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green, cost.ManaValue());
+    // ...and this payment's OWN coloured pips as the line hold counts them (cost_in, before any
+    // float is spent: the hold carries the cast's full cost until it lands). The generic-pip
+    // readers of the hold take them back out -- see g_pay_own_line_pips in SpellEffects.h.
+    PayOwnPipsScope _pops(cost_in);
     const int pay_full_mv = cost.ManaValue();   // restored before the backtracker (see pay())
 
     // SNOW-pip restriction (see ManaCost::snow_pips): while the greedy loop is settling an {S}
@@ -974,13 +978,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               // exactly as before. g_line_unpaid_cost is zero outside a plan apply, and the whole
               // hold is gated on HumanPlayActive(), so autonomous play is byte-identical.
               static const bool s_lfh = EnvOn("MTG_PAY_LINE_FLOAT_HOLD", true);
-              const ManaCost& lu = g_line_unpaid_cost;
               if (any && s_lfh && HumanPlayActive() && floating.colorless == 0 && floating.wild == 0)
               {
-                  // Colours the rest of the line still owes AFTER this cast's own pips.
-                  const int later[5] = { lu.white - cost_in.white, lu.blue - cost_in.blue,
-                                         lu.black - cost_in.black, lu.red - cost_in.red,
-                                         lu.green - cost_in.green };
+                  // Colours the rest of the line still owes AFTER this cast's own pips (the shared
+                  // definition; clamping at zero changes neither comparison below).
+                  int later[5];
+                  LineOwedAfterOwnPips(later);
                   const int fl[5] = { floating.white, floating.blue, floating.black,
                                       floating.red, floating.green };
                   bool all_needed = floating.Total() > 0;

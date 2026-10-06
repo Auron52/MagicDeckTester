@@ -1,0 +1,78 @@
+{
+ "_comment": [
+  "USER frame, 2026-10-06 (play viewer, Hinata2 seed 5 gi=4 T6, logs/play/rejections/",
+  "Hinata2_cod_s5_gi4_t6.json) -- the residual of the Spasm/Sol Ring fix: with no land drop,",
+  "'cast=Reality Spasm;cast=Preordain;cast=Crackle with Power' was still 'unsupported'.",
+  "",
+  "Board: floating {U}, ONE untapped Island, two Forbidden Orchards + Izzet Boilerworks TAPPED,",
+  "Hinata out. Spasm (X=4, {U}{U} under Hinata) untaps all four lands: Island {U}, Boilerworks",
+  "{U}{R}, two Orchards (any colour) = 5 mana. Crackle X=1 at one target ({3}{R}{R} - 1 =",
+  "{2}{R}{R}) + Preordain {U} = 5: exactly payable, but only if Crackle's generic leaves a {U}.",
+  "",
+  "HAND ORDER IS LOAD-BEARING: Crackle and Preordain tie at generic cast rank 20, so the",
+  "sequential-payability walk pays them in candidate (hand) order -- Crackle first, as in the real",
+  "frame. With Preordain first the walk pays it off Boilerworks and never hits the defect.",
+  "",
+  "ROOT CAUSE: during a payment g_line_unpaid_cost still includes the cast being paid. Crackle's",
+  "{R}{R} were settled first (Boilerworks -> {R} + floating {U}; Orchard -> {R}); its generic pips",
+  "then read the line as still owing {R}{R} (Crackle's OWN, already paid). LineDemandAnyPipColor",
+  "tapped the last Orchard for that phantom {R}, and ConsumeFloatingAny's surplus order spent the",
+  "floating {U} (surplus 0) ahead of the {R} (surplus -1): Preordain's {U} unpayable. Fix: the",
+  "generic-pip readers of the line hold subtract the payment's own coloured pips",
+  "(g_pay_own_line_pips / LineOwedAfterOwnPips, the definition the line-float hold already used).",
+  "",
+  "Discriminating: 'unsupported' on the pre-fix binary, 'accept' with the fix."
+ ],
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "deck": "decks/Hinata2/Hinata2.cod",
+ "turn": 6,
+ "on_the_play": false,
+ "max_turns": 6,
+ "active_life": 18,
+ "opponent_life": 19,
+ "floating_mana": {
+  "U": 1
+ },
+ "battlefield": [
+  {
+   "name": "Forbidden Orchard",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Forbidden Orchard",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Izzet Boilerworks",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Hinata, Dawn-Crowned",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Crackle with Power",
+  "Reality Spasm",
+  "Preordain"
+ ],
+ "library_filler": "Soulfire Eruption",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 100,
+ "validate_line": "cast=Reality Spasm;cast=Preordain;cast=Crackle with Power",
+ "expect_verdict": "accept"
+}

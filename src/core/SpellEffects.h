@@ -986,6 +986,47 @@ inline thread_local const int* g_generic_spend_budget = nullptr;
 // below can read it -- see the MTG_LINE_SURPLUS_GENERIC note at the drain site.
 extern thread_local ManaCost g_line_unpaid_cost;
 
+// THE PAYMENT'S OWN COLOURED PIPS, as the line hold still counts them (W,U,B,R,G). Every cast site
+// that binds g_line_unpaid_cost (both plan-apply paths, SubsetPayableSequential, CheckLine's walk)
+// decrements it only AFTER the cast's payment lands, so DURING that payment the line total still
+// includes the cast being paid. The greedy settles every coloured pip before any generic one, so by
+// the time a generic pip asks "what does the rest of the line still owe?", the cast's own coloured
+// pips are already paid -- counting them again inflates exactly the colours this cast just spent.
+// TapForCostSharedOnce publishes its cost_in here for the duration of one payment (PayOwnPipsScope);
+// zero everywhere else, so a reader outside a payment sees the plain line total.
+//
+// Found by the USER's Hinata2 seed 5 gi=4 T6 frame (2026-10-06): after Reality Spasm untapped
+// Island + Izzet Boilerworks + two Forbidden Orchards, Crackle with Power {2}{R}{R} paid its {R}{R}
+// (Boilerworks, Orchard) and then its two generic pips read the line as still owing {R}{R} --
+// Crackle's OWN, already paid. The last generic tapped the Orchard for {R} (the "owed" colour) and
+// spent the floating {U} on the generic, so Preordain {U} -- the line's only remaining pip -- was
+// unpayable and "Spasm; Preordain; Crackle" was refused as unsupported.
+inline thread_local int g_pay_own_line_pips[5] = { 0, 0, 0, 0, 0 };
+struct PayOwnPipsScope
+{
+    int prev[5];
+    explicit PayOwnPipsScope(const ManaCost& own)
+    {
+        for (int i = 0; i < 5; ++i) { prev[i] = g_pay_own_line_pips[i]; }
+        g_pay_own_line_pips[0] = own.white; g_pay_own_line_pips[1] = own.blue;
+        g_pay_own_line_pips[2] = own.black; g_pay_own_line_pips[3] = own.red;
+        g_pay_own_line_pips[4] = own.green;
+    }
+    ~PayOwnPipsScope() { for (int i = 0; i < 5; ++i) { g_pay_own_line_pips[i] = prev[i]; } }
+    PayOwnPipsScope(const PayOwnPipsScope&)            = delete;
+    PayOwnPipsScope& operator=(const PayOwnPipsScope&) = delete;
+};
+// Coloured pips (W,U,B,R,G) the REST of the line owes after the payment in progress -- the line hold
+// minus this payment's own pips, clamped at zero. The ONE definition of "later demand" shared by
+// every generic-pip reader of the line hold (the line-float hold, LineDemandAnyPipColor,
+// ConsumeFloatingAny's surplus order), so the three halves of one payment cannot disagree.
+inline void LineOwedAfterOwnPips(int out[5])
+{
+    const ManaCost& lu = g_line_unpaid_cost;
+    const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+    for (int i = 0; i < 5; ++i) { out[i] = std::max(0, owed[i] - g_pay_own_line_pips[i]); }
+}
+
 // Colours the human's REMAINING QUEUED line declared it still wants (a bitmask over
 // static_cast<int>(Color); defined in ManaPayment.cpp, bound around both plan-apply paths by
 // HumanUntapNeedScope). Redeclared here so EtbUntapLands' continuation-demand promotion below can
@@ -26110,13 +26151,17 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
     if (s_line_order && HumanPlayActive()
         && (lu.white + lu.blue + lu.black + lu.red + lu.green) > 0)
     {
+        // Surplus against what the line owes AFTER this payment's own (already-settled) coloured
+        // pips -- see g_pay_own_line_pips. Outside a payment the scope is zero: the plain line total.
+        int later[5];
+        LineOwedAfterOwnPips(later);
         struct Ent { Color c; int surplus; };
         Ent e[5] = {
-            { Color::White, floating.white - lu.white },
-            { Color::Blue,  floating.blue  - lu.blue  },
-            { Color::Black, floating.black - lu.black },
-            { Color::Red,   floating.red   - lu.red   },
-            { Color::Green, floating.green - lu.green },
+            { Color::White, floating.white - later[0] },
+            { Color::Blue,  floating.blue  - later[1] },
+            { Color::Black, floating.black - later[2] },
+            { Color::Red,   floating.red   - later[3] },
+            { Color::Green, floating.green - later[4] },
         };
         std::stable_sort(std::begin(e), std::end(e),
                          [](const Ent& a, const Ent& b) { return a.surplus > b.surplus; });
@@ -26164,8 +26209,11 @@ inline Color LineDemandAnyPipColor(const GameState& state, const std::vector<Col
 {
     static const bool s_on = EnvOn("MTG_PAY_LINE_TAP_COLOR", true);   // DEFAULT ON; =0 restores prod[0]
     if (!s_on || prod.size() < 2 || !HumanPlayActive()) { return fallback; }
-    const ManaCost& lu = g_line_unpaid_cost;
-    const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+    // What the REST of the line owes: this payment's own coloured pips are already paid by the time
+    // a generic pip is tapped (see g_pay_own_line_pips) -- counting them made a Forbidden Orchard
+    // tap for the {R} Crackle had just paid instead of keeping the {U} the line's Preordain needed.
+    int owed[5];
+    LineOwedAfterOwnPips(owed);
     if (owed[0] + owed[1] + owed[2] + owed[3] + owed[4] <= 0) { return fallback; }
     const ManaPool& r = state.floating_mana;
     const int have[5] = { r.white + payment_float.white, r.blue  + payment_float.blue,
