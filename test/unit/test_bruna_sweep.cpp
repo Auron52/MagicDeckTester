@@ -793,3 +793,77 @@ TEST_CASE("Aura host ranking: a mana creature the deck needs next turn is not co
     CHECK(SolveHostOf(b.s, "Colossification") == mother);
     (void)birds;
 }
+
+// ---- GREEDY AURA-SWAP TIMING (MTG_SOLVE_COMBAT_SWAP, USER 2026-10-06) ------------------------------
+// Bruna d0 smoke gi12 / gi885 / gi681: the greedy Solve swapped Arcanum Wings -> Colossification in the
+// MAIN phase onto a creature that could attack; the ETB tap cost the attack (gi885: Mother with Eldrazi
+// Conscription, opponent at 5, no attack T7). The same Aura brought in by the IN-COMBAT swap taps an
+// attacker that stays in combat (CR 506.4). The control arm (slot forced 0) is the pre-fix policy.
+namespace
+{
+struct SolveSwapArm
+{
+    std::int8_t prev;
+    explicit SolveSwapArm(bool on) : prev(heurarm::t_arm[heurarm::SOLVE_COMBAT_SWAP])
+    { heurarm::t_arm[heurarm::SOLVE_COMBAT_SWAP] = on ? 1 : 0; }
+    ~SolveSwapArm() { heurarm::t_arm[heurarm::SOLVE_COMBAT_SWAP] = prev; }
+};
+
+bool SolveTakesSwap(const GameState& s)
+{
+    const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+        TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    for (const Action& a : plan.actions) { if (a.kind == Action::Kind::AuraSwap) { return true; } }
+    return false;
+}
+
+BoardBs WingsOnMother(bool mother_sick)
+{
+    BoardBs b;
+    const int mother = b.Put("Mother of Runes", /*tapped=*/false, /*sick=*/mother_sick);
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = mother;
+    b.s.battlefield.push_back(w);
+    // Exactly the swap's {2}{U}: Chancery {W}{U} + Forest.
+    b.Put("Azorius Chancery");
+    b.Put("Forest");
+    b.Hand("Colossification");
+    return b;
+}
+}   // namespace
+
+TEST_CASE("Greedy Aura-swap timing: no pre-combat Colossification swap onto a would-be attacker")
+{
+    BoardBs b = WingsOnMother(/*mother_sick=*/false);
+    { SolveSwapArm off(false); CHECK_MESSAGE(SolveTakesSwap(b.s), "control: the pre-fix greedy takes the main-phase swap"); }
+    { SolveSwapArm on(true);   CHECK_FALSE(SolveTakesSwap(b.s)); }
+    // The combat window still brings it in: the pin the d0 runner / rollout leaf set.
+    TurnSolver::Plan none;
+    TurnSolver::PinRolloutAuraSwap(b.s, /*is_pre_combat=*/true, none);
+    CHECK(none.combat_aura_swap_choice == 70);
+}
+
+TEST_CASE("Greedy Aura-swap timing: a host that cannot attack keeps the main-phase swap")
+{
+    BoardBs b = WingsOnMother(/*mother_sick=*/true);
+    SolveSwapArm on(true);
+    CHECK(SolveTakesSwap(b.s));
+}
+
+// s9420000 gi965: the Wings host is Birds of Paradise and only the Birds' own mana completes the
+// {2}{U}. An attacking Birds cannot tap for the combat swap, so the main-phase swap (paid in the ETB
+// respond window) is the only way Colossification comes in this turn -- it is kept.
+TEST_CASE("Greedy Aura-swap timing: a swap only a mana-creature host can pay stays in the main phase")
+{
+    BoardBs b;
+    const int birds = b.Put("Birds of Paradise");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = birds;
+    b.s.battlefield.push_back(w);
+    b.Put("Azorius Chancery");   // {W}{U}: one short of {2}{U} without the Birds
+    b.Hand("Colossification");
+    SolveSwapArm on(true);
+    CHECK(SolveTakesSwap(b.s));
+}

@@ -30543,6 +30543,57 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, c
     return p;
 }
 
+// GREEDY AURA-SWAP TIMING (MTG_SOLVE_COMBAT_SWAP, USER 2026-10-06: "I would fix depth-0 for
+// colossification to improve our ranking"). Solve's candidate list holds the MAIN-PHASE Arcanum Wings
+// swap (CollectActions' AuraSwap, which brings in AuraSwapPick's main-phase pick). When that pick --
+// or, for a swap CHAIN of K, any of the ranking's top K -- carries an ETB "tap enchanted creature"
+// (Colossification) and the host is a creature that could ATTACK this turn, the main-phase swap taps
+// the would-be attacker and costs its whole attack for nothing: the same Aura brought in by the
+// IN-COMBAT swap (after attackers are declared) taps an attacking creature, which stays in combat
+// (CR 506.4) and deals the +20 THIS turn. Bruna d0 smoke gi12 (Bruna 5/5 swapped T5 main -> no attack,
+// won T6; the combat swap is lethal T5), gi885 (Mother with Eldrazi Conscription, opp at 5, swapped
+// Colossification in main -> no attack T7), seed 9300000 gi681 (Mother, T7 -> T5). So the greedy
+// policy drops it from its chosen plan (SolveUncached's materialize_best, when the combat swap stays
+// payable without tapping an attacker) and the swap is left to the combat window -- the rollout leaf's
+// PinRolloutAuraSwap and, with this flag, the d0 runner's pin (AIEngine). A host that cannot attack (sick, already tapped, a dork whose ETB tap is
+// pending) keeps the main swap: there the tap costs nothing and the +20 is next turn either way. The
+// ranking the host key prices Colossification's tap with (AuraPlanHostKey) is untouched; this is the
+// greedy policy's WINDOW choice only. The searched tree keeps both windows (swap variants are
+// branched there; Solve is not called inside the search window -- GreedyPermit).
+static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::AuraSwap) { return false; }
+    const int me = state.active_player_index;
+    const int wnum = a.sac_source_id;
+    int host = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.m_number == wnum && p.controller_index == me) { host = p.aura_attached_to; break; } }
+    if (host == 0) { return false; }
+    const Permanent* hp = nullptr;
+    for (const Permanent& p : state.battlefield) { if (p.card.m_number == host) { hp = &p; break; } }
+    if (hp == nullptr || hp->controller_index != me || hp->tapped || hp->etb_tap_pending) { return false; }
+    if (!CanAttackFull(*hp, state.battlefield, me)) { return false; }
+    const std::vector<Card>& hand = state.players[me].hand;
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        const Card& c = hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        if (cd && cd->params.is_aura && AuraCouldEnchant(state, cd->params, *hp)) { legal.push_back(i); }
+    }
+    if (legal.empty()) { return false; }
+    const std::vector<int> ranked = ResolveProvider(state).AuraSwapRanking(
+        state, me, wnum, host, /*host_attacking=*/false, legal);
+    const int k = std::max(1, a.chosen_x);   // a chain of K brings in the ranking's top K
+    for (int r = 0; r < k && r < static_cast<int>(ranked.size()); ++r)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(ranked[static_cast<std::size_t>(r)])]);
+        if (cd && cd->params.aura_etb_tap_host) { return true; }
+    }
+    return false;
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
                                             const GreedyPermit& permit)
 {
@@ -30760,6 +30811,35 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // shared damage key puts them (see RetargetSolveAuraHosts). Self-gating: no creature Aura
         // with two candidate hosts in the plan -> nothing scored, nothing changes.
         RetargetSolveAuraHosts(state, is_pre_combat, cands, best_sel, pre.aura_shroud_src, best.actions);
+        // Greedy Aura-swap timing (see PrecombatSwapTapsAttacker): the chosen plan's pre-combat swap
+        // that would tap a would-be attacker is left to the combat window -- but only when the combat
+        // swap is still payable: its cost on top of everything else the plan casts must fit the supply
+        // left once every would-be attacker is tapped (an attacking mana creature cannot tap for it in combat -- Bruna d0
+        // s9420000 gi965: Birds carried the Wings, attacked, and the {2}{U} was gone; the main swap
+        // paid with Birds' own mana in the respond window). When it does not fit, the main swap is
+        // the only way the Aura comes in this turn, so it is kept. Self-gating: no AuraSwap -> no-op.
+        if (is_pre_combat && SolveCombatSwapOn())
+        {
+            for (std::size_t q = 0; q < best.actions.size(); ++q)
+            {
+                const Action& sw = best.actions[q];
+                if (sw.kind != Action::Kind::AuraSwap || sw.chosen_x >= 2
+                    || !PrecombatSwapTapsAttacker(state, sw)) { continue; }
+                ManaCost total;
+                for (const Action& o : best.actions) { AddManaCost(total, o.cost); }
+                // The combat supply: every creature that could attack is tapped by its attack (a copy
+                // marks them so); sick creatures and non-creature sources still pay.
+                GameState cs = state;
+                for (Permanent& cp : cs.battlefield)
+                {
+                    if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
+                        && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
+                }
+                if (!BuildNonCreaturePool(cs).CanPay(total)) { continue; }
+                best.actions.erase(best.actions.begin() + static_cast<std::ptrdiff_t>(q));
+                break;
+            }
+        }
         ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
         return best;
     };

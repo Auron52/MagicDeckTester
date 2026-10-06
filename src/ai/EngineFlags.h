@@ -118,6 +118,16 @@ inline bool AttackBodyTapOrderOn(bool human_play)
     return heurarm::Flag(heurarm::ATTACK_BODY_TAP_ORDER, explicit_set ? env_on : human_play);
 }
 
+// MTG_SOLVE_COMBAT_SWAP -- DEFAULT ON; =0 reverts. The greedy policy's Aura-swap TIMING (USER
+// 2026-10-06): Solve drops a pre-combat Arcanum Wings swap that would bring a host-tapping Aura onto
+// a creature that could attack (the swap belongs in combat, after attackers are declared) when the
+// combat swap stays payable without tapping an attacker, and the d0 runner pins that combat swap. Read by TurnSolver (Solve) and AIEngine (the d0 pin): one reader.
+inline bool SolveCombatSwapOn()
+{
+    static const bool env_on = EnvOn("MTG_SOLVE_COMBAT_SWAP", true);
+    return heurarm::Flag(heurarm::SOLVE_COMBAT_SWAP, env_on);
+}
+
 // MTG_NEEDS_TAP_ORDER -- DEFAULT OFF until measured. Needs-based mana-source choice: see the
 // ComputeNeedsDemandSupply header in ManaPayment.cpp. Read inside the shared payment, so executor
 // and rollout see one value; heurarm slot so a pooled batch can carry both arms.

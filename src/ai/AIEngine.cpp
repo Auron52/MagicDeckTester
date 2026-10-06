@@ -3671,6 +3671,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             execgreedy::Record(m_lookahead_depth, m_in_rollout);
             plan = TurnSolver::Solve(state, is_pre_combat_main,
                                      TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
+            // GREEDY AURA-SWAP TIMING (MTG_SOLVE_COMBAT_SWAP, USER 2026-10-06): the d0 runner pins the
+            // damage-max Arcanum Wings combat swap exactly as the rollout's horizon leaf does
+            // (PinRolloutAuraSwap) -- Solve no longer takes a pre-combat swap that taps a would-be
+            // attacker, so the combat window is where that Aura comes in. d0 only: this branch is the
+            // executor's own greedy decision, never a searched plan.
+            if (SolveCombatSwapOn()) { TurnSolver::PinRolloutAuraSwap(state, is_pre_combat_main, plan); }
         }
     }
 
