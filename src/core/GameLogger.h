@@ -825,8 +825,12 @@ extern thread_local LifegainCountersChooser* g_play_lifegain_counters_chooser;
 // have taken. Returns the chosen index, or -1 to DECLINE -- Matron reads "you MAY search", so
 // declining is a legal line the engine could not previously express. Nulled by RevealLogPause for
 // every search/rollout/enumeration scope, so autonomous + batch play is byte-identical. Inert unless set.
+// `suggested` = indices into `candidates` the provider's NARROWED set holds (DecisionProvider::
+// TutorMarksSuggested -- Bruna's Glittering Wish); the viewer badges them, the order is untouched.
+// Empty for every other tutor.
 using TutorChooser = std::function<int(const GameState& state, int controller, const std::string& source,
-                                       const std::vector<std::string>& candidates, int heuristic_index)>;
+                                       const std::vector<std::string>& candidates, int heuristic_index,
+                                       const std::vector<int>& suggested)>;
 extern thread_local TutorChooser* g_play_tutor_chooser;
 
 // ---- Human-play draw sink (accurate per-draw reporting for the viewer history) -------------

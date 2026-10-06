@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -18,6 +19,7 @@
 #include "core/SpellEffects.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -516,4 +518,210 @@ TEST_CASE("Bruna sideboard: the discard policy sheds a regrowth before a real tu
     REQUIRE_FALSE(shed.empty());
     // CONTROL: before the change Reborn Hope sat in the tutor tier at 70, beside the Wish.
     CHECK(b.s.players[0].hand[static_cast<std::size_t>(shed.front())].m_number == hope);
+}
+
+// ---- Glittering Wish CANDIDATE RULE (USER spec 2026-10-06) ----------------------------------------
+// BrunaProvider::TutorCandidates narrows the 11-name wish pool; MTG_WISH_FULL_WIDTH (heurarm slot) is
+// the full-width control. Each case pairs the narrowed answer with the control arm's full list.
+namespace
+{
+struct WishFullWidthArm
+{
+    std::int8_t prev;
+    explicit WishFullWidthArm(bool on) : prev(heurarm::t_arm[heurarm::WISH_FULL_WIDTH])
+    { heurarm::t_arm[heurarm::WISH_FULL_WIDTH] = on ? 1 : 0; }
+    ~WishFullWidthArm() { heurarm::t_arm[heurarm::WISH_FULL_WIDTH] = prev; }
+};
+
+std::vector<std::string> WishCands(const BoardSb& b)
+{
+    return BrunaSb().TutorCandidates(b.s, 0, DefSb("Glittering Wish").params);
+}
+
+bool Has(const std::vector<std::string>& v, const std::string& n)
+{
+    return std::find(v.begin(), v.end(), n) != v.end();
+}
+
+// The USER's sideboard, an early board: two lands + a land in hand, Mother of Runes out.
+BoardSb EarlyWishBoard()
+{
+    BoardSb b;
+    for (const std::string& n : kNewSideboard) { b.Side(n); }
+    b.Put("Forest");
+    b.Put("Plains");
+    b.Put("Mother of Runes");
+    b.Hand("Forest");
+    b.Hand("Glittering Wish");
+    return b;
+}
+}   // namespace
+
+TEST_CASE("Glittering Wish rule: a narrowed set; the full-width control arm offers all eleven")
+{
+    BoardSb b = EarlyWishBoard();
+    WishFullWidthArm off(false);
+    const std::vector<std::string> c = WishCands(b);
+    CHECK(c.size() >= 1);
+    CHECK(c.size() <= 4);
+    for (const std::string& n : { "Linvala, Shield of Sea Gate", "Detention Sphere", "Vexing Shusher",
+                                  "Auroral Procession", "Reborn Hope", "Indrik Umbra" })
+    { CHECK_MESSAGE(!Has(c, n), "excluded name offered: ", n); }
+    // CONTROL: the full-width arm is GenericProvider's list verbatim (sideboard order, 11 names).
+    WishFullWidthArm on(true);
+    const std::vector<std::string> full = WishCands(b);
+    CHECK(full.size() == 11);
+    CHECK(full == GenericProvider().TutorCandidates(b.s, 0, DefSb("Glittering Wish").params));
+}
+
+TEST_CASE("Glittering Wish rule: never a duplicate Bruna (hand or battlefield)")
+{
+    WishFullWidthArm off(false);
+    {
+        BoardSb b = EarlyWishBoard();
+        const std::vector<std::string> c = WishCands(b);
+        REQUIRE_FALSE(c.empty());
+        CHECK(c.front() == "Bruna, Light of Alabaster");   // no Bruna anywhere: she leads
+    }
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Hand("Bruna, Light of Alabaster");
+        CHECK_FALSE(Has(WishCands(b), "Bruna, Light of Alabaster"));
+    }
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Put("Bruna, Light of Alabaster");
+        CHECK_FALSE(Has(WishCands(b), "Bruna, Light of Alabaster"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: the highest-power Aura is the primary (Almost Perfect, then Umbra)")
+{
+    WishFullWidthArm off(false);
+    BoardSb b = EarlyWishBoard();
+    std::vector<std::string> c = WishCands(b);
+    CHECK(Has(c, "Almost Perfect"));        // Mother 1/1 -> 9/10: +8 > Umbra's +4
+    CHECK_FALSE(Has(c, "Indrik Umbra"));
+    // Almost Perfect already fetched (gone from the sideboard): Indrik Umbra is the top-power Aura.
+    auto& sb = b.s.players[0].sideboard;
+    sb.erase(std::remove_if(sb.begin(), sb.end(),
+                            [](const Card& x) { return x.m_name.str() == "Almost Perfect"; }), sb.end());
+    c = WishCands(b);
+    CHECK(Has(c, "Indrik Umbra"));
+}
+
+TEST_CASE("Glittering Wish rule: a cheap Aura is NEVER the sole Aura pick, and only without a cheat path")
+{
+    WishFullWidthArm off(false);
+    // No cheat path (no Bruna, no Arcanum Wings): the cheap Aura may join as a SECOND Aura.
+    {
+        BoardSb b = EarlyWishBoard();
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Almost Perfect"));
+        CHECK(Has(c, "Unflinching Courage"));
+        CHECK_FALSE(Has(c, "Steel of the Godhead"));   // at most ONE cheap Aura (Courage +2 vs Steel's +1 on white Mother)
+    }
+    // Cheat path -- Bruna on the battlefield: only the highest-power Aura.
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Put("Bruna, Light of Alabaster");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Almost Perfect"));
+        CHECK_FALSE(Has(c, "Unflinching Courage"));
+        CHECK_FALSE(Has(c, "Steel of the Godhead"));
+    }
+    // Cheat path -- Arcanum Wings on the battlefield.
+    {
+        BoardSb b = EarlyWishBoard();
+        int mother = 0;
+        for (const Permanent& q : b.s.battlefield)
+        { if (q.card.m_name.str() == "Mother of Runes") { mother = q.card.m_number; } }
+        REQUIRE(mother > 0);
+        b.Put("Arcanum Wings", false, mother);
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Almost Perfect"));
+        CHECK_FALSE(Has(c, "Unflinching Courage"));
+    }
+    // Only cheap Auras left in the sideboard: neither is offered (never the sole Aura pick).
+    {
+        BoardSb b = EarlyWishBoard();
+        auto& sb = b.s.players[0].sideboard;
+        sb.erase(std::remove_if(sb.begin(), sb.end(), [](const Card& x)
+                 { return x.m_name.str() == "Almost Perfect" || x.m_name.str() == "Indrik Umbra"; }), sb.end());
+        const std::vector<std::string> c = WishCands(b);
+        CHECK_FALSE(Has(c, "Unflinching Courage"));
+        CHECK_FALSE(Has(c, "Steel of the Godhead"));
+        CHECK(Has(c, "Bruna, Light of Alabaster"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: Troyan only when mana is short")
+{
+    WishFullWidthArm off(false);
+    // Short: next turn = 2 lands + a land drop = 3 < 6 (Bruna / Almost Perfect).
+    {
+        BoardSb b = EarlyWishBoard();
+        CHECK(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+    // Not short: 6 lands + the drop = 7 >= 6, nothing pricier in hand.
+    {
+        BoardSb b = EarlyWishBoard();
+        for (int k = 0; k < 4; ++k) { b.Put("Forest"); }
+        CHECK_FALSE(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+        // ...but an Eldrazi Conscription {8} in hand makes it short again (7 < 8).
+        b.Hand("Eldrazi Conscription");
+        CHECK(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: other tutors keep GenericProvider's list (Open the Armory)")
+{
+    WishFullWidthArm off(false);
+    BoardSb b = EarlyWishBoard();
+    std::vector<Card> lib;
+    for (const std::string& n : { "Colossification", "Lightning Greaves", "Arcanum Wings", "Wild Growth" })
+    { lib.push_back(PlaceholderSb(n, b.next++)); }
+    b.s.players[0].library.assign(lib.begin(), lib.end());
+    const CardParams& armory = DefSb("Open the Armory").params;
+    CHECK(BrunaSb().TutorCandidates(b.s, 0, armory) == GenericProvider().TutorCandidates(b.s, 0, armory));
+    CHECK_FALSE(BrunaSb().TutorMarksSuggested(armory));
+    CHECK(BrunaSb().TutorMarksSuggested(DefSb("Glittering Wish").params));
+}
+
+TEST_CASE("Glittering Wish rule: cheap BODIES (Vexing Shusher + Linvala) only when no non-dork creature can carry the Auras")
+{
+    WishFullWidthArm off(false);
+    // No creature at all, Colossification in hand: the bodies join (Shusher {R/G}{R/G} 2/2, the cheapest;
+    // Linvala {1}{W}{U} 3/3, the hardest-hitting) -- and the cheap Aura does NOT (nothing to wear it).
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Forest");
+        b.Hand("Colossification");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Vexing Shusher"));                 // the cheapest body
+        CHECK(Has(c, "Linvala, Shield of Sea Gate"));    // the hardest-hitting body of mana value <= 3
+        CHECK_FALSE(Has(c, "Unflinching Courage"));
+    }
+    // Only mana dorks out (they tap for mana, they do not carry): still a body.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Avacyn's Pilgrim");
+        CHECK(Has(WishCands(b), "Vexing Shusher"));
+    }
+    // A non-dork creature on the battlefield (Mother of Runes): no body.
+    {
+        BoardSb b = EarlyWishBoard();
+        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+    }
+    // Shusher already fetched: Linvala is both the cheapest and the hardest-hitting body (one name).
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { if (n != "Vexing Shusher") { b.Side(n); } }
+        b.Put("Forest");
+        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+    }
 }

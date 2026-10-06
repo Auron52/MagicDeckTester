@@ -3364,15 +3364,21 @@ static void WriteLifegainCountersDecisionJson(std::ostream& os, const GameState&
 //     in one plan were handed the SAME name, so the second silently whiffed on a spent singleton.)
 // `heuristic_default` = the engine's pick, pre-selected in the viewer; -1 = decline, which is also
 // what a baked target that has left the zone defaults to (reproducing the old whiff for replays).
+// `suggested` (indices into `candidates`) = the provider's narrowed set (Bruna's Glittering Wish
+// candidate rule): emitted as `"suggested": true` on those candidates ONLY, so every other tutor's
+// payload is byte-identical. A badge in the viewer; the order is never changed.
 static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                    const std::vector<std::string>& candidates, int heuristic_default,
-                                   int decision_index)
+                                   int decision_index, const std::vector<int>& suggested)
 {
     DecisionJson d(os, decision_index);
     d.Type("tutor_etb").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
-        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i]); os << " }";
+        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i]);
+        if (std::find(suggested.begin(), suggested.end(), static_cast<int>(i)) != suggested.end())
+        { os << ", \"suggested\": true"; }
+        os << " }";
     });
     d.Note("reply a candidate index to search that card up, or -1 to decline the optional search. "
            "Default = the AI's pick.");
@@ -5640,7 +5646,8 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
     // ground truth is unaffected.
     tutor_chooser =
         [this](const GameState& s, int controller, const std::string& source,
-            const std::vector<std::string>& candidates, int heuristic_index) -> int
+            const std::vector<std::string>& candidates, int heuristic_index,
+            const std::vector<int>& suggested) -> int
         {
             (void)controller;
             int di = static_cast<int>(cursor);
@@ -5656,14 +5663,14 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTutorDecisionJson(ss, s, source, candidates, heuristic_index, di);
+                    WriteTutorDecisionJson(ss, s, source, candidates, heuristic_index, di, suggested);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return chosen;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTutorDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
+            WriteTutorDecisionJson(std::cout, s, source, candidates, heuristic_index, di, suggested);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             if (AwaitMoreChoices()) { goto claude_retry_16; }
