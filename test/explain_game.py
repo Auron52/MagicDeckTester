@@ -34,7 +34,7 @@ def load_cases(path=CASES):
     txt = open(path).read()
 
     def amap(name):
-        m = re.search(r"declare -A " + name + r"=\((.*?)\)", txt, re.S)
+        m = re.search(r"declare -A " + name + r"=\((.*?)\n\)", txt, re.S)
         if not m:
             return {}
         # Values are shell-quoted and may contain SPACES ("decks/Mirrorwing Dragon/..."); a bare
