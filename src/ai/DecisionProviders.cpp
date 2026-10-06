@@ -2961,6 +2961,20 @@ static int SnowScryVariant()
 //                turn's mana (Rimefeather Owl, Rimescale Dragon early) -> bottom. Else keep.
 // "Threat" and "accelerant" are the user's discard buckets (CleanupDiscardCandidates), param-driven.
 struct SnowScryCall { int firm; bool lean; };
+// DIAGNOSTIC ONLY (attribution of the USER rule's slower games, 2026-10-06): MTG_SNOW_SCRY_USER_ABLATE
+// is a bitmask that swaps ONE clause for OUTLOOK's version -- 1 = no Frost Augur draw-source exception,
+// 2 = accelerants kept like OUTLOOK (castable soon, no threat/sink test), 4 = the slow-card cutoff is
+// next turn's mana + 1 (OUTLOOK's), 8 = no firm Treefolk keep (it falls to the cutoff), 16 = an accelerant with a sink is kept with NO
+// accelerant in play even without a threat ("good early in the game if you have none"). Unset = 0.
+static int SnowUserScryAblate()
+{
+    static const int m = []
+    {
+        const char* e = std::getenv("MTG_SNOW_SCRY_USER_ABLATE");
+        return (e == nullptr || *e == '\0') ? 0 : std::atoi(e);
+    }();
+    return m;
+}
 static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, const CardDefinition& td,
                                  const Card& top_card)
 {
@@ -2978,7 +2992,7 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
 
     if (!td.card.IsLand() && prov.NeverCast(td)) { return { 0, false }; }
 
-    int board_mana = 0, draw_sources = 0;
+    int board_mana = 0, draw_sources = 0, board_accel = 0;
     bool same_name = false, threat_present = false;
     for (const Permanent& p : s.battlefield)
     {
@@ -2987,6 +3001,7 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
         if (p.card.IsLand() || is_accel(*d)) { ++board_mana; }
+        if (is_accel(*d)) { ++board_accel; }
         if (d->params.tap_draw_cost.has_value()) { ++draw_sources; }
         // A threat ALREADY IN PLAY counts: Slumber and the Treefolk grow with every snow permanent we
         // add, so an accelerant (itself snow) feeds them. USER 2026-10-06: the snow permanents "can
@@ -3015,7 +3030,9 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
     if (td.card.HasSupertype(Supertype::Legendary) && same_name) { return { 0, false }; }
 
     const int next_mana = board_mana + ((drop_open && lands_in_hand >= 1) ? 1 : 0) + (spare_lands >= 1 ? 1 : 0);
-    if (is_threat(td) && td.params.pt_equals_snow_permanents_you_control)
+    const int ablate = SnowUserScryAblate();
+    const int cutoff = next_mana + ((ablate & 4) ? 1 : 0);
+    if (is_threat(td) && td.params.pt_equals_snow_permanents_you_control && !(ablate & 8))
     {
         // "no means to play it": a coloured pip nothing on board or among the lands in hand produces.
         auto can_make = [&](Color want)
@@ -3038,15 +3055,20 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
     if (is_draw(td))
     {
         const bool augur = td.params.tap_draw_cost.has_value() && td.card.IsCreature();
-        return { -1, !(augur && draw_sources >= 2) };
+        return { -1, !(augur && draw_sources >= 2 && !(ablate & 1)) };
     }
     // Accelerant (USER 2026-10-06): "good unless we are lacking threats", "good early in the game if
     // you have none", "If they let you cast a Treefolk a turn earlier that is great. But you need to
     // have something to use their mana for. Acceleration that goes into nothing is a waste." -> keep
     // it only when a threat exists AND the hand's spells cost more than next turn's mana (a sink). An
     // early hand with no accelerant is normally exactly that state; a flooded late hand is not.
-    if (is_accel(td)) { return { -1, threat_present && hand_demand > next_mana }; }
-    if (CleanupDiscardManaValue(top_card) > next_mana) { return { -1, false }; }
+    if (is_accel(td))
+    {
+        if (ablate & 2) { return { -1, CleanupDiscardManaValue(top_card) <= next_mana + 1 }; }
+        if (ablate & 16) { return { -1, (threat_present || board_accel == 0) && hand_demand > next_mana }; }
+        return { -1, threat_present && hand_demand > next_mana };
+    }
+    if (CleanupDiscardManaValue(top_card) > cutoff) { return { -1, false }; }
     return { -1, true };
 }
 

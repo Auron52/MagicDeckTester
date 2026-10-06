@@ -116,6 +116,24 @@ The USER rule matches OUTLOOK overall and leads on the searched cells, but moves
 (48 slower vs 23, mostly d0). With its firm calls pruning, the land-drop search has almost nothing
 left to branch on and buys nothing (+1/-1 game) for 5% more units.
 
+### Clause attribution at d0 (`MTG_SNOW_SCRY_USER_ABLATE`, diagnostic; `logs/snow_scry_ab/ablate`)
+
+Each bit swaps one USER clause for OUTLOOK's; all four together reproduce OUTLOOK's digest exactly, so
+these four clauses ARE the difference. Seed 8106000, 2,000 games, paired against the full USER rule
+(positive = removing the clause hurts):
+
+| clause swapped out | delta | faster / slower |
+|---|---|---|
+| 1 Frost Augur draw-source exception | +0.0030 | 9 / 16 |
+| 2 accelerant threat + mana-sink test | -0.0040 | 19 / 12 |
+| 4 strict "castable by next turn" cutoff | +0.0025 | 1 / 6 |
+| 8 Treefolk firm keep | +0.0035 | 2 / 8 |
+
+All within ~1 se. The accelerant clause is the only one leaning costly, and its THREAT half is vacuous
+here: every Snow scry comes from a Slumber in play, which is itself a threat (bit 16, "keep with no
+accelerant in play even without a threat", is byte-identical). So the cost is the MANA-SINK half -- an
+accelerant that buys no castable mana is still a snow permanent toward Slumber's ten and the Treefolk.
+
 ## Status
 
 Levers default OFF; adoption (which heuristic, and whether the triggered scry is searched by default)
