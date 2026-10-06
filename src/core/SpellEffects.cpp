@@ -1599,7 +1599,12 @@ int AuraSwapPick(const GameState& state, int controller, int wings_number, bool 
 void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk_idx)
 {
     const int pin = state.scripted_combat_aura_swap;
+    // The FIXED Aura of a human-play deferred main-phase swap (TurnSolver::DeferHumanAuraSwapToCombat):
+    // the human named it when committing the line, so it comes in here without being asked again.
+    // -1 (every autonomous pin) = the damage-max pick, exactly as before.
+    const int pin_in = state.scripted_combat_aura_swap_in;
     state.scripted_combat_aura_swap = -1;   // consumed whether or not it fires
+    state.scripted_combat_aura_swap_in = -1;
     const bool human = g_play_dig_chooser != nullptr;
     if (pin < 0 && !human) { return; }
     // Which swap permanents to consider: the pinned one, or (human) every one we control.
@@ -1610,6 +1615,26 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !d->params.aura_swap_cost.has_value()) { continue; }
         if (human || p.card.m_number == pin % kAuraSwapRankStride) { wings_list.push_back(p.card.m_number); }
+    }
+    // ATTACKERS ARE ALREADY TAPPED HERE (CR 508.1f: "The active player taps the chosen creatures" as
+    // part of declaring attackers -- before attack triggers, and so before this window). The engine
+    // taps them only at combat damage (ResolveCombatDamage), so without this an attacking Birds of
+    // Paradise / Avacyn's Pilgrim paid the {2}{U} with mana it cannot make: an ILLEGAL combat swap,
+    // offered to the human (the dig prompt's affordability probe) and scored by the search's combat
+    // pin alike (found 2026-10-06 building the human swap timing; unit "CR 508.1f"). Vigilance keeps
+    // a creature untapped, as at damage. Idempotent with ResolveCombatDamage's own tap. Shared by both
+    // combat worlds, so lockstep. MTG_COMBAT_SWAP_TAPPED_ATTACKERS=0 restores the old payment.
+    // Only when a swap window is really open (a Wings is attached): human play reaches this function
+    // for EVERY deck (the dig chooser is always installed there), and nothing else here may change.
+    static const bool s_tap_attackers = EnvOn("MTG_COMBAT_SWAP_TAPPED_ATTACKERS", true);
+    if (s_tap_attackers && !wings_list.empty())
+    {
+        for (int ai : atk_idx)
+        {
+            if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
+            Permanent& ap = state.battlefield[static_cast<std::size_t>(ai)];
+            if (ap.controller_index == controller && !CreatureHasVigilance(ap, state)) { ap.tapped = true; }
+        }
     }
     for (const int wnum : wings_list)
     {
@@ -1628,7 +1653,26 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
                 && state.battlefield[static_cast<std::size_t>(ai)].card.m_number == host) { host_attacking = true; }
         }
         int pick = -1;
-        if (!human)
+        // The human's deferred swap: the named Aura, if it is still in hand and can still enchant
+        // the host (a Bruna gather may have put it onto Bruna first). Not found -> the ordinary
+        // window below (the human is asked; an autonomous pin takes the damage-max pick).
+        bool fixed_pick = false;
+        if (pin_in >= 0 && pin >= 0 && wnum == pin % kAuraSwapRankStride)
+        {
+            const Permanent* hp = nullptr;
+            for (const Permanent& p : state.battlefield) { if (p.card.m_number == host) { hp = &p; break; } }
+            const std::vector<Card>& hand = state.players[controller].hand;
+            for (int i = 0; hp && i < static_cast<int>(hand.size()); ++i)
+            {
+                const Card& hc = hand[static_cast<std::size_t>(i)];
+                if (hc.m_number != pin_in || hc.m_is_staged) { continue; }
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(hc);
+                if (cd && cd->params.is_aura && AuraCouldEnchant(state, cd->params, *hp)) { pick = i; fixed_pick = true; }
+                break;
+            }
+        }
+        if (fixed_pick) { }
+        else if (!human)
         {
             const int rank = pin / kAuraSwapRankStride;
             if (rank == 0) { pick = AuraSwapPick(state, controller, wnum, host_attacking); }
@@ -1707,7 +1751,15 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
             atk_nums.push_back((ai >= 0 && ai < static_cast<int>(state.battlefield.size()))
                                ? state.battlefield[static_cast<std::size_t>(ai)].card.m_number : -1);
         }
+        const std::string in_name = state.players[controller].hand[static_cast<std::size_t>(pick)].m_name.str();
         ApplyAuraSwap(state, controller, wnum, pick, /*respond_window=*/false);
+        if (fixed_pick && g_real_resolution)
+        {
+            EmitPlayEvent(state.turn_number, "aura_swap",
+                          wd->card.m_name.str() + " \xE2\x87\x84 " + in_name
+                              + ": your main-phase aura swap, applied in combat after attackers were declared"
+                              + (host_attacking ? " (the host is attacking -- its ETB tap costs no damage)" : ""));
+        }
         // REPAIR atk_idx: the swap erased the Wings permanent (the fb-paysac index-shift class).
         std::vector<int> fixed;
         for (int num : atk_nums)

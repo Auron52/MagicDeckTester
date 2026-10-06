@@ -1273,6 +1273,22 @@ inline bool HumanPlayActive()
     return s_env && !g_human_play_suppressed;
 }
 
+// HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: "it should be automatically applied in the attack
+// phase rather than the 1st main"). A main-phase Arcanum Wings swap the human commits that brings a
+// host-tapping Aura (Colossification) onto a creature that could attack is applied in the COMBAT swap
+// window after attackers are declared instead -- the same rule and affordability as the greedy's
+// MTG_SOLVE_COMBAT_SWAP (TurnSolver::HumanSwapDefersToCombat). DEFAULT ON; MTG_HUMAN_COMBAT_SWAP=0
+// or `--legacy-main-swap` restores the old main-phase timing. The CLI flag exists for REPLAY: a
+// reference recorded before this rule carries no `combat_swap_timing` key, and its replayers
+// (test/viewer_protocol_check.py) pass `--legacy-main-swap` so the recording replays exactly as
+// played. Human play only -- autonomous play never reaches the deferral.
+inline bool g_play_legacy_main_swap = false;
+inline bool HumanCombatSwapOn()
+{
+    static const bool s_env = EnvOn("MTG_HUMAN_COMBAT_SWAP", true);
+    return s_env && !g_play_legacy_main_swap;
+}
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit

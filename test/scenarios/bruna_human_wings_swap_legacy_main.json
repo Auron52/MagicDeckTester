@@ -1,0 +1,26 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": { "MTG_HUMAN_PLAY": "1", "MTG_HUMAN_COMBAT_SWAP": "0" },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "battlefield": [
+    { "name": "Mother of Runes", "controller": 0, "tapped": false },
+    { "name": "Arcanum Wings", "controller": 0, "tapped": false, "equips": "Mother of Runes" },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossification"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "human_lines": ["auraswap=Colossification"],
+  "expect_history_lacks": ["deferred to COMBAT"],
+  "expect_no_win": true,
+  "expect_opponent_life": 21,
+  "comment": "CONTROL for bruna_human_wings_swap_deferred_to_combat.json: the same human line under the PRE-RULE timing (MTG_HUMAN_COMBAT_SWAP=0, the env twin of --legacy-main-swap that replays references recorded before 2026-10-06). The main-phase swap taps Mother of Runes (Colossification's ETB), she cannot attack, nothing is dealt. Fails if the rule leaks into the legacy arm -- which would invalidate an old recording."
+}

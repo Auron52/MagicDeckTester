@@ -807,3 +807,72 @@ deck's shipped strength is untouched — that hand's autonomous digest is byte-i
 recorded human line that needs re-playing, not a regression. References are commit-only: it was not
 touched. Re-play and re-save it in the viewer, or set `MTG_HUMAN_AUTOCASH=1` to restore the old
 behaviour without a rebuild.
+
+## A host-tapping Aura swap committed in main 1 is applied IN COMBAT (2026-10-06)
+
+**User:** *"My recommendation for the viewer is that it should be automatically applied in the attack
+phase rather than the 1st main"* -- Arcanum Wings' swap into Colossification. Colossification's ETB
+taps its host, so a main-phase swap onto a creature that could attack costs that creature its whole
+attack; the same swap after attackers are declared taps an ATTACKING creature, which stays in combat
+(CR 506.4), and the +20 swings this turn. On a non-sick host it is usually the kill.
+
+**What happens.** When the human commits a pre-combat line containing `auraswap=<Aura>` and that Aura
+carries `aura_etb_tap_host`, the host is untapped / not ETB-tap-pending / `CanAttackFull`, and the
+{2}{U} stays payable in combat without any ATTACKER's mana (the real payer, the line's other costs
+first -- the affordability rule of the greedy's `MTG_SOLVE_COMBAT_SWAP`,
+`TurnSolver::HumanSwapDefersToCombat`), the swap leaves the committed line and the combat window is
+pinned to bring in exactly that Aura (`scripted_combat_aura_swap` + `scripted_combat_aura_swap_in`).
+`ApplyCombatAuraSwap` applies it without opening the `dig` prompt for that Wings (another attached
+Wings is still asked). Otherwise the swap stays in main 1 exactly as before.
+
+* **The menu says so before the click:** the plan summary reads `aura swap: Arcanum Wings ⇄
+  Colossification (in combat, after attacks)`, the plan JSON carries `"swap_in_combat": true` and the
+  swap action `"in_combat": true`; the board-activation flash and picker row say it too, and CheckLine's
+  `matched_summary` / variant labels carry the same suffix.
+* **The history says so twice:** a `aura_swap` event at commit ("deferred to COMBAT ...") and one in
+  combat ("your main-phase aura swap, applied in combat after attackers were declared"), beside the
+  ordinary swap event.
+* **Re-checked when main 1 ends** (`TurnSolver::SettleHumanDeferredSwap`): a later line may have spent
+  the mana. Still payable in combat -> kept; payable only now -> swapped in the MAIN phase after all
+  (history says why); not payable at all -> dropped with a warning (never left to fail silently in
+  combat). The swap is not re-offered in main 1 once deferred (it is committed).
+* **A swap-then-recast line** (the plan also casts a card of the Wings' name) keeps its main-phase swap.
+* **Bruna's gather** resolves before the swap window; if the human puts the named Aura onto Bruna from
+  hand there, the deferred swap finds it gone and the ordinary `dig` prompt opens instead.
+
+**"An attacker" is the set the engine will really declare** (the one refinement over the greedy's
+rule, which taps every creature that COULD attack): `DeclareAttackerIndices` on the board, evaluated
+with the combat pin set -- because with a swap pinned for combat the attack heuristic now HOLDS the
+mana creatures the {2}{U} needs (`HoldForCombatAuraSwap` in `DecisionProvider::AttackWith`,
+`MTG_COMBAT_SWAP_ATTACK_HOLD`, shared by both combat worlds): a 0-power Birds of Paradise whose {U} is
+the only blue stays home instead of swinging for nothing. The host must be in the set.
+
+**Two rules defects this found (fixed in the same change):**
+* **CR 508.1f -- attackers are tapped when declared.** The engine tapped them only at combat damage,
+  so in the swap window an attacking Birds / Pilgrim still paid the {2}{U}: the `dig` prompt's
+  affordability probe offered ILLEGAL swaps and the search's combat pin scored them.
+  `ApplyCombatAuraSwap` now taps the non-vigilant attackers before probing or paying
+  (`MTG_COMBAT_SWAP_TAPPED_ATTACKERS`, only when an attached Wings opens the window). The same class
+  remains open for firebreathing: `docs/design/attackers-tapped-at-declaration.md`.
+* **The attack default threw that mana away** -- the hold above is the legal way to keep it.
+
+**Replay of OLD recordings (an old recording must never be invalidated by a new behaviour).** The
+reference writer stamps `"combat_swap_timing": 1` on every game recorded under the rule.
+`test/viewer_protocol_check.py`'s `recording_rule_args` passes `--legacy-main-swap` for a reference
+WITHOUT the stamp, which restores the old main-phase timing (and the old summaries) for that replay.
+`MTG_HUMAN_COMBAT_SWAP=0` is the env twin. At adoption the only reference holding a main-phase
+Colossification swap was `references/suboptimal/Bruna/claude_s3_gi2` (T4, Wings on Avacyn's Pilgrim,
+opponent at 18, Birds the only blue). The gate is load-bearing there: with `--legacy-main-swap` it
+replays exactly as played (main-phase swap, T5 win); WITHOUT it the same recorded picks defer the swap
+to combat, the Birds stays home to pay, Pilgrim swings for 21 and the game is won on **T4** -- the
+line the user describes. (The user may want to re-play that game; it stays as recorded until then.)
+
+**Parity with the search.** The search keeps both windows in-tree: the main-phase `AuraSwap` action
+(its damage-max pick) and the in-combat pin variants (`Plan::combat_aura_swap_choice`, damage-max at
+the window). Human play offers every legal Aura in both windows; the combat prompt's default is the
+same damage-max pick (Bruna sweep fix H). The one deliberate asymmetry: a human can no longer make the
+(dominated) main-phase Colossification swap onto a would-be attacker when the combat swap is payable.
+
+Pinned by `test/unit/test_bruna_sweep.cpp` ("Human swap timing: ...") and the human-path scenarios
+`test/scenarios/bruna_human_wings_swap_{deferred_to_combat,legacy_main,unpayable_in_combat}.json`
+(the scenario harness's new `human_lines` option drives AIEngine's external-chooser path).

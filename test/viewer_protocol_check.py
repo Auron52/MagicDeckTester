@@ -372,6 +372,19 @@ def recorded_tap_prefs(decisions):
     return prefs
 
 
+def recording_rule_args(ref):
+    """Engine flags that make a replay follow the RULES the reference was recorded under, where a
+    later rule changed what the same picks do.
+
+    `combat_swap_timing` (2026-10-06, USER: Arcanum Wings -> Colossification "should be automatically
+    applied in the attack phase rather than the 1st main"): from then on a human's main-phase swap of
+    a host-tapping Aura onto a would-be attacker is applied in the COMBAT window. A recording made
+    before carries no key and may hold the old main-phase swap, so it is replayed with
+    --legacy-main-swap -- an OLD recording must never be invalidated by a NEW behaviour. Inert on
+    every deck without an Aura-swap card."""
+    return [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
+
+
 def side_channel_args(decisions, pin_lines=False, ordmap=None):
     """Reconstruct the keyed side-channel args a reference used, so a saved reordered/held game replays
     faithfully: --firebreathe "turn:count", --storage-hold "turn:num:val", --cast-order "ord:A|B" (the
@@ -1230,7 +1243,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     seed, gi = ref["seed"], ref["game_index"]
     # --firebreathe / --storage-hold / --cast-order the ref used (+ the recorded lines pinned by
     # name on the retry path; see side_channel_args).
-    side = side_channel_args(ref["decisions"], pin_lines=pin_lines)
+    side = side_channel_args(ref["decisions"], pin_lines=pin_lines) + recording_rule_args(ref)
     ordmap = OrdinalMap()
     force = force_arg(ref)   # reconstruct the recorded opening hand when the reference carries it
     # The reference's own decisions, in the order the positional stream used to address them. Under
@@ -1439,7 +1452,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
         # Translate the recording's ordinal for this frame into the replay's (see OrdinalMap). The
         # frame's own pick has not been applied yet, so its pins take effect from the NEXT replay.
         if rd.get("type") == "main_phase" and ordmap.learn(rd.get("main_ordinal"), dec.get("main_ordinal")):
-            side = side_channel_args(ref["decisions"], pin_lines=pin_lines, ordmap=ordmap)
+            side = (side_channel_args(ref["decisions"], pin_lines=pin_lines, ordmap=ordmap)
+                    + recording_rule_args(ref))
             if collect is not None:
                 collect["side"] = side
         # FIRST BOARD DIVERGENCE. The failure this file reports is wherever a recorded plan finally

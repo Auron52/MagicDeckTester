@@ -2048,6 +2048,57 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
 // and the lever wants a fresh second-main solve on the realized post-draw state. Never in
 // rollouts (their scoring twin is ApplySecondMainInSearch) and never under human play (the
 // human owns the rest of the phase).
+// MTG_TRACE=cswapwin (measurement only): see the call site in the main-phase entry. One line per
+// qualifying Wings: the host, its combat power, the team's, the opponent's life, and whether +20 on
+// the host alone (`lethal_host`) or with every would-be attacker (`lethal_team`) is lethal.
+static void TraceCombatSwapWindow(const GameState& state)
+{
+    const int me = state.active_player_index;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != me || w.def_absent || w.aura_attached_to == 0) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd == nullptr || !wd->params.aura_swap_cost.has_value()) { continue; }
+        const Permanent* hp = nullptr;
+        for (const Permanent& p : state.battlefield) { if (p.card.m_number == w.aura_attached_to) { hp = &p; break; } }
+        if (hp == nullptr || hp->controller_index != me || hp->tapped || hp->etb_tap_pending
+            || !CanAttackFull(*hp, state.battlefield, me)) { continue; }
+        int bonus = 0;
+        for (const Card& c : state.players[me].hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (cd && cd->params.is_aura && cd->params.aura_etb_tap_host && AuraCouldEnchant(state, cd->params, *hp))
+            { bonus = std::max(bonus, cd->params.aura_power_bonus); }
+        }
+        if (bonus <= 0) { continue; }
+        GameState cs = state;
+        int team = 0;
+        for (Permanent& cp : cs.battlefield)
+        {
+            if (cp.controller_index == me && !cp.tapped && cp.card.IsCreature()
+                && CanAttackFull(cp, state.battlefield, me))
+            { team += CombatPowerOf(cp, state); cp.tapped = true; }
+        }
+        bool payable = false, payable_host_only = false;
+        {
+            RevealLogPause quiet;
+            payable = TapForCostDirect(cs, *wd->params.aura_swap_cost, /*for_creature=*/false);
+            // Only the HOST attacks; every other creature may stay home and pay (a 0-power Birds).
+            GameState hs = state;
+            for (Permanent& hq : hs.battlefield) { if (hq.card.m_number == hp->card.m_number) { hq.tapped = true; } }
+            payable_host_only = TapForCostDirect(hs, *wd->params.aura_swap_cost, /*for_creature=*/false);
+        }
+        const int opp  = state.players[1 - me].life;
+        const int hpow = CombatPowerOf(*hp, state);
+        TRACE("cswapwin", "seed=%llu T%d host=%s pow=%d team=%d opp=%d payable=%d payable_host_only=%d "
+              "lethal_host=%d lethal_team=%d",
+              static_cast<unsigned long long>(state.game_seed), state.turn_number,
+              hp->card.m_name.str().c_str(), hpow, team, opp, payable ? 1 : 0, payable_host_only ? 1 : 0,
+              (payable && hpow + bonus >= opp) ? 1 : 0, (payable && team + bonus >= opp) ? 1 : 0);
+    }
+}
+
 bool AIEngine::WantsSecondMainReentry(const GameState& state) const
 {
     return M2FixModeFor(state) != 0 && !m_in_rollout && !HumanPlayActive() && m_m2_exec_drew;
@@ -2398,6 +2449,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // clairvoyant rollouts (bottoming / keep evaluation): those must play autonomously so the kept
     // hand reproduces the real search's game. m_in_rollout gates it off there (the rollout then
     // follows the normal autonomous search path, exactly like a goldfish rollout).
+    // MEASUREMENT (MTG_TRACE=cswapwin; off by default, no game effect): the REAL pre-combat main of a
+    // board where Arcanum Wings sits on a creature that could attack, a host-tapping Aura
+    // (Colossification) is in hand, and the {2}{U} swap stays payable in combat without an attacker's
+    // mana -- the "automatic win" the USER describes (2026-10-06). Joined with the game's win turn by
+    // the caller to measure whether the search finds that kill whenever it is on the table.
+    if (is_pre_combat_main && !m_in_rollout && m_shared_tt == nullptr && TRACE_ON("cswapwin"))
+    { TraceCombatSwapWindow(state); }
     const bool use_external = m_external_chooser != nullptr && !m_in_rollout;
     // UntapSecondMainLive: a deck whose only combat-generated resource is Jorn's untap plays main 2
     // on exactly the turns it fired -- the same predicate every simulated turn of the search reads.
@@ -2828,6 +2886,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
                 ReorderPlanCasts(chosen, ord);
             }
+            // HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: "it should be automatically applied in the
+            // attack phase rather than the 1st main"). A committed main-phase Arcanum Wings swap that
+            // brings a host-tapping Aura (Colossification) onto a creature that could attack moves to
+            // the combat swap window after attackers are declared -- the greedy's MTG_SOLVE_COMBAT_SWAP
+            // rule and affordability (TurnSolver::HumanSwapDefersToCombat). The menu summary already
+            // said "(in combat, after attacks)". Human play only (this branch); --legacy-main-swap /
+            // MTG_HUMAN_COMBAT_SWAP=0 keep the old timing for references recorded before it.
+            if (is_pre_combat_main)
+            {
+                std::string swap_label;
+                if (TurnSolver::DeferHumanAuraSwapToCombat(state, chosen, &swap_label))
+                {
+                    EmitPlayEvent(state.turn_number, "aura_swap",
+                                  swap_label + ": deferred to COMBAT -- swapped in automatically after "
+                                  "attackers are declared, so the host still attacks and the Aura's ETB "
+                                  "tap costs no damage");
+                }
+            }
             // THE REAL APPLY HALF of the COMBO OFF verify/apply pair. A plan carrying
             // combo_off_verified was proved a kill by a trial ApplyPlanDirect run inside a
             // ComboOffFinishScope; applying it WITHOUT that scope re-closes the finish gates, so the
@@ -2938,6 +3014,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
         if (!handed_back)
         {
+        // A deferred human Aura swap (above) is re-checked on the board the phase really ends with.
+        if (is_pre_combat_main) { TurnSolver::SettleHumanDeferredSwap(state); }
         // Grove of the Burnwillows drip -- the same end-of-pre-combat-main sweep the autonomous
         // executor (below, ~3716) and the rollout (ApplyPlanDirect) both run. This external-chooser
         // path returns before reaching that call, so human play never swept leftover drip lands;
@@ -3787,7 +3865,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
     if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
     if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
-    if (plan.combat_aura_swap_choice >= 0) { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; }
+    if (plan.combat_aura_swap_choice >= 0)
+    { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's

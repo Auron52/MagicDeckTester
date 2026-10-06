@@ -255,6 +255,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_tectonic_keep = -1;  // ...and its mode-B keep pin (same lockstep)
     state.scripted_bruna_gather = -1;   // searched Bruna gather subset is per-turn (same lockstep)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
+    state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;

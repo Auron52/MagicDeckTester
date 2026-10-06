@@ -348,7 +348,9 @@ static std::string AuraHostLabel(const GameState& s, int m_number)
     return (total <= 1 || ordinal == 0) ? name : (name + " #" + std::to_string(ordinal));
 }
 
-static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s)
+// `swap_in_combat` = the action index of a main-phase Aura swap human play will apply in the COMBAT
+// window instead (TurnSolver::HumanSwapDefersToCombat), -1 = none; that swap's label says so.
+static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s, int swap_in_combat = -1)
 {
     std::ostringstream os;
     // Pure dig line (human play): cycle a land / sacrifice Fiery Islet to draw -- show just the
@@ -489,7 +491,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; break;
             case Action::Kind::AuraSwap:
                 tag = "aura swap: " + EnchantTargetName(s, a.sac_source_id) + " \xE2\x87\x84 "
-                    + a.card_name.str(); break;
+                    + a.card_name.str();
+                if (swap_in_combat >= 0 && &a == &plan.actions[static_cast<std::size_t>(swap_in_combat)])
+                { tag += " (in combat, after attacks)"; }
+                break;
             case Action::Kind::JitteModeAbility:
             {
                 // Mode 3 (+2/+2) names no victim -- it pumps the EQUIPPED creature -- and carries a
@@ -1699,8 +1704,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     auto emit_plan = [&](size_t i, bool last)
     {
         const TurnSolver::Plan& p = plans[i];
+        // HUMAN-PLAY AURA-SWAP TIMING: a swap this line would apply in the combat window instead of
+        // here says so, on the summary and as a key (absent otherwise -> byte-identical payloads).
+        const int swap_in_combat = is_pre_combat ? TurnSolver::HumanSwapDefersToCombat(s, p) : -1;
         os << "    { \"index\": " << i << ", \"summary\": ";
-        JsonStr(os, SummarizePlan(p, s));
+        JsonStr(os, SummarizePlan(p, s, swap_in_combat));
+        if (swap_in_combat >= 0) { os << ", \"swap_in_combat\": true"; }
         // Structured land + cast list so the GUI can match a hand-assembled line against
         // the model's plans (and show, after a reject, exactly which lines it WOULD play).
         os << ", \"land\": ";
@@ -1995,7 +2004,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::PutFromHandAbility) { os << ", \"verb\": \"sfput\""; }
                 // Arcanum Wings' swap names the Aura brought IN (card_name, in HAND), so `cast=` would
                 // read as hard-casting it -- its own verb, like sfput.
-                else if (ac.kind == Action::Kind::AuraSwap)           { os << ", \"verb\": \"auraswap\""; }
+                else if (ac.kind == Action::Kind::AuraSwap)
+                {
+                    os << ", \"verb\": \"auraswap\"";
+                    // ...applied in the COMBAT window by this line (human-play swap timing): the
+                    // board-activation flash says so before the line is even committed.
+                    if (swap_in_combat == static_cast<int>(a)) { os << ", \"in_combat\": true"; }
+                }
                 else if (ac.kind == Action::Kind::Equip)              { os << ", \"verb\": \"equip\""; }
                 else if (ac.kind == Action::Kind::JitteModeAbility)
                 { os << ", \"verb\": \"jittemode\", \"mode\": " << ac.gy_exile_mode; }
@@ -4099,7 +4114,14 @@ if (!log_dir.empty())
     out << "{\n  \"seed\": " << seed << ", \"game_index\": " << game_index
         << ", \"win_turn\": " << (won ? win_turn : -1)
         << ", \"won\": " << (won ? "true" : "false")
-        << ",\n  \"mulligan\": " << mulligan_json << ",\n  \"decisions\": [\n";
+        << ",\n  \"mulligan\": " << mulligan_json;
+    // RECORDING-RULE STAMP: this game was played under the human-play Aura-swap timing rule
+    // (HumanCombatSwapOn -- a main-phase host-tapping swap onto a would-be attacker is applied in
+    // combat). A reference WITHOUT the key predates it, and its replayers pass --legacy-main-swap so
+    // it replays exactly as played (test/viewer_protocol_check.py). Additive key; omitted when the
+    // run itself was legacy, so re-writing an old recording does not mislabel it.
+    if (HumanCombatSwapOn()) { out << ", \"combat_swap_timing\": 1"; }
+    out << ",\n  \"decisions\": [\n";
     for (size_t i = 0; i < trace.size(); ++i)
     {
         out << "    " << trace[i] << (i + 1 < trace.size() ? ",\n" : "\n");
@@ -7452,11 +7474,94 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     GameEngine engine(ai);
     engine.SetLogger(&logger);
 
+    // Optional HUMAN-PLAY LINES ("human_lines": ["auraswap=Colossification", ...]): drive the main
+    // phases through AIEngine's EXTERNAL-CHOOSER path -- the one the play viewer and --claude-play
+    // commit through -- instead of the search. Each main-phase frame takes the next line, resolved
+    // against that frame's own menu by TurnSolver::CheckLine (as --validate-line does; a `choose`
+    // takes its first variant); once the list is used up every frame passes. Combat, discard and
+    // every other decision stay on the engine, as in the viewer. Needs "env": {"MTG_HUMAN_PLAY": "1"}.
+    // The history the viewer would show is captured (g_play_event_sink) so a fixture can assert it:
+    //   "expect_human_summary_contains": "...",   // the committed line's menu summary
+    //   "expect_history_contains": ["...", ...]    // the play-event narration of the whole run
+    const std::vector<std::string> human_lines = j.value("human_lines", std::vector<std::string>{});
+    std::size_t human_next = 0;
+    std::vector<std::string> human_summaries;
+    std::vector<PlayEvent>   human_events;
+    if (!human_lines.empty())
+    {
+        if (!HumanPlayActive())
+        { std::cerr << "scenario: \"human_lines\" needs \"env\": {\"MTG_HUMAN_PLAY\": \"1\"}\n"; return 2; }
+        g_play_hooks_installed = true;   // before any sink is bound (RevealLogPause's fast path)
+        g_play_event_sink      = &human_events;
+        ai.SetExternalChooser(
+            [&](const GameState& fs, std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
+            {
+                if (human_next >= human_lines.size()) { return -1; }
+                const std::string& line = human_lines[human_next++];
+                TurnSolver::LineCheck chk = TurnSolver::CheckLine(fs, is_pre, ParseLineSpec(line), &plans);
+                int idx = chk.plan_index;
+                if (idx < 0 && !chk.variants.empty()) { idx = chk.variants[0].plan_index; }
+                if (idx < 0 || idx >= static_cast<int>(plans.size()))
+                {
+                    std::cout << "scenario: human line \"" << line << "\" NOT offered on T" << fs.turn_number
+                              << (chk.reason.empty() ? "" : (" (" + chk.reason + ")")) << "\n";
+                    return -1;
+                }
+                const std::string sum = SummarizePlan(plans[static_cast<std::size_t>(idx)], fs,
+                    is_pre ? TurnSolver::HumanSwapDefersToCombat(fs, plans[static_cast<std::size_t>(idx)]) : -1);
+                std::cout << "scenario: human T" << fs.turn_number << (is_pre ? " main1" : " main2")
+                          << " plays [" << idx << "] " << sum << "\n";
+                human_summaries.push_back(sum);
+                return idx;
+            });
+    }
+
     const int win_turn = resume_at.empty()
         ? engine.PlayOut(state, max_turns)
         : engine.PlayOutFrom(state, max_turns, resume_at == "main1" ? GameEngine::ResumeAt::Main1
                                                                      : GameEngine::ResumeAt::Main2);
     logger.EndGame(win_turn);
+    if (!human_lines.empty())
+    {
+        g_play_event_sink = nullptr;
+        for (const PlayEvent& e : human_events)
+        { std::cout << "scenario:   hist T" << e.turn << " [" << e.kind << "] " << e.text << "\n"; }
+        if (j.contains("expect_human_summary_contains"))
+        {
+            const std::string need = j.at("expect_human_summary_contains").get<std::string>();
+            bool hit = false;
+            for (const std::string& h : human_summaries) { if (h.find(need) != std::string::npos) { hit = true; } }
+            if (!hit)
+            {
+                std::cout << "scenario: FAIL no committed human line's summary contains \"" << need << "\"\n";
+                return 1;
+            }
+            std::cout << "scenario: PASS (human summary contains \"" << need << "\")\n";
+        }
+        for (const auto& need : j.value("expect_history_contains", json::array()))
+        {
+            const std::string want_txt = need.get<std::string>();
+            bool hit = false;
+            for (const PlayEvent& e : human_events) { if (e.text.find(want_txt) != std::string::npos) { hit = true; } }
+            if (!hit)
+            {
+                std::cout << "scenario: FAIL history has no entry containing \"" << want_txt << "\"\n";
+                return 1;
+            }
+        }
+        for (const auto& bad : j.value("expect_history_lacks", json::array()))
+        {
+            const std::string bad_txt = bad.get<std::string>();
+            for (const PlayEvent& e : human_events)
+            {
+                if (e.text.find(bad_txt) != std::string::npos)
+                {
+                    std::cout << "scenario: FAIL history contains \"" << bad_txt << "\": " << e.text << "\n";
+                    return 1;
+                }
+            }
+        }
+    }
 
     const std::string log_out = j.value("log_out", std::string(""));
     if (!log_out.empty())
@@ -7982,7 +8087,8 @@ int main(int argc, char* argv[])
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
-        if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }    // #4: value-less, same trap as above
+        if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }
+        if (flag == "--legacy-main-swap")    { g_play_legacy_main_swap = true; continue; }   // replay a reference recorded before the human combat-swap timing rule (value-less)    // #4: value-less, same trap as above
         if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try
         {

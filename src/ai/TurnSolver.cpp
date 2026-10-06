@@ -24024,6 +24024,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     || p.def_absent) { continue; }
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (!pd || !pd->params.aura_swap_cost.has_value()) { continue; }
+                // Human play: this Wings' swap was already committed and deferred to the combat
+                // window (DeferHumanAuraSwapToCombat) -- offering it again would read as undone.
+                if (state.scripted_combat_aura_swap_in >= 0
+                    && p.card.m_number == state.scripted_combat_aura_swap % kAuraSwapRankStride) { continue; }
                 const Permanent* hp = nullptr;
                 for (const Permanent& q : state.battlefield)
                 { if (q.card.m_number == p.aura_attached_to) { hp = &q; break; } }
@@ -30589,6 +30593,68 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a); 
 // Bruna d0 s9420000 gi965: Birds carried the Wings, attacked, and the {2}{U} was gone; the main swap
 // paid with Birds' own mana in the respond window). Otherwise the main swap is the only way the
 // Aura comes in this turn and it is kept. Chains (K >= 2) are left alone. Self-gating.
+// THE COMBAT SWAP STAYS PAYABLE -- the one affordability rule both timing passes share (the greedy's
+// DeferAuraSwapToCombat and human play's HumanSwapDefersToCombat). The combat supply: every creature
+// that could attack is tapped by its attack (a copy marks them so); sick creatures and non-creature
+// sources still pay. The REAL payer then pays the plan's other costs in plan order and the swap last
+// -- a flat pool check was optimistic (~10% of deferred swaps went unpaid in combat on Bruna
+// regression s3003 gi35: colours the pool counted twice), and an unpaid combat swap loses the Aura
+// for the turn.
+//
+// `host` > 0 selects HUMAN play's attack set: instead of assuming every creature that could attack
+// does, tap exactly the creatures the engine will DECLARE on this board (DeclareAttackerIndices --
+// the very function GameEngine's combat calls, so a recorded --force-attackers pin is honoured too),
+// and require the swap's host to be among them (an Aura swap onto a creature that is not going to
+// attack gains nothing in combat). Human play needs the exact set: its attack declaration is the
+// engine's, and a 0-power Birds of Paradise the attack heuristic holds home for the pinned swap
+// (DecisionProvider::AttackWith -> HoldForCombatAuraSwap) is exactly the {U} that pays it
+// (references/suboptimal/Bruna/claude_s3_gi2 T4: Wings on Avacyn's Pilgrim, Birds the only blue --
+// the combat swap is the T4 kill, and the all-attackers approximation calls it unpayable).
+static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Plan& plan, std::size_t q,
+                                   int host = 0)
+{
+    const Action& sw = plan.actions[q];
+    GameState cs = state;
+    if (host > 0)
+    {
+        // Read OUTSIDE the RevealLogPause below: the pause nulls the --force-attackers pin. Declared
+        // WITH the combat pin this deferral would set, so the attack heuristic's hold for the swap's
+        // mana (DecisionProvider::AttackWith -> HoldForCombatAuraSwap) is part of the prediction.
+        GameState as = state;
+        if (as.scripted_combat_aura_swap < 0) { as.scripted_combat_aura_swap = sw.sac_source_id; }
+        const std::vector<int> atk = DeclareAttackerIndices(as);
+        bool host_attacks = false;
+        for (int i : atk)
+        {
+            if (i < 0 || i >= static_cast<int>(cs.battlefield.size())) { continue; }
+            Permanent& cp = cs.battlefield[static_cast<std::size_t>(i)];
+            if (cp.card.m_number == host) { host_attacks = true; }
+            cp.tapped = true;
+        }
+        if (!host_attacks) { return false; }
+    }
+    else
+    {
+        for (Permanent& cp : cs.battlefield)
+        {
+            if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
+                && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
+        }
+    }
+    RevealLogPause quiet;
+    bool payable = true;
+    for (std::size_t r = 0; r < plan.actions.size() && payable; ++r)
+    {
+        if (r == q) { continue; }
+        const Action& o = plan.actions[r];
+        if (o.cost.ManaValue() <= 0 && !o.cost.has_x) { continue; }
+        const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+        const bool for_creature = o.kind == Action::Kind::CastFromHand && od && od->card.IsCreature();
+        payable = TapForCostDirect(cs, o.cost, for_creature);
+    }
+    return payable && TapForCostDirect(cs, sw.cost, /*for_creature=*/false);
+}
+
 void TurnSolver::DeferAuraSwapToCombat(const GameState& state, bool is_pre_combat, Plan& plan)
 {
     if (!is_pre_combat || !SolveCombatSwapOn()) { return; }
@@ -30597,29 +30663,7 @@ void TurnSolver::DeferAuraSwapToCombat(const GameState& state, bool is_pre_comba
         const Action& sw = plan.actions[q];
         if (sw.kind != Action::Kind::AuraSwap || sw.chosen_x >= 2
             || !PrecombatSwapTapsAttacker(state, sw)) { continue; }
-        // The combat supply: every creature that could attack is tapped by its attack (a copy marks
-        // them so); sick creatures and non-creature sources still pay. The REAL payer then pays the
-        // plan's other costs in plan order and the swap last -- a flat pool check was optimistic
-        // (~10% of deferred swaps went unpaid in combat on Bruna regression s3003 gi35: colours the
-        // pool counted twice), and an unpaid combat swap loses the Aura for the turn.
-        GameState cs = state;
-        for (Permanent& cp : cs.battlefield)
-        {
-            if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
-                && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
-        }
-        RevealLogPause quiet;
-        bool payable = true;
-        for (std::size_t r = 0; r < plan.actions.size() && payable; ++r)
-        {
-            if (r == q) { continue; }
-            const Action& o = plan.actions[r];
-            if (o.cost.ManaValue() <= 0 && !o.cost.has_x) { continue; }
-            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
-            const bool for_creature = o.kind == Action::Kind::CastFromHand && od && od->card.IsCreature();
-            payable = TapForCostDirect(cs, o.cost, for_creature);
-        }
-        if (!payable || !TapForCostDirect(cs, sw.cost, /*for_creature=*/false)) { continue; }
+        if (!CombatSwapStaysPayable(state, plan, q)) { continue; }
         if (TRACE_ON("swapdefer"))
         {
             std::string acts;
@@ -30632,6 +30676,146 @@ void TurnSolver::DeferAuraSwapToCombat(const GameState& state, bool is_pre_comba
         }
         plan.actions.erase(plan.actions.begin() + static_cast<std::ptrdiff_t>(q));
         return;
+    }
+}
+
+// HUMAN-PLAY AURA-SWAP TIMING (HumanCombatSwapOn; USER 2026-10-06: "My recommendation for the viewer
+// is that it should be automatically applied in the attack phase rather than the 1st main"). The
+// human's main-phase plan names the Aura it swaps in (`auraswap=Colossification`). When that Aura's
+// ETB taps its host (aura_etb_tap_host) and the host could attack this turn, the main-phase swap
+// taps a would-be attacker for nothing; the same swap in the combat window (after attackers are
+// declared) taps an ATTACKING creature, which stays in combat (CR 506.4), so the +20 counts THIS
+// combat. The rule is the greedy's (DeferAuraSwapToCombat): the host is untapped, has no pending ETB
+// tap and CanAttackFull, and the combat swap stays payable without an attacker's mana
+// (CombatSwapStaysPayable) -- otherwise the main phase is the only window the Aura can come in this
+// turn and the swap stays there. Three human-only differences: the Aura is the NAMED one (the
+// human's pick, not the ranking's); "an attacker" is the creature set the engine will actually
+// DECLARE, which must include the host (the greedy approximates it by every creature that could
+// attack -- see CombatSwapStaysPayable's `host`); and a plan that also CASTS a card of the Wings'
+// name keeps its swap in main (a swap-then-recast line needs the Wings back in hand). Returns the
+// swap's action index, or -1. Pure: no state is changed.
+int TurnSolver::HumanSwapDefersToCombat(const GameState& state, const Plan& plan,
+                                        int* wings_out, int* aura_out)
+{
+    if (!HumanCombatSwapOn()) { return -1; }
+    const int me = state.active_player_index;
+    for (std::size_t q = 0; q < plan.actions.size(); ++q)
+    {
+        const Action& sw = plan.actions[q];
+        if (sw.kind != Action::Kind::AuraSwap || sw.chosen_x >= 2) { continue; }
+        const Permanent* wp = nullptr;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == sw.sac_source_id && p.controller_index == me) { wp = &p; break; } }
+        if (wp == nullptr || wp->aura_attached_to == 0) { continue; }
+        const Permanent* hp = nullptr;
+        for (const Permanent& p : state.battlefield) { if (p.card.m_number == wp->aura_attached_to) { hp = &p; break; } }
+        if (hp == nullptr || hp->controller_index != me || hp->tapped || hp->etb_tap_pending
+            || !CanAttackFull(*hp, state.battlefield, me)) { continue; }
+        // The Aura brought in: the human's named card (the first unstaged hand copy -- the same
+        // resolution the apply uses), or the ranking's pick for an autonomous-shaped action.
+        const std::vector<Card>& hand = state.players[me].hand;
+        int hi = -1;
+        if (sw.hand_index == -2) { hi = AuraSwapPick(state, me, sw.sac_source_id, /*host_attacking=*/false); }
+        else
+        {
+            for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+            {
+                const Card& c = hand[static_cast<std::size_t>(i)];
+                if (!c.m_is_staged && c.m_name == sw.card_name) { hi = i; break; }
+            }
+        }
+        if (hi < 0) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(hi)]);
+        if (ad == nullptr || !ad->params.is_aura || !ad->params.aura_etb_tap_host
+            || !AuraCouldEnchant(state, ad->params, *hp)) { continue; }
+        bool recasts_wings = false;
+        for (const Action& o : plan.actions)
+        { if (o.kind == Action::Kind::CastFromHand && o.card_name == wp->card.m_name) { recasts_wings = true; break; } }
+        if (recasts_wings) { continue; }
+        if (!CombatSwapStaysPayable(state, plan, q, hp->card.m_number)) { continue; }
+        if (wings_out != nullptr) { *wings_out = wp->card.m_number; }
+        if (aura_out != nullptr)  { *aura_out = hand[static_cast<std::size_t>(hi)].m_number; }
+        return static_cast<int>(q);
+    }
+    return -1;
+}
+
+// The human-play deferral itself (see HumanSwapDefersToCombat): the swap leaves the committed plan
+// and the combat window is pinned to bring in exactly the Aura the human named
+// (scripted_combat_aura_swap + scripted_combat_aura_swap_in, consumed by ApplyCombatAuraSwap).
+bool TurnSolver::DeferHumanAuraSwapToCombat(GameState& state, Plan& plan, std::string* label_out)
+{
+    int wings = -1, aura = -1;
+    const int q = HumanSwapDefersToCombat(state, plan, &wings, &aura);
+    if (q < 0) { return false; }
+    if (label_out != nullptr)
+    {
+        std::string wname, aname, hname;
+        int host = 0;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == wings) { wname = p.card.m_name.str(); host = p.aura_attached_to; break; } }
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == host) { hname = p.card.m_name.str(); break; } }
+        for (const Card& c : state.players[state.active_player_index].hand)
+        { if (c.m_number == aura) { aname = c.m_name.str(); break; } }
+        *label_out = wname + " \xE2\x87\x84 " + aname + " (on " + hname + ")";
+    }
+    plan.actions.erase(plan.actions.begin() + q);
+    state.scripted_combat_aura_swap    = wings;
+    state.scripted_combat_aura_swap_in = aura;
+    return true;
+}
+
+// END OF THE HUMAN'S PRE-COMBAT MAIN, with a deferred swap pending (DeferHumanAuraSwapToCombat). The
+// deferral was decided when the line was committed; later lines in the same main phase may have spent
+// the mana it counted on, moved the Aura, or bounced the Wings. Re-check on the board the phase
+// actually ends with: still payable in combat -> keep it; otherwise the main phase is the last window,
+// so swap NOW if it can be paid (the old timing), else drop it -- and say which, in the history.
+void TurnSolver::SettleHumanDeferredSwap(GameState& state)
+{
+    if (state.scripted_combat_aura_swap_in < 0 || state.scripted_combat_aura_swap < 0) { return; }
+    const int me   = state.active_player_index;
+    const int wnum = state.scripted_combat_aura_swap % kAuraSwapRankStride;
+    const int anum = state.scripted_combat_aura_swap_in;
+    const Permanent* wp = nullptr;
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.m_number == wnum && p.controller_index == me && p.aura_attached_to != 0) { wp = &p; break; } }
+    const CardDefinition* wd = wp ? CardDatabase::Instance().LookupCached(wp->card) : nullptr;
+    int hi = -1;
+    const std::vector<Card>& hand = state.players[me].hand;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    { if (hand[static_cast<std::size_t>(i)].m_number == anum && !hand[static_cast<std::size_t>(i)].m_is_staged) { hi = i; break; } }
+    if (wp == nullptr || wd == nullptr || !wd->params.aura_swap_cost.has_value() || hi < 0)
+    {
+        state.scripted_combat_aura_swap = state.scripted_combat_aura_swap_in = -1;
+        EmitPlayEvent(state.turn_number, "aura_swap",
+                      "\xE2\x9A\xA0 deferred aura swap cancelled: the swapping Aura or the Aura it was to bring in "
+                      "is no longer where the line left it");
+        return;
+    }
+    Plan one;
+    Action a;
+    a.kind          = Action::Kind::AuraSwap;
+    a.card_name     = hand[static_cast<std::size_t>(hi)].m_name;
+    a.hand_index    = -1;
+    a.cost          = *wd->params.aura_swap_cost;
+    a.sac_source_id = wnum;
+    one.actions.push_back(a);
+    if (CombatSwapStaysPayable(state, one, 0, wp->aura_attached_to)) { return; }   // combat will pay it
+    const std::string label = wp->card.m_name.str() + " \xE2\x87\x84 " + a.card_name.str();
+    state.scripted_combat_aura_swap = state.scripted_combat_aura_swap_in = -1;
+    if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+    {
+        ApplyAuraSwap(state, me, wnum, hi, /*respond_window=*/true);
+        EmitPlayEvent(state.turn_number, "aura_swap",
+                      label + ": applied in the MAIN phase after all -- the mana left would not pay "
+                      + a.cost.ToString() + " once the attackers are tapped");
+    }
+    else
+    {
+        EmitPlayEvent(state.turn_number, "aura_swap",
+                      "\xE2\x9A\xA0 " + label + ": deferred aura swap dropped -- " + a.cost.ToString()
+                      + " can no longer be paid");
     }
 }
 
@@ -34990,7 +35174,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
     if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
     if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
-    if (plan.combat_aura_swap_choice >= 0) { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; }
+    if (plan.combat_aura_swap_choice >= 0)
+    { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard.
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
@@ -40463,6 +40648,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_tectonic_keep  = -1;            // ...and its mode-B keep pin (same lockstep)
     state.scripted_bruna_gather   = -1;            // searched Bruna gather subset (same lockstep)
     state.scripted_combat_aura_swap = -1;          // searched Arcanum Wings combat swap (same lockstep)
+    state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
@@ -63869,7 +64055,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
 // One-line "land=...; cast: a, b" summary of a plan (for the human-play accept verdict).
 static std::string SubChoiceHostLabel(const GameState& s, int num);   // defined below (fwd for labels)
 
-static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState* st = nullptr)
+// `swap_in_combat`: this plan's Aura swap is one human play applies in the COMBAT window
+// (TurnSolver::HumanSwapDefersToCombat) -- its label says so.
+static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState* st = nullptr,
+                                     bool swap_in_combat = false)
 {
     std::string s;
     if (p.land_decided && !p.land_to_play.empty()) { s += "land=" + p.land_to_play + "; "; }
@@ -63923,7 +64112,10 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         else if (a.kind == Action::Kind::PutFromHandAbility)
         { cast_names.push_back("put " + a.card_name + " from hand"); }
         else if (a.kind == Action::Kind::AuraSwap)
-        { cast_names.push_back("aura swap \xE2\x87\x84 " + a.card_name); }
+        {
+            cast_names.push_back("aura swap \xE2\x87\x84 " + a.card_name
+                                 + (swap_in_combat ? " (in combat, after attacks)" : ""));
+        }
         else if (a.kind == Action::Kind::JitteModeAbility)
         { cast_names.push_back(a.card_name + (a.gy_exile_mode == 1 ? ": -1/-1" : ": gain 2 life")); }
         // Blink activations: listed bare under "cast:", a blink read "cast: Eldrazi Displacer" --
@@ -65566,7 +65758,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // the sub-decisions in CAST ORDER (unsorted `toks`), so two Desperate Rituals read
         // "splice+0; splice+1" in the order cast, not alpha-scrambled (viewer issue #8). Empty subs ->
         // just the line summary (unchanged from the old label.empty() fallback).
-        std::string label = LineSummaryOfPlan(p, &state);
+        std::string label = LineSummaryOfPlan(p, &state, is_pre_combat && HumanSwapDefersToCombat(state, p) >= 0);
         if (!toks.empty())
         {
             label += " \xE2\x80\x94 ";   // em dash separating the line from its sub-decisions
@@ -65699,7 +65891,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     if (out.variants.size() == 1)
     {
         out.verdict = V::Accept; out.plan_index = out.variants[0].plan_index;
-        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index], &state);
+        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index], &state,
+            is_pre_combat && HumanSwapDefersToCombat(state, plans[out.variants[0].plan_index]) >= 0);
         return out;
     }
     // #7 SPLICE default: the player does NOT get a splice-count picker -- the line just splices as many
@@ -65745,7 +65938,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { for (const LineVariant& v : out.variants) { int t = totalSplice(v.plan_index); if (t > pick_total) { pick_total = t; pick = v.plan_index; } } }
             out.variants.clear();
             out.verdict = V::Accept; out.plan_index = pick;
-            out.matched_summary = LineSummaryOfPlan(plans[pick], &state);
+            out.matched_summary = LineSummaryOfPlan(plans[pick], &state,
+                is_pre_combat && HumanSwapDefersToCombat(state, plans[pick]) >= 0);
             return out;
         }
     }

@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Birds of Paradise", "controller": 0, "tapped": false },
+    { "name": "Arcanum Wings", "controller": 0, "tapped": false, "equips": "Birds of Paradise" },
+    { "name": "Azorius Chancery", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossification"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "human_lines": ["auraswap=Colossification"],
+  "expect_history_lacks": ["deferred to COMBAT"],
+  "expect_no_win": true,
+  "expect_opponent_life": 20,
+  "comment": "CONTROL (combat payment impossible) for bruna_human_wings_swap_deferred_to_combat.json: Birds of Paradise wears Arcanum Wings and only Azorius Chancery ({W}{U}) + the Birds' own mana make the {2}{U}. An attacking Birds cannot tap for the combat swap, so the deferral would lose the Aura for the turn -- the MTG_SOLVE_COMBAT_SWAP affordability rule (s9420000 gi965) keeps the swap in the MAIN phase, paid in Colossification's respond window. The Birds then cannot attack: no damage. A deferral here would read 'deferred to COMBAT' and then fail to pay."
+}
