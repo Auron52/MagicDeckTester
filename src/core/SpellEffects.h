@@ -4156,6 +4156,22 @@ inline bool HasDoubleStrikeFromLords(
     return false;
 }
 
+// SEARCHED SOULBOND DECLINE (Plan::soulbond_decline): while a plan carrying the flag is being
+// applied, the pairing resolution below declines every "you MAY pair" it is offered. Set only by the
+// two apply worlds (ApplyPlanDirect, AIEngine::TakeTurn) through the RAII scope, never consulted in
+// human play (the attach-host chooser owns the decision there), so references replay unchanged.
+inline thread_local bool g_plan_soulbond_decline = false;
+struct PlanSoulbondDeclineScope
+{
+    bool prev;
+    explicit PlanSoulbondDeclineScope(bool on) : prev(g_plan_soulbond_decline) { g_plan_soulbond_decline = on; }
+    ~PlanSoulbondDeclineScope() { g_plan_soulbond_decline = prev; }
+    PlanSoulbondDeclineScope(const PlanSoulbondDeclineScope&)            = delete;
+    PlanSoulbondDeclineScope& operator=(const PlanSoulbondDeclineScope&) = delete;
+};
+inline std::atomic<long long> g_soulbond_decline_applied{0};   // MTG_SOULBOND_DECLINE_AUDIT census
+inline std::atomic<long long> g_soulbond_decline_twins{0};     // twins enumerated (AppendSoulbondDeclineVariants)
+
 // ---- SOULBOND (CR 702.46b) -- the read-time pair resolution --------------------------------------
 // Permanent::paired_with holds the PARTNER's m_number on the soulbond side only. These two helpers
 // are the ONLY way it is ever read, and both re-verify the partner against the live battlefield --
@@ -6468,6 +6484,10 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
                     if (cands.empty()) { return false; }
                     int want = ResolveProvider(state).SoulbondPartner(
                         state, src.controller_index, src, cands);
+                    // SEARCHED DECLINE (Plan::soulbond_decline): the plan being applied scored "do
+                    // not pair"; the human chooser below still overrides it in the viewer.
+                    if (g_plan_soulbond_decline && g_play_attach_host_chooser == nullptr)
+                    { want = 0; g_soulbond_decline_applied.fetch_add(1, std::memory_order_relaxed); }
                     // HUMAN PLAY: the same board-click decision type the Skyhunter attach uses --
                     // the full rules-legal set with the heuristic pick preselected, and -1 declines
                     // (the printed "you MAY pair"). The chooser never sees a narrowed list.
@@ -15130,6 +15150,47 @@ inline void PerformUpkeepSlumber(GameState& state)
 // Extra base power from a characteristic-defining ability (Adeline: power = number of
 // creatures you control). Returns 0 for ordinary creatures. The card's printed power is
 // 0 (printed *), so this is the whole base power before counters/temp/lords.
+// Forward: defined just below. The soulbond helpers after it need it by name.
+inline int DynamicBasePower(const CardDefinition& def, const GameState& state, int controller_index);
+
+// Effective power of a soulbond PARTNER candidate as the board really sees it: printed + until-EOT
+// bonuses, lords and anthems, animation, and the characteristic-defining term (Adeline is printed
+// 0/4 with power_equals_creature_count). ONE formula for the provider's pick
+// (DecisionProvider::SoulbondPartner) and the enumerator's "only weak partners" test
+// (SoulbondOnlyWeakPartners), so the two can never disagree about what a 1/1 is.
+inline int SoulbondCandidatePower(const GameState& s, int controller, const Permanent& c)
+{
+    const CardDefinition* cd = c.def_absent ? nullptr : CardDatabase::Instance().LookupCached(c.card);
+    int pw = c.EffectivePower()
+           + ComputeLordBonus(c.card, s, controller, c.AnimatedAllTypes(), &c).first;
+    if (cd != nullptr)
+    {
+        if (c.is_animated) { pw += cd->params.animate_power; }
+        pw += DynamicBasePower(*cd, s, controller);
+    }
+    return pw;
+}
+
+// Would a soulbond creature entering NOW find only WEAK partners? True iff the controller has at
+// least one legal partner (a creature that is neither a soulbond holder's pair nor claimed as one)
+// and every such partner has effective power below `min_power`. The enumerator's gate for the
+// searched decline twin (Plan::soulbond_decline): with a real partner on the board the pairing is
+// never in doubt and no twin is made.
+inline bool SoulbondOnlyWeakPartners(const GameState& state, int controller, int min_power)
+{
+    int legal = 0;
+    for (const Permanent& c : state.battlefield)
+    {
+        if (c.controller_index != controller) { continue; }
+        if (!c.card.IsCreature() && !c.is_animated) { continue; }
+        if (SoulbondNumberIsClaimed(state, controller, c.card.m_number)) { continue; }
+        if (SoulbondPartnerIndex(c, state) >= 0) { continue; }
+        ++legal;
+        if (SoulbondCandidatePower(state, controller, c) >= min_power) { return false; }
+    }
+    return legal > 0;
+}
+
 inline int DynamicBasePower(const CardDefinition& def, const GameState& state, int controller_index)
 {
     if (def.params.power_equals_creature_count) { return CreatureCount(state, controller_index); }

@@ -81,19 +81,24 @@ matcher.
 
 ## Open questions (surfaced, not blocking)
 
-1. **Soulbond partner quality in the SEARCH (USER 2026-10-06: "even in the search I would say it is
-   wrong to pair with a 1/1").** `SoulbondPartner` picks the highest effective power among the legal
-   candidates. The list's printed creatures are all 2+ power; its 1/1s are tokens (Adeline and Hero
-   of Bladehold on attack, Worthy Knight on a Knight cast, Basri on tap) -- and, as the user pointed
-   out, a token only exists once its maker, itself a 2+-power creature, is on the board, so a Paladin
-   pairs with that on entry and is never unpaired when a token enters. The residual case is a LATER
-   Paladin entering when every 2+-power creature is already paired, where the entry trigger's only
-   unpaired candidates are tokens. USER 2026-10-06: "you could have only a 1/1 token unpaired and a
-   paladin enter. In that case it could make sense to search." That is the right shape: pair-now
-   (+2 double strike on the Paladin from this attack) versus wait-for-a-real-partner is a two-way
-   decision the heuristic cannot settle, so it should be a SEARCHED branch, not a provider pick --
-   and only in that case (every legal partner below 2 power), so the enumeration does not double
-   every soulbond cast. DEFERRED, not built: it widens the search and needs the standard A/B.
+1. **Soulbond pair-or-wait is now SEARCHED (USER 2026-10-06: "even in the search I would say it is
+   wrong to pair with a 1/1 ... you could have only a 1/1 token unpaired and a paladin enter. In that
+   case it could make sense to search ... searching is cheap enough here, since this is an unusual
+   case").** `Plan::soulbond_decline`: for a base plan that casts a soulbond creature while every legal
+   partner on the board is below 2 power (a lone 1/1 token), `AppendSoulbondDeclineVariants` appends
+   a twin that declines the pairing, so pair-now (+double strike from this attack, locked to the
+   token) is scored against wait-for-a-real-partner instead of being the provider's guess. Gated
+   tightly: no twin with a real partner up (the pairing is not in doubt), none when the plan also
+   casts a 2+-power creature (the pairing would land on that), none in human play (the viewer's
+   dialog is the decision), none for a deck without a soulbond card (`deck_has_soulbond`). Applied
+   lockstep by `ApplyPlanDirect` and `AIEngine::TakeTurn` through `PlanSoulbondDeclineScope`, which
+   the pairing resolution honours only when no human chooser is installed. Folded into the plan
+   hash, `SamePlan` and the dedup signature; summaries read "; no pairing".
+   `MTG_SOULBOND_DECLINE_AXIS=0` disables; `MTG_SOULBOND_DECLINE_AUDIT=1` prints twins enumerated and
+   declines applied at exit (150 WhiteKnights games at the smoke d3 settings: 244 twins; d0: 0).
+   The printed list's creatures are all 2+ power and its 1/1s are tokens whose makers are 2+-power
+   creatures themselves, so a Paladin normally pairs with the maker on entry; the twin exists for
+   the residual case only. Suite results: see the commit that lands it.
 2. **Snow seed 13.** The report does not reproduce on the user's line on either binary. The better
    payment (Mountain + Druid) needs the needs-based lever to value the dig's expected find; the
    lever's library-reveal expectation does not yet cover Scrying Sheets / Frost Augur finds. That is

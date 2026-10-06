@@ -1092,14 +1092,8 @@ int DecisionProvider::SoulbondPartner(
         // anthems, plus the characteristic-defining term. Adeline is printed 0/4 with
         // power_equals_creature_count, so DynamicBasePower is what stops her being valued at 0 --
         // she is routinely this deck's largest creature and therefore its best pair.
-        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c.card);
-        int pw = c.EffectivePower()
-               + ComputeLordBonus(c.card, s, controller, c.AnimatedAllTypes(), &c).first;
-        if (cd != nullptr)
-        {
-            if (c.is_animated) { pw += cd->params.animate_power; }   // P/T add: ANY animation, typed or not
-            pw += DynamicBasePower(*cd, s, controller);
-        }
+        // ONE formula with the enumerator's weak-partner gate (SoulbondCandidatePower).
+        const int pw = SoulbondCandidatePower(s, controller, c);
         if (pw > best_pw || (pw == best_pw && best_num != 0 && c.card.m_number < best_num))
         {
             best_pw  = pw;

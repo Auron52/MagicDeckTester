@@ -14330,6 +14330,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // Vial-order variant: same actions, different resolution order -> a different plan. Folded only
     // when set, so every plan without it fingerprints exactly as before.
     if (p.vial_after_casts) { fold(0x5649414cull); }
+    // Searched soulbond decline: same casts, no pairing -> a different plan (must-fold, as above).
+    if (p.soulbond_decline) { fold(0x534f554cull); }
     // Surtland Flinger victim. MUST be folded: omitting it collapses the fling variants back to
     // one and silently re-steals the decision the axis exists to give the search (the 2026-06-30
     // plan_signature tutor precedent). +3 because -2 (decline) is a live value here.
@@ -29504,6 +29506,7 @@ namespace solvememo
         if (a.value != b.value || a.wins_this_turn != b.wins_this_turn
             || a.searched_order != b.searched_order || a.land_decided != b.land_decided
             || a.vial_after_casts != b.vial_after_casts
+            || a.soulbond_decline != b.soulbond_decline
             || a.land_to_play != b.land_to_play || a.fetch_target != b.fetch_target
             || a.land_face != b.land_face || a.actions.size() != b.actions.size())
         { return false; }
@@ -34123,6 +34126,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     auto apply_continuation_plan = [&](const TurnSolver::Plan& cp)
     {
         vial_after_armed = cp.vial_after_casts;
+        PlanSoulbondDeclineScope _sbd(cp.soulbond_decline);   // Plan::soulbond_decline, lockstep w/ executor
         apply_plan_actions(cp.actions, cp.searched_order);
         vial_after_armed = false;
     };
@@ -38076,6 +38080,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // above has already drained them, but the invariant should not depend on that.
     pre_taps_armed = plan.searched_order;
     vial_after_armed = plan.vial_after_casts;
+    PlanSoulbondDeclineScope _sbd_top(plan.soulbond_decline);   // Plan::soulbond_decline (executor twin: TakeTurn)
     apply_plan_actions(plan.actions, plan.searched_order);
     pre_taps_armed   = false;
     human_seq_inline = false;
@@ -47104,6 +47109,63 @@ static bool VialTwinRolloutLegacyOn()
     static const bool v = EnvOn("MTG_VIAL_TWIN_ROLLOUT_LEGACY", true);
     return heurarm::Flag(heurarm::VIAL_TWIN_ROLLOUT_LEGACY, v);
 }
+// SEARCHED SOULBOND DECLINE (Plan::soulbond_decline; USER 2026-10-06). For every base plan that
+// casts a soulbond creature while the board's only legal partners are below 2 power (a lone 1/1
+// token), append a twin that declines the pairing, so the search scores pair-now (+double strike
+// from this attack, locked to the token) against wait-for-a-real-partner. Gated tightly, because
+// every twin is a plan the odometer pays for: no twin when a real partner is up (the pairing is not
+// in doubt), none when the plan also casts a 2+-power creature (the pairing would land on THAT),
+// none in human play (the viewer's pairing dialog is the decision), none for a deck without a
+// soulbond card. MTG_SOULBOND_DECLINE_AXIS=0 disables (one-binary A/B).
+// MTG_SOULBOND_DECLINE_AUDIT=1: print at exit how many decline twins were enumerated and how many
+// pairings a plan actually declined (the applied count includes rollout-world applies).
+namespace {
+struct SoulbondDeclineAuditDumper
+{
+    ~SoulbondDeclineAuditDumper()
+    {
+        static const bool on = EnvOn("MTG_SOULBOND_DECLINE_AUDIT");
+        if (!on) { return; }
+        std::fprintf(stderr, "[soulbond-decline] twins_enumerated=%lld declines_applied=%lld\n",
+                     g_soulbond_decline_twins.load(), g_soulbond_decline_applied.load());
+    }
+};
+static SoulbondDeclineAuditDumper s_soulbond_decline_audit_dumper;
+}  // namespace
+
+static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<TurnSolver::Plan>& all)
+{
+    if (all.empty() || !state.deck_has_soulbond || HumanPlayActive()) { return; }
+    static const bool s_on = EnvOn("MTG_SOULBOND_DECLINE_AXIS", true);
+    if (!s_on) { return; }
+    const int active = state.active_player_index;
+    bool gate_known = false, gate = false;   // SoulbondOnlyWeakPartners, computed once per call
+    std::vector<TurnSolver::Plan> extra;
+    for (const TurnSolver::Plan& p : all)
+    {
+        if (p.soulbond_decline) { continue; }
+        bool casts_soulbond = false, casts_strong = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+            if (!d || !d->card.IsCreature()) { continue; }
+            if (d->params.soulbond) { casts_soulbond = true; }
+            else if (d->card.m_power.value_or(0) >= 2) { casts_strong = true; }
+        }
+        if (!casts_soulbond || casts_strong) { continue; }
+        if (!gate_known) { gate = SoulbondOnlyWeakPartners(state, active, /*min_power=*/2); gate_known = true; }
+        if (!gate) { return; }
+        TurnSolver::Plan v = p;
+        v.soulbond_decline = true;
+        v.bp_wave0 = false;   // a clone does not inherit wave 0's fan-out (MTG_BP_AXIS_W0_CLEAR)
+        extra.push_back(std::move(v));
+        g_soulbond_decline_twins.fetch_add(1, std::memory_order_relaxed);
+    }
+    all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                          std::make_move_iterator(extra.end()));
+}
+
 static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolver::Plan>& all,
                                     bool is_pre_combat)
 {
@@ -47193,6 +47255,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     AppendBreakpointVariants(state, plans);
     AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans);   // during-cast axes only inside a derivation
     AppendVialOrderVariants(state, plans, /*is_pre_combat=*/false);
+    AppendSoulbondDeclineVariants(state, plans);
     return plans;
 }
 
@@ -47344,6 +47407,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (const std::string& w : pl.would_drop)    { adds(w); }
             add(pl.human_action_order);   // human-play only; present so the list is exhaustive
             add(pl.vial_after_casts);
+            add(pl.soulbond_decline);
             add(static_cast<long long>(pl.human_pre_taps.size()));
             add(pl.human_untap_need);
             k.push_back(id_of(x, 'N'));   // class 'N': could never be mistaken for "more"
@@ -47453,6 +47517,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // The vial-order axis runs on the no-drop path too (m1 AND m2): a Vial deck spends most of
         // its turns with no land left to play, which is exactly when the puts and casts pile up.
         AppendVialOrderVariants(state, plans, is_pre_combat);
+        AppendSoulbondDeclineVariants(state, plans);
         return plans;
     }
 
@@ -48215,6 +48280,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     AppendBreakpointVariants(state, all);
     AppendSubdecisionAxes(state, is_pre_combat, all);
     AppendVialOrderVariants(state, all, is_pre_combat);
+    AppendSoulbondDeclineVariants(state, all);
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
@@ -62325,6 +62391,7 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         for (size_t i = 0; i < cast_names.size(); ++i) { if (i) s += ", "; s += cast_names[i]; }
     }
     if (le_count > 0) { s += "; Land's Edge x" + std::to_string(le_count); }
+    if (p.soulbond_decline) { s += "; no pairing"; }
     return s;
 }
 

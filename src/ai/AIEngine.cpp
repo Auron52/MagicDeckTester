@@ -4639,6 +4639,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // the flag set -- a continuation-list twin (AppendVialOrderVariants now twins those) and the
         // searched re-solve, whose fresh enumeration has always twinned; before this branch the
         // latter deployed its puts FIRST, i.e. the executor played a line the search never scored.
+        PlanSoulbondDeclineScope _sbd_cont(extra.soulbond_decline);   // Plan::soulbond_decline, continuation twin
         const bool cont_vial_after = extra.vial_after_casts;
         if (!cont_vial_after)
         {
@@ -5711,6 +5712,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // puts are deployed after its graveyard casts instead of here. Top-level plan only -- the
     // continuation and recorded-script replays above deploy theirs first, as always.
     const bool vial_after = plan.vial_after_casts;
+    // Plan::soulbond_decline (lockstep twin of ApplyPlanDirect's scope): a plan the search scored
+    // as "cast the Paladin, do not pair it" is realised that way here too.
+    PlanSoulbondDeclineScope _sbd_plan(plan.soulbond_decline);
     if (!vial_after)
     {
         for (const Action& a : plan.actions)

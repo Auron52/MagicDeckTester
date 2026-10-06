@@ -880,6 +880,15 @@ public:
         // can change the outcome -- a param-gated predicate no pre-Pirates card satisfies -- so every
         // other deck is byte-identical, and the search, not a rule, picks the order.
         bool vial_after_casts = false;
+        // SEARCHED SOULBOND DECLINE (USER 2026-10-06, WhiteKnights): this plan casts a soulbond
+        // creature (Silverblade Paladin) and DECLINES to pair it ("you MAY pair", CR 702.46b).
+        // Enumerated as a twin of the base plan ONLY when every legal partner on the board is below
+        // 2 power (a lone 1/1 token) -- "you could have only a 1/1 token unpaired and a paladin
+        // enter. In that case it could make sense to search" -- so pair-now vs wait-for-a-real-
+        // partner is scored, not guessed. Never in human play (the viewer's pairing dialog is the
+        // decision there). Folded into the plan hash, SamePlan and the dedup signature; applied
+        // lockstep by ApplyPlanDirect and AIEngine::TakeTurn via PlanSoulbondDeclineScope.
+        bool soulbond_decline = false;
 
         // UNBRANCHED-CANON CONTINUATION (set only by TurnSolver::BpUnbranchedCanon, the shared
         // canonical default at a breakpoint the plan does not branch on). Such a continuation is an
