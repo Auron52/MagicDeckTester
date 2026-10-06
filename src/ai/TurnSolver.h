@@ -1846,6 +1846,13 @@ public:
     // "the host is a still-locked mana source", so an equip onto a beater is untouched and still
     // fires in the trailing pass. Returns how many fired. Off-switch: MTG_NO_HASTE_DORK_CREDIT.
     static int ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts);
+    // PROOF INSTRUMENT for the AURA CAST HOST RANKING (MTG_TRACE=hostproof; the executor calls it on
+    // every committed autonomous main-phase plan). For a plan casting creature Auras it scores every
+    // legal combination of hosts with the shared key (AuraPlanHostKey) and traces whether the
+    // committed hosts are the key's best ("heur"), tie it with another combination ("tie"), or are
+    // strictly beaten ("worse" -- under the MTG_AURA_HOST_BRANCH control arm, a counterexample
+    // candidate). Read-only: the board is copied, nothing is cached. No-op unless the stream is on.
+    static void TraceAuraHostProof(const GameState& state, bool is_pre_combat, const Plan& plan);
 
     // Card numbers of battlefield sources a plan with a mana-unlock equip must hold untapped until
     // that equip fires -- the "reserve red" half of the same line. Empty for every other plan.

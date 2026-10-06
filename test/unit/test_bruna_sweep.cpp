@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -232,6 +233,16 @@ int EquipHostOf(const GameState& s, int equip)
     for (const Permanent& p : s.battlefield) { if (p.card.m_number == equip) { return p.equipped_to; } }
     return -1;
 }
+
+// The AURA CAST HOST RANKING's proof CONTROL arm (MTG_AURA_HOST_BRANCH=1) for the scope: the search
+// keeps every creature-Aura host as its own plan. The expressibility cases below ask "can the engine
+// state this line at all", which is the branched plan list's question; the shipped arm keeps the
+// ranking's pick per plan class (its own cases at the end of this file).
+struct BranchArm
+{
+    BranchArm()  { heurarm::t_arm[heurarm::AURA_HOST_BRANCH] = 1; }
+    ~BranchArm() { heurarm::t_arm[heurarm::AURA_HOST_BRANCH] = -1; }
+};
 }   // namespace
 
 // Seed 77002 T4: three lands, Pilgrim + Courage in hand. The only way to cast both is Pilgrim, equip
@@ -277,6 +288,7 @@ TEST_CASE("Bruna sweep B: Courage -> Mother after Greaves moves to the fresh Pil
 // line was inexpressible.
 TEST_CASE("Bruna sweep B: equip Greaves to another creature, then an Aura on the creature it left")
 {
+    BranchArm arm;   // expressibility: the branched plan list (see BranchArm)
     GreavesOnMother g;
     const int pilgrim = g.b.Put("Avacyn's Pilgrim");
     g.b.Put("Razorverge Thicket");
@@ -314,29 +326,42 @@ TEST_CASE("Bruna sweep B: equip Greaves to another creature, then an Aura on the
     }
 }
 
-// The autonomous plan dedup used to key a creature Aura by NAME only, so the search saw ONE host per
-// Aura (the first enumerated) -- which creature carries Mythic Proportions was never searched.
-TEST_CASE("Bruna sweep B: a creature Aura's host is a searched axis (one plan per legal host)")
+// The autonomous plan dedup used to key a creature Aura by NAME only and keep the FIRST enumerated
+// host (battlefield order). Now the class keeps the shared host ranking's pick; the proof's control
+// arm (MTG_AURA_HOST_BRANCH=1) keeps every host. Here the first-enumerated host is a summoning-sick
+// Pilgrim, so the old fold and the ranking disagree: Mythic Proportions must go on Mother, who can
+// attack this turn.
+TEST_CASE("Aura host ranking: one ranked host per plan class; the control arm keeps every host")
 {
     BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim", /*tapped=*/false, /*sick=*/true);
     const int mother  = b.Put("Mother of Runes");
-    const int pilgrim = b.Put("Avacyn's Pilgrim");
     for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
     b.Hand("Mythic Proportions");
     b.s.players[0].lands_played_this_turn = 1;
-    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true);
-    bool on_mother = false, on_pilgrim = false;
-    for (const TurnSolver::Plan& p : plans)
+    auto hosts = [&](const std::vector<TurnSolver::Plan>& plans, bool& on_mother, bool& on_pilgrim)
     {
-        for (const Action& a : p.actions)
+        on_mother = on_pilgrim = false;
+        for (const TurnSolver::Plan& p : plans)
         {
-            if (a.kind != Action::Kind::CastFromHand) { continue; }
-            if (a.enchant_target == mother)  { on_mother = true; }
-            if (a.enchant_target == pilgrim) { on_pilgrim = true; }
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != "Mythic Proportions") { continue; }
+                if (a.enchant_target == mother)  { on_mother = true; }
+                if (a.enchant_target == pilgrim) { on_pilgrim = true; }
+            }
         }
+    };
+    bool m = false, pg = false;
+    hosts(TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true), m, pg);
+    CHECK(m);
+    CHECK_FALSE(pg);
+    {
+        BranchArm arm;
+        hosts(TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true), m, pg);
+        CHECK(m);
+        CHECK(pg);
     }
-    CHECK(on_mother);
-    CHECK(on_pilgrim);
 }
 
 // ---- C: the orphaned-Aura SBA (CR 704.5m) runs as the land leaves, not at the next combat --------
@@ -500,6 +525,7 @@ TEST_CASE("Bruna sweep F: Wild Growth's same-turn ramp is cast before the spells
 // in that order (the Aura onto the move's destination resolves before the Greaves arrives).
 TEST_CASE("Bruna sweep B: an Aura on the Greaves move's destination resolves before the move")
 {
+    BranchArm arm;   // expressibility: the branched plan list (see BranchArm)
     GreavesOnMother g;
     const int pilgrim = g.b.Put("Avacyn's Pilgrim");
     g.b.Put("Razorverge Thicket");
@@ -587,4 +613,183 @@ TEST_CASE("Bruna sweep A-iii: the greedy Solve does not haste a mana dork the at
         { if (a.kind == Action::Kind::Equip && a.sac_victim_id == birds) { offered = true; } }
     }
     CHECK(offered);
+}
+
+// ---- AURA CAST HOST RANKING (USER 2026-10-06) -----------------------------------------------------
+// One ranking (AuraPlanHostKey / AuraCastHostByRank, core/SpellEffects.h "AURA CAST HOST RANKING")
+// decides which creature an Aura SPELL enchants -- the search's plan classes, Solve (d0 + rollout
+// leaves) and the resolution fallback. Each case puts the host the OLD first-enumerated fold would
+// have kept FIRST on the battlefield, so it fails if the ranking's term under test is removed.
+namespace
+{
+// The host every enumerated plan that casts `aura` names (0 = never cast, -1 = more than one host).
+int OnlyHostOf(const std::vector<TurnSolver::Plan>& plans, const std::string& aura)
+{
+    int host = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != aura) { continue; }
+            if (host == 0) { host = a.enchant_target; }
+            else if (host != a.enchant_target) { return -1; }
+        }
+    }
+    return host;
+}
+
+int SolveHostOf(const GameState& s, const std::string& aura)
+{
+    const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+        TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    for (const Action& a : plan.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == aura) { return a.enchant_target; } }
+    return 0;
+}
+}   // namespace
+
+// A mana dork the plan must tap to pay for the Aura cannot attack this turn: Courage {1}{G}{W} off two
+// lands needs the Pilgrim's {W}, so Courage goes on Mother (who attacks for 3), not the Pilgrim.
+TEST_CASE("Aura host ranking: a host the plan taps for mana loses its attack")
+{
+    BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    const int mother  = b.Put("Mother of Runes");
+    b.Put("Forest");
+    b.Put("Forest");
+    b.Hand("Unflinching Courage");
+    b.s.players[0].lands_played_this_turn = 1;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Unflinching Courage") == mother);
+    CHECK(SolveHostOf(b.s, "Unflinching Courage") == mother);
+    // With a third land nothing taps the Pilgrim and the damage key ties; the tie-break keeps the
+    // Aura off the creature mana source (it will be tapped for mana on later turns).
+    b.Put("Plains");
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Unflinching Courage") == mother);
+    CHECK(SolveHostOf(b.s, "Unflinching Courage") == mother);
+    (void)pilgrim;
+}
+
+// Colossification taps its host as it enters. On Mother (ready to attack) that costs this turn's
+// swing; on a summoning-sick Pilgrim it costs nothing -- the Pilgrim takes it.
+TEST_CASE("Aura host ranking: Colossification's ETB tap goes on a host that cannot attack anyway")
+{
+    BoardBs b;
+    const int mother  = b.Put("Mother of Runes");
+    const int pilgrim = b.Put("Avacyn's Pilgrim", /*tapped=*/false, /*sick=*/true);
+    for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
+    b.Hand("Colossification");
+    b.s.players[0].lands_played_this_turn = 1;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Colossification") == pilgrim);
+    CHECK(SolveHostOf(b.s, "Colossification") == pilgrim);
+    (void)mother;
+}
+
+// Bruna gathers every Aura when she attacks, so Colossification on Bruna (tapped: no attack) loses the
+// whole swing, while Colossification on the Pilgrim is gathered onto an attacking Bruna (+20 now).
+TEST_CASE("Aura host ranking: a gathering attacker is priced -- Colossification stays off Bruna")
+{
+    BoardBs b;
+    const int bruna   = b.Put("Bruna, Light of Alabaster");
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
+    b.Hand("Colossification");
+    b.s.players[0].lands_played_this_turn = 1;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Colossification") == pilgrim);
+    CHECK(SolveHostOf(b.s, "Colossification") == pilgrim);
+    (void)bruna;
+}
+
+// Greaves' shroud is respected by the ranking's candidates: with Greaves on Mother, an Aura reaches
+// Mother only in a plan that moves the Greaves away first; the shipped arm never names a shrouded host
+// without that move, in the search or in Solve.
+TEST_CASE("Aura host ranking: never a Greaves-shrouded host without the plan's own move")
+{
+    GreavesOnMother g;
+    g.b.Put("Avacyn's Pilgrim");
+    for (int k = 0; k < 7; ++k) { g.b.Put("Forest"); }
+    g.b.Hand("Mythic Proportions");
+    g.b.s.players[0].lands_played_this_turn = 1;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g.b.s, true))
+    {
+        bool on_mother = false, move = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.enchant_target == g.mother) { on_mother = true; }
+            if (a.kind == Action::Kind::Equip && a.sac_source_id == g.greaves && a.sac_victim_id != g.mother) { move = true; }
+        }
+        CHECK_MESSAGE(!(on_mother && !move), "Mythic Proportions names the shrouded Mother with no Greaves move");
+    }
+    {
+        const TurnSolver::Plan plan = TurnSolver::Solve(g.b.s, /*is_pre_combat=*/true,
+            TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+        bool on_mother = false, move = false;
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.enchant_target == g.mother) { on_mother = true; }
+            if (a.kind == Action::Kind::Equip && a.sac_source_id == g.greaves && a.sac_victim_id != g.mother) { move = true; }
+        }
+        CHECK_MESSAGE(!(on_mother && !move), "Solve names the shrouded Mother with no Greaves move");
+    }
+    const long long before = g_enchant_retargets.load();
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g.b.s, true))
+    { GameState t = g.b.s; TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true); }
+    CHECK(g_enchant_retargets.load() == before);
+}
+
+// The resolution-time fallback (an Aura with no usable target) uses the same key: Mother can attack,
+// the sick Pilgrim cannot, so an orphaned Mythic Proportions lands on Mother -- not on the lowest card
+// number (the Pilgrim), which the historical fallback picked.
+TEST_CASE("Aura host ranking: the resolution fallback ranks with the same key")
+{
+    BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim", /*tapped=*/false, /*sick=*/true);
+    const int mother  = b.Put("Mother of Runes");
+    b.s.phase = Phase::PreCombatMain;
+    Permanent aura;
+    aura.card             = CardBs("Mythic Proportions", 500);
+    aura.controller_index = 0;
+    aura.owner_index      = 0;
+    b.s.battlefield.push_back(aura);
+    const int slot = static_cast<int>(b.s.battlefield.size()) - 1;
+    CHECK(ResolveEnchantTarget(b.s, 0, 0, false, slot) == mother);
+    CHECK(ResolveEnchantTarget(b.s, 0, 0, false) == pilgrim);   // no slot: the historical scoring
+}
+
+// A creature-ONLY mana source (Somberwald Sage) cannot pay for an Aura, so the key must not "tap" it
+// for one: Almost Perfect {4}{G}{W} off five lands needs one more mana, which only the Pilgrim can
+// make -- the Pilgrim taps, the Sage stays up and is the host that attacks (proof run 1, gi52).
+TEST_CASE("Aura host ranking: a creature-only mana source is never spent on an Aura")
+{
+    BoardBs b;
+    const int sage    = b.Put("Somberwald Sage");
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    b.Put("Forest");
+    b.Put("Forest");
+    b.Put("Plains");
+    b.Put("Forest");
+    b.Put("Forest");
+    b.Hand("Almost Perfect");
+    b.s.players[0].lands_played_this_turn = 1;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Almost Perfect") == sage);
+    CHECK(SolveHostOf(b.s, "Almost Perfect") == sage);
+    (void)pilgrim;
+}
+
+// NEXT turn's mana: a creature mana source the deck must tap next turn does not swing next turn.
+// Colossification off seven lands; Eldrazi Conscription {8} stays in hand, so next turn the seven
+// lands leave it one short and the fresh Birds of Paradise pays. Colossification on the Birds would
+// score +20 next turn for a creature that will be tapped for mana; on Mother it swings for 21
+// (proof run 5, d0 gi566).
+TEST_CASE("Aura host ranking: a mana creature the deck needs next turn is not counted as next turn's attacker")
+{
+    BoardBs b;
+    const int birds  = b.Put("Birds of Paradise", /*tapped=*/false, /*sick=*/true);
+    const int mother = b.Put("Mother of Runes");
+    for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
+    b.Hand("Colossification");
+    b.Hand("Eldrazi Conscription");
+    b.s.players[0].lands_played_this_turn = 1;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Colossification") == mother);
+    CHECK(SolveHostOf(b.s, "Colossification") == mother);
+    (void)birds;
 }

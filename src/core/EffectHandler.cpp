@@ -331,7 +331,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     state.battlefield.back().aura_attached_to =
                         ResolveEnchantTarget(state, entry.controller_index, entry.enchant_target,
-                                             def.params.is_land_aura);
+                                             def.params.is_land_aura,
+                                             static_cast<int>(state.battlefield.size()) - 1);
                     // Colossification's ETB tap, right after the attach (see ResolveAuraEnterTapHost
                     // for why it is not in FireOwnEtbTriggers). Main-phase cast -> respond window.
                     ResolveAuraEnterTapHost(state, static_cast<int>(state.battlefield.size()) - 1,

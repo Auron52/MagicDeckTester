@@ -3460,8 +3460,13 @@ struct EnchantRetargetDumper
 };
 inline EnchantRetargetDumper g_enchant_retarget_dumper;
 
+// The shared AURA CAST HOST RANKING's resolution-time form (defined at the end of this header, see
+// "AURA CAST HOST RANKING"): the legal creature host the damage key ranks first for the unattached
+// Aura permanent at `aura_slot`, or 0 when no host is legal. ResolveEnchantTarget's fallback.
+inline int AuraCastHostByRank(const GameState& state, int controller, int aura_slot);
+
 inline int ResolveEnchantTarget(const GameState& state, int controller, int enchant_target,
-                                bool land_aura = false)
+                                bool land_aura = false, int aura_slot = -1)
 {
     if (land_aura)
     {
@@ -3510,6 +3515,13 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
             std::abort();
         }
     }
+    // THE SHARED HOST RANKING (USER 2026-10-06: which creature gets an Aura "is not a difficult
+    // decision. It makes sense to have a heuristic for it."): when the cast-resolution caller hands
+    // in the Aura's own slot, the fallback is the same damage key the plan builders rank hosts by
+    // (AuraCastHostByRank), so an unset / no-longer-legal target lands where the heuristic would
+    // have put it. Both cast-resolution sites (EffectHandler + the rollout's apply_one) pass it, so
+    // the two worlds still agree. Callers without a slot keep the historical scoring below.
+    if (aura_slot >= 0) { return AuraCastHostByRank(state, controller, aura_slot); }
     int best = 0, best_score = -1;
     for (const Permanent& p : state.battlefield)
     {
@@ -29171,4 +29183,202 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
         dmgev::FlushDamageEvents(state);
         if (dmgev::WonLocked(state) || state.players[ctrl].life <= 0) { return; }
     }
+}
+
+// ================================================================================================
+// AURA CAST HOST RANKING (USER 2026-10-06, Bruna ledger "Aura host ranking")
+// ------------------------------------------------------------------------------------------------
+// USER: which creature gets an Aura "is not a difficult decision. It makes sense to have a heuristic
+// for it." ONE ranking decides the host of every Aura SPELL cast onto a creature -- the search's plan
+// list (EnumeratePlans keeps one host per plan class), Solve (d0 + every rollout leaf), and the
+// resolution-time fallback (ResolveEnchantTarget) -- so the executor and the rollout cannot disagree.
+// It replaced (a) the autonomous dedup's NAME fold, which kept whichever host happened to be
+// enumerated first (battlefield order), and (b) Bruna's per-host branching (MTG_BRUNA_AURA_HOST_SIG).
+// The fully-branched path survives as the PROOF control arm only (MTG_AURA_HOST_BRANCH=1).
+//
+// THE KEY is the goldfish objective itself, measured on a board where the Aura(s) are attached:
+//   1. LETHAL THIS TURN (pre-combat only): the team's attack this turn reaches the opponent's life;
+//   2. if lethal, this turn's team damage; otherwise the team's damage THIS turn + NEXT turn;
+//   3. tie-breaks: more of it THIS turn; then fewer Auras on creature mana sources.
+// "Team" sums CombatPowerOf (printed + counters + lords + CDA + Auras incl. base-setters such as
+// Almost Perfect + Equipment), doubled for double strike, over the creatures that can attack:
+//   * this turn: CanAttackFull -- summoning sickness / haste (own, lord, Equipment such as Lightning
+//     Greaves moved by the same plan), tapped (a creature the plan's payment taps for MANA -- the
+//     real payer, BatchPrepayMainCasts, run on the copy -- cannot attack), and Colossification's ETB
+//     tap (ResolveAuraEnterTapHost, incl. the main-phase respond window that keeps a mana dork's mana
+//     but not its attack);
+//   * next turn: every non-Defender creature (sickness and taps wear off) EXCEPT the creature mana
+//     sources the deck will have to tap next turn: the most expensive nonland card left in hand,
+//     less what lands / rocks (+ a land drop) make, drawn from mana creatures least-powerful first.
+// A gathering attacker (Bruna, Light of Alabaster) moves every battlefield Aura onto itself when it
+// attacks, so each side of the sum takes the better of "gather everything" / "gather all but the
+// base-setters" / "no gather" (the gather itself is a separate, already-proven collapse).
+// Evasion, trample and lifelink are goldfish-irrelevant (nothing blocks, life never matters) and so
+// are not in the key. Remaining ties keep the historical order (first enumerated / lowest number).
+// Every term above was added to fix a counterexample of the proof (Bruna ledger, "Aura host
+// ranking"); unit cases in test/unit/test_bruna_sweep.cpp pin each one.
+// ================================================================================================
+struct AuraHostKey
+{
+    bool lethal     = false;
+    int  dmg        = -1;
+    int  now        = 0;    // tie-break 1: this turn's share of `dmg` (damage sooner is never worse)
+    int  dork_hosts = 0;    // tie-break 2: Auras placed on creature MANA sources (fewer is better)
+};
+
+// Tie-breaks. (1) The same two-turn total with more of it THIS turn. (2) (Bruna proof run 1, gi49)
+// when the damage key ties, an Aura on a creature that is also
+// a MANA source is the worse home -- the deck keeps tapping that creature for mana on later turns
+// (Arcanum Wings on Avacyn's Pilgrim, swapped next turn into Mythic Proportions that then could not
+// attack because the Pilgrim paid for the swap), which a two-turn damage key cannot see.
+inline bool AuraHostKeyBetter(const AuraHostKey& a, const AuraHostKey& b)
+{
+    if (a.lethal != b.lethal) { return a.lethal; }
+    if (a.dmg != b.dmg) { return a.dmg > b.dmg; }
+    if (a.now != b.now) { return a.now > b.now; }
+    return a.dork_hosts < b.dork_hosts;
+}
+
+// Is this creature a mana source the deck taps (the tie-break above)?
+inline bool AuraHostIsManaCreature(const Permanent& p)
+{
+    if (p.def_absent || !p.card.IsCreature()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    return d != nullptr && d->tmpl == CardTemplate::ManaDork;
+}
+
+// Silences the play-event sink (and the human choosers' reach) while the key performs attachments
+// on a COPY: the copy is a projection, never the game, and the viewer must not log its taps.
+struct AuraHostKeyQuiet
+{
+    std::vector<PlayEvent>* saved;
+    AuraHostKeyQuiet() : saved(g_play_event_sink) { g_play_event_sink = nullptr; }
+    ~AuraHostKeyQuiet() { g_play_event_sink = saved; }
+    AuraHostKeyQuiet(const AuraHostKeyQuiet&) = delete;
+    AuraHostKeyQuiet& operator=(const AuraHostKeyQuiet&) = delete;
+};
+
+// `next_out`: creatures left out of the NEXT-turn sum (see AuraHostBoardKey).
+inline int AuraHostKeyAttackSum(const GameState& t, int controller, bool now,
+                                const std::vector<int>* next_out = nullptr)
+{
+    int sum = 0;
+    for (const Permanent& q : t.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+        if (now) { if (!CanAttackFull(q, t.battlefield, controller)) { continue; } }
+        else if (q.card.HasKeyword(Keyword::Defender)) { continue; }
+        if (!now && next_out != nullptr
+            && std::find(next_out->begin(), next_out->end(), q.card.m_number) != next_out->end()) { continue; }
+        sum += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
+    }
+    return sum;
+}
+
+// Team damage this turn (`now`) or next, with a gathering attacker's best gather (see the header).
+// `t` is a scratch board: the gather variants re-point Auras on it and restore its battlefield.
+inline int AuraHostKeyTeamDamage(GameState& t, int controller, bool now,
+                                 const std::vector<int>* next_out = nullptr)
+{
+    int gatherer = -1;
+    for (int i = 0; i < static_cast<int>(t.battlefield.size()); ++i)
+    {
+        const Permanent& q = t.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->params.attack_gather_auras) { continue; }
+        if (now ? !CanAttackFull(q, t.battlefield, controller) : q.card.HasKeyword(Keyword::Defender)) { continue; }
+        gatherer = i;
+        break;
+    }
+    int best = AuraHostKeyAttackSum(t, controller, now, next_out);
+    if (gatherer < 0) { return best; }
+    const std::vector<Permanent> saved = t.battlefield;
+    for (int skip_base = 0; skip_base < 2; ++skip_base)
+    {
+        GameState& g = t;
+        if (skip_base != 0) { g.battlefield = saved; }
+        const Permanent host = g.battlefield[static_cast<std::size_t>(gatherer)];
+        bool moved = false;
+        for (Permanent& a : g.battlefield)
+        {
+            if (a.controller_index != controller || a.def_absent || a.aura_attached_to == 0) { continue; }
+            if (a.aura_attached_to == host.card.m_number) { continue; }
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+            if (ad == nullptr || !ad->params.is_aura || ad->params.is_land_aura) { continue; }
+            if (skip_base != 0 && ad->params.aura_set_base_power >= 0) { continue; }
+            if (!AuraCouldEnchant(g, ad->params, host)) { continue; }
+            a.aura_attached_to = host.card.m_number;
+            moved = true;
+        }
+        if (moved) { best = std::max(best, AuraHostKeyAttackSum(g, controller, now, next_out)); }
+    }
+    t.battlefield = saved;
+    return best;
+}
+
+// The key of a board on which every Aura under consideration is already attached. `attack_window`
+// = this turn's combat is still ahead (pre-combat main). `mana_tapped`: creature mana sources the
+// plan taps for MANA this turn; they are assumed to pay again next turn, so their next-turn swing is
+// not counted (Bruna proof run 4, d0 gi566: Colossification on the Pilgrim that paid for it scored
+// +21 next turn, but next turn the Pilgrim paid for Eldrazi Conscription and never swung; on Mother
+// it was lethal). Their this-turn swing is already zero (tapped).
+inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_window,
+                                    const std::vector<int>* mana_tapped = nullptr)
+{
+    AuraHostKey k;
+    const int now = attack_window ? AuraHostKeyTeamDamage(t, controller, true) : 0;
+    if (attack_window && now >= t.players[static_cast<std::size_t>(1 - controller)].life)
+    {
+        k.lethal = true;
+        k.dmg    = now;
+        k.now    = now;
+        return k;
+    }
+    k.now = now;
+    k.dmg = now + AuraHostKeyTeamDamage(t, controller, false, mana_tapped);
+    return k;
+}
+
+// Resolution-time ranking (ResolveEnchantTarget's fallback): the Aura permanent at `aura_slot` is on
+// the battlefield, unattached. Every legal creature host (targetable by an Aura spell, CR 303.4a,
+// and satisfying the Enchant restriction) is tried on a copy -- attach, Colossification's ETB tap --
+// and the best key wins; ties to the historical score (Kor-style self-buff, then most Auras), then
+// the lowest card number. With no restriction-legal host the targetable set is used (the historical
+// fallback's set), so this never strands an Aura the old code attached.
+inline int AuraCastHostByRank(const GameState& state, int controller, int aura_slot)
+{
+    if (aura_slot < 0 || aura_slot >= static_cast<int>(state.battlefield.size())) { return 0; }
+    const CardDefinition* ad = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(aura_slot)].card);
+    AuraHostKeyQuiet quiet;
+    const bool window = state.phase != Phase::PostCombatMain;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        int best = 0, best_score = -1;
+        AuraHostKey best_key;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+            if (!CreatureTargetableByAuraSpell(p, state, controller)) { continue; }
+            if (pass == 0 && ad != nullptr && !AuraCouldEnchant(state, ad->params, p)) { continue; }
+            GameState t = state;
+            t.battlefield[static_cast<std::size_t>(aura_slot)].aura_attached_to = p.card.m_number;
+            ResolveAuraEnterTapHost(t, aura_slot, /*respond_window=*/true);
+            AuraHostKey k = AuraHostBoardKey(t, controller, window);
+            k.dork_hosts = AuraHostIsManaCreature(p) ? 1 : 0;
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            int auras = 0;
+            for (const Permanent& a : state.battlefield)
+            { if (a.aura_attached_to == p.card.m_number && a.controller_index == controller) { ++auras; } }
+            const int score = auras * 4 + ((d && d->params.aura_self_buff_power > 0) ? 1000 : 0);
+            const bool better = best == 0
+                             || AuraHostKeyBetter(k, best_key)
+                             || (!AuraHostKeyBetter(best_key, k)
+                                 && (score > best_score || (score == best_score && p.card.m_number < best)));
+            if (better) { best = p.card.m_number; best_score = score; best_key = k; }
+        }
+        if (best != 0) { return best; }
+    }
+    return 0;
 }

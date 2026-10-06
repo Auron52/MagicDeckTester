@@ -9009,6 +9009,422 @@ static bool SubsetHasShroudBlockedAura(const std::vector<Action>& cands, const s
     return false;
 }
 
+// ---- AURA CAST HOST RANKING: the plan-level key (USER 2026-10-06) --------------------------------
+// See "AURA CAST HOST RANKING" in core/SpellEffects.h for the key and the user decision. These are
+// its two plan-construction call sites: EnumeratePlans' dedup keeps, per plan class (the plans that
+// differ ONLY in which creature their Auras enchant), the member with the best key; Solve (d0 + every
+// rollout leaf) re-points its chosen plan's Auras the same way. Both apply worlds then simply realise
+// the plan's enchant_target, so the executor and the rollout cannot disagree.
+//
+// MTG_AURA_HOST_BRANCH=1 -- the PROOF CONTROL ARM only (default OFF): the search keeps every host as
+// its own plan (the fully-branched path the heuristic must match). Solve keeps the ranking in both
+// arms (it never branched), so the arms differ only in the search's plan list. heurarm slot
+// AURA_HOST_BRANCH so one pooled batch runs both arms.
+static bool AuraHostBranchOn()
+{
+    static const bool env = EnvOn("MTG_AURA_HOST_BRANCH");
+    return heurarm::Flag(heurarm::AURA_HOST_BRANCH, env);
+}
+
+// A creature Aura SPELL with a searched host (the decision this ranking owns). Bestow casts and land
+// Auras are out of scope (bestow is a creature-or-Aura mode choice with its own axis; a land Aura's
+// host is the land machinery's).
+static bool IsCreatureAuraCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.is_aura && !d->params.is_land_aura;
+}
+
+// The key of plan `acts` from `s` (the board the plan starts on). A COPY realises only what decides
+// the comparison between hosts, in the order the apply worlds do:
+//   1. the plan's creature casts enter (summoning-sick, as cast);
+//   2. its Equip actions attach (Lightning Greaves' haste -- and the shroud-release move);
+//   3. the mana its casts need beyond the non-creature sources is drawn from creature mana sources,
+//      least-powerful first (the CollectAttackingManaSources convention) -- a creature tapped for
+//      mana is not an attacker this turn;
+//   4. its creature Auras attach in plan order, Colossification's ETB tap included.
+// Steps 1-3 are identical for every member of a class, so the key differs between members exactly
+// by where the Auras went.
+// The host-INDEPENDENT half (steps 1-3): identical for every member of a plan class and for every
+// host combination Solve tries, so callers build it once and score each host combination on a copy
+// (AuraPlanHostKeyOn). The prepay (step 3) reads no Aura target.
+static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>& acts)
+{
+    AuraHostKeyQuiet quiet;
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    GameState t = s;
+    std::vector<int> used;
+    auto hand_number = [&](const Action& a) -> int
+    {
+        auto free = [&](int n) { return std::find(used.begin(), used.end(), n) == used.end(); };
+        if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+        {
+            const Card& c = ap.hand[static_cast<std::size_t>(a.hand_index)];
+            if (c.m_name == a.card_name && free(c.m_number)) { used.push_back(c.m_number); return c.m_number; }
+        }
+        for (const Card& c : ap.hand)
+        { if (c.m_name == a.card_name && free(c.m_number)) { used.push_back(c.m_number); return c.m_number; } }
+        return 0;
+    };
+    // MANA FIRST, by the REAL payer: the executor and the rollout both open a plan with
+    // BatchPrepayMainCasts on the pre-plan board (lockstep), and which creatures it taps is exactly
+    // which creatures cannot attack this turn. Running it on the copy prices that faithfully --
+    // creature-only sources (Somberwald Sage), colour needs, an enters-tapped land drop, the
+    // attack-capable-source holds -- where any re-derivation would drift from the payer (Bruna proof
+    // runs 1-2: gi52 / gi238 / gi282 were all the key's own tap model disagreeing with the payer).
+    // When the prepay declines (it returns false with the copy untouched; the casts then pay one at a
+    // time) the approximation below stands in.
+    // The only thing the payment changes that the key reads is WHICH CREATURES get tapped, so with no
+    // creature mana source that could tap this turn (none untapped and able on the board, and no
+    // plan-cast dork an Equip of the plan could haste) it is skipped -- exactly equivalent, and the
+    // prepay is the expensive half of the key (most Auras boards: Bogles has no mana creatures).
+    bool any_dork = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && !p.tapped && AuraHostIsManaCreature(p) && CanTapNow(p, s.battlefield))
+        { any_dork = true; break; }
+    }
+    if (!any_dork)
+    {
+        bool equip = false, fresh_dork = false;
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::Equip) { equip = true; }
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d != nullptr && d->card.IsCreature() && d->tmpl == CardTemplate::ManaDork) { fresh_dork = true; }
+        }
+        any_dork = equip && fresh_dork;
+    }
+    const bool prepaid = !any_dork || TurnSolver::BatchPrepayMainCasts(t, acts);
+    int cost_cre = 0, cost_other = 0;   // creature-spell costs vs everything else (activations too)
+    for (const Action& a : acts)
+    {
+        const CardDefinition* d = (a.kind == Action::Kind::CastFromHand)
+                                ? (a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name)) : nullptr;
+        const bool cre = d != nullptr && d->card.IsCreature() && !a.bestow;
+        (cre ? cost_cre : cost_other) += a.cost.ManaValue();
+    }
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        const int num = hand_number(a);
+        if (num <= 0) { continue; }
+        Permanent p;
+        p.card              = d->card;
+        p.card.m_number     = num;
+        p.controller_index  = me;
+        p.owner_index       = me;
+        p.entered_this_turn = true;
+        if (d->params.enters_tapped) { p.tapped = true; }
+        t.battlefield.push_back(p);
+    }
+    for (const Action& a : acts)
+    { if (a.kind == Action::Kind::Equip) { ApplyEquip(t, me, a.sac_source_id, a.sac_victim_id); } }
+    if (!prepaid)
+    {
+        // APPROXIMATION (prepay declined). Supply that is NOT a creature's tap = the whole available pool less every creature dork's
+        // yield (BuildNonCreaturePool is the "no creature-ONLY mana" pool and still counts dorks). It pays
+        // the non-creature costs first, the rest goes to creature spells. What remains is drawn from
+        // creature dorks, least-powerful first: a creature-ONLY source (Somberwald Sage) can fund only the
+        // creature-spell remainder, so it is spent there first and is never "tapped" for an Aura -- the
+        // payer cannot spend it there (Bruna proof run 1, gi52 / gi238: the key tapped the 0-power Sage
+        // for Almost Perfect / Eldrazi Conscription and so steered the Aura onto a Pilgrim the real
+        // payment taps, while the Sage -- untapped -- was the only attacker).
+        int supply = AvailableManaPool(s).Total();
+        // ...plus the plan's own same-turn ramp: a mana rock it casts (Sol Ring), a ritual's float,
+        // a minted Treasure (proof run 3, d0 gi100: Sol Ring + Eldrazi Conscription paid with the
+        // Ring's {C}{C}; without it the model "tapped" Birds of Paradise and moved the Aura).
+        for (const Action& a : acts) { supply += a.rock_mana.Total() + a.ritual_float + a.mint_gain; }
+        struct Src { int pw; int idx; int y; bool cre_only; };
+        std::vector<Src> srcs;
+        for (int i = 0; i < static_cast<int>(t.battlefield.size()); ++i)
+        {
+            const Permanent& p = t.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != me || p.tapped || !p.card.IsCreature() || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || d->tmpl != CardTemplate::ManaDork || !CanTapNow(p, t.battlefield)) { continue; }
+            int y = PermanentManaYield(t, p, *d);
+            if (y <= 0) { y = ManaProducedPerTap(*d); }
+            if (y <= 0) { continue; }
+            // Only a dork that was already able to tap on the pre-plan board is inside AvailableManaPool.
+            bool pre = false;
+            for (const Permanent& q : s.battlefield)
+            { if (q.card.m_number == p.card.m_number) { pre = q.controller_index == me && !q.tapped && CanTapNow(q, s.battlefield); break; } }
+            if (pre) { supply -= y; }
+            srcs.push_back({ CombatPowerOf(p, t), i, y, d->params.creature_mana_only });
+        }
+        std::stable_sort(srcs.begin(), srcs.end(), [](const Src& a, const Src& b) { return a.pw < b.pw; });
+        supply = std::max(0, supply);
+        int need_other = std::max(0, cost_other - supply);
+        int need_cre   = std::max(0, cost_cre - std::max(0, supply - cost_other));
+        for (int pass = 0; pass < 2; ++pass)          // creature-only sources first, on creature costs
+        {
+            for (const Src& src : srcs)
+            {
+                if (need_other + need_cre <= 0) { break; }
+                if (src.cre_only != (pass == 0)) { continue; }
+                Permanent& p = t.battlefield[static_cast<std::size_t>(src.idx)];
+                if (p.tapped) { continue; }
+                if (src.cre_only)
+                {
+                    if (need_cre <= 0) { continue; }
+                    need_cre -= src.y;
+                }
+                else
+                {
+                    int y = src.y;
+                    const int c = std::min(y, need_cre); need_cre -= c; y -= c;
+                    need_other -= std::min(y, need_other);
+                }
+                p.tapped = true;
+            }
+        }
+    }
+    return t;
+}
+
+// The host-DEPENDENT half (step 4 + the key) on `work`, a scratch copy of `base` (AuraPlanHostBase of
+// the same plan) that the caller made ONCE: step 4 only appends Auras to the battlefield and taps
+// hosts, so each evaluation resets just the battlefield instead of copying the whole state (perf).
+static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, GameState& work,
+                                     const GameState& s, bool is_pre_combat, const std::vector<Action>& acts)
+{
+    AuraHostKeyQuiet quiet;
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    work.battlefield = base_bf;
+    GameState& t = work;
+    std::vector<int> used;
+    auto hand_number = [&](const Action& a) -> int
+    {
+        auto free = [&](int n) { return std::find(used.begin(), used.end(), n) == used.end(); };
+        if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+        {
+            const Card& c = ap.hand[static_cast<std::size_t>(a.hand_index)];
+            if (c.m_name == a.card_name && free(c.m_number)) { used.push_back(c.m_number); return c.m_number; }
+        }
+        for (const Card& c : ap.hand)
+        { if (c.m_name == a.card_name && free(c.m_number)) { used.push_back(c.m_number); return c.m_number; } }
+        return 0;
+    };
+    for (const Action& a : acts)
+    {
+        if (!IsCreatureAuraCast(a)) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        Permanent p;
+        p.card              = d->card;
+        p.card.m_number     = hand_number(a);
+        p.controller_index  = me;
+        p.owner_index       = me;
+        p.entered_this_turn = true;
+        p.aura_attached_to  = a.enchant_target;
+        t.battlefield.push_back(p);
+        ResolveAuraEnterTapHost(t, static_cast<int>(t.battlefield.size()) - 1, /*respond_window=*/true);
+    }
+    // NEXT TURN'S MANA. The two-turn key counts next turn's swing of every creature, but a creature
+    // mana source the deck must tap next turn does not swing (Bruna proof runs 4-5, d0 gi566:
+    // Colossification on a Pilgrim / a fresh Birds of Paradise scored +20 next turn, but next turn
+    // that dork paid for the Eldrazi Conscription in hand and never attacked; on Mother it was
+    // lethal). Estimate: next turn the deck wants its most expensive nonland card still in hand; what
+    // the non-creature sources (every land / rock on the board after this plan, plus a land drop if a
+    // land is in hand) cannot cover is drawn from creature mana sources least-powerful first -- the
+    // payer's own order (AttackerReserve holds the biggest attacker back) -- and those creatures are
+    // left out of the next-turn sum. A creature-ONLY source pays only for a creature card.
+    std::vector<int> mana_tapped;
+    {
+        std::vector<int> cast_hand;   // hand numbers this plan casts
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_name != a.card_name) { continue; }
+                if (std::find(cast_hand.begin(), cast_hand.end(), c.m_number) != cast_hand.end()) { continue; }
+                cast_hand.push_back(c.m_number);
+                break;
+            }
+        }
+        int need = 0; bool need_creature = false, land_in_hand = false;
+        for (const Card& c : ap.hand)
+        {
+            if (std::find(cast_hand.begin(), cast_hand.end(), c.m_number) != cast_hand.end()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { continue; }
+            if (d->card.IsLand()) { land_in_hand = true; continue; }
+            const int mv = d->card.m_mana_cost.ManaValue();
+            if (mv > need) { need = mv; need_creature = d->card.IsCreature(); }
+        }
+        int supply = land_in_hand ? 1 : 0;
+        struct Src { int pw; int num; int y; };
+        std::vector<Src> dorks;
+        for (const Permanent& q : t.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d == nullptr) { continue; }
+            // Mana sources only: lands, rocks, creature dorks (PermanentManaYield's default is 1 for
+            // any permanent -- an Equipment or an Aura is not a source).
+            const bool src = d->card.IsLand() || (d->params.mana_rock && !d->card.IsCreature())
+                          || (q.card.IsCreature() && d->tmpl == CardTemplate::ManaDork);
+            if (!src) { continue; }
+            int y = PermanentManaYield(t, q, *d);
+            if (y <= 0) { y = ManaProducedPerTap(*d); }
+            if (y <= 0) { continue; }
+            if (q.card.IsCreature())
+            {
+                if (d->tmpl != CardTemplate::ManaDork) { continue; }
+                if (d->params.creature_mana_only && !need_creature) { continue; }
+                dorks.push_back({ std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1), q.card.m_number, y });
+            }
+            else { supply += y; }
+        }
+        int deficit = need - supply;
+        std::stable_sort(dorks.begin(), dorks.end(), [](const Src& a, const Src& b) { return a.pw < b.pw; });
+        for (const Src& d : dorks)
+        {
+            if (deficit <= 0) { break; }
+            mana_tapped.push_back(d.num);
+            deficit -= d.y;
+        }
+        if (TRACE_ON("hostkey"))
+        {
+            std::string ds;
+            for (const Src& d : dorks) { ds += " #" + std::to_string(d.num) + "/pw" + std::to_string(d.pw) + "/y" + std::to_string(d.y); }
+            TRACE("hostkey", "T%d need=%d supply=%d dorks={%s} out=%zu", s.turn_number, need, supply, ds.c_str(), mana_tapped.size());
+        }
+    }
+    AuraHostKey key = AuraHostBoardKey(t, me, is_pre_combat, &mana_tapped);
+    for (const Action& a : acts)
+    {
+        if (!IsCreatureAuraCast(a)) { continue; }
+        for (const Permanent& h : t.battlefield)
+        { if (h.card.m_number == a.enchant_target) { key.dork_hosts += AuraHostIsManaCreature(h) ? 1 : 0; break; } }
+    }
+    return key;
+}
+
+// A host-independent fingerprint of a plan (every action field the base reads; a creature Aura's
+// target left out), so the dedup builds one base per distinct plan-modulo-hosts.
+static std::string AuraPlanBaseFingerprint(const std::vector<Action>& acts)
+{
+    std::string f;
+    for (const Action& a : acts)
+    {
+        f += std::to_string(static_cast<int>(a.kind)); f += ':'; f += a.card_name.str(); f += ':';
+        f += std::to_string(a.sac_source_id); f += ':'; f += std::to_string(a.sac_victim_id); f += ':';
+        f += std::to_string(a.hand_index); f += ':'; f += std::to_string(a.chosen_x); f += ':';
+        f += std::to_string(IsCreatureAuraCast(a) ? 0 : a.enchant_target); f += ';';
+    }
+    return f;
+}
+
+inline bool AuraOnNewCreatureEnabled();   // defined with AppendCreatureTargetAuraCandidates
+
+// Lockstep twin of SubsetHasShroudBlockedAura over an ACTION list (Solve's conservative form): a
+// creature Aura naming a creature an Equipment shrouds is legal only if the same plan moves that
+// Equipment to a different creature that no Aura of the plan targets.
+static bool ActsHaveShroudBlockedAura(const GameState& state, const std::vector<Action>& acts)
+{
+    for (const Action& a : acts)
+    {
+        if (!IsCreatureAuraCast(a)) { continue; }
+        const int x = a.enchant_target;
+        int g = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != x) { continue; }
+            if (!CreatureHasShroud(p, state, &g)) { g = 0; }
+            break;
+        }
+        if (g == 0) { continue; }
+        int y = 0;
+        for (const Action& d : acts)
+        { if (d.kind == Action::Kind::Equip && d.sac_source_id == g && d.sac_victim_id != x) { y = d.sac_victim_id; break; } }
+        if (y == 0) { return true; }
+        for (const Action& d : acts)
+        { if (d.kind == Action::Kind::CastFromHand && d.enchant_target == y) { return true; } }
+    }
+    return false;
+}
+
+// Solve's half (d0 + rollout leaves): re-point the chosen plan's creature Auras to the best-keyed
+// combination of hosts. The hosts on offer are the search's: every host Solve itself enumerated for
+// that Aura (same card, same hand_index, same cost) plus -- for an unrestricted Aura -- every
+// creature the same plan casts (EnumeratePlans' AppendCreatureTargetAuraCandidates; the apply
+// worlds cast creatures before Auras, CastOrderRank 10 < 20). Combinations the shroud rule refuses
+// are skipped (ActsHaveShroudBlockedAura). The chosen selection is the incumbent and wins ties.
+static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
+                                   const std::vector<Action>& cands, const std::vector<int>& sel,
+                                   const std::vector<int>& /*shroud_src*/, std::vector<Action>& acts)
+{
+    if (acts.size() != sel.size()) { return; }
+    std::vector<int> pos;                      // positions in acts holding a creature Aura
+    std::vector<std::vector<int>> alts;        // per position: host numbers (incumbent first)
+    std::vector<int> cast_nums;                // creatures this plan casts (hand numbers)
+    {
+        const Player& ap = state.players[static_cast<std::size_t>(state.active_player_index)];
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr || !d->card.IsCreature()) { continue; }
+            const Card* hc = nullptr;
+            if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size())
+                && ap.hand[static_cast<std::size_t>(a.hand_index)].m_name == a.card_name)
+            { hc = &ap.hand[static_cast<std::size_t>(a.hand_index)]; }
+            if (hc != nullptr && hc->m_number > 0
+                && std::find(cast_nums.begin(), cast_nums.end(), hc->m_number) == cast_nums.end())
+            { cast_nums.push_back(hc->m_number); }
+        }
+    }
+    long long combos = 1;
+    for (int k = 0; k < static_cast<int>(acts.size()); ++k)
+    {
+        const Action& a0 = acts[static_cast<std::size_t>(k)];
+        if (!IsCreatureAuraCast(a0)) { continue; }
+        const Action& c0 = cands[static_cast<std::size_t>(sel[static_cast<std::size_t>(k)])];
+        std::vector<int> al{ a0.enchant_target };
+        auto add = [&](int n) { if (n > 0 && std::find(al.begin(), al.end(), n) == al.end()) { al.push_back(n); } };
+        for (const Action& c : cands)
+        {
+            if (c.hand_index != c0.hand_index || c.card_name != c0.card_name || !IsCreatureAuraCast(c)) { continue; }
+            if (c.alt_cost != c0.alt_cost || c.cost.ManaValue() != c0.cost.ManaValue()) { continue; }
+            add(c.enchant_target);
+        }
+        const CardDefinition* ad = a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name);
+        if (ad != nullptr && ad->params.aura_enchant_requires.empty() && AuraOnNewCreatureEnabled())
+        { for (int n : cast_nums) { add(n); } }
+        if (al.size() < 2) { continue; }
+        pos.push_back(k);
+        combos *= static_cast<long long>(al.size());
+        alts.push_back(std::move(al));
+    }
+    if (pos.empty() || combos > 4096) { return; }
+    std::vector<int> pick(pos.size(), 0), best_pick = pick;
+    std::vector<Action> trial = acts;
+    GameState work = AuraPlanHostBase(state, acts);
+    const std::vector<Permanent> base_bf = work.battlefield;
+    AuraHostKey best_key = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, acts);
+    for (;;)
+    {
+        std::size_t d = 0;
+        while (d < pick.size() && ++pick[d] == static_cast<int>(alts[d].size())) { pick[d] = 0; ++d; }
+        if (d == pick.size()) { break; }
+        for (std::size_t q = 0; q < pos.size(); ++q)
+        { trial[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(pick[q])]; }
+        if (ActsHaveShroudBlockedAura(state, trial)) { continue; }
+        const AuraHostKey k = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, trial);
+        if (AuraHostKeyBetter(k, best_key)) { best_key = k; best_pick = pick; }
+    }
+    for (std::size_t q = 0; q < pos.size(); ++q)
+    { acts[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(best_pick[q])]; }
+}
+
 // ---- Same-turn HASTED mana dork ---------------------------------------------------------------
 // A mana dork is summoning-sick the turn it arrives, which is exactly why the same-turn ROCK credit
 // (EnumeratePlans, `sel_rock`) excludes creatures. But a haste-granting Equipment attached this same
@@ -30311,6 +30727,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         best.actions.clear();
         for (int j : best_sel)
         { best.actions.push_back(j == best_fill_j ? best_fill_action : cands[j]); }
+        // AURA CAST HOST RANKING (USER 2026-10-06): the chosen plan's creature Auras go where the
+        // shared damage key puts them (see RetargetSolveAuraHosts). Self-gating: no creature Aura
+        // with two candidate hosts in the plan -> nothing scored, nothing changes.
+        RetargetSolveAuraHosts(state, is_pre_combat, cands, best_sel, pre.aura_shroud_src, best.actions);
         ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
         return best;
     };
@@ -37078,7 +37498,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 state.battlefield.back().aura_attached_to =
                     ResolveEnchantTarget(state, state.active_player_index, enchant_target,
-                                         def.params.is_land_aura);
+                                         def.params.is_land_aura,
+                                         static_cast<int>(state.battlefield.size()) - 1);
                 // Colossification's ETB tap -- lockstep with EffectHandler's executor attach.
                 ResolveAuraEnterTapHost(state, static_cast<int>(state.battlefield.size()) - 1,
                                         /*respond_window=*/true);
@@ -43490,14 +43911,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const bool host_sig = s_aura_host_sig
                        && (!s_aura_host_karoo || g_enum_karoo_drop || s_human_play_sig
                            || DecisionUnpruned());
-    // CREATURE-AURA HOST (Bruna sweep B, 2026-10-05). The autonomous signature keyed a creature Aura
-    // by NAME only, so "Courage -> Mother" and "Courage -> Pilgrim" folded to whichever was enumerated
-    // first: WHICH creature carries an Aura was never a searched decision outside human play -- a
-    // heuristic substitute in the search window, and on a voltron deck the decision that matters
-    // most. Provider-owned opt-in (DecisionProvider::KeysCreatureAuraHost; Bruna only -- the fold's
-    // fleet-wide status is an open user question in docs/design/analysis-Bruna.md), plus the
-    // un-pruned oracle (MTG_UNPRUNED), whose plan list must show the axis. Human play keys it already.
-    const bool cre_host_sig = ResolveProvider(state).KeysCreatureAuraHost() || DecisionUnpruned();
+    // CREATURE-AURA HOST. The autonomous signature keys a creature Aura by NAME only, so the plans
+    // that differ only in WHICH creature an Aura enchants form one class. Which member survives is the
+    // AURA CAST HOST RANKING's decision (USER 2026-10-06 -- "not a difficult decision. It makes sense
+    // to have a heuristic for it"; see AuraPlanHostKey and core/SpellEffects.h), applied in the dedup
+    // below. Before it the class kept whichever host was enumerated FIRST (battlefield order), and
+    // Bruna opted out of the fold entirely (per-host branching, Bruna sweep B). The host stays a
+    // distinct plan for the un-pruned oracle (MTG_UNPRUNED: the viewer's / claude-play's plan list),
+    // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
+    const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
     auto plan_signature = [s_human_play_sig, host_sig, cre_host_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
@@ -43850,13 +44272,67 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // it (in which case the provider's multi-value XCandidates is partially dead)?
     static const bool s_sig_x_audit = EnvOn("MTG_SIG_X_AUDIT");
     std::unordered_map<std::string, std::size_t> sig_first;
-    for (TurnSolver::Plan& p : plans)
+    // AURA CAST HOST RANKING (USER 2026-10-06). When the signature folds creature-Aura hosts (the
+    // autonomous search: not human play, not un-pruned, not the control arm) and some plan casts one,
+    // the class's survivor is its best-keyed member (AuraPlanHostKey; ties keep the FIRST enumerated
+    // -- the historical survivor), emitted at the class's first position. `pick` maps a class to its
+    // survivor; empty = no creature Aura anywhere -> the loop below is the unchanged first-wins dedup.
+    std::unordered_map<std::string, std::size_t> pick;
+    std::vector<std::string> sigs;
+    if (!cre_host_sig && !s_human_play_sig)
     {
-        const std::string sig = plan_signature(p);
+        bool any = false;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            for (const Action& a : p.actions) { if (IsCreatureAuraCast(a)) { any = true; break; } }
+            if (any) { break; }
+        }
+        if (any)
+        {
+            sigs.reserve(plans.size());
+            std::unordered_map<std::size_t, AuraHostKey> keys;
+            // One host-independent base (+ its scratch copy) per plan-modulo-hosts.
+            std::unordered_map<std::string, std::pair<std::vector<Permanent>, GameState>> bases;
+            auto key_of = [&](std::size_t i) -> const AuraHostKey&
+            {
+                auto it = keys.find(i);
+                if (it == keys.end())
+                {
+                    const std::vector<Action>& acts = plans[i].actions;
+                    const std::string fp = AuraPlanBaseFingerprint(acts);
+                    auto bt = bases.find(fp);
+                    if (bt == bases.end())
+                    {
+                        GameState w = AuraPlanHostBase(state, acts);
+                        std::vector<Permanent> b = w.battlefield;
+                        bt = bases.emplace(fp, std::make_pair(std::move(b), std::move(w))).first;
+                    }
+                    it = keys.emplace(i, AuraPlanHostKeyOn(bt->second.first, bt->second.second, state,
+                                                           is_pre_combat, acts)).first;
+                }
+                return it->second;
+            };
+            for (std::size_t i = 0; i < plans.size(); ++i)
+            {
+                sigs.push_back(plan_signature(plans[i]));
+                auto it = pick.find(sigs.back());
+                if (it == pick.end()) { pick.emplace(sigs.back(), i); continue; }
+                bool aura = false;
+                for (const Action& a : plans[i].actions) { if (IsCreatureAuraCast(a)) { aura = true; break; } }
+                if (!aura) { continue; }
+                if (AuraHostKeyBetter(key_of(i), key_of(it->second))) { it->second = i; }
+            }
+        }
+    }
+    for (std::size_t pi = 0; pi < plans.size(); ++pi)
+    {
+        TurnSolver::Plan& p = plans[pi];
+        const std::string sig = sigs.empty() ? plan_signature(p) : sigs[pi];
         if (seen.insert(sig).second)
         {
             if (s_sig_x_audit) { sig_first[sig] = deduped.size(); }
-            deduped.push_back(std::move(p));
+            const std::size_t keep = pick.empty() ? pi : pick[sig];
+            deduped.push_back(std::move(plans[keep]));
         }
         else if (s_sig_x_audit)
         {
@@ -66757,4 +67233,98 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
         }
     }
     return false;
+}
+
+// ---- MTG_TRACE=hostproof (see the TurnSolver.h declaration) ---------------------------------------
+void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, const Plan& plan)
+{
+    if (!TRACE_ON("hostproof")) { return; }
+    const std::vector<Action>& acts = plan.actions;
+    std::vector<int> pos;
+    for (int k = 0; k < static_cast<int>(acts.size()); ++k)
+    { if (IsCreatureAuraCast(acts[static_cast<std::size_t>(k)])) { pos.push_back(k); } }
+    if (pos.empty()) { return; }
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    // Creatures this plan casts (their hand numbers): same-turn hosts for a plain Aura.
+    std::vector<int> cast_nums;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_name != a.card_name) { continue; }
+            if (std::find(cast_nums.begin(), cast_nums.end(), c.m_number) != cast_nums.end()) { continue; }
+            cast_nums.push_back(c.m_number);
+            break;
+        }
+    }
+    std::vector<std::vector<int>> alts;
+    long long combos = 1;
+    for (int k : pos)
+    {
+        const Action& a = acts[static_cast<std::size_t>(k)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        std::vector<int> al{ a.enchant_target };
+        auto add = [&](int n) { if (n > 0 && std::find(al.begin(), al.end(), n) == al.end()) { al.push_back(n); } };
+        for (int n : LegalEnchantTargets(state, me, d->params)) { add(n); }
+        const bool plain = d->params.aura_enchant_requires.empty();
+        if (plain) { for (int n : cast_nums) { add(n); } }
+        // Greaves-shrouded hosts whose grantor this plan moves to a different creature.
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            int ssrc = 0;
+            if (!CreatureHasShroud(p, state, &ssrc) || ssrc == 0) { continue; }
+            if (!plain && !AuraCouldEnchant(state, d->params, p)) { continue; }
+            for (const Action& e : acts)
+            {
+                if (e.kind == Action::Kind::Equip && e.sac_source_id == ssrc && e.sac_victim_id != p.card.m_number)
+                { add(p.card.m_number); break; }
+            }
+        }
+        combos *= static_cast<long long>(al.size());
+        alts.push_back(std::move(al));
+    }
+    if (combos > 4096) { return; }
+    auto name_of = [&](int num) -> std::string
+    {
+        for (const Permanent& p : state.battlefield) { if (p.card.m_number == num) { return p.card.m_name.str(); } }
+        for (const Card& c : ap.hand) { if (c.m_number == num) { return c.m_name.str() + "(hand)"; } }
+        return "#" + std::to_string(num);
+    };
+    std::vector<int> pick(pos.size(), 0);
+    std::vector<Action> trial = acts;
+    GameState work = AuraPlanHostBase(state, acts);
+    const std::vector<Permanent> base_bf = work.battlefield;
+    const AuraHostKey inc = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, acts);
+    AuraHostKey best = inc;
+    std::vector<int> best_pick = pick;
+    int ties = 0;
+    for (;;)
+    {
+        std::size_t dgt = 0;
+        while (dgt < pick.size() && ++pick[dgt] == static_cast<int>(alts[dgt].size())) { pick[dgt] = 0; ++dgt; }
+        if (dgt == pick.size()) { break; }
+        for (std::size_t q = 0; q < pos.size(); ++q)
+        { trial[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(pick[q])]; }
+        const AuraHostKey k = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, trial);
+        if (AuraHostKeyBetter(k, best)) { best = k; best_pick = pick; }
+        else if (!AuraHostKeyBetter(inc, k) && !AuraHostKeyBetter(k, inc)) { ++ties; }
+    }
+    const bool worse = AuraHostKeyBetter(best, inc);
+    std::string took, top;
+    for (std::size_t q = 0; q < pos.size(); ++q)
+    {
+        const Action& a = acts[static_cast<std::size_t>(pos[q])];
+        took += (q ? "," : "") + a.card_name.str() + ">" + name_of(a.enchant_target);
+        top  += (q ? "," : "") + a.card_name.str() + ">" + name_of(alts[q][static_cast<std::size_t>(best_pick[q])]);
+    }
+    TRACE("hostproof", "branch=%d seed=%llu T%d pre=%d verdict=%s took={%s} key=%d/%d best={%s} key=%d/%d combos=%lld",
+          AuraHostBranchOn() ? 1 : 0,
+          static_cast<unsigned long long>(state.game_seed), state.turn_number, is_pre_combat ? 1 : 0,
+          worse ? "worse" : (ties > 0 ? "tie" : "heur"), took.c_str(), inc.lethal ? 1 : 0, inc.dmg,
+          top.c_str(), best.lethal ? 1 : 0, best.dmg, combos);
 }

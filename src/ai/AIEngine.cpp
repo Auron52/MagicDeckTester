@@ -5795,6 +5795,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // see a drop from an earlier plan on this worker thread. No-op unless the audit is on.
     if (AffordAuditOn()) { ResetDroppedCastNumbers(); }
 
+    // PROOF INSTRUMENT (MTG_TRACE=hostproof): the committed creature-Aura hosts vs the shared host
+    // ranking's best (see TurnSolver::TraceAuraHostProof). Autonomous play only; read-only.
+    if (TRACE_ON("hostproof") && !HumanPlayActive())
+    { TurnSolver::TraceAuraHostProof(state, is_pre_combat_main, plan); }
     // Plan::vial_after_casts (lockstep twin of ApplyPlanDirect's vial_after_armed): this plan's Vial
     // puts are deployed after its graveyard casts instead of here. Top-level plan only -- the
     // continuation and recorded-script replays above deploy theirs first, as always.
