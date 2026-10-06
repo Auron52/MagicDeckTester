@@ -1190,7 +1190,8 @@ enum Site
     // APPEND LAST ONLY -- see the enum's note below; these ordinals index a persisted name table
     // and the census's u_* column order.
     kGreedyWalk,           // EnumeratePlans' subset walk, one unit per W visits (MTG_SOLVE_CHARGE)
-    kEquipRoute,           // equip-route DFS: one unit per link applied (TurnSolver::ChargeDecisionUnits)
+    kEquipRoute,           // equip-route DFS: MTG_EQUIP_ROUTE_NODE_UNITS units per link applied
+                           // (default 8, NOT 1 -- TurnSolver::ChargeDecisionUnits, equiproute::NodeUnits)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
