@@ -68,7 +68,10 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
        non-zero exit means a reference is not safe yet — fix it before ending the session.
     5. **What the viewer does by itself** (defence in depth, not a substitute for 1-4): each save
        copies the file to `$MDT_REFERENCE_BACKUP_DIR` (default `~/.mdt-reference-backups/<repo>/`,
-       never overwritten), commits it to the `references-autosave` branch with git plumbing (your
+       never overwritten — **in the devcontainer `~` is the container's throwaway overlay, so start
+       the viewer with `MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups`, a
+       persistent docker volume**; only `/workspaces/MagicDeckTester` and the `~/.claude`, `~/.config/gh`
+       and `build/` volumes survive a container rebuild — check `findmnt` before trusting any path), commits it to the `references-autosave` branch with git plumbing (your
        working tree, index and branch are untouched) and pushes that branch; at startup it does
        the same for any untracked/modified reference. A failure shows as a RED banner in the GUI
        — treat one as an emergency: commit and push the file by hand. NOTE: in the devcontainer
