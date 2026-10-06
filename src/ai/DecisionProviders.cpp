@@ -2902,6 +2902,99 @@ std::uint8_t DecisionProvider::EtbChosenKeywords(const GameState& /*s*/, int /*c
 // APPROVED DEFERRAL, phase 2: when Skred becomes live (a blocking model, or any deck where its
 // damage matters), Red rejoins the candidate set -- and at that point this override should simply
 // be DELETED so the deck falls back to the generic demand rule, rather than grown a third case.
+// ---- SnowProvider::ScryKeepOnTop -------------------------------------------------------------
+// Every scry this deck makes is Marit Lage's Slumber's "whenever a snow permanent you control
+// enters, scry 1" -- i.e. ONE card, nearly always right after our own land drop or cast, and
+// nearly every card in the list is snow. USER 2026-10-06: "Scry should be optionally searched, but
+// I think we should be able to design a heuristic for it as well." The search half is
+// MTG_SCRY_SEARCH_TRIGGERED (TurnSolver); this is the heuristic half -- and it is also candidate 0
+// of that searched fan, so it decides every scry the search does not reach.
+//
+// What it replaces: GenericProvider keeps every nonland and bottoms every LAND once two lands are
+// in play. That is backwards here: every land in this list is a snow permanent, so a land drop is
+// +1 toward Slumber's ten and +1/+1 on each Treefolk / Owl -- the deck wants one EVERY turn.
+//
+// The anchor is the USER's own Snow bucket policy (SnowProvider::CleanupDiscardCandidates: "2 land
+// (and 3 if we have none on board)", accelerants 1-2, threats 2, draw fills the rest). A discard
+// asks "which card do I least want in hand"; a scry asks "do I want this card in hand next" --
+// the same question, so the scry rule reads the same buckets rather than inventing new ones.
+//
+//   MTG_SNOW_SCRY=0          the generic rule (shipped behaviour; byte-identical).
+//   MTG_SNOW_SCRY=1          BUCKET. Bottom a card the deck never casts (NeverCast: Skred), a
+//                            legendary we already control or hold (Jorn, a second Slumber -- the
+//                            legend rule eats one), and a land the hand does not need: one past the
+//                            user's land quota, counting the land in hand that this turn's still-open
+//                            drop will spend. Keep the rest.
+//   MTG_SNOW_SCRY_OUTLOOK=1  OUTLOOK (implies the above). BUCKET with a land quota of ONE (a land is
+//                            kept only when it would be next turn's drop), and a nonland bottomed
+//                            when it cannot be cast within a turn of next turn (mana value > next
+//                            turn's mana + 1 -- the two seven-drops early).
+// Both are per-job levers (heurarm) so one pooled batch measures every arm.
+static int SnowScryVariant()
+{
+    static const bool on      = EnvOn("MTG_SNOW_SCRY");
+    static const bool outlook = EnvOn("MTG_SNOW_SCRY_OUTLOOK");
+    if (heurarm::Flag(heurarm::SNOW_SCRY_OUTLOOK, outlook)) { return 2; }
+    return heurarm::Flag(heurarm::SNOW_SCRY, on) ? 1 : 0;
+}
+
+bool SnowProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    const int variant = SnowScryVariant();
+    if (variant != 1 && variant != 2) { return GenericProvider::ScryKeepOnTop(s, top_card); }
+
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(top_card);
+    if (td == nullptr) { return GenericProvider::ScryKeepOnTop(s, top_card); }
+    const int     me = s.active_player_index;
+    const Player& ap = s.players[me];
+
+    // Dead in this deck: never cast, so drawing it is drawing nothing.
+    if (!td->card.IsLand() && NeverCast(*td)) { return false; }
+
+    int board_lands = 0, board_mana = 0;
+    bool controls_same_name = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.m_name == top_card.m_name) { controls_same_name = true; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand()) { ++board_lands; ++board_mana; continue; }
+        // Next turn every rock untaps and every dork has lost its sickness, so all of them count.
+        if (d && (d->params.mana_rock || !d->params.produces.empty())) { ++board_mana; }
+    }
+    int  lands_in_hand = 0;
+    bool holds_same_name = false;
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        if (CleanupDiscardIsLand(c)) { ++lands_in_hand; }
+        if (c.m_name == top_card.m_name) { holds_same_name = true; }
+    }
+    // The land in hand that this turn's open drop is about to spend is not a land for LATER.
+    const int drop_open  = ap.lands_played_this_turn < ap.LandDropsAvailable() ? 1 : 0;
+    const int spare_lands = std::max(0, lands_in_hand - drop_open);
+
+    if (td->card.IsLand())
+    {
+        const int quota = (variant == 2) ? 1 : (board_lands == 0 ? 3 : 2);
+        return spare_lands < quota;
+    }
+
+    // A second copy of a legendary permanent is dead while the first is in play or in hand.
+    if (td->card.HasSupertype(Supertype::Legendary) && (controls_same_name || holds_same_name))
+    { return false; }
+
+    if (variant == 2)
+    {
+        // Next turn's mana: everything on board now, the land this turn's open drop will add, and
+        // next turn's drop if a spare land is in hand.
+        const int next_mana = board_mana + ((drop_open && lands_in_hand >= 1) ? 1 : 0)
+                                         + (spare_lands >= 1 ? 1 : 0);
+        if (CleanupDiscardManaValue(top_card) > next_mana + 1) { return false; }
+    }
+    return true;
+}
+
 int SnowProvider::EtbChosenColor(const GameState& s, int controller,
                                  const CardDefinition& def) const
 {

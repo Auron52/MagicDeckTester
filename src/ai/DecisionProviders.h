@@ -1814,6 +1814,13 @@ public:
     bool NeverCast(const CardDefinition& def) const override
     { return def.params.damage_equals_snow_permanents; }
 
+    // SCRY KEEP (Marit Lage's Slumber's triggered scry 1 -- the deck's only scry). USER 2026-10-06:
+    // "Scry should be optionally searched, but I think we should be able to design a heuristic for
+    // it as well." The generic rule bottoms EVERY land once two are in play, which is backwards on a
+    // deck whose lands are snow permanents. MTG_SNOW_SCRY selects the rule (0 = generic); see the
+    // definition for the variants and their anchor in the user's discard buckets.
+    bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+
     // "STUCK -- PASS THE TURN" CERTIFICATE. Admissible: proves no line wins THIS turn, so the
     // unbounded label / depth-matrix search can drop the node without enumerating its plan space.
     // Snow is an unusually clean case for it -- combat damage is the deck's ONLY route to the

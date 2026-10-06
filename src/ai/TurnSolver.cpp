@@ -14186,6 +14186,32 @@ static bool ScrySearchEnabled()
     static const bool on = EnvOn("MTG_SCRY_SEARCH", true);
     return on && SearchedPlayActive();
 }
+// ...and its TRIGGERED half (MTG_SCRY_SEARCH_TRIGGERED). USER 2026-10-06: "Scry should be
+// optionally searched, but I think we should be able to design a heuristic for it as well." A land
+// drop that is a snow permanent fires Marit Lage's Slumber's "scry 1" from INSIDE the land play
+// (FireSnowEnterWatchers at LandPlay's tail) -- the same scope the land's own etb_scry resolves in,
+// so the same pin (Plan::scry_choice, consumed by the first look) reaches it with no new plumbing.
+// What it does NOT reach: a scry triggered by a CAST (a snow permanent entering from the cast loop)
+// or the second of two Slumbers' triggers on one land -- those stay with the provider heuristic
+// (SnowProvider::ScryKeepOnTop), which is also candidate 0 here.
+static bool ScrySearchTriggeredEnabled()
+{
+    static const bool on = EnvOn("MTG_SCRY_SEARCH_TRIGGERED");
+    return heurarm::Flag(heurarm::SCRY_SEARCH_TRIGGERED, on) && ScrySearchEnabled();
+}
+// The scry count of the FIRST look a land drop of `land` triggers through a watcher we control
+// (snow_enter_scry), or 0. Param-driven: any watcher card, any snow land.
+static int LandDropTriggeredScry(const GameState& state, const CardDefinition& land)
+{
+    if (!land.card.HasSupertype(Supertype::Snow)) { return 0; }
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(w.card);
+        if (d && d->params.snow_enter_scry > 0) { return d->params.snow_enter_scry; }
+    }
+    return 0;
+}
 // NOT under-measured -- SATURATED, which is why there is no sweep to point at. Both modelled ETB
 // look cards examine exactly ONE card (Temple of Epiphany etb_scry 1, Thundering Falls etb_surveil 1,
 // Treasure Hunt the only deck running either), and for a 1-card look EnumerateTopDispositions yields
@@ -47231,7 +47257,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const CardDefinition* d = CardDatabase::Instance().Lookup(p.land_to_play);
             if (d == nullptr) { continue; }
             const bool  surveil = d->params.etb_surveil > 0;
-            const int   n       = surveil ? d->params.etb_surveil : d->params.etb_scry;
+            int         n       = surveil ? d->params.etb_surveil : d->params.etb_scry;
+            if (n <= 0 && ScrySearchTriggeredEnabled()) { n = LandDropTriggeredScry(state, *d); }
             if (n <= 0) { continue; }
             const int look = std::min<int>(n, static_cast<int>(ap.library.size()));
             if (look <= 0) { continue; }

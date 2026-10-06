@@ -317,6 +317,9 @@ enum Slot : int
     BP_NODE_SHADOW,           // MTG_BP_NODE_SHADOW         a BP-NODE child of a BASE plan is numbered as a from-scratch (variant) apply counts -- every class-on occurrence plus site 9 -- not the base's own uncounted bp_seen (docs/design/site9-continuation-index-mismatch.md). Correctness fix, default ON; =0 reverts
     SOLVE_COMBAT_SWAP,        // MTG_SOLVE_COMBAT_SWAP      the greedy Solve (d0 runner + rollout leaves) drops a PRE-COMBAT Aura swap that brings in a host-tapping Aura (Colossification) onto a would-be attacker when the combat swap stays payable without tapping an attacker -- the in-combat swap brings it in for free (CR 506.4) -- and the d0 runner pins that combat swap like the rollout leaf does. USER 2026-10-06 ("I would fix depth-0 for colossification"). Default ON; =0 reverts
     COST_REFRAME,             // MTG_COST_REFRAME           the deck-agnostic over-optimistic cost relaxation in EnumeratePlans (see CostReframeEnabled). Default OFF. A slot so scripts/analyze_deck.py's cost diagnostic runs BOTH arms in ONE pooled batch at the deck's play settings
+    SNOW_SCRY,                // MTG_SNOW_SCRY              Snow's own scry keep (SnowProvider::ScryKeepOnTop) anchored on the USER's discard buckets, instead of the generic "bottom lands once two are in play". USER 2026-10-06. Measurement lever
+    SNOW_SCRY_OUTLOOK,        // MTG_SNOW_SCRY_OUTLOOK      ...its OUTLOOK variant: land quota 1 and bottom a nonland not castable within a turn of next turn. Implies MTG_SNOW_SCRY. Measurement lever
+    SCRY_SEARCH_TRIGGERED,    // MTG_SCRY_SEARCH_TRIGGERED  the searched land-ETB scry axis also reaches a scry the land drop TRIGGERS (Marit Lage's Slumber). USER 2026-10-06: "Scry should be optionally searched". Measurement lever
     COUNT
 };
 
@@ -595,6 +598,9 @@ inline const char* Name(int slot)
         "MTG_BP_NODE_SHADOW",
         "MTG_SOLVE_COMBAT_SWAP",
         "MTG_COST_REFRAME",
+        "MTG_SNOW_SCRY",
+        "MTG_SNOW_SCRY_OUTLOOK",
+        "MTG_SCRY_SEARCH_TRIGGERED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
