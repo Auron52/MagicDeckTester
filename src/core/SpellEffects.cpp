@@ -1738,6 +1738,18 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         }
         // Pay {2}{U} from what is untapped now (the plan left it up). A swap that cannot be paid
         // does not happen -- the variant then scores like declining it.
+        // MEASUREMENT (MTG_TRACE=swapatkpay): with MTG_COMBAT_SWAP_TAPPED_ATTACKERS=0 (the pre-fix
+        // payment), report a combat swap that an ATTACKING creature's mana paid -- the illegal case
+        // the fix removes. Lets a suite delta be attributed game by game.
+        std::vector<char> atk_untapped;
+        if (TRACE_ON("swapatkpay"))
+        {
+            for (int ai : atk_idx)
+            {
+                atk_untapped.push_back(ai >= 0 && ai < static_cast<int>(state.battlefield.size())
+                                       && !state.battlefield[static_cast<std::size_t>(ai)].tapped);
+            }
+        }
         if (!TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false))
         {
             TRACE("swapdefer", "T%d combat swap UNPAID (pin %d, real=%d)", state.turn_number, pin,
@@ -1745,6 +1757,23 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
             continue;
         }
         TRACE("swapdefer", "T%d combat swap paid (pin %d, real=%d)", state.turn_number, pin, g_real_resolution ? 1 : 0);
+        if (!atk_untapped.empty())
+        {
+            std::string payers;
+            for (std::size_t k = 0; k < atk_idx.size() && k < atk_untapped.size(); ++k)
+            {
+                const int ai = atk_idx[k];
+                if (atk_untapped[k] && ai >= 0 && ai < static_cast<int>(state.battlefield.size())
+                    && state.battlefield[static_cast<std::size_t>(ai)].tapped)
+                { payers += state.battlefield[static_cast<std::size_t>(ai)].card.m_name.str() + ","; }
+            }
+            if (!payers.empty())
+            {
+                TRACE("swapatkpay", "seed=%llu T%d real=%d ATTACKER PAID the combat swap: %s",
+                      static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                      g_real_resolution ? 1 : 0, payers.c_str());
+            }
+        }
         std::vector<int> atk_nums;
         for (int ai : atk_idx)
         {
