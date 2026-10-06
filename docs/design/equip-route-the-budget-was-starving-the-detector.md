@@ -85,14 +85,33 @@ false. So the redundancy may not be collapsible by assertion; it has to be measu
 charges the same work fewer units by construction — so wall (`ms`, thread time) is the only honest
 cross-arm cost column here.
 
-| arm | price | avg win turn | wall (thread-s) | vs base | paired vs base |
-|---|---|---|---|---|---|
-| base | 8 (shipped) | 3.9163 | 7,324 | 1.000x | — |
-| nu4 | 4 | **3.9083** | **6,272** | **0.856x** | 41 faster / 15 slower / 2,944 identical, net **-24 game-turns** |
+| arm | price | avg win turn | wall (thread-s) | vs base | faster/slower | paired net |
+|---|---|---|---|---|---|---|
+| nu4 | 4 | **3.9083** | **6,272** | **0.856x** | 41 / 15 | **-24 game-turns** |
+| base | 8 (shipped) | 3.9163 | 7,324 | 1.000x | — | — |
+| nu12 | 12 | 3.9207 | 8,183 | 1.117x | 9 / 23 | +13 game-turns |
+| nu32 | 32 | 3.9380 | 9,877 | 1.349x | 32 / 100 | +65 game-turns |
 
-So halving the price is **better and cheaper at the same budget** — the budget buys more detection
-*and* less total work. The dominant paired transition is `4 -> 3` in **25 games**: the route is
-finding the turn-3 kill in games where it previously did not.
+**Monotone on both axes across the whole range**, and in the direction opposite to the one this
+file's first draft predicted: halving the price is better AND cheaper; quadrupling it is worse AND
+dearer. The paired transitions name the mechanism exactly — nu4's dominant move is `4 -> 3` in **25
+games**, nu12's is the mirror image, `3 -> 4` in **12 games**. The price is not an accounting dial,
+it is a **detection dial**.
+
+**And it improves the TAIL, which is what actually binds here.** Slow-game (>30 s) census of the
+same 3,000 games:
+
+| arm | slow games | tail sum | worst game | 2nd | 3rd |
+|---|---|---|---|---|---|
+| base (8) | 31 | 5,618 s | 1,166 s | 1,053 s | 513 s |
+| nu4 (4) | **21** | **4,451 s** | 1,150 s | 1,047 s | 484 s |
+
+That matters because the tail IS the wall on this deck: the `[batch] heartbeat` reads 2/30 workers
+at ten minutes and 0/30 at twenty, and two games (gi=369, gi=759) are 30% of the run.
+
+**The worst game is price-INVARIANT (1,166 s at price 8, 1,150 s at price 4), so its cost is not
+the route's budgeted DFS at all.** That is a second, independent pathology, and it is the one with
+the most headroom left; it gets its own profile (§6).
 
 **The mechanism is that the route is a detector whose success removes work.** A verified lethal
 fires the go-off cut, which collapses the frame to one plan; more detection therefore means more
@@ -105,12 +124,111 @@ adoption bar: every slower game must recover at `--depth 8 --budget-ms 0`, and t
 must be net <= 0 on a large held-out sample. The aggregate half passes at -24 game-turns on 3,000
 games; the per-game half is running (§6).
 
+**How low can it go is an open question with a known floor.** `NodeUnits()`'s comment records why
+the price exists at all: *"Charged at 1, the budget stopped bounding wall: the value-leaf row dump
+(d5/b20, K=3 labels) had games at 250-400 units/s, 2.5-3+ HOURS each, pinning phase A on two of them
+for hours with 30 cores idle, and the mulligan generation at d1/b3 would have had ~8 s decisions."*
+So price 1 has already been observed to blow up — but in **generation** contexts (the value-leaf
+matrix, mulligan gen at d1/b3), not in plain goldfish at d5/b20, and the binding symptom there was
+the TAIL. The nu2/nu1 arms (§6) are measuring exactly that, and any adoption has to be checked
+against the generation shapes too, not only the suite.
+
+**This is a USER-OWNED decision and is not being adopted here** (CLAUDE.md, "A USER-OWNED DECISION
+IS NEVER SETTLED BY AN AGENT"): it changes play, so it moves GT on every deck whose gate the route
+passes, and it is not a clean win. The recommendation, with the recovery data, goes to the user.
+
+## 4b. WHERE THE COST ACTUALLY IS: one decision, 31 million plans, and the route is 25% of it
+
+`perf` cannot record on this kernel (`failed to write perf data, error: Bad address`, WSL2
+6.18.33.2), so this is the repo's own deterministic instrumentation instead — which is the better
+instrument anyway, being exactly reproducible: `-DMTG_PROFILE=ON` counters (`src/ai/Profiler.h`)
+and the per-decision work census (`MTG_TURN_CENSUS`, `src/ai/TurnCensus.h`).
+
+**Per budget unit, the per-unit cost is TAIL-specific, not deck-general:**
+
+| | plans / unit | plans per EnumeratePlans call | GameState copies / unit |
+|---|---|---|---|
+| stompy, 40 games | 1.14 | 12.9 | 0.133 |
+| kittyv2, 40 typical games | 3.04 | 7.7 | 0.219 |
+| **kittyv2 gi=371 (tail)** | **139.1** | **88.2** | **0.801** |
+
+A typical kitty game enumerates FEWER plans per call than Stompy. The 11x deck-average per-unit
+cost is therefore an average over a bimodal population, and sizing any lever against it is sizing
+against a number no real decision had (the exact trap `TurnCensus.h` was built for).
+
+**And within the tail game the cost is ONE decision.** Per-decision census of gi=371:
+
+| turn | units | wall | ms/unit | u_equip_route | plurality site |
+|---|---|---|---|---|---|
+| 1 pre | 20,474 | 483 ms | 0.024 | 85.5% | — |
+| 2 pre | 22,129 | 1,495 ms | 0.068 | 80.5% | — |
+| **3 pre** | **70,077** | **133,891 ms** | **1.91** | **25.0%** | `la_cand` 24,445 (34.9%) |
+| 4 pre | 1 | 6 ms | — | 0% | — |
+
+**98.5% of the game's wall is one decision, running at 80x the per-unit cost of turn 1 of the same
+game.** Note what that does to the route story: the route's unit count is almost flat across turns
+(17,504 / 17,808 / 17,552 — it is hitting a cap), so on the decision that costs everything the
+route is a QUARTER of the units, not the bulk. That is why the price lever, which is real, only
+buys 0.856x: it is operating on 25% of the problem.
+
+**What the expensive decision actually does** (turn 3 vs turn 1 of the same game):
+
+| counter | turn 1 | turn 3 | ratio |
+|---|---|---|---|
+| `space_plans` | 49,023 | **31,144,648** | 635x |
+| `enum_emitted` | 49,589 | 31,191,949 | 629x |
+| `space_odo` | 2,260,008 | **167,616,938** | 74x |
+| `enum_enter` | 1,098,615 | 91,533,117 | 83x |
+| `cand_scored` | 403 | 24,445 | 61x |
+| `rollout_calls` | 258 | 13,686 | 53x |
+
+One decision enumerates **31.1 million plans** and walks a **167.6-million-state odometer**. For
+scale, all 40 typical games together emit 1.51M plans — this single decision emits 20x that.
+
+The shape is: **24,445 scored root candidates, each driving a rollout (13,686 calls), each rollout
+re-enumerating a wide equipment board at ~2,275 plans per rollout.** With `MTG_DEDUP_CENSUS` armed,
+**38.0% of those root candidates are duplicates** (`dedup_seen` 24,445, `dedup_dup` 9,302, of which
+`dedup_exactdup` 3,501 and `dedup_copy_perm` 5,271).
+
+**Two negative results worth keeping, so nobody re-runs them:**
+* `MTG_FOLD_SEARCH_ODO=1` (the canonical-prefix fold adopted on Snow) moves gi=371's plan count by
+  **-0.19%** (15,648,149 vs 15,677,338). This is genuine menu WIDTH, not the prefix redundancy that
+  lever folds. Do not reach for it here.
+* A damage pre-filter on the route gate is still ruled out (~90% of trials find a kill).
+
+**So the largest remaining non-lossy headroom is wide-board plan enumeration, not the route.** That
+is a "COLLAPSE WASTED SEARCH UNCONDITIONALLY" target needing no user ruling, and it has direct
+precedent (pooling the interchangeable sac outlets took the worst odometer shape 4.61e+03 ->
+2.02e+03). The symmetry to attack on an equipment board is *which* Equipment goes on *which*
+interchangeable host; the existing `sub_rej_dupsrc` fires only 4,726 times against 31M plans, so it
+is not catching it. NOT yet implemented or measured — it is the recommended next piece of work.
+
 ## 5. The lever triage under the user's completeness rule
 
 | lever | shape | findable at unlimited budget? | verdict |
 |---|---|---|---|
 | `MTG_EQUIP_ROUTE_NODE_UNITS` | price, read only to decrement a budget | **yes, provably** — `ChargeDecisionUnits` returns on `budget == nullptr` and the cut test requires `budget != nullptr`, so at an unlimited root the price is never read | legitimate; this is the candidate |
-| `MTG_EQUIP_ROUTE_TOPMAIN` | predicate in the GATE (`EquipRoutePiecesInPlace`) | **no** — consulted at every budget | lossy as a gate; out unless §6 shows it answer-identical at a large budget |
+| `MTG_EQUIP_ROUTE_TOPMAIN` | predicate in the GATE (`EquipRoutePiecesInPlace`) | **no** — consulted at every budget | lossy as a gate — **and it is DOMINATED, so the question is moot** |
+
+**TOPMAIN is dominated by the safe lever, which settles it without needing the wave.** At b20, 3,000
+games paired:
+
+| arm | avg win turn | wall | faster/slower | paired net | lossy? |
+|---|---|---|---|---|---|
+| nu4 (price 4) | 3.9083 | **0.856x** | 41 / 15 | **-24** | no, provably |
+| topmain | 3.9080 | 0.879x | 40 / 15 | -25 | **yes, by construction** |
+
+They buy the *same* quality (-24 vs -25, and the **same 15 slower games**, gi=470/630/723/938/1112
+…), because they do the same thing: free up budget that then finds the turn-3 kill. But the
+non-lossy one is also the cheaper one. So TOPMAIN has "good results" exactly as the user
+anticipated — and there is still no reason to take it, because the price lever already captures its
+entire win without removing capability. **The wave/position-aware-price design is therefore NOT
+needed for this lever**; it is kept on file in CLAUDE.md as the sanctioned pattern for the next
+restriction that is *not* dominated.
+
+The b200/b1000 arms still run (§6) to record whether TOPMAIN is lossy *in fact* and not merely in
+shape, because that is a reusable fact about the redundancy argument in
+`EquipRoutePiecesInPlace`'s comment — but it can no longer change the recommendation.
 
 `TOPMAIN`'s in-code justification is a *redundancy* argument (§3). If that argument is true the
 gate is a sound identity fold rather than a capability deletion — and the only way to tell is to
