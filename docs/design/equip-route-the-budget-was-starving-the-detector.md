@@ -316,9 +316,24 @@ So `EquipRoutePiecesInPlace`'s redundancy argument — the first main's playout 
 out, drawing the real library top, so a later-main frame re-derives a conclusion the frame already
 had — appears to be CORRECT, and the b200 differences are budget reallocation, not blindness.
 
-**What this does and does not license.** It is 7 games, deliberately chosen as the ones most likely
-to expose a difference, which makes it the sharpest available probe but not a proof over the whole
-space. A wider unlimited-budget A/B (1,000 games) is running to look for a counterexample, together
+**And the difference CONVERGES TO ZERO as the budget grows, which is the user's rule stated as a
+measurement:**
+
+| budget | games | games differing | paired net | wall vs base |
+|---|---|---|---|---|
+| b20 (shipped) | 3,000 | 55 (40 better, 15 worse) | -25 | 0.879x |
+| b200 (10x) | 1,000 | 7 (6 better, 1 worse) | -6 | 0.903x |
+| **b1000 (50x)** | 250 | **0** — digest `06f74dd3a70b9f7f` on BOTH arms | 0 | **0.746x** |
+| unlimited | 7 (the ones that moved at b200) | **0** | 0 | ~0.65x |
+
+At 50x the shipped budget TOPMAIN is byte-identical across 250 games while costing a quarter less.
+A lever whose effect on the answer shrinks monotonically to nothing as the budget grows, while its
+saving persists, is a redundancy fold — "adding more budget fills in more of these lines
+proportionally" is exactly what this table shows.
+
+**What this does and does not license.** The unlimited arm is 7 games, deliberately chosen as the
+ones most likely to expose a difference, which makes it the sharpest available probe but not a proof
+over the whole space; b1000's 250 games are a broader but still finite check. A wider unlimited-budget A/B (1,000 games) is running to look for a counterexample, together
 with a CONTROL that must come back byte-identical if the "price is provably inert at unlimited"
 claim is true (nu4 at `--budget-ms 0` vs base at `--budget-ms 0`), and a COMBINED arm, since the two
 levers are independent — one prices links, the other skips frames — and should stack if topmain is
@@ -366,6 +381,24 @@ Two caveats that belong in the same breath:
   env read, so changing the default moves every deck whose board passes the route's gate. The repo
   already has the right pattern for this — Snow's per-deck charge opt-in (`SnowProvider W=16`) —
   and a per-deck opt-in is the safer shape if any non-kitty deck moves.
+
+**The iso-wall question the user asked — "make sure the budget is well spent" — has a clean answer:
+the budget was MIS-ALLOCATED, not under-provisioned.** Spending the price lever's saving on more
+budget buys very little; spending it on a lower price buys a lot:
+
+| arm | avg win turn | wall |
+|---|---|---|
+| base @ b20 | 3.9163 | 7,324 |
+| nu4 @ b20 | 3.9083 | 6,272 |
+| nu4 @ b24 | 3.9077 | 6,574 |
+| nu4 @ b30 | 3.9040 | 6,910 |
+| nu2 @ b20 | 3.9017 | 6,204 |
+| **nu1 @ b20** | **3.9003** | **5,986** |
+
+`nu1` at the SHIPPED budget beats `nu4` at 1.5x the budget on both axes, for 13% less wall. Raising
+the budget is a strictly worse use of the same compute than letting the detector finish — which
+follows directly from §4c: extra budget mostly buys more of the 31-million-plan enumeration, while
+a completed detection deletes it.
 
 **Secondary idea, NOT recommended over the price, recorded because the data suggests it:** since an
 interrupted detection spends the budget and collapses nothing, the engine could decline to *start* a
