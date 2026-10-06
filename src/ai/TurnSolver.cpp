@@ -14191,6 +14191,39 @@ static bool EquipRouteLandDeferEnabled()
     return v;
 }
 
+// THE GO-OFF COLLAPSE IS ONLY SOUND AT THE TURN'S FIRST MAIN (MTG_EQUIP_ROUTE_CUT_TOPMAIN,
+// DEFAULT ON; `=0` restores the pre-fix arm for the A/B). What the cut does is delete every other
+// plan in the frame on the grounds that a verified kill dominates under turn-to-win. That argument
+// holds where the frame's plan IS the turn's plan. It does NOT hold in a MID-TURN frame -- a
+// breakpoint continuation -- and the difference cost a whole turn:
+//
+//   kitty_smoke_d3_s1001 gi=237 (kitty v1, d3 b10, seed 1238). The route proves a t3 kill 424
+//   times, EMITs it, CUTs the frame 6 times with `CUT t3 verified pre=1`, and `APPLY real=1` never
+//   fires once. Upstream wins that game on turn 3 in 740 units; with the route on we took turn 4 in
+//   6,703, and MTG_EQUIP_ROUTE=0 returned upstream's digest byte for byte. The t3 frames that get
+//   cut are the Puresteel DRAW BREAKPOINT's continuations (spells_cast_this_turn == 2, one untapped
+//   land, the drawn Colossus Hammer in hand). The winning line IS one of the plans that cut deletes:
+//   `land=Plains + Colossus Hammer + O-Naginata | bp[k0:Colossus Hammer k13:... k13:...]`. With the
+//   frame collapsed to the route alone, the base plan loses its only surviving child -- and a base
+//   plan with a breakpoint is never scored on its own, only through its children (see FullSearchLine)
+//   -- so the entire t3 line disappears and the commit-the-line search reports win=4.
+//
+// SO DETECTION STAYS, THE DELETION GOES. Mid-turn the verified route plan is still pushed and still
+// flagged `wins_this_turn`, so a frame whose ONLY win is the chain still reports one; it simply no
+// longer deletes the frame's other plans. Measured on gi=237: identical to upstream (digest
+// 9301b8f1ea971125, 1,739 units) under EITHER intervention -- restricting the collapse, or keeping
+// the collapse's plan additively -- which is what identifies the DELETION as the defect rather than
+// the route plan being unplayable there.
+//
+// Note what this does NOT claim: the mid-turn kill is real (the re-verify applies it and checks
+// PendingAttackDamage), and at the top main the collapse remains load-bearing and ON -- that is the
+// half measured at claude_s1_gi0 4 -> 3 and the references 2/14 short -> 1/14.
+static bool EquipRouteCutTopMainOnly()
+{
+    static const bool v = EnvOn("MTG_EQUIP_ROUTE_CUT_TOPMAIN", true);
+    return v;
+}
+
 // ---- FOLD PREFIX: hoist the canonical-prefix rejection into the odometer -----------------------
 // Same move as EquipPieceDepViolated below, for the rule that dominates Snow.
 //
@@ -33185,6 +33218,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     if (s_route_solve_cut && ResolveProvider(state).EquipRouteEnabled()
         && !DecisionUnpruned(UnprunedGate::ComboLine) && !HumanPlayActive())
     {
+        // Collapse at the turn's FIRST main only -- see EquipRouteCutTopMainOnly. Mid-turn the
+        // route subset is still offered to `consider` and still flagged, it just does not end the
+        // search; `keep_route` is what stops the snapshot restore from discarding it again.
+        const bool may_collapse = !EquipRouteCutTopMainOnly() || state.spells_cast_this_turn == 0;
+        bool keep_route = false;
         int eroute_idx = -1;
         for (int j = 0; j < static_cast<int>(cands.size()); ++j)
         { if (cands[j].kind == Action::Kind::ComboRoute && cands[j].chosen_x > 3)
@@ -33212,16 +33250,21 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     best.wins_this_turn = true;
                     if (EquipRouteTraceOn())
                     {
-                        std::fprintf(stderr, "[equip-route] CUT(solve) t%d verified\n", state.turn_number);
+                        std::fprintf(stderr, "[equip-route] CUT(solve) t%d verified spells=%d collapse=%d\n",
+                                     state.turn_number, state.spells_cast_this_turn, may_collapse ? 1 : 0);
                     }
-                    return materialize_best();            // trial-certified lethal
+                    if (may_collapse) { return materialize_best(); }   // trial-certified lethal
+                    keep_route = true;                    // in the running, not the whole answer
                 }
             }
-            best      = saved_best;
-            best_mask = saved_mask;
-            best_sel  = saved_sel;
-            best_fill_j = saved_fj;
-            best_fill_action = saved_fa;
+            if (!keep_route)
+            {
+                best      = saved_best;
+                best_mask = saved_mask;
+                best_sel  = saved_sel;
+                best_fill_j = saved_fj;
+                best_fill_action = saved_fa;
+            }
         }
     }
 
@@ -45049,6 +45092,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     if (ResolveProvider(state).EquipRouteEnabled()
         && !DecisionUnpruned(UnprunedGate::ComboLine) && !HumanPlayActive())
     {
+        // Collapse at the turn's FIRST main only -- see EquipRouteCutTopMainOnly. Mid-turn the
+        // verified plan stays in `plans` and the odometer walk below still runs, so nothing the
+        // frame could have found is deleted.
+        const bool may_collapse = !EquipRouteCutTopMainOnly() || state.spells_cast_this_turn == 0;
         int eroute_idx = -1;
         for (int j = 0; j < static_cast<int>(cands.size()); ++j)
         { if (cands[j].kind == Action::Kind::ComboRoute && cands[j].chosen_x > 3)
@@ -45096,10 +45143,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     plans.back().wins_this_turn = true;
                     if (EquipRouteTraceOn())
                     {
-                        std::fprintf(stderr, "[equip-route] CUT t%d verified pre=%d\n", state.turn_number, is_pre_combat ? 1 : 0);
+                        std::fprintf(stderr, "[equip-route] CUT t%d verified pre=%d spells=%d collapse=%d\n",
+                                     state.turn_number, is_pre_combat ? 1 : 0,
+                                     state.spells_cast_this_turn, may_collapse ? 1 : 0);
                     }
-                    return { std::move(plans.back()) };
+                    if (may_collapse) { return { std::move(plans.back()) }; }
                 }
+                else
+                {
                 if (EquipRouteTraceOn())
                 {
                     GameState copy2 = state;
@@ -45110,6 +45161,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         PendingAttackDamage(copy2), copy2.Opponent().life);
                 }
                 plans.pop_back();                    // refuted -> enumerate normally (no dup)
+                }
             }
         }
     }
