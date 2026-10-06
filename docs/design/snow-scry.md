@@ -134,9 +134,27 @@ here: every Snow scry comes from a Slumber in play, which is itself a threat (bi
 accelerant in play even without a threat", is byte-identical). So the cost is the MANA-SINK half -- an
 accelerant that buys no castable mana is still a snow permanent toward Slumber's ten and the Treefolk.
 
+### The accelerant pick (USER: "let's try both and choose the best option. After that we should adopt it")
+
+Fresh seeds 8406000-8706000 (d0 4,000, d3/b10 1,200, d5/b20 600 games per arm;
+`logs/snow_scry_ab/pick_accel`). The two USER-rule accelerant clauses, paired (count vs sink):
+
+| cells | delta | faster / slower |
+|---|---|---|
+| d0 | -0.0045 | 42 / 25 |
+| searched d3 + d5 | +0.0022 | 9 / 13 |
+| all | -0.0024 +/- 0.0017 | 51 / 38 |
+
+Against the generic rule: sink -0.0724 (430 / 88), count -0.0748 (414 / 61). A statistical tie; the
+SNOW-COUNT clause was picked for the better overall delta and the far smaller slower-game count (61 vs
+88) -- the defect the comparison was run to fix -- and because it is the user's own point that every
+snow permanent advances Slumber.
+
 ## Status
 
-Levers default OFF; adoption (which heuristic, and whether the triggered scry is searched by default)
-is the USER's decision. Note the tension with the no-greedy-in-the-search-window rule: with the
-search lever off, the land-drop scry is a heuristic pick inside the window; with it on, cast-triggered
-scries still are.
+**ADOPTED 2026-10-06** (USER: "After that we should adopt it"): `MTG_SNOW_SCRY_USER` and
+`MTG_SNOW_SCRY_ACCEL_COUNT` default ON; `=0` on either is the control. `MTG_SCRY_SEARCH_TRIGGERED` stays
+OFF -- with the USER rule pruning, the land-drop search bought nothing (+1/-1 game) for 5% more units.
+The cast-triggered scry search is designed (an ordinal pin list on the `Plan::sac_pins` pattern) but
+NOT built, pending the user. BUCKET / OUTLOOK remain as measurement levers. Overnight-tier Snow GT is
+stale until the next overnight accept.

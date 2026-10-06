@@ -71,9 +71,10 @@ GameState Turn3(int hand_lands)
 
 struct Arm
 {
-    Arm(bool bucket, bool outlook, bool user = false)
+    Arm(bool bucket, bool outlook, bool user = false, bool accel_count = false)
     {
         heurarm::Clear();
+        heurarm::t_arm[heurarm::SNOW_SCRY_ACCEL_COUNT] = accel_count ? 1 : 0;
         heurarm::t_arm[heurarm::SNOW_SCRY]         = bucket ? 1 : 0;
         heurarm::t_arm[heurarm::SNOW_SCRY_OUTLOOK] = outlook ? 1 : 0;
         heurarm::t_arm[heurarm::SNOW_SCRY_USER]    = user ? 1 : 0;
@@ -180,4 +181,14 @@ TEST_CASE("Snow scry: no verdicts (and no pruning) unless the USER rule is on")
     Arm a(false, true);
     CHECK(Verdict(Turn3(0), "Skred") == -1);
     CHECK(TopDispositionCandidates(Turn3(0), { CardSs("Skred", 99) }, LookKind::Scry).size() == 2);
+}
+
+TEST_CASE("Snow scry USER rule, ADOPTED accelerant clause: kept while a snow-count payoff is in play")
+{
+    Arm a(false, false, true, true);
+    // Turn3 has a Slumber in play: the Heart is a snow permanent toward its ten even with no sink.
+    CHECK(Keep(Turn3(0), "Coldsteel Heart"));
+    GameState bare = Turn3(0);
+    bare.battlefield.pop_back();                            // no Slumber, no Treefolk: the sink test decides
+    CHECK_FALSE(Keep(bare, "Coldsteel Heart"));
 }

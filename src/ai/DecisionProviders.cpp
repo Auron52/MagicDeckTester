@@ -2934,7 +2934,11 @@ static int SnowScryVariant()
 {
     static const bool on      = EnvOn("MTG_SNOW_SCRY");
     static const bool outlook = EnvOn("MTG_SNOW_SCRY_OUTLOOK");
-    static const bool user    = EnvOn("MTG_SNOW_SCRY_USER");
+    // ADOPTED 2026-10-06 (USER: "try both and choose the best option. After that we should adopt
+    // it"): the USER rule with the snow-count accelerant clause (MTG_SNOW_SCRY_ACCEL_COUNT). Held-out
+    // vs the generic rule: -0.0748 turns, 414 faster / 61 slower over 5,800 games. =0 restores the
+    // generic rule (the A/B control). See docs/design/snow-scry.md.
+    static const bool user    = EnvOn("MTG_SNOW_SCRY_USER", true);
     if (heurarm::Flag(heurarm::SNOW_SCRY_USER, user)) { return 3; }
     if (heurarm::Flag(heurarm::SNOW_SCRY_OUTLOOK, outlook)) { return 2; }
     return heurarm::Flag(heurarm::SNOW_SCRY, on) ? 1 : 0;
@@ -3069,7 +3073,7 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
         if (ablate & 2) { return { -1, CleanupDiscardManaValue(top_card) <= next_mana + 1 }; }
         // The alternative (MTG_SNOW_SCRY_ACCEL_COUNT): an accelerant is itself a snow permanent, so with
         // a payoff that counts them in play (Slumber's ten, the Treefolk's P/T) it is never "nothing".
-        static const bool s_accel_count = EnvOn("MTG_SNOW_SCRY_ACCEL_COUNT");
+        static const bool s_accel_count = EnvOn("MTG_SNOW_SCRY_ACCEL_COUNT", true);   // ADOPTED 2026-10-06
         if (heurarm::Flag(heurarm::SNOW_SCRY_ACCEL_COUNT, s_accel_count) && count_payoff) { return { -1, true }; }
         if (ablate & 16) { return { -1, (threat_present || board_accel == 0) && hand_demand > next_mana }; }
         return { -1, threat_present && hand_demand > next_mana };

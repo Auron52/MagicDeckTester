@@ -320,8 +320,8 @@ enum Slot : int
     SNOW_SCRY,                // MTG_SNOW_SCRY              Snow's own scry keep (SnowProvider::ScryKeepOnTop) anchored on the USER's discard buckets, instead of the generic "bottom lands once two are in play". USER 2026-10-06. Measurement lever
     SNOW_SCRY_OUTLOOK,        // MTG_SNOW_SCRY_OUTLOOK      ...its OUTLOOK variant: land quota 1 and bottom a nonland not castable within a turn of next turn. Implies MTG_SNOW_SCRY. Measurement lever
     SCRY_SEARCH_TRIGGERED,    // MTG_SCRY_SEARCH_TRIGGERED  the searched land-ETB scry axis also reaches a scry the land drop TRIGGERS (Marit Lage's Slumber). USER 2026-10-06: "Scry should be optionally searched". Measurement lever
-    SNOW_SCRY_USER,           // MTG_SNOW_SCRY_USER         the USER's Snow scry rule (2026-10-06), firm calls PRUNE the searched scry (SnowProvider::ScryVerdict). Measurement lever
-    SNOW_SCRY_ACCEL_COUNT,    // MTG_SNOW_SCRY_ACCEL_COUNT  USER rule: an accelerant is kept whenever a snow-count payoff is in play (Slumber, a Treefolk) -- it grows the count even when its mana buys nothing -- instead of only with a mana sink. USER 2026-10-06: "let's try both and choose the best option". Measurement lever
+    SNOW_SCRY_USER,           // MTG_SNOW_SCRY_USER         the USER's Snow scry rule (2026-10-06), firm calls PRUNE the searched scry (SnowProvider::ScryVerdict). Default ON since 2026-10-06 (ADOPTED); =0 restores the generic rule
+    SNOW_SCRY_ACCEL_COUNT,    // MTG_SNOW_SCRY_ACCEL_COUNT  USER rule: an accelerant is kept whenever a snow-count payoff is in play (Slumber, a Treefolk) -- it grows the count even when its mana buys nothing -- instead of only with a mana sink. USER 2026-10-06: "let's try both and choose the best option". Default ON since 2026-10-06 (ADOPTED, won the pick)
     COUNT
 };
 
