@@ -819,7 +819,8 @@ function testLoopMacro(win) {
     chk(S.loopPick === null, 'the loop dialog stayed open after the pick');
     const segs = win.LineBuild.encodeSegments(S.plan);
     chk(segs.length === 6, `loop ×3 queued ${segs.length} lines, expected 6`);
-    chk(segs.every((s, i) => s === (i % 2 ? 'cast=Clue Token;blink=Eldrazi Displacer@42*1' : 'cast=Kitchen')),
+    // A plain board activation writes act=, not cast= (cee9a4c1, USER 2026-10-06 "Frost Augur X?").
+    chk(segs.every((s, i) => s === (i % 2 ? 'act=Clue Token;blink=Eldrazi Displacer@42*1' : 'act=Kitchen')),
         `loop ×3 queued the wrong lines: ${JSON.stringify(segs)}`);
     chk(S.macroRun && S.macroRun.kind === 'loop' && S.macroRun.segs === 6,
         `macroRun not set for the honest stop: ${JSON.stringify(S.macroRun)}`);
@@ -1356,8 +1357,10 @@ function testAbilityTagAffordance(win) {
     chk(S.actPick == null, 'body click opens NO modal picker (the tag is the other ability)');
     chk(S.plan.length === 1 && !S.plan[0].sacout,
         `body click queues the primary ability, got ${JSON.stringify(S.plan)}`);
-    chk(win.LineBuild.encodeLine(S.plan) === 'cast=Utopia Mycon',
-        `the primary encodes as cast=, got "${win.LineBuild.encodeLine(S.plan)}"`);
+    // A plain board activation writes act= (cee9a4c1): the engine then requires the matched plan to
+    // ACTIVATE the Mycon, so a same-named copy in hand cannot match instead.
+    chk(win.LineBuild.encodeLine(S.plan) === 'act=Utopia Mycon',
+        `the primary encodes as act=, got "${win.LineBuild.encodeLine(S.plan)}"`);
   }
   // (2) The tag queues the SACRIFICE, and it encodes as sacout= -- the verb CheckLine matches the
   // SacForMana / SacCreatureOutlet kinds by. Writing cast= here is the bug fixed in 32ce19cc.
