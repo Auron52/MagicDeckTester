@@ -715,6 +715,33 @@ def mdfc_face_intent(kept, ri, land_name):
     return None
 
 
+def fetch_intent(recorded, kept, ri):
+    """Which land the recorded line's FETCHLAND found, as a set of candidate names, or None.
+
+    Plans that differ only in the fetch target are identical in every field a legacy reference
+    recorded (summary, land, casts, actions), so find_plan used to take the first such variant; an
+    unrelated reorder of the variant list then fetched the wrong land (Creature_Giving s1_gi0, T3
+    Windswept Heath, after the 2026-10-06 tutor-ranking change: the Forest Crop Rotation sacrifices
+    was never fetched -> ENUM-GAP). A recording that carries `fetch_target` answers directly;
+    otherwise the intent is read off the reference's own next board -- the fetched land is sitting
+    there (the fetchland itself was sacrificed). Same principle as mdfc_face_intent: by NAME, out
+    of the reference's own record, never by the index the variant used to have."""
+    if recorded.get("fetch_target"):
+        return {recorded["fetch_target"]}
+    if not recorded.get("land"):
+        return None
+    rd = kept[ri].get("decision") or {}
+    before = {pp.get("name") for pp in rd.get("me", {}).get("battlefield", [])}
+    for rec in kept[ri + 1:]:
+        nd = rec.get("decision") or {}
+        bf = nd.get("me", {}).get("battlefield")
+        if not bf:
+            continue
+        added = {pp.get("name") for pp in bf if pp.get("is_land")} - before
+        return added or None
+    return None
+
+
 # Only a TARGET label ("→ Name #N") -- never a legacy "blink #0" spawn reference, which has its own tier.
 _COPY_LABEL = re.compile(r"(→ [^→;#]*?) #\d+(?=,|;|$)")
 
@@ -1519,6 +1546,17 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # Which MDFC land FACE the recorded line played, by name, out of the reference's
                 # own later boards (see mdfc_face_intent). None on every deck without one.
                 face_want = mdfc_face_intent(kept, ri, recorded.get("land"))
+                # Which land the recorded FETCH found (see fetch_intent). Applied only when the
+                # current plans actually differ by fetch target, so it is inert everywhere else.
+                fetch_want = None
+                if len({pp.get("fetch_target") for pp in cur_plans
+                        if pp.get("land") == recorded.get("land")}) > 1:
+                    fetch_want = fetch_intent(recorded, kept, ri)
+                if fetch_want:
+                    _rep = rep_prefer
+                    def rep_prefer(pl, _rep=_rep, _fw=fetch_want):
+                        ft = pl.get("fetch_target")
+                        return (ft is None or ft in _fw) and (_rep is None or _rep(pl))
                 q = find_plan(recorded, cur_plans, recorded_index=p, prefer=rep_prefer,
                               mdfc_face=face_want)
                 if q is None and rep_prefer is not None:

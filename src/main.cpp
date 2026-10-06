@@ -1723,6 +1723,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // deck without such a land serialises byte-identically. 1 = enter tapped and take the
         // counters, 0 = decline; -1 (no such land) is omitted.
         if (p.rad_mode >= 0) { os << ", \"rad_mode\": " << p.rad_mode; }
+        // The fetchland's searched target, structured. Plans differing ONLY in what the fetch finds
+        // were otherwise identical in every emitted field, so a replay re-finding a recorded pick by
+        // content took the FIRST such variant -- and an unrelated reorder of the variant list (the
+        // tutor ranking, 2026-10-06) made Creature_Giving s1_gi0's Windswept Heath fetch the wrong
+        // land. Emitted only when set, so every other plan serialises byte-identically.
+        if (!p.fetch_target.empty()) { os << ", \"fetch_target\": "; JsonStr(os, p.fetch_target); }
         // COMBO OFF: this plan IS the recognised go-off, and (per EnumerateMainPlans' human-play
         // gate) applying it verifiably wins the game this turn. The viewer renders it as its own
         // side-panel button rather than as one of the source card's activations -- USER 2026-09-07:
