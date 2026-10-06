@@ -24581,19 +24581,36 @@ static int RunSearch(GameState& s, int me, RunMode mode)
             // with NO budget to charge (`--budget-ms 0`, the depth-0 runner, every value-leaf
             // matrix cell) the same walk is bounded by nothing but its cap: 4,000 rollout trials
             // x 24 links x 2.3 ms = 200-300 s per DEPTH-1 game, against the old certificate-only
-            // rollouts' ~10 s. So the capped DFS exists only where it can be paid for: a finite
-            // decision budget. Without one the rollout trial is the certificate alone, exactly the
-            // rollout the pre-redesign engine ran, while the in-window search above the horizon
-            // stays complete at that same unlimited budget.
+            // rollouts' ~10 s. So the capped DFS runs only where it can be paid for OR where paying
+            // is not the point.
+            //
+            // UNLIMITED MUST BE A SUPERSET OF FINITE (USER RULING 2026-10-06): "It is supposed to do
+            // the same thing and then more work to ensure we have covered everything exhaustively."
+            // This gate used to skip on `b.budget == nullptr`, which is TWO different states wearing
+            // one value -- an UNLIMITED root, and NO root at all -- and skipping both made
+            // `--budget-ms 0` do strictly LESS beyond the horizon than `--budget-ms 10` did. That is
+            // not merely surprising: `--depth 8 --budget-ms 0` is this repo's ADOPTION BAR ("every
+            // slower game must recover at --depth 8 --budget-ms 0"), so for every equipment deck the
+            // bar was weaker than the configurations it was meant to dominate, and a game could fail
+            // to recover because the walk was OFF rather than because the line does not exist.
+            // DecisionRootOpen() is exactly the predicate that separates the two (see its definition
+            // in TurnSolver.cpp), so: an open-but-unlimited root RUNS the walk, bounded by its node
+            // cap and charging nothing -- the same contract the in-window branch below already has.
+            // Only a frame with NO decision root at all still skips, which keeps the cost blow-up
+            // that motivated the original gate exactly where it was: the depth-0 runner and the
+            // value-leaf matrix cells open no decision root, so they are untouched and stay fast.
             b.budget = TurnSolver::DecisionBudget();
-            if (b.budget == nullptr)
+            const bool unlimited_root = (b.budget == nullptr) && TurnSolver::DecisionRootOpen();
+            if (b.budget == nullptr && !unlimited_root)
             {
-                if (Trace()) { std::fprintf(stderr, "[equip-route] t%d SEARCH skipped (%s, no budget to charge)\n", s.turn_number, TurnSolver::InRolloutPlayout() ? "rollout" : "d0"); }
+                if (Trace()) { std::fprintf(stderr, "[equip-route] t%d SEARCH skipped (%s, no decision root to charge)\n", s.turn_number, TurnSolver::InRolloutPlayout() ? "rollout" : "d0"); }
                 return 0;
             }
             b.nodes_left = RolloutDfsNodes();
             b.tranches   = false;
-            regime       = TurnSolver::InRolloutPlayout() ? "rollout" : "d0";
+            // Labelled apart so the census can tell a charged walk from an uncharged one.
+            regime       = TurnSolver::InRolloutPlayout() ? (unlimited_root ? "rollout-unlim" : "rollout")
+                                                          : (unlimited_root ? "d0-unlim" : "d0");
         }
         else
         {
