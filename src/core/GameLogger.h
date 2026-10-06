@@ -962,7 +962,8 @@ inline bool AllPlayHooksNull()
         && g_play_loyalty_chooser == nullptr
         && g_play_attack_mode_chooser == nullptr
         && g_play_lifegain_counters_chooser == nullptr
-        && g_play_fling_chooser == nullptr;
+        && g_play_fling_chooser == nullptr
+        && g_play_etb_color_chooser == nullptr && g_play_etb_keywords_chooser == nullptr;
 }
 
 // 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
@@ -1019,6 +1020,12 @@ struct RevealLogPause
     AttackersChooser*   saved_atkchooser;
     TapPrefChooser*     saved_tpchooser;
     LoyaltyTargetChooser* saved_loychooser;
+    // The "as this enters" choosers (Coldsteel Heart's colour, Rick's ability pair). They fire from the
+    // universal enter cascade, so without a pause every SIMULATED entry in the search (a Vial put of
+    // Rick tried by plan enumeration) asked the human -- 16 phantom Rick prompts on Soldiers seed 7 T5
+    // (USER 2026-10-06: "I hadn't even cast him yet").
+    EtbColorChooser*    saved_etbcolchooser = nullptr;
+    EtbKeywordsChooser* saved_etbkwchooser = nullptr;
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
     bool noop;   // fast path: nothing installed -> nothing to save/null/restore (see ctor)
@@ -1071,6 +1078,7 @@ struct RevealLogPause
         saved_atkchooser = g_play_attackers_chooser;
         saved_tpchooser = g_play_tap_pref_chooser;
         saved_loychooser = g_play_loyalty_chooser;
+        saved_etbcolchooser = g_play_etb_color_chooser; saved_etbkwchooser = g_play_etb_keywords_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
@@ -1092,6 +1100,7 @@ struct RevealLogPause
         g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
         g_play_loyalty_chooser = nullptr;
+        g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
                         g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -1124,7 +1133,9 @@ struct RevealLogPause
                         g_play_jitte_chooser = saved_jitchooser;
                         g_play_attackers_chooser = saved_atkchooser;
                         g_play_tap_pref_chooser = saved_tpchooser;
-                        g_play_loyalty_chooser = saved_loychooser; }
+                        g_play_loyalty_chooser = saved_loychooser;
+                        g_play_etb_color_chooser = saved_etbcolchooser;
+                        g_play_etb_keywords_chooser = saved_etbkwchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
@@ -1164,6 +1175,7 @@ struct ComboOffApplyPause
     BounceChooser* c24; FirebreatheChooser* c25; TapPrefChooser* c26; LoyaltyTargetChooser* c27;
     AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
     LifegainCountersChooser* c31;
+    EtbColorChooser* c32; EtbKeywordsChooser* c33;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1184,6 +1196,7 @@ struct ComboOffApplyPause
         c29 = g_play_fling_chooser;
         c30 = g_play_treasurify_chooser;
         c31 = g_play_lifegain_counters_chooser;
+        c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1202,6 +1215,7 @@ struct ComboOffApplyPause
         g_play_fling_chooser = nullptr;
         g_play_treasurify_chooser = nullptr;
         g_play_lifegain_counters_chooser = nullptr;
+        g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1223,6 +1237,7 @@ struct ComboOffApplyPause
         g_play_fling_chooser = c29;
         g_play_treasurify_chooser = c30;
         g_play_lifegain_counters_chooser = c31;
+        g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;
