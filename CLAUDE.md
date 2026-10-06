@@ -50,6 +50,30 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     reference has exactly one copy.
   * Before restarting or killing a viewer, check its tree for uncommitted references and commit
     them first.
+  * **HARD RULES added 2026-10-06 (the user asked for "a lot of hard rules to prevent this under
+    any situation"). Every one is mandatory; none has a bypass.**
+    1. **The viewer runs ONLY from the PRIMARY checkout** (`/workspaces/MagicDeckTester` here) —
+       never a linked worktree, never a clone made for scratch work. GATED: `server.js` exits 2
+       when its root is a temp dir OR a linked `git worktree` (`tools/play/refsafe.js`). To run
+       new viewer code, land it on the branch and fast-forward the primary checkout
+       (`git -C /workspaces/MagicDeckTester pull --rebase`), then restart there.
+    2. **Before removing, pruning, resetting or recreating ANY worktree or clone, run
+       `python3 scripts/check_references_safe.py`** (all worktrees) and commit + push every file it
+       lists. Remove worktrees with **`scripts/safe_worktree_remove.sh <path>`**, never a bare
+       `git worktree remove` / `rm -rf` (`worktree_audit.py --prune-stale` runs the same scan).
+    3. **Commit AND push a new reference the moment it appears** — or confirm it is already on
+       `origin/references-autosave` (the scanner checks exactly that). A local commit alone is
+       not enough: a container rebuild takes the unpushed branch with it.
+    4. **Session-close checklist item:** run `python3 scripts/check_references_safe.py`; a
+       non-zero exit means a reference is not safe yet — fix it before ending the session.
+    5. **What the viewer does by itself** (defence in depth, not a substitute for 1-4): each save
+       copies the file to `$MDT_REFERENCE_BACKUP_DIR` (default `~/.mdt-reference-backups/<repo>/`,
+       never overwritten), commits it to the `references-autosave` branch with git plumbing (your
+       working tree, index and branch are untouched) and pushes that branch; at startup it does
+       the same for any untracked/modified reference. A failure shows as a RED banner in the GUI
+       — treat one as an emergency: commit and push the file by hand. NOTE: in the devcontainer
+       `~` is on the ephemeral overlay, so the local backup does not survive a rebuild; the push
+       is the copy that does.
 
 - **NO GREEDY PICK INSIDE THE SEARCH WINDOW — the ENGINE is heuristic-free (user hard rule,
   2026-09-30).** The user's words: *"We need to make sure all of them are purged"*, *"I don't care

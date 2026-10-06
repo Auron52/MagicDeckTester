@@ -118,6 +118,11 @@ deterministic game applying the prior `--choices`, then prints the next decision
 > example above. A 15-agent sweep was fanned over 15 game-indices and unknowingly played the same
 > game 15 times; the agents only salvaged it by independently noticing and probing on their own.)*
 
+> **REFERENCE GAMES ARE IRREPLACEABLE USER WORK (CLAUDE.md, first Repository Convention):** start the
+> play viewer ONLY from the primary checkout (it refuses temp dirs and linked worktrees), commit + push
+> any new `references/` file at once, and run `python3 scripts/check_references_safe.py` before
+> removing any worktree (`scripts/safe_worktree_remove.sh`) and at session close.
+
 - Start with **no** `--choices` (or empty). The command prints ONE decision between
   `<<<CLAUDE_DECISION>>>` and `<<<END_DECISION>>>` and exits **70** ("more input
   needed"). The JSON has: turn, phase, your life/battlefield/hand/graveyard,

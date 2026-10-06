@@ -22,6 +22,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync, spawn } = require('child_process');
+const refsafe = require('./refsafe');                       // reference-game safety (see its header)
 
 const ROOT = path.resolve(__dirname, '..', '..');          // repo root
 // HARD GUARD (user directive 2026-10-05, see CLAUDE.md): the viewer saves the user's hand-played
@@ -49,6 +50,9 @@ const ROOT = path.resolve(__dirname, '..', '..');          // repo root
     }
   }
 })();
+// The LINKED-WORKTREE refusal (2026-10-06, refsafe.refuseUnsafeRoot) is applied only when this file
+// is about to LISTEN (see the require.main block at the bottom): agents legitimately require() it
+// from their own worktrees to run the viewer checks, and a require()d module never serves a save.
 const DECKS_DIR = path.join(ROOT, 'decks');
 const CARDS_JSON = path.join(ROOT, 'src', 'cards', 'data', 'cards.json');
 // Engine binary. Honours $MTG_BIN, else probes the multi-config layout for BOTH names:
@@ -158,7 +162,8 @@ function intParam(v, dflt) {
 // compares it against its own constant and, crucially, treats its ABSENCE as "older than the day
 // this check was added" -- which is the only way a stale server can be detected at all, since a
 // stale server cannot serve a field it has never heard of.
-const SERVER_API = 3;   // 3 = sessionBin pin + @cast-order/@validate-line stdin directives
+const SERVER_API = 4;   // 3 = sessionBin pin + @cast-order/@validate-line stdin directives
+                        // 4 = reference-safety: save-reference returns `backup`, /api/decks `referenceSafety`
 
 // Build the argv for one --claude-play invocation.
 // #10 cast-order side-channel, as argv. `map` is a { mainOrdinal: [entry, ...] } map of the human's
@@ -1366,7 +1371,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/decks') {
       return sendJson(res, 200, { decks: listDecks(), binExists: fs.existsSync(BIN),
-                                  serverApi: SERVER_API });
+                                  serverApi: SERVER_API, referenceSafety: referenceSafetyState() });
     }
     if (req.method === 'GET' && url.pathname === '/api/reference-exists') {
       // Does a saved reference game already exist for this (deck, seed, game#)? The top bar shows a
@@ -1491,15 +1496,29 @@ const server = http.createServer(async (req, res) => {
       // the root-cause fix: previously every game landed in references/<Deck>/ whatever list was
       // being played, so replacing a deck's shipping list silently mixed two lists' games in one
       // folder, and each was then benched against whichever list the folder was bound to.
-      const dir = p.suboptimal
-        ? path.join(ROOT, 'references', 'suboptimal', safeStem(stem), ...(version ? [version] : []))
-        : path.join(ROOT, 'references', safeStem(stem), ...(version ? [version] : []));
+      const relDir = p.suboptimal
+        ? path.join('references', 'suboptimal', safeStem(stem), ...(version ? [version] : []))
+        : path.join('references', safeStem(stem), ...(version ? [version] : []));
+      const dir = path.join(REFS_REPO, relDir);
       fs.mkdirSync(dir, { recursive: true });
+      // REFERENCE SAFETY (2026-10-06, after a week of references was lost with a scratch worktree).
+      // A re-save OVERWRITES an existing reference, so the version on disk is backed up FIRST.
+      const relFile = path.join(relDir, `claude_s${intParam(p.seed, 1)}_gi${intParam(p.gameIndex, 0)}.json`);
+      if (fs.existsSync(path.join(REFS_REPO, relFile))) refsafe.backupFile(REFS_REPO, relFile);
       // Staged + AUDITED (saveTrace): a reference is user ground truth the repo's rules say may
       // never be discarded, so a replay that diverged from the played game must not be able to land
       // on top of one. A refusal returns kind:'error' with savedAs null -- the GUI already renders
       // that as "save failed: <error>", and nothing is written.
-      return sendJson(res, 200, saveTrace(p, dir));
+      const out = saveTrace(p, dir);
+      // ...and a published one is immediately copied out of the repo, committed to the
+      // references-autosave branch (plumbing only: working tree, index, HEAD untouched) and pushed.
+      // None of that can fail the save -- the file is already written -- but every failure is in
+      // `backup`, which the GUI renders as a red banner.
+      if (out.savedAs) {
+        out.backup = await refsafe.protect(REFS_REPO, [relFile]);
+        lastSaveBackup = out.backup;
+      }
+      return sendJson(res, 200, out);
     }
     if (req.method === 'POST' && url.pathname === '/api/save') {
       // Re-run the FULL accumulated choices with --log-dir so RunClaudePlay writes the
@@ -1524,13 +1543,50 @@ const server = http.createServer(async (req, res) => {
 // Only bind the port when run as a script (node tools/play/server.js). When require()d — by the
 // jsdom client check (test/viewer_client_check.js), which reuses runStep/runValidate/listDecks to
 // serve the exact same protocol the browser talks — do NOT listen (no port bind, no console spam).
+// Reference-safety state surfaced to the GUI (via /api/decks): the startup scan's findings and the
+// last save's backup status. REFS_REPO is the repo references are written into -- always ROOT for
+// a real server; test/viewer_reference_backup_check.js points it at a scratch repo.
+let REFS_REPO = ROOT;
+let startupSafety = null;     // { files, backup, error }
+let lastSaveBackup = null;
+function referenceSafetyState() {
+  return { startup: startupSafety, lastSave: lastSaveBackup, backupDir: refsafe.backupRoot(REFS_REPO),
+           backupDirWarning: refsafe.backupDirWarning(refsafe.backupRoot(REFS_REPO)) };
+}
+// Startup scan: anything under references/ that is untracked or modified and NOT already on the
+// autosave branch is backed up and autosave-committed before the first request is served (the push
+// completes in the background and updates the state the GUI reads).
+function startupReferenceScan(root) {
+  const scan = refsafe.scanUnprotected(root);
+  if (!scan.ok) {
+    startupSafety = { files: [], backup: null, error: scan.error };
+    console.error('!!! reference startup scan failed: ' + scan.error);
+    return Promise.resolve(startupSafety);
+  }
+  if (!scan.files.length) { startupSafety = { files: [], backup: null }; return Promise.resolve(startupSafety); }
+  console.log(`  references: ${scan.files.length} untracked/modified reference(s) were NOT on `
+            + `${refsafe.AUTOSAVE_BRANCH}; protecting them now:`);
+  for (const f of scan.files) console.log('    ' + f);
+  startupSafety = { files: scan.files.map(f => f.split(path.sep).join('/')), backup: { pending: true } };
+  return refsafe.protect(root, scan.files, {
+    message: `autosave: startup scan found ${scan.files.length} unprotected reference game(s)\n\n`
+           + scan.files.map(f => '  ' + f.split(path.sep).join('/')).join('\n'),
+  }).then(b => { startupSafety.backup = b; return startupSafety; });
+}
+
 if (require.main === module) {
+  // HARD GUARD: never serve (= never save a reference) from a temp dir or a LINKED worktree.
+  refsafe.refuseUnsafeRoot(ROOT);
+  startupReferenceScan(ROOT);
   server.listen(PORT, HOST, () => {
     const buildCmd = process.platform === 'win32' ? 'build.cmd' : './build.sh';
     const found = fs.existsSync(BIN);
     console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
     console.log(`  binary: ${BIN} ${found ? '(found)' : '(MISSING)'}`);
     console.log(`  decks:  ${DECKS_DIR}`);
+    console.log(`  reference backups: ${refsafe.backupRoot(ROOT)} + branch ${refsafe.AUTOSAVE_BRANCH} (pushed to origin)`);
+    const bw = refsafe.backupDirWarning(refsafe.backupRoot(ROOT));
+    if (bw) console.log('  WARNING: ' + bw);
     if (!found) {
       // Name the platform's build command rather than a bare "build Release first" -- this is
       // the first thing a new user hits, and the answer differs per OS.
@@ -1554,4 +1610,7 @@ module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
                    pySlug, referenceOwners,
                    // stale-server detection (see SERVER_API): the client warns when the running
                    // server is older than the page it just served.
-                   SERVER_API };
+                   SERVER_API,
+                   // reference safety, for test/viewer_reference_backup_check.js
+                   refsafe, startupReferenceScan, referenceSafetyState,
+                   setReferenceRepoForTest: (dir) => { REFS_REPO = dir; } };

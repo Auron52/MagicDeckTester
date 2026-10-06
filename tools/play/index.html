@@ -609,6 +609,11 @@
      because the failure it warns about is silent and, in the engine-pinning case, corrupts the
      saved game. -->
 <div id="staleserver" class="staleserver" style="display:none"></div>
+<!-- REFERENCE SAFETY (tools/play/refsafe.js). Red = a saved reference is NOT fully protected (backup
+     copy, autosave commit or push failed) -- commit and push it by hand. Amber = informational
+     (the startup scan protected files that were only in the working tree, or the backup dir is on
+     storage that will not survive a container rebuild). -->
+<div id="refsafety" class="staleserver" style="display:none"></div>
 
 <main>
   <section id="board"><div class="hint">Start a new game.</div></section>
@@ -662,7 +667,7 @@ const scryImg = (name, ver) => IMAGE_REFS[name]
 const MAX_TURNS = 8;
 // The server behaviour this page assumes (see SERVER_API in server.js and checkServerFresh below).
 // Bump BOTH together when a server.js change alters what the client can rely on.
-const CLIENT_API = 3;
+const CLIENT_API = 4;
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
           plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{},
           // MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md). `tapMode` armed => clicking one of
@@ -5673,7 +5678,9 @@ async function saveRef(suboptimal) {
   const route = (S.hadReject && !suboptimal) ? '/api/save' : '/api/save-reference';
   const res=await post(route, suboptimal ? {...cfg(), suboptimal:true} : cfg());
   $('saveinfo').innerHTML = res.savedAs ? `Saved:<br><b>${esc(res.savedAs)}</b><br>Open it in <code>tools/replay/</code>.`
+      + (res.backup ? `<br><small>${backupSummary(res.backup)}</small>` : '')
     : `<span class="err">save failed: ${esc(res.error||'unknown')}</span>`;
+  if (res.backup) showRefSafety(Object.assign({}, REF_SAFETY, { lastSave: res.backup }));
   if (res.savedAs) checkReference();   // saving updates the badge (verified or suboptimal)
 }
 // Top-bar badge: does this (deck, seed, game#) already have a saved reference game? Informational
@@ -5779,6 +5786,7 @@ async function loadDecks() {
   fillVersions();
   if(!j.binExists) showError('Simulator binary not found — build it first:\n  Linux/macOS:  ./build.sh\n  Windows:      build.cmd\n\nOr start the viewer with ./play.sh (play.cmd on Windows), which builds it for you.');
   checkServerFresh(j);
+  if (j.referenceSafety) { REF_SAFETY = j.referenceSafety; showRefSafety(REF_SAFETY); }
   showBetaNote();     // reflect the initially-selected deck
   checkReference();   // reflect the initial deck/seed/game# on load
 }
@@ -5810,6 +5818,44 @@ function checkServerFresh(j){
     + `Stop it and run <code>./play.sh</code> again. `
     + `<button id="stalex" class="ghost">Dismiss</button>`;
   const x = $('stalex'); if (x) x.onclick = ()=>{ el.style.display='none'; };
+}
+
+// REFERENCE SAFETY banner (see tools/play/refsafe.js). Never a modal: the save itself succeeded,
+// this says whether its out-of-repo backup, autosave commit and push did too.
+let REF_SAFETY = {};
+function backupSummary(b){
+  if(!b) return '';
+  const parts=[];
+  parts.push(b.local==='ok' ? 'backup copy ✓' : 'backup copy ✗');
+  parts.push(b.autosave_commit ? `autosave ${esc(String(b.autosave_commit).slice(0,8))} ✓` : 'autosave ✗');
+  parts.push(b.pushed===true ? 'pushed ✓' : b.pushed===null ? 'push skipped' : b.pending ? 'push pending' : 'pushed ✗');
+  return parts.join(' · ');
+}
+function showRefSafety(st){
+  const el=$('refsafety'); if(!el || !st) return;
+  const msgs=[]; let red=false;
+  const ls=st.lastSave;
+  if(ls && ls.ok===false){
+    red=true;
+    msgs.push(`<b>Reference backup FAILED for ${esc((ls.files||[]).join(', '))}</b> (${backupSummary(ls)}). `
+      + `The file is saved in the repo, but it is NOT safe yet -- commit and push it by hand now. `
+      + esc((ls.errors||[]).join(' | ')));
+  }
+  const su=st.startup;
+  if(su && su.error){ red=true; msgs.push(`<b>Reference startup scan failed:</b> ${esc(su.error)}`); }
+  if(su && su.files && su.files.length){
+    const b=su.backup||{};
+    if(b.ok===false) red=true;
+    msgs.push(`<b>Startup: ${su.files.length} reference game(s) existed only in the working tree</b> and were `
+      + `protected now (${backupSummary(b)}): ${esc(su.files.slice(0,6).join(', '))}${su.files.length>6?' …':''}`
+      + (b.ok===false ? ' -- <b>'+esc((b.errors||[]).join(' | '))+'</b>' : ''));
+  }
+  if(st.backupDirWarning) msgs.push('⚠ '+esc(st.backupDirWarning)+'.');
+  if(!msgs.length){ el.style.display='none'; return; }
+  el.style.display='';
+  el.style.background = red ? '#e0503a' : '#e0a33a';
+  el.innerHTML = msgs.join('<br>') + ` <button id="refsafex" class="ghost">Dismiss</button>`;
+  const x=$('refsafex'); if(x) x.onclick=()=>{ el.style.display='none'; };
 }
 
 // drag from hand onto YOUR FIELD (#playfield) — the area where cards get played — queues the card

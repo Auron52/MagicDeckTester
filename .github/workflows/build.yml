@@ -45,6 +45,8 @@ on:
       # signal into a misattributed one.
       - 'test/viewer_*.js'
       - 'test/viewer_*.py'
+      - 'scripts/check_references_safe.py'
+      - 'scripts/safe_worktree_remove.sh'
       - 'references/**'
   workflow_dispatch:
 
@@ -89,6 +91,13 @@ jobs:
       # are structurally blind to.
       - name: Viewer line-build check
         run: node test/viewer_linebuild_check.js
+
+      # Reference-game safety (tools/play/refsafe.js): backup copy, plumbing-only autosave commit,
+      # push + push-failure reporting, startup scan, the real /api/save-reference route, and the
+      # linked-worktree refusal -- all against scratch repos. Run on BOTH OSes because the viewer
+      # (play.cmd) saves references on Windows too. Needs git + the binary built above.
+      - name: Viewer reference-safety check
+        run: node test/viewer_reference_backup_check.js
 
       # The cross-platform determinism sample. Single-threaded so the result cannot depend on
       # the runner's core count. Both OSes must produce the same number -- compared in the job

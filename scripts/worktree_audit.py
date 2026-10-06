@@ -181,6 +181,13 @@ def main():
         stale = [r for r in rows if r['verdict'] == 'STALE']
         for r in stale:
             if a.yes:
+                # REFERENCE SAFETY gate (CLAUDE.md): never remove a worktree holding a reference game
+                # that exists nowhere else, whatever the STALE verdict above concluded.
+                chk = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                      'check_references_safe.py'), r['path']], capture_output=True, text=True)
+                if chk.returncode != 0:
+                    print(f"REFUSED {r['path']}: unprotected reference games (scripts/check_references_safe.py):\n{chk.stdout}{chk.stderr}")
+                    continue
                 rc, out, err = git(['worktree', 'remove', '--force', r['path']])
                 print(f"removed {r['path']}" if rc == 0 else f"FAILED {r['path']}: {err}")
             else:

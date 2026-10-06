@@ -36,6 +36,11 @@ The harness lives in `test/`:
 | `logs/<mode>/mtg.run` | snapshot of the exact binary that produced this run (`+ .meta` records its git hash/state) | no (gitignored) |
 | `regression_result_<mode>.txt` | last run's summary table | no (gitignored) |
 
+> **Saved references (`references/`) are irreplaceable user work** — see CLAUDE.md's first Repository
+> Convention: the viewer runs ONLY from the primary checkout, new references are committed + pushed at
+> once, and `python3 scripts/check_references_safe.py` must pass before any worktree is removed
+> (`scripts/safe_worktree_remove.sh`) or a session ends.
+
 All runs are **deterministic and thread-invariant** — same seed + budget ⇒ same
 result on any core count. That is what makes ground-truth comparison and A/B
 testing valid. Every search run (depth > 0) uses `--lookahead-bottoming`. Build

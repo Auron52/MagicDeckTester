@@ -36,6 +36,9 @@
 #     reason. Needs python3 + the binary; seconds. Nothing else can see it: the fallback is
 #     human-play-only and default-inert, and the float it makes is spent by the next payment (see
 #     its header). SKIPS itself when the board it drives is not reachable.
+#   * REFERENCE SAFETY (server<->git) -- viewer_reference_backup_check.js: backup copy outside the
+#     repo, references-autosave commit + push, push-failure reporting, startup scan, linked-worktree
+#     refusal. Scratch repos only; ~10 s.
 #   * SAVE parity (server<->engine) -- viewer_save_parity_check.js drives real games through
 #     server.js's own step entry point and then SAVES them, asserting the save's fresh full-stream
 #     replay reproduces the live session decision-for-decision. The only layer that runs /api/save
@@ -125,6 +128,21 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_beta_check.js" ]; 
   echo "--- viewer deck maturity (alpha / beta / stable) ---"
   if node "$HERE/viewer_deck_beta_check.js"; then :; else
     echo "FAIL: the viewer's alpha/beta/stable grading disagrees with the decks' actual artifacts."
+    rc=1
+  fi
+fi
+
+# 0d) REFERENCE SAFETY (node + git; the route layer also uses the binary and SKIPS without it).
+#     ~10 s. Pins tools/play/refsafe.js: every saved reference is copied OUT of the repo, committed to
+#     the references-autosave branch with plumbing (working tree / index / HEAD untouched) and pushed;
+#     a push failure surfaces in the save response; the startup scan protects stray references; and
+#     the server refuses to LISTEN from a linked worktree. Exists because a week of the user's
+#     hand-played references was lost with a scratch checkout on 2026-10-05 -- all against scratch
+#     repos, never the real one. Runs in every mode, --line-only included: it is cheap.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_reference_backup_check.js" ]; then
+  echo "--- viewer reference safety (backup + autosave branch + push + worktree refusal) ---"
+  if MTG_BIN="$BIN" node "$HERE/viewer_reference_backup_check.js"; then :; else
+    echo "FAIL: a saved reference game is no longer protected outside the working tree."
     rc=1
   fi
 fi
