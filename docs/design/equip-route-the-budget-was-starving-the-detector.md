@@ -1,6 +1,13 @@
 # The equip route's per-link price was starving the detector that pays for itself (2026-10-06)
 
-Status: MEASURED, candidate identified, NOT adopted. Runs in flight; §6 records what is still open.
+Status: **MEASURED AND COMPLETE, NOTHING ADOPTED — awaiting the user's ruling on §5b.** All arms
+have run. The headline: the shipped per-link price was set just high enough to make the route's
+lethal detection FAIL on the boards where it was worth the most, and a failed detection is the worst
+case available — it spends the whole budget and collapses nothing. Lowering the price (and stacking
+the TOPMAIN fold, which measures answer-identical at large budgets) gives **0.714x wall and -51
+game-turns per 3,000 games**, with every slower game recovering at the adoption bar. The remaining
+order of magnitude is NOT in the route at all: it is one decision enumerating 31-145 million plans
+(§4b/§4c), which is non-lossy to fix and needs no ruling.
 
 Context: KittyEquipment v2 costs **2.48 thread-s per game** against Stompy's 0.029 and
 Fluctuator's 0.027 — 85x — which blocks the deck-screening apparatus (a 16-arm x 16,000-game
@@ -264,23 +271,25 @@ is not catching it. NOT yet implemented or measured — it is the recommended ne
 | lever | shape | findable at unlimited budget? | verdict |
 |---|---|---|---|
 | `MTG_EQUIP_ROUTE_NODE_UNITS` | price, read only to decrement a budget | **yes, provably** — `ChargeDecisionUnits` returns on `budget == nullptr` and the cut test requires `budget != nullptr`, so at an unlimited root the price is never read | legitimate; this is the candidate |
-| `MTG_EQUIP_ROUTE_TOPMAIN` | predicate in the GATE (`EquipRoutePiecesInPlace`) | **no** — consulted at every budget | lossy as a gate — **and it is DOMINATED, so the question is moot** |
+| `MTG_EQUIP_ROUTE_TOPMAIN` | predicate in the GATE (`EquipRoutePiecesInPlace`) | **not by construction** — it is consulted at every budget, so the shape cannot guarantee it. **Measured: yes** (§5a) | a GATE, so it needs its completeness earned by measurement rather than argued from the code — and it earns it |
 
-**TOPMAIN is dominated by the safe lever, which settles it without needing the wave.** At b20, 3,000
-games paired:
+**Read §5a before acting on the shape column.** The honest sequence of conclusions here was:
+TOPMAIN is a gate predicate, gates are consulted at every budget, therefore it *can* delete a line
+that no budget would then find — so by shape it is the lossy kind and the user's rule puts it out.
+That reasoning is sound about the *shape* and it is the right default. But it is a statement about
+what the code could do, not about what it does, and the measurement in §5a says the frames it skips
+really are redundant: byte-identical at 50x budget over 250 games, byte-identical at unlimited
+budget on every game that moved at 10x, and 44/44 identical at the recovery bar.
 
-| arm | avg win turn | wall | faster/slower | paired net | lossy? |
-|---|---|---|---|---|---|
-| nu4 (price 4) | 3.9083 | **0.856x** | 41 / 15 | **-24** | no, provably |
-| topmain | 3.9080 | 0.879x | 40 / 15 | -25 | **yes, by construction** |
+So both levers are admissible under the user's rule, by different routes — the price by
+construction, TOPMAIN by evidence — and §5c shows they stack. **The wave / position-aware-price
+design is therefore not needed here**; it stays on file in CLAUDE.md as the sanctioned pattern for
+the next restriction that turns out to be genuinely lossy.
 
-They buy the *same* quality (-24 vs -25, and the **same 15 slower games**, gi=470/630/723/938/1112
-…), because they do the same thing: free up budget that then finds the turn-3 kill. But the
-non-lossy one is also the cheaper one. So TOPMAIN has "good results" exactly as the user
-anticipated — and there is still no reason to take it, because the price lever already captures its
-entire win without removing capability. **The wave/position-aware-price design is therefore NOT
-needed for this lever**; it is kept on file in CLAUDE.md as the sanctioned pattern for the next
-restriction that is *not* dominated.
+At the shipped b20 they buy almost the same thing (price 4: -24 at 0.856x; topmain: -25 at 0.879x,
+and the **same 15 slower games** — gi=470/630/723/938/1112 …), because at that budget they do the
+same thing: free up budget that then finds the turn-3 kill. Their saving mechanisms differ, which is
+why stacking them compounds.
 
 ### 5a. TOPMAIN is lossy in SHAPE but — on the sharpest sample available — NOT in FACT
 
@@ -351,6 +360,36 @@ line findable while still spending small budgets where the yield is.
 Explicitly ruled out: a damage pre-filter on the gate. The route's own measurement says ~90% of
 trials DO find a kill, so there is almost no hopeless-board detection to skip.
 
+### 5c. The two levers STACK, and the combination is the best configuration measured
+
+They are independent by construction — one prices the route's links against the decision budget,
+the other skips route frames after the turn's first main — so if TOPMAIN is the redundancy fold
+§5a says it is, stacking should buy its saving on top of the price's. It does. All arms: 3,000
+games, kittyv2 shipped policy, seed 960000, paired per game.
+
+| config | avg win turn | wall | vs base | net | faster/slower | slow games | tail sum | recovery bar |
+|---|---|---|---|---|---|---|---|---|
+| base (price 8) | 3.9163 | 7,324 | 1.000x | — | — | 31 | 5,618 s | — |
+| price 4 | 3.9083 | 6,272 | 0.856x | -24 | 41 / 15 | 21 | 4,451 s | 36/36 identical |
+| price 2 | 3.9017 | 6,204 | 0.847x | -44 | 64 / 24 | 21 | 4,215 s | 36/36 identical |
+| price 1 | 3.9003 | 5,986 | 0.817x | -48 | 79 / 34 | 20 | 3,777 s | 36/36 identical |
+| topmain alone | 3.9080 | 6,440 | 0.879x | -25 | 40 / 15 | 26 | 4,940 s | 44/44 identical |
+| price 2 + topmain | 3.9017 | 5,270 | 0.719x | -44 | 76 / 35 | 18 | 3,473 s | 44/44 identical |
+| **price 1 + topmain** | **3.8993** | **5,227** | **0.714x** | **-51** | 89 / 40 | **18** | **3,449 s** | 44/44 identical |
+
+**Adding TOPMAIN to a price is answer-neutral and ~15% cheaper.** Paired directly against the
+price-only arm: `price 2 + topmain` vs `price 2` is net **±0** game-turns (2,977 of 3,000
+identical, 12 faster / 11 slower) for 0.847x -> 0.719x; `price 1 + topmain` vs `price 1` is net
+**-3** (2,976 identical, 13 / 11) for 0.817x -> 0.714x. Neutral answer, materially less work — a
+sound fold's signature, consistent with the b1000 byte-identity in §5a.
+
+**Every candidate passes both halves of the adoption bar.** Two pooled recovery runs at
+`--depth 8 --budget-ms 0` — 36 games for the price-only arms, 44 for TOPMAIN and the stacked ones
+(each the union of every game that arm made slower) — came back **identical to base on every
+game, for every arm**. That is 80 distinct games at unlimited budget across six configurations
+with no divergence, which is simultaneously the recovery bar and the strongest available evidence
+for both the price's inertness and TOPMAIN's soundness.
+
 ## 5b. Recommendation (for the USER to rule on — it changes play, so it moves GT)
 
 **Lower `MTG_EQUIP_ROUTE_NODE_UNITS` from its default of 8. Prices 1, 2 and 4 ALL pass the repo's
@@ -368,9 +407,24 @@ a genuine judgement call, so it is the user's:
 Lower is better on every aggregate axis, with diminishing returns below 2 (quality -44 -> -48 while
 wall still falls 0.847x -> 0.817x). The axis that argues the other way is **churn**: price 1 moves
 113 of 3,000 games, which is more GT movement to review and more exposure to a slower game that a
-future engine change stops recovering. **Recommended: price 2**, as the point where almost all the
-aggregate win is banked (-44 of -48) at two-thirds of price 1's churn. Price 4 is the conservative
-pick if churn is the dominant concern.
+future engine change stops recovering.
+
+**Recommended: price 2 + TOPMAIN** — 3.9017 avg, **0.719x wall**, net -44 game-turns, the tail down
+to 18 slow games / 3,473 s from 31 / 5,618 s, and 44/44 recovery. It banks nearly all the available
+win at meaningfully less churn than price 1 (111 games moved vs 129), and TOPMAIN's contribution is
+answer-neutral rather than a trade.
+
+`price 1 + TOPMAIN` is the maximum (3.8993, 0.714x, net -51) if the extra churn is acceptable;
+`price 4` alone is the conservative floor if TOPMAIN is to be held back for a wider soundness
+sample. **TOPMAIN is a gate justified by an argument rather than by construction**, so even though
+every measurement here supports it (byte-identical at b1000 over 250 games, 44/44 at unlimited), a
+reasonable position is to take the price now and TOPMAIN after a broader unlimited-budget check.
+
+**Sizing this against the actual complaint — the screens.** At 0.714x, kittyv2 goes from 2.48 to
+~1.77 thread-s per game, so a 16-arm x 16,000-game screen goes from ~5.5 h to ~3.9 h on 32 cores.
+That is real but it is not a step change, and it should not be sold as one: the step change is in
+§4b/§4c, the 31-million-plan enumeration on wide boards, which none of these levers touches. The
+screens want that fix, and it is non-lossy and needs no ruling.
 
 Two caveats that belong in the same breath:
 * **The floor is real.** `NodeUnits()`'s comment records price 1 producing 2.5-3+ HOUR games in the
@@ -408,22 +462,52 @@ the ~18,000 wasted units; it does not avoid the 31M-plan enumeration that follow
 Completing the detection is worth ~300x more than not wasting the attempt, so the price is the
 better lever and this is at most a complement.
 
-## 6. Open / in flight
+## 6. What ran, what is left
 
-Running as one serial chain (`logs/kittyv2_swaps/levers/run_overnight.sh`; serial because
-`NodeUnits()` and `s_topmain` are `static const` env reads, so a price arm cannot be a job inside
-one manifest — the one case the pooling rule's "waves are a loop" allows):
+Everything above is DONE. Arms ran as serial chains (serial because `NodeUnits()` and `s_topmain`
+are `static const` env reads, so a price or gate arm cannot be a job inside one manifest — a
+genuine data dependency, which is the one case the pooling rule's "waves are a loop" allows; within
+each arm the 3,000 games are one pooled batch, one tail). Scripts and raw output:
+`logs/kittyv2_swaps/levers/` — `run_quality.sh`, `run_overnight.sh`, `run_unlim.sh`,
+`run_stack.sh`, `run_recovery2.sh`, with `pair.py` (paired per-game read, losses penalised to
+`max_turns+1`) and `mkrecovery.py` (one pooled manifest of one job per affected game).
 
-1. **Profile** of gi=371 (the worst per-unit game, 2.15 ms/unit) under `build/Profile` — where the
-   per-unit cost goes. Any waste found here is a non-lossy win needing no ruling.
-2. **Is TOPMAIN lossy?** `b200` (10x shipped), 1,000 games, paired, topmain off vs on.
-3. **Price curve downward:** nu2, nu1 at b20, 3,000 games, paired.
-4. **Recovery bar** at `--depth 8 --budget-ms 0` for every slower game of every candidate price,
-   as one pooled manifest (`mkrecovery.py`).
-5. **"Budget well spent":** nu4 at b24 and b30 — whether spending nu4's 14.4% wall saving on
-   budget buys more than base got for the same wall.
+**NOTHING HAS BEEN ADOPTED.** No default changed; the only `src/` edit in this work is a corrected
+comment. Every number above is from env-var arms.
 
-Also open, and independent of all of the above: the viewer's node cap is mis-shaped (bounded in
-LINKS, not work), which costs 13 minutes per decision and makes `regression.sh --regression`
-unable to finish — `docs/design/equip-route-viewer-dfs-cap-is-mis-sized.md`. The constant's
-re-size is the user's call because it trades menu completeness.
+### Left to do, in value order
+
+1. **THE BIG ONE, and it needs no ruling: the wide-board plan explosion** (§4b/§4c). One decision
+   enumerating 31-145 million plans is where the remaining order of magnitude is, and ~30-38% of
+   its scored root candidates are duplicates. Non-lossy, pre-approved by "COLLAPSE WASTED SEARCH
+   UNCONDITIONALLY", and the thing the screens actually need. Start from the equip-assignment
+   symmetry (which Equipment on which interchangeable host); `MTG_FOLD_SEARCH_ODO` is NOT it
+   (-0.19%, measured).
+2. **The user's ruling** on §5b, then rebaseline the smoke and regression tiers for whichever
+   configuration is taken, and re-check the chosen price against the GENERATION shapes (value-leaf
+   matrix, mulligan gen at d1/b3) before any generation run — that is where price 1 historically
+   blew up.
+3. **A wider unlimited-budget sample for TOPMAIN**, if the user wants the gate held to a higher bar
+   than the 250-game b1000 byte-identity plus 44/44 at the recovery bar. Note that a full
+   unlimited-budget batch on this deck has no bound: a 1,000-game `--budget-ms 0` run was abandoned
+   with 13 games still running after 31 minutes at 13/30 workers. Size it small and targeted.
+4. **The viewer's node cap**, independent of all of the above: bounded in LINKS rather than work,
+   13 minutes per decision, and it makes `regression.sh --regression` unable to finish —
+   `docs/design/equip-route-viewer-dfs-cap-is-mis-sized.md`. Until then use `VPC_SKIP=1` and report
+   the reference gate as UN-RUN. The constant's re-size is the user's call (it trades menu
+   completeness).
+
+### Method notes worth keeping
+
+* **`perf` does not work on this kernel** (`failed to write perf data, error: Bad address`, WSL2
+  6.18.33.2). Use the repo's own instrumentation instead, which is deterministic and therefore
+  better for A/B work: `cmake -S . -B build-instr -DMTG_PROFILE=ON -DCMAKE_BUILD_TYPE=Release`
+  (the one place a raw `cmake` is correct — `build.sh` has no mode for it and the build type is
+  explicit), plus `MTG_TURN_CENSUS=<path>` and `MTG_DEDUP_CENSUS=1`.
+* **Units are not comparable across price arms.** A lower price charges the same work fewer units
+  by construction, so `units` moves even when nothing else does. Compare `ms`.
+* **Wall is tail-bound on this deck and `ms` is thread time**, so never derive a wall estimate from
+  `ms / threads`: 3,000 games read 2/30 workers busy at ten minutes and 0/30 at twenty, with two
+  games holding 30% of the run.
+* The census CSV is **tab**-separated with a leading `#` comment line, and its `u_*` columns sum to
+  `units`.
