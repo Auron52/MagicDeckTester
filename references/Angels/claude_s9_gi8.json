@@ -1,0 +1,337 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 5, "won": true,
+  "mulligan": { "count": 3, "bottom": [4, 57, 56] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 21, "name": "Plains" }, { "num": 22, "name": "Plains" }, { "num": 3, "name": "Bishop of Wings" }, { "num": 17, "name": "Lyra, Archangel of Dawn" }, { "num": 23, "name": "Plains" }, { "num": 24, "name": "Plains" }, { "num": 44, "name": "Righteous Valkyrie" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 34, "name": "Plains" }, { "num": 6, "name": "Bishop of Wings" }, { "num": 8, "name": "Giada, Font of Hope" }, { "num": 18, "name": "Lyra, Archangel of Dawn" }, { "num": 20, "name": "Lyra, Archangel of Dawn" }, { "num": 5, "name": "Bishop of Wings" }, { "num": 45, "name": "Righteous Valkyrie" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 33, "name": "Plains" }, { "num": 12, "name": "Lightstall Inquisitor" }, { "num": 52, "name": "Serra the Benevolent" }, { "num": 32, "name": "Plains" }, { "num": 1, "name": "Archangel of Thune" }, { "num": 22, "name": "Plains" }, { "num": 58, "name": "Unexpectedly Absent" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": false,
+  "to_bottom": 3,
+  "hand": [{ "num": 56, "name": "Swords to Plowshares" }, { "num": 57, "name": "Unexpectedly Absent" }, { "num": 47, "name": "Righteous Valkyrie" }, { "num": 21, "name": "Plains" }, { "num": 1, "name": "Archangel of Thune" }, { "num": 4, "name": "Bishop of Wings" }, { "num": 54, "name": "Sol Ring" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 56, "name": "Swords to Plowshares", "win_optimal": true }, { "num": 57, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 47, "name": "Righteous Valkyrie", "win_optimal": true }, { "num": 21, "name": "Plains", "win_optimal": true }, { "num": 1, "name": "Archangel of Thune", "win_optimal": true }, { "num": 4, "name": "Bishop of Wings", "win_optimal": true }, { "num": 54, "name": "Sol Ring", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 1, "name": "Archangel of Thune" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 56, "name": "Swords to Plowshares", "win_optimal": true }, { "num": 57, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 47, "name": "Righteous Valkyrie", "win_optimal": true }, { "num": 21, "name": "Plains", "win_optimal": true }, { "num": 1, "name": "Archangel of Thune", "win_optimal": true }, { "num": 54, "name": "Sol Ring", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 1, "name": "Archangel of Thune" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 56, "name": "Swords to Plowshares", "win_optimal": true }, { "num": 47, "name": "Righteous Valkyrie", "win_optimal": true }, { "num": 21, "name": "Plains", "win_optimal": true }, { "num": 1, "name": "Archangel of Thune", "win_optimal": true }, { "num": 54, "name": "Sol Ring", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 1, "name": "Archangel of Thune" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Righteous Valkyrie" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Sol Ring", "land": "Plains", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Seraph Sanctuary" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Righteous Valkyrie", "land": "Seraph Sanctuary", "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 1, "summary": "land=none; cast: Righteous Valkyrie", "land": null, "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "drain", "text": "💚 Righteous Valkyrie entered — Seraph Sanctuary: you +1 (21→22)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Bishop of Wings" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Righteous Valkyrie", "land": null, "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 Righteous Valkyrie entered — Seraph Sanctuary, Righteous Valkyrie: you +5 (22→27)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Righteous Valkyrie (6) — 6 to opponent (20→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "tapped": true, "is_land": false }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Resplendent Angel" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Righteous Valkyrie (6), Righteous Valkyrie (6) — 12 to opponent (14→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "tapped": true, "is_land": false }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "tapped": true, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Giada, Font of Hope" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Giada, Font of Hope", "land": null, "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "drain", "text": "💚 Giada, Font of Hope entered — Seraph Sanctuary, Righteous Valkyrie ×2: you +13 (27→40)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 40, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 7, "num": 10, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 3, "num": 47, "is_land": false }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 2, "num": 49, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 54, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1, "floating_mana": {"C": 1} },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Righteous Valkyrie (6), Righteous Valkyrie (6) — 12 to opponent (2→-10)" }
+  ]
+}

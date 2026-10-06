@@ -1,0 +1,285 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 21, "name": "Plains" }, { "num": 17, "name": "Lyra, Archangel of Dawn" }, { "num": 12, "name": "Lightstall Inquisitor" }, { "num": 36, "name": "Remote Farm" }, { "num": 3, "name": "Bishop of Wings" }, { "num": 22, "name": "Plains" }, { "num": 48, "name": "Seraph Sanctuary" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 1, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Youthful Valkyrie" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Bishop of Wings", "land": "Plains", "casts": ["Bishop of Wings"], "actions": [{ "card": "Bishop of Wings" }] },
+    { "index": 1, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Lightstall Inquisitor" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Lyra, Archangel of Dawn", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Lyra, Archangel of Dawn", "land": "Seraph Sanctuary", "casts": ["Lyra, Archangel of Dawn"], "actions": [{ "card": "Lyra, Archangel of Dawn" }] },
+    { "index": 1, "summary": "land=Plains; cast: Lyra, Archangel of Dawn", "land": "Plains", "casts": ["Lyra, Archangel of Dawn"], "actions": [{ "card": "Lyra, Archangel of Dawn" }] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=Plains; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": "Plains", "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 5, "summary": "land=Plains; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": "Plains", "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 6, "summary": "land=Remote Farm; cast: Lightstall Inquisitor", "land": "Remote Farm", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 7, "summary": "land=Seraph Sanctuary; cast: Lightstall Inquisitor", "land": "Seraph Sanctuary", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 8, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 9, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 10, "summary": "land=Remote Farm; cast: Youthful Valkyrie", "land": "Remote Farm", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 11, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 12, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 13, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 14, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "❤️ life gained: Lyra, Archangel of Dawn: +1/+1 on each Angel" }, { "turn": 3, "kind": "trigger", "text": "❤️ life gained: Lyra, Archangel of Dawn: +1/+1 on each Angel" }, { "turn": 3, "kind": "drain", "text": "💚 Lyra, Archangel of Dawn entered — Bishop of Wings, Seraph Sanctuary: you +5 (21→26)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Lyra, Archangel of Dawn", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 4, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (4), Bishop of Wings (1) — 5 to opponent (18→13)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Lyra, Archangel of Dawn", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 4, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 13, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 9, "cast_order": ["*", "Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Sol Ring" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Lyra, Archangel of Dawn", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }, { "name": "Seraph Sanctuary", "idx": 4, "num": 48, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Remote Farm; cast: Lightstall Inquisitor, Sol Ring, Youthful Valkyrie", "land": "Remote Farm", "casts": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 1, "summary": "land=Remote Farm; cast: Lightstall Inquisitor, Youthful Valkyrie, Sol Ring", "land": "Remote Farm", "drops": ["Sol Ring"], "casts": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 2, "summary": "land=Remote Farm; cast: Sol Ring, Lightstall Inquisitor, Youthful Valkyrie", "land": "Remote Farm", "casts": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=Remote Farm; cast: Sol Ring, Youthful Valkyrie, Lightstall Inquisitor", "land": "Remote Farm", "casts": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=Remote Farm; cast: Youthful Valkyrie, Lightstall Inquisitor, Sol Ring", "land": "Remote Farm", "drops": ["Sol Ring"], "casts": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 5, "summary": "land=Remote Farm; cast: Youthful Valkyrie, Sol Ring, Lightstall Inquisitor", "land": "Remote Farm", "drops": ["Lightstall Inquisitor"], "casts": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 6, "summary": "land=Plains; cast: Lightstall Inquisitor, Sol Ring, Youthful Valkyrie", "land": "Plains", "casts": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 7, "summary": "land=Plains; cast: Lightstall Inquisitor, Youthful Valkyrie, Sol Ring", "land": "Plains", "casts": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 8, "summary": "land=Plains; cast: Sol Ring, Lightstall Inquisitor, Youthful Valkyrie", "land": "Plains", "casts": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 9, "summary": "land=Plains; cast: Sol Ring, Youthful Valkyrie, Lightstall Inquisitor", "land": "Plains", "casts": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 10, "summary": "land=Plains; cast: Youthful Valkyrie, Lightstall Inquisitor, Sol Ring", "land": "Plains", "casts": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 11, "summary": "land=Plains; cast: Youthful Valkyrie, Sol Ring, Lightstall Inquisitor", "land": "Plains", "casts": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 12, "summary": "land=none; cast: Lightstall Inquisitor, Sol Ring, Youthful Valkyrie", "land": null, "casts": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 13, "summary": "land=none; cast: Lightstall Inquisitor, Youthful Valkyrie, Sol Ring", "land": null, "drops": ["Sol Ring"], "casts": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 14, "summary": "land=none; cast: Sol Ring, Lightstall Inquisitor, Youthful Valkyrie", "land": null, "casts": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 15, "summary": "land=none; cast: Sol Ring, Youthful Valkyrie, Lightstall Inquisitor", "land": null, "casts": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 16, "summary": "land=none; cast: Youthful Valkyrie, Lightstall Inquisitor, Sol Ring", "land": null, "drops": ["Sol Ring"], "casts": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 17, "summary": "land=none; cast: Youthful Valkyrie, Sol Ring, Lightstall Inquisitor", "land": null, "drops": ["Lightstall Inquisitor"], "casts": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 18, "summary": "land=Remote Farm; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": "Remote Farm", "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 19, "summary": "land=Remote Farm; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": "Remote Farm", "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 20, "summary": "land=Plains; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": "Plains", "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 21, "summary": "land=Plains; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": "Plains", "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 22, "summary": "land=none; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": null, "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 23, "summary": "land=none; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": null, "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 24, "summary": "land=Remote Farm; cast: Lightstall Inquisitor, Sol Ring", "land": "Remote Farm", "casts": ["Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 25, "summary": "land=Remote Farm; cast: Sol Ring, Lightstall Inquisitor", "land": "Remote Farm", "casts": ["Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 26, "summary": "land=Plains; cast: Lightstall Inquisitor, Sol Ring", "land": "Plains", "casts": ["Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 27, "summary": "land=Plains; cast: Sol Ring, Lightstall Inquisitor", "land": "Plains", "casts": ["Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 28, "summary": "land=none; cast: Lightstall Inquisitor, Sol Ring", "land": null, "casts": ["Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 29, "summary": "land=none; cast: Sol Ring, Lightstall Inquisitor", "land": null, "casts": ["Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 30, "summary": "land=Remote Farm; cast: Lightstall Inquisitor", "land": "Remote Farm", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 31, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 32, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 33, "summary": "land=Remote Farm; cast: Sol Ring, Youthful Valkyrie", "land": "Remote Farm", "casts": ["Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 34, "summary": "land=Remote Farm; cast: Youthful Valkyrie, Sol Ring", "land": "Remote Farm", "casts": ["Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 35, "summary": "land=Plains; cast: Sol Ring, Youthful Valkyrie", "land": "Plains", "casts": ["Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 36, "summary": "land=Plains; cast: Youthful Valkyrie, Sol Ring", "land": "Plains", "casts": ["Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 37, "summary": "land=none; cast: Sol Ring, Youthful Valkyrie", "land": null, "casts": ["Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 38, "summary": "land=none; cast: Youthful Valkyrie, Sol Ring", "land": null, "casts": ["Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 39, "summary": "land=Remote Farm; cast: Youthful Valkyrie", "land": "Remote Farm", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 40, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 41, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 42, "summary": "land=Remote Farm; cast: Sol Ring", "land": "Remote Farm", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 43, "summary": "land=Plains; cast: Sol Ring", "land": "Plains", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 44, "summary": "land=none; cast: Sol Ring", "land": null, "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 45, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 46, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 47, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Lyra, Archangel of Dawn: +1/+1 on each Angel" }, { "turn": 4, "kind": "trigger", "text": "❤️ life gained: Lyra, Archangel of Dawn: +1/+1 on each Angel" }, { "turn": 4, "kind": "drain", "text": "💚 Youthful Valkyrie entered — Bishop of Wings, Seraph Sanctuary: you +5 (26→31)" }, { "turn": 4, "kind": "trigger", "text": "❤️ life gained: Lyra, Archangel of Dawn: +1/+1 on each Angel" }, { "turn": 4, "kind": "trigger", "text": "❤️ life gained: Lyra, Archangel of Dawn: +1/+1 on each Angel" }, { "turn": 4, "kind": "ability", "text": "➕ Youthful Valkyrie: +1/+1 counter (Angel entered)" }, { "turn": 4, "kind": "drain", "text": "💚 Lightstall Inquisitor entered — Bishop of Wings, Seraph Sanctuary: you +5 (31→36)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 36, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 6 }] }, { "name": "Lightstall Inquisitor", "idx": 9, "num": 13, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Lyra, Archangel of Dawn", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 6 }] }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 23, "is_land": true, "taps": "W" }, { "name": "Seraph Sanctuary", "idx": 4, "num": 48, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 7, "num": 54, "tapped": true, "is_land": false }, { "name": "Youthful Valkyrie", "idx": 8, "num": 60, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 5 }] }], "vial_counters": [], "hand": [{ "num": 36, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0, "floating_mana": {"C": 1} },
+  "opponent": { "life": 13, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (8), Bishop of Wings (1), Lyra, Archangel of Dawn (9) — 18 to opponent (13→-5)" }
+  ]
+}

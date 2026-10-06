@@ -1,0 +1,328 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [3, 49] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 44, "name": "Righteous Valkyrie" }, { "num": 7, "name": "Giada, Font of Hope" }, { "num": 1, "name": "Archangel of Thune" }, { "num": 12, "name": "Lightstall Inquisitor" }, { "num": 2, "name": "Archangel of Thune" }, { "num": 52, "name": "Serra the Benevolent" }, { "num": 40, "name": "Resplendent Angel" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 6, "name": "Bishop of Wings" }, { "num": 13, "name": "Lightstall Inquisitor" }, { "num": 21, "name": "Plains" }, { "num": 24, "name": "Plains" }, { "num": 22, "name": "Plains" }, { "num": 36, "name": "Remote Farm" }, { "num": 60, "name": "Youthful Valkyrie" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 8, "name": "Giada, Font of Hope" }, { "num": 47, "name": "Righteous Valkyrie" }, { "num": 49, "name": "Seraph Sanctuary" }, { "num": 3, "name": "Bishop of Wings" }, { "num": 22, "name": "Plains" }, { "num": 27, "name": "Plains" }, { "num": 41, "name": "Resplendent Angel" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 8, "name": "Giada, Font of Hope", "win_optimal": true }, { "num": 47, "name": "Righteous Valkyrie", "win_optimal": true }, { "num": 49, "name": "Seraph Sanctuary", "win_optimal": true }, { "num": 3, "name": "Bishop of Wings", "win_optimal": true }, { "num": 22, "name": "Plains", "win_optimal": true }, { "num": 27, "name": "Plains", "win_optimal": true }, { "num": 41, "name": "Resplendent Angel", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 49, "name": "Seraph Sanctuary" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 8, "name": "Giada, Font of Hope", "win_optimal": true }, { "num": 47, "name": "Righteous Valkyrie", "win_optimal": true }, { "num": 49, "name": "Seraph Sanctuary", "win_optimal": true }, { "num": 22, "name": "Plains", "win_optimal": true }, { "num": 27, "name": "Plains", "win_optimal": true }, { "num": 41, "name": "Resplendent Angel", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 49, "name": "Seraph Sanctuary" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Lyra Dawnbringer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Giada, Font of Hope", "land": "Plains", "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Giada, Font of Hope" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Resplendent Angel", "land": null, "casts": ["Resplendent Angel"], "actions": [{ "card": "Resplendent Angel" }] },
+    { "index": 1, "summary": "land=none; cast: Righteous Valkyrie", "land": null, "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 2, "summary": "land=none; cast: Giada, Font of Hope", "land": null, "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "tapped": true, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "tapped": true, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Serra the Benevolent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Resplendent Angel", "land": null, "casts": ["Resplendent Angel"], "actions": [{ "card": "Resplendent Angel" }] },
+    { "index": 1, "summary": "land=none; cast: Giada, Font of Hope", "land": null, "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "drain", "text": "💚 Resplendent Angel entered — Righteous Valkyrie: you +5 (20→25)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 25, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "tapped": true, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 7, "num": 41, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Righteous Valkyrie (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 25, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "tapped": true, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 7, "num": 41, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Lightstall Inquisitor", "Giada, Font of Hope"], "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Lightstall Inquisitor" }],
+  "events": [{ "turn": 4, "kind": "drain", "text": "💚 4/4 Angel Token entered — Righteous Valkyrie: you +7 (25→32)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 32, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 7, "num": 41, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Giada, Font of Hope, Lightstall Inquisitor", "land": null, "casts": ["Giada, Font of Hope", "Lightstall Inquisitor"], "cast_order_canonical": ["Giada, Font of Hope", "Lightstall Inquisitor"], "actions": [{ "card": "Giada, Font of Hope" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 1, "summary": "land=none; cast: Lightstall Inquisitor, Giada, Font of Hope", "land": null, "casts": ["Lightstall Inquisitor", "Giada, Font of Hope"], "cast_order_canonical": ["Lightstall Inquisitor", "Giada, Font of Hope"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Giada, Font of Hope" }] },
+    { "index": 2, "summary": "land=none; cast: Giada, Font of Hope", "land": null, "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 3, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "drain", "text": "💚 Lightstall Inquisitor entered — Righteous Valkyrie: you +7 (32→39)" }, { "turn": 5, "kind": "drain", "text": "💚 Giada, Font of Hope entered — Righteous Valkyrie: you +9 (39→48)" }, { "turn": 5, "kind": "legend", "text": "⚖ legend rule: Giada, Font of Hope dies -- you already control a Giada, Font of Hope" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 48, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Giada, Font of Hope", "idx": 4, "num": 8, "tapped": true, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 9, "num": 14, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 7, "num": 41, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Righteous Valkyrie", "idx": 6, "num": 47, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }], "graveyard": ["Giada, Font of Hope"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Righteous Valkyrie (5), Resplendent Angel (7), 4/4 Angel Token (9) — 21 to opponent (17→-4)" }
+  ]
+}

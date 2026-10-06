@@ -1,0 +1,310 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [11, 16] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 40, "name": "Resplendent Angel" }, { "num": 36, "name": "Remote Farm" }, { "num": 21, "name": "Plains" }, { "num": 22, "name": "Plains" }, { "num": 23, "name": "Plains" }, { "num": 12, "name": "Lightstall Inquisitor" }, { "num": 57, "name": "Unexpectedly Absent" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 41, "name": "Resplendent Angel" }, { "num": 22, "name": "Plains" }, { "num": 56, "name": "Swords to Plowshares" }, { "num": 34, "name": "Plains" }, { "num": 52, "name": "Serra the Benevolent" }, { "num": 48, "name": "Seraph Sanctuary" }, { "num": 33, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 15, "name": "Lightstall Inquisitor" }, { "num": 16, "name": "Lyra Dawnbringer" }, { "num": 60, "name": "Youthful Valkyrie" }, { "num": 22, "name": "Plains" }, { "num": 11, "name": "Lightning Greaves" }, { "num": 8, "name": "Giada, Font of Hope" }, { "num": 13, "name": "Lightstall Inquisitor" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 15, "name": "Lightstall Inquisitor", "win_optimal": true }, { "num": 16, "name": "Lyra Dawnbringer", "win_optimal": true }, { "num": 60, "name": "Youthful Valkyrie", "win_optimal": true }, { "num": 22, "name": "Plains", "win_optimal": true }, { "num": 11, "name": "Lightning Greaves", "win_optimal": true }, { "num": 8, "name": "Giada, Font of Hope", "win_optimal": true }, { "num": 13, "name": "Lightstall Inquisitor", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 16, "name": "Lyra Dawnbringer" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 15, "name": "Lightstall Inquisitor", "win_optimal": true }, { "num": 16, "name": "Lyra Dawnbringer", "win_optimal": true }, { "num": 60, "name": "Youthful Valkyrie", "win_optimal": true }, { "num": 22, "name": "Plains", "win_optimal": true }, { "num": 8, "name": "Giada, Font of Hope", "win_optimal": true }, { "num": 13, "name": "Lightstall Inquisitor", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 16, "name": "Lyra Dawnbringer" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Seraph Sanctuary" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Giada, Font of Hope", "land": "Seraph Sanctuary", "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 1, "summary": "land=Seraph Sanctuary; cast: Lightstall Inquisitor", "land": "Seraph Sanctuary", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 2, "summary": "land=Plains; cast: Giada, Font of Hope", "land": "Plains", "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 3, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 5, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 6, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 7, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "drain", "text": "💚 Giada, Font of Hope entered — Seraph Sanctuary: you +1 (21→22)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Righteous Valkyrie" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lightstall Inquisitor, Righteous Valkyrie", "land": "Plains", "casts": ["Lightstall Inquisitor", "Righteous Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Righteous Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Righteous Valkyrie" }] },
+    { "index": 1, "summary": "land=Plains; cast: Righteous Valkyrie, Lightstall Inquisitor", "land": "Plains", "casts": ["Righteous Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Righteous Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Righteous Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 2, "summary": "land=Plains; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": "Plains", "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=Plains; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": "Plains", "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=none; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": null, "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 5, "summary": "land=none; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": null, "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 6, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 7, "summary": "land=Plains; cast: Righteous Valkyrie", "land": "Plains", "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 8, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 9, "summary": "land=none; cast: Righteous Valkyrie", "land": null, "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 10, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 11, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 12, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 Righteous Valkyrie entered — Seraph Sanctuary: you +1 (22→23)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 34, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (2), Giada, Font of Hope (2) — 4 to opponent (18→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 34, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "cast_order": ["*", "Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Sol Ring" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 34, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 60, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightstall Inquisitor, Sol Ring, Youthful Valkyrie", "land": null, "casts": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 1, "summary": "land=none; cast: Lightstall Inquisitor, Youthful Valkyrie, Sol Ring", "land": null, "drops": ["Sol Ring"], "casts": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 2, "summary": "land=none; cast: Sol Ring, Lightstall Inquisitor, Youthful Valkyrie", "land": null, "casts": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=none; cast: Sol Ring, Youthful Valkyrie, Lightstall Inquisitor", "land": null, "casts": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=none; cast: Youthful Valkyrie, Lightstall Inquisitor, Sol Ring", "land": null, "drops": ["Sol Ring"], "casts": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 5, "summary": "land=none; cast: Youthful Valkyrie, Sol Ring, Lightstall Inquisitor", "land": null, "casts": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 6, "summary": "land=none; cast: Lightstall Inquisitor, Youthful Valkyrie", "land": null, "casts": ["Lightstall Inquisitor", "Youthful Valkyrie"], "cast_order_canonical": ["Lightstall Inquisitor", "Youthful Valkyrie"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 7, "summary": "land=none; cast: Youthful Valkyrie, Lightstall Inquisitor", "land": null, "casts": ["Youthful Valkyrie", "Lightstall Inquisitor"], "cast_order_canonical": ["Youthful Valkyrie", "Lightstall Inquisitor"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 8, "summary": "land=none; cast: Lightstall Inquisitor, Sol Ring", "land": null, "casts": ["Lightstall Inquisitor", "Sol Ring"], "cast_order_canonical": ["Lightstall Inquisitor", "Sol Ring"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Sol Ring" }] },
+    { "index": 9, "summary": "land=none; cast: Sol Ring, Lightstall Inquisitor", "land": null, "casts": ["Sol Ring", "Lightstall Inquisitor"], "cast_order_canonical": ["Sol Ring", "Lightstall Inquisitor"], "actions": [{ "card": "Sol Ring" }, { "card": "Lightstall Inquisitor" }] },
+    { "index": 10, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 11, "summary": "land=none; cast: Sol Ring, Youthful Valkyrie", "land": null, "casts": ["Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 12, "summary": "land=none; cast: Youthful Valkyrie, Sol Ring", "land": null, "casts": ["Youthful Valkyrie", "Sol Ring"], "cast_order_canonical": ["Youthful Valkyrie", "Sol Ring"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Sol Ring" }] },
+    { "index": 13, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 14, "summary": "land=none; cast: Sol Ring", "land": null, "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "drain", "text": "💚 Youthful Valkyrie entered — Seraph Sanctuary, Righteous Valkyrie: you +7 (23→30)" }, { "turn": 4, "kind": "ability", "text": "➕ Youthful Valkyrie: +1/+1 counter (Angel entered)" }, { "turn": 4, "kind": "drain", "text": "💚 Lightstall Inquisitor entered — Seraph Sanctuary, Righteous Valkyrie: you +8 (30→38)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 38, "battlefield": [{ "name": "Giada, Font of Hope", "idx": 4, "num": 8, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 2, "num": 15, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 9, "num": 13, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Plains", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 34, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 46, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Seraph Sanctuary", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 7, "num": 54, "tapped": true, "is_land": false }, { "name": "Youthful Valkyrie", "idx": 8, "num": 60, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 1, "floating_mana": {"C": 1} },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (4), Giada, Font of Hope (4), Righteous Valkyrie (6) — 14 to opponent (14→0)" }
+  ]
+}

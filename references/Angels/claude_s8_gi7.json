@@ -1,0 +1,295 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 21, "name": "Plains" }, { "num": 3, "name": "Bishop of Wings" }, { "num": 12, "name": "Lightstall Inquisitor" }, { "num": 44, "name": "Righteous Valkyrie" }, { "num": 48, "name": "Seraph Sanctuary" }, { "num": 22, "name": "Plains" }, { "num": 13, "name": "Lightstall Inquisitor" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Swords to Plowshares" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lightstall Inquisitor, Swords to Plowshares", "land": "Plains", "casts": ["Lightstall Inquisitor", "Swords to Plowshares"], "cast_order_canonical": ["Lightstall Inquisitor", "Swords to Plowshares"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=Seraph Sanctuary; cast: Lightstall Inquisitor", "land": "Seraph Sanctuary", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 2, "summary": "land=Plains; cast: Lightstall Inquisitor", "land": "Plains", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 3, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=Plains; cast: Bishop of Wings", "land": "Plains", "casts": ["Bishop of Wings"], "actions": [{ "card": "Bishop of Wings" }] },
+    { "index": 5, "summary": "land=Seraph Sanctuary; cast: Swords to Plowshares", "land": "Seraph Sanctuary", "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 6, "summary": "land=Plains; cast: Swords to Plowshares", "land": "Plains", "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 7, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 8, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Lyra Dawnbringer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Righteous Valkyrie", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Lightstall Inquisitor, Swords to Plowshares", "land": "Seraph Sanctuary", "casts": ["Lightstall Inquisitor", "Swords to Plowshares"], "cast_order_canonical": ["Lightstall Inquisitor", "Swords to Plowshares"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: Lightstall Inquisitor, Swords to Plowshares", "land": null, "casts": ["Lightstall Inquisitor", "Swords to Plowshares"], "cast_order_canonical": ["Lightstall Inquisitor", "Swords to Plowshares"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Swords to Plowshares" }] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: Righteous Valkyrie", "land": "Seraph Sanctuary", "casts": ["Righteous Valkyrie"], "actions": [{ "card": "Righteous Valkyrie" }] },
+    { "index": 3, "summary": "land=Seraph Sanctuary; cast: Lightstall Inquisitor", "land": "Seraph Sanctuary", "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 4, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 5, "summary": "land=Seraph Sanctuary; cast: Swords to Plowshares", "land": "Seraph Sanctuary", "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 6, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 7, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 Righteous Valkyrie entered — Bishop of Wings, Seraph Sanctuary: you +5 (21→26)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (2), Bishop of Wings (1) — 3 to opponent (18→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "tapped": true, "is_land": true }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Serra the Benevolent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Lightstall Inquisitor", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightstall Inquisitor, Swords to Plowshares", "land": null, "casts": ["Lightstall Inquisitor", "Swords to Plowshares"], "cast_order_canonical": ["Lightstall Inquisitor", "Swords to Plowshares"], "actions": [{ "card": "Lightstall Inquisitor" }, { "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: Lightstall Inquisitor", "land": null, "casts": ["Lightstall Inquisitor"], "actions": [{ "card": "Lightstall Inquisitor" }] },
+    { "index": 2, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "drain", "text": "💚 Lightstall Inquisitor entered — Bishop of Wings, Seraph Sanctuary, Righteous Valkyrie: you +8 (26→34)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 34, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 7, "num": 13, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (4), Bishop of Wings (3), Righteous Valkyrie (4) — 11 to opponent (15→4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 34, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 7, "num": 13, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "tapped": true, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Giada, Font of Hope" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 34, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 7, "num": 13, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Giada, Font of Hope", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Giada, Font of Hope, Swords to Plowshares", "land": null, "casts": ["Giada, Font of Hope", "Swords to Plowshares"], "cast_order_canonical": ["Giada, Font of Hope", "Swords to Plowshares"], "actions": [{ "card": "Giada, Font of Hope" }, { "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: Giada, Font of Hope", "land": null, "casts": ["Giada, Font of Hope"], "actions": [{ "card": "Giada, Font of Hope" }] },
+    { "index": 2, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "drain", "text": "💚 Giada, Font of Hope entered — Bishop of Wings, Seraph Sanctuary, Righteous Valkyrie: you +9 (34→43)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 43, "battlefield": [{ "name": "Bishop of Wings", "idx": 3, "num": 3, "is_land": false }, { "name": "Giada, Font of Hope", "idx": 8, "num": 7, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 1, "num": 12, "is_land": false }, { "name": "Lightstall Inquisitor", "idx": 7, "num": 13, "is_land": false }, { "name": "Plains", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 22, "is_land": true, "taps": "W" }, { "name": "Righteous Valkyrie", "idx": 6, "num": 44, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 5, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Serra the Benevolent", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 55, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Lightstall Inquisitor (4), Bishop of Wings (3), Righteous Valkyrie (4), Lightstall Inquisitor (4) — 15 to opponent (4→-11)" }
+  ]
+}
