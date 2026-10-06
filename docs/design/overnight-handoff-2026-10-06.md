@@ -4,6 +4,8 @@ This handoff is for the session that starts the overnight run on 2026-10-06. The
 overnight run in a NEW session. That session owns the choice of job. This file lists the candidates
 and what must be true before any of them starts.
 
+Bruna state summary: `docs/design/bruna-state-2026-10-06.md`.
+
 ## Preconditions (check all of them before launching)
 
 1. **The box is free.** One heavy job at a time, `--threads 20`. Check that no `mtg` or `cc1plus`
