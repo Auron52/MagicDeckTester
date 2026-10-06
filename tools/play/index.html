@@ -4285,13 +4285,16 @@ function dragonPanelHtml(d){
   // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
   if (S._dragonFor !== d.decision_index){ S._dragonFor=d.decision_index; S.dragonSel=new Set(aiDragonSet(d)); }
   const sel=S.dragonSel, aiSet=new Set(aiDragonSet(d));
-  // The same multi-pick serves Bilbo, Birthday Celebrant's "search your library for any number of
-  // creature cards" (source != Dragonstorm) -- word it for creatures there.
+  // The same multi-pick serves every "put any number of these onto the battlefield" source --
+  // Bilbo, Genesis Wave, Bruna's Auras/Equipment, ... -- so only Dragonstorm says "Dragon". USER
+  // 2026-10-06: "A lot of dialogs seem to say Put X Dragons when they are not dragons. Bruna's dialog
+  // is an example." The noun comes from the source; everything else is plain "card".
   const isDs = !d.source || d.source==='Dragonstorm';
+  const noun = n => isDs ? `Dragon${n===1?'':'s'}` : `card${n===1?'':'s'}`;
   let h = isDs ? `<h3>Dragonstorm — put which Dragons?</h3>`
-               : `<h3>${esc(d.source)} — put which creature cards onto the battlefield?</h3>`;
+               : `<h3>${esc(d.source)} — put which cards onto the battlefield?</h3>`;
   h+= isDs ? `<div class="sub">Choose up to <b>${cap}</b> Dragon${cap===1?'':'s'} to put onto the battlefield. They enter in the order shown (Lathliss and Scourges first — they trigger off every later Dragon). The AI’s picks are preselected.</div>`
-           : `<div class="sub">Choose any number (up to <b>${cap}</b>) of creature cards from your library. A second copy of a legend you control dies to the legend rule. The AI’s picks are preselected.</div>`;
+           : `<div class="sub">Choose any number (up to <b>${cap}</b>) of these cards to put onto the battlefield. A second copy of a legend you control dies to the legend rule. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.candidates||[]).forEach(c=>{
     const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
@@ -4303,7 +4306,7 @@ function dragonPanelHtml(d){
   const n=sel.size, ok=(n<=cap);
   h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
      `<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>`+
-     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Put ${n} Dragon${n===1?'':'s'}</button></div>`;
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Put ${n} ${noun(n)}</button></div>`;
   return h;
 }
 // Retrace-discard panel (Throes of Chaos): IMAGE-based central modal. Casting a retrace spell from
@@ -4903,11 +4906,12 @@ function toggleDragon(d, oi){
 }
 function commitDragonBatch(d){
   const cap=d.max_puts||0, sel=S.dragonSel||new Set();
-  if (sel.size>cap){ flashHint(`Pick up to ${cap} Dragon${cap===1?'':'s'}.`); return; }
+  const isDs = !d.source || d.source==='Dragonstorm';
+  if (sel.size>cap){ flashHint(`Pick up to ${cap} ${isDs ? 'Dragon' : 'card'}${cap===1?'':'s'}.`); return; }
   const flags=(d.candidates||[]).map(c=>sel.has(c.index)?1:0);
   const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
   S._dragonFor=null; S.dragonSel=null;        // clear the per-decision selection guard
-  pushChoices(d, flags, `Dragonstorm: put ${names.length?names.join(', '):'nothing'}`);
+  pushChoices(d, flags, `${isDs ? 'Dragonstorm' : (d.source || 'Put')}: put ${names.length?names.join(', '):'nothing'}`);
 }
 // Defense of the Heart upkeep sac-tutor: same multi-select shape as the Dragon put override
 // (candidates + ai_set + max_puts; reply = one 0/1 flag per candidate). "Up to two" -- putting
