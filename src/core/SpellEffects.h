@@ -2272,7 +2272,7 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         pinned_single = true;
         const int pick = g_scripted_tutor_choice;
         g_scripted_tutor_choice = -1;
-        std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller, pp);
+        std::vector<std::string> cands = RankedTutorCandidates(ResolveProvider(state), state, controller, pp);
         std::vector<std::string> uniq;
         for (const std::string& c : cands)
         { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
@@ -2466,7 +2466,7 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     if (!human_override && static_cast<int>(put_names.size()) < max_puts)
     {
         std::vector<std::string> prov =
-            ResolveProvider(state).TutorCandidates(state, controller, pp);
+            RankedTutorCandidates(ResolveProvider(state), state, controller, pp);
         std::unordered_set<std::string> handled;
         for (const std::string& nm : prov)
         {
@@ -28175,7 +28175,7 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     if (want.empty())
     {
         std::vector<std::string> cands =
-            ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+            RankedTutorCandidates(ResolveProvider(state), state, controller_index, pp);
         if (cands.empty()) { return; }   // whiff: no land left in the library
         want = cands.front();
     }

@@ -155,6 +155,17 @@ const char* GateName(UnprunedGate g);
 // disarm their own short-circuit while probing (TurnSolver's SubsetFilterPre is the one caller).
 bool        GateProbeArmed();
 
+// The tutor candidate list every engine site uses. Autonomous play: exactly the provider's
+// TutorCandidates. HUMAN play runs with the Tutor gate unpruned so the player sees every legal card,
+// and most providers answer that with the raw LIBRARY order -- so the viewer's "AI pick" (the first
+// candidate, baked into the first plan variant) was an arbitrary card: Hinata seed 2 offered Gamble ->
+// Distorting Wake, a card the deck's own ranking calls inert (USER 2026-10-06). Here the full list is
+// kept, but the provider's SHIPPED ranking (the pruned answer, computed with the unpruned gates handed
+// back) goes first. Nothing is removed; only the order changes, and only in human play.
+class DecisionProvider;
+std::vector<std::string> RankedTutorCandidates(const DecisionProvider& prov, const GameState& s,
+                                               int controller, const CardParams& pp);
+
 class GenericProvider : public DecisionProvider
 {
 public:

@@ -183,6 +183,30 @@ bool DecisionUnpruned(UnprunedGate g)
     return (UnpruneMask() >> static_cast<int>(g)) & 1u;
 }
 
+std::vector<std::string> RankedTutorCandidates(const DecisionProvider& prov, const GameState& s,
+                                               int controller, const CardParams& pp)
+{
+    std::vector<std::string> full = prov.TutorCandidates(s, controller, pp);
+    if (!HumanPlayActive() || !DecisionUnpruned(UnprunedGate::Tutor) || full.size() <= 1) { return full; }
+    std::vector<std::string> ranked;
+    {
+        const bool saved = g_unpruned_suppressed;
+        g_unpruned_suppressed = true;                 // the shipped (pruned) ranking
+        ranked = prov.TutorCandidates(s, controller, pp);
+        g_unpruned_suppressed = saved;
+    }
+    std::vector<std::string> out;
+    out.reserve(full.size());
+    for (const std::string& n : ranked)
+    {
+        if (std::find(full.begin(), full.end(), n) != full.end()
+            && std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); }
+    }
+    for (const std::string& n : full)
+    { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
+    return out;
+}
+
 bool UseLearnedEval()
 {
     static const bool v = EnvOn("MTG_EVAL_MODEL");
@@ -1599,6 +1623,8 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
     // option rather than excluded (the bounce is mandatory; with one land it is still the pick).
     static const bool s_spare_aura_env = EnvOn("MTG_BOUNCE_SPARE_AURA", true);
     const bool spare_aura = heurarm::Flag(heurarm::BOUNCE_SPARE_AURA, s_spare_aura_env);
+    static const bool s_untapped_first_env = EnvOn("MTG_BOUNCE_UNTAPPED_FIRST");
+    const bool untapped_first = heurarm::Flag(heurarm::BOUNCE_UNTAPPED_FIRST, s_untapped_first_env);
     auto carries_aura = [&](const Permanent& land) -> bool {
         for (const Permanent& q : s.battlefield)
         { if (q.aura_attached_to != 0 && q.aura_attached_to == land.card.m_number) { return true; } }
@@ -1612,8 +1638,20 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
             !(d && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
         long v = 0;
         if (is_karoo)        { v -= 1000; }   // never re-trigger the bounce loop
-        if (p.tapped)        { v += 100;  }   // already spent -> no mana lost this turn
-        if (enters_untapped) { v += 10;   }   // clean replay
+        if (untapped_first)
+        {
+            // USER 2026-10-06 (Hinata: a tapped Mystic Monastery was recommended over an untapped
+            // Forbidden Orchard): "Generally the Orchard is better to bounce because the monastery
+            // will come into play tapped again." The Karoo resolves after the main casts, so an
+            // untapped land it returns was not needed this turn; the replay's tempo is the real cost.
+            if (enters_untapped) { v += 100; }
+            if (p.tapped)        { v += 10;  }
+        }
+        else
+        {
+            if (p.tapped)        { v += 100;  }   // already spent -> no mana lost this turn
+            if (enters_untapped) { v += 10;   }   // clean replay
+        }
         if (spare_aura && carries_aura(p)) { v -= 500; }   // the Aura would die with the bounce
         return v;
     };

@@ -49,7 +49,7 @@ enum class TutorAskResult { NoCandidates, Declined, Chosen };
 static std::vector<std::string> LiveTutorCandidates(const GameState& state, int controller_index,
                                                     const CardParams& pp)
 {
-    std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+    std::vector<std::string> cands = RankedTutorCandidates(ResolveProvider(state), state, controller_index, pp);
     if (!pp.tutor_max_mv_is_lands) { return cands; }
     cands.erase(std::remove_if(cands.begin(), cands.end(), [&](const std::string& nm)
     {

@@ -20864,7 +20864,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             else
             {
-                cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
+                cands = RankedTutorCandidates(ResolveProvider(state), state, state.active_player_index, def.params);
                 // HUMAN PLAY: "you MAY search" gets its decline plan (kTutorDeclineTarget). Only for
                 // a card whose target the menu owns -- a tutor SPELL re-asks at resolution with -1 =
                 // decline (HumanPlayDefersTutorTarget), so it needs none. A tutor_to_top ETB such as
@@ -26509,7 +26509,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const CardParams tp = TransmuteSearchParams(cd->card);
             std::vector<std::string> names;
             for (const std::string& nm :
-                 ResolveProvider(state).TutorCandidates(state, state.active_player_index, tp))
+                 RankedTutorCandidates(ResolveProvider(state), state, state.active_player_index, tp))
             { if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); } }
             if (names.empty()) { continue; }   // nothing to find: a discard for nothing
             if (HumanPlayActive()) { names.assign(1, std::string()); }
@@ -47350,7 +47350,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     // Turn-start sizing only; resolution clamps any drift (a state-dependent cut
                     // can shorten the list by the time the tutor resolves).
-                    std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(
+                    std::vector<std::string> cands = RankedTutorCandidates(ResolveProvider(state), 
                         state, state.active_player_index, d->params);
                     std::vector<std::string> uniq;
                     for (const std::string& c : cands)
@@ -47492,12 +47492,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     {
                         GameState ls = state;
                         PlayLandByName(ls, p.land_to_play, p.fetch_target, true, p.land_face);
-                        cands = ResolveProvider(ls).TutorCandidates(ls, ls.active_player_index,
+                        cands = RankedTutorCandidates(ResolveProvider(ls), ls, ls.active_player_index,
                                                                     d->params);
                     }
                     else
                     {
-                        cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
+                        cands = RankedTutorCandidates(ResolveProvider(state), state, state.active_player_index,
                                                                        d->params);
                     }
                 }

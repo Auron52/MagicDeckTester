@@ -6349,8 +6349,29 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
                 if (a.size() != b.size()) { return false; }
                 for (size_t i = 0; i < a.size(); ++i) { if (a[i].kind != b[i].kind || a[i].index != b[i].index) { return false; } }
                 return true; };
-            int heur_option = 0;
+            int heur_option = -1;
             for (size_t oi = 0; oi < opts.size(); ++oi) { if (same(opts[oi].targets, heur)) { heur_option = static_cast<int>(oi); break; } }
+            // The enumeration is CAPPED (EnumerateTargetSets, 256 options), and a wide default -- the
+            // face, you, and EVERY opponent creature -- is exactly what falls off the end of it. The
+            // viewer pre-selects options[heuristic_default], so heur_option silently stayed 0 and the
+            // recommendation dropped most of the opponent's creatures (USER 2026-10-06, Hinata s4_gi3
+            // T5: the AI pick targeted 2 of 8). Append the heuristic set as its own option instead. The
+            // reply is per-target flags (below), so no recorded pick indexes this list.
+            if (heur_option < 0 && !heur.empty())
+            {
+                TargetOption ho; ho.targets = heur;
+                for (size_t i = 0; i < heur.size(); ++i)
+                {
+                    for (size_t j = 0; j < legal_ct.size(); ++j)
+                    {
+                        if (legal_ct[j].kind == heur[i].kind && legal_ct[j].index == heur[i].index)
+                        { ho.label += (ho.label.empty() ? "" : " + ") + legal_labels[j]; break; }
+                    }
+                }
+                opts.push_back(ho);
+                heur_option = static_cast<int>(opts.size()) - 1;
+            }
+            if (heur_option < 0) { heur_option = 0; }
             auto toSentinels = [&](const std::vector<ChosenTarget>& ts) {
                 std::vector<int> out; for (const ChosenTarget& c : ts) { out.push_back(ChosenToSentinel(c, controller)); } return out; };
             int di = static_cast<int>(cursor);
