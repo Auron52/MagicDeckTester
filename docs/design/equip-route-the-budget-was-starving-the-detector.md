@@ -264,9 +264,48 @@ entire win without removing capability. **The wave/position-aware-price design i
 needed for this lever**; it is kept on file in CLAUDE.md as the sanctioned pattern for the next
 restriction that is *not* dominated.
 
-The b200/b1000 arms still run (§6) to record whether TOPMAIN is lossy *in fact* and not merely in
-shape, because that is a reusable fact about the redundancy argument in
-`EquipRoutePiecesInPlace`'s comment — but it can no longer change the recommendation.
+### 5a. TOPMAIN is lossy in SHAPE but — on the sharpest sample available — NOT in FACT
+
+This reverses the shape-based verdict above, so it is recorded in full rather than quietly
+amended.
+
+**A finite-budget A/B cannot answer the question.** At b200 (10x shipped), 1,000 games paired:
+993 identical, 6 faster, 1 slower, net -6 game-turns, digests different. That is NOT evidence of
+lossiness — at any finite budget a work-removing change reallocates the budget and therefore moves
+play whether or not it removed any capability. It is exactly the confound the user's rule exists to
+defeat, which is why the rule says to test at the TOP of the range.
+
+**At unlimited budget there is no budget to reallocate, so any difference is a capability
+difference.** Re-running precisely the 7 games that moved at b200, at `--budget-ms 0`, both arms,
+same thread count:
+
+| game | b200 base -> topmain | unlimited: digests | unlimited: win turn | base ms | topmain ms |
+|---|---|---|---|---|---|
+| g36 | 7 -> 5 | `3f617ffca422ae54` = `3f617ffca422ae54` | 5 = 5 | 2,400 | 1,738 |
+| g71 | 6 -> 5 | `5e00f738f8931f3a` = `5e00f738f8931f3a` | 5 = 5 | 1,030 | 449 |
+| g341 | 5 -> 4 | `fcecf5ad14fdd98a` = `fcecf5ad14fdd98a` | 4 = 4 | 7,897 | 4,273 |
+| g470 | 6 -> 5 | `42acb834108dd33f` = `42acb834108dd33f` | 5 = 5 | 641 | 426 |
+| g697 | 5 -> **6** | `d556cdcf91817ae7` = `d556cdcf91817ae7` | 5 = 5 | 5,687 | 2,982 |
+| g741 | 6 -> 5 | `78bff5cac8463170` = `78bff5cac8463170` | 5 = 5 | 1,480 | 1,193 |
+| g957 | 5 -> 4 | `a4b63a59f1c5a729` = `a4b63a59f1c5a729` | 4 = 4 | 760 | 470 |
+
+**All 7 byte-identical, including the one game TOPMAIN made worse at b200 — while doing strictly
+less work on every one** (units e.g. 6,871 -> 6,596 on g470). Identical answers from less work at
+unlimited budget is the signature of a **sound identity fold**, which is CLAUDE.md's "collapse
+freely, default ON" category, not the "projection / heuristic narrowing" category.
+
+So `EquipRoutePiecesInPlace`'s redundancy argument — the first main's playout plays the whole turn
+out, drawing the real library top, so a later-main frame re-derives a conclusion the frame already
+had — appears to be CORRECT, and the b200 differences are budget reallocation, not blindness.
+
+**What this does and does not license.** It is 7 games, deliberately chosen as the ones most likely
+to expose a difference, which makes it the sharpest available probe but not a proof over the whole
+space. A wider unlimited-budget A/B (1,000 games) is running to look for a counterexample, together
+with a CONTROL that must come back byte-identical if the "price is provably inert at unlimited"
+claim is true (nu4 at `--budget-ms 0` vs base at `--budget-ms 0`), and a COMBINED arm, since the two
+levers are independent — one prices links, the other skips frames — and should stack if topmain is
+sound. Adopting TOPMAIN remains the user's call: it is a gate, and a gate justified by an argument
+rather than by construction deserves the wider sample before it ships.
 
 `TOPMAIN`'s in-code justification is a *redundancy* argument (§3). If that argument is true the
 gate is a sound identity fold rather than a capability deletion — and the only way to tell is to
@@ -278,6 +317,33 @@ line findable while still spending small budgets where the yield is.
 
 Explicitly ruled out: a damage pre-filter on the gate. The route's own measurement says ~90% of
 trials DO find a kill, so there is almost no hopeless-board detection to skip.
+
+## 5b. Recommendation (for the USER to rule on — it changes play, so it moves GT)
+
+**Lower `MTG_EQUIP_ROUTE_NODE_UNITS` from 8 to 4** (pending the nu2/nu1 knee and the recovery bar).
+It is non-lossy by construction, better on quality (-24 game-turns / 3,000), cheaper on mean wall
+(0.856x), cheaper on the tail (21 slow games vs 31; 4,451 s vs 5,618 s), and it dominates the lossy
+alternative. It is NOT a clean win — 15 of 3,000 games got worse — so under this repo's adoption bar
+it needs every slower game to recover at `--depth 8 --budget-ms 0` (running, §6) and it needs the
+user's sign-off rather than an agent's.
+
+Two caveats that belong in the same breath:
+* **The floor is real.** `NodeUnits()`'s comment records price 1 producing 2.5-3+ HOUR games in the
+  value-leaf matrix and ~8 s decisions in mulligan gen at d1/b3. Those are *generation* shapes, not
+  the suite, so a price adopted on suite evidence must be re-checked against them before any
+  generation run.
+* **It is a per-deck question wearing a global flag.** The price is a process-wide `static const`
+  env read, so changing the default moves every deck whose board passes the route's gate. The repo
+  already has the right pattern for this — Snow's per-deck charge opt-in (`SnowProvider W=16`) —
+  and a per-deck opt-in is the safer shape if any non-kitty deck moves.
+
+**Secondary idea, NOT recommended over the price, recorded because the data suggests it:** since an
+interrupted detection spends the budget and collapses nothing, the engine could decline to *start* a
+route trial it cannot fund to completion. That is budget-conditional rather than capability-removing
+(at a larger budget it runs), so it is a legitimate WAVE in the user's sense. But it only recovers
+the ~18,000 wasted units; it does not avoid the 31M-plan enumeration that follows a non-collapse.
+Completing the detection is worth ~300x more than not wasting the attempt, so the price is the
+better lever and this is at most a complement.
 
 ## 6. Open / in flight
 
