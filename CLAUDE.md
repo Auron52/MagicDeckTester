@@ -341,6 +341,53 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     ON despite measuring 0.2%. `MTG_FUNGUS_DEVOUR_LANDMARKS` is the second — eating 3 of eight
     identical N/N tokens really does differ from eating 5 — and stays OFF until a quality A/B.
 
+- **A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE UNFINDABLE — COMPLETENESS AT LARGE BUDGET IS
+  THE INVARIANT (user directive, 2026-10-06).** The user's words: *"I won't accept a lossy
+  solution"*, and the general form: *"You can use practically any methods with good results to
+  utilize the budget better, but everything should be findable at unlimited or large budgets. Adding
+  more budget should fill in more of these lines proportionally."*
+  * **The test is at the TOP of the budget range, not at the shipped setting.** A lever that changes
+    what the engine can find at `--budget-ms 0` (unlimited) or at a large budget is **lossy and is
+    out** — no quality A/B at the shipped budget can buy it in, because the A/B only shows what that
+    one budget happened to reach. A lever that changes only *how fast a finite budget is spent* is
+    legitimate and is the preferred shape: it is inert at unlimited budget by construction, so raising
+    the budget restores exactly what the price removed.
+  * **Concretely, the two shapes, using the equip route as the worked example.**
+    `MTG_EQUIP_ROUTE_NODE_UNITS` (the per-link price) is the GOOD shape:
+    `TurnSolver::ChargeDecisionUnits` returns immediately when `budget == nullptr`, and the route's
+    per-link cut test is `b.budget != nullptr && (Exhausted() || Overrun())`, so at an unlimited root
+    the price is **never read** — provably inert, and monotone in budget below that.
+    `MTG_EQUIP_ROUTE_TOPMAIN` is the BAD shape: it is a predicate in the *gate*
+    (`EquipRoutePiecesInPlace`, `s_topmain && s.spells_cast_this_turn != 0 → return false`), consulted
+    at every budget including unlimited, so a kill reachable only after a mid-turn cast is unfindable
+    at any budget. Its in-code justification is a *redundancy* argument (the first main's playout
+    plays the whole turn out, so it already contains the answer) — if that argument is true the gate
+    is a sound identity fold rather than a loss, and **the way to find out is to run it at a large
+    budget and compare per game**, never to measure it at the shipped budget.
+  * **WAVES ARE THE SANCTIONED WAY TO GET A LOSSY LEVER'S WIN LEGITIMATELY.** If a restriction has
+    good results, do not ship it as a gate — ship it as a **budget-staged admission order**: the
+    restricted frames run in a later wave, so a small budget spends on the high-yield frames first
+    and a larger budget reaches the rest, with nothing refused at unlimited. The user: *"there might
+    be a way to do this with waves if TOPMAIN has good results."* Note this is the one case where a
+    wave is **required** rather than forbidden — the "WAVES ARE A LOOP" rule above is about
+    *scheduling a pooled run*, and has nothing to do with staging work inside one search.
+  * **IT MUST STILL BE SEARCHED-WITH-HEURISTICS.** The user: *"I still want to retain
+    searched-with-heuristics no matter the approach."* A wave or a price may **order** and **restrict
+    options**, and the search still branches over what is admitted; it may never collapse a decision
+    to one option it did not branch on. This is the NO-GREEDY rule above, and budget pressure does
+    not suspend it: "the budget ran out" is not a licence to pick.
+  * **WHEN A BUDGET BINDS, FINISH THE TURN BEFORE REACHING THE NEXT (user preference, same date).**
+    *"I prefer solutions that fully complete a turn before going to the next, but we may have no
+    choice but to accept something lossier if results point that way"* — *"(when restricted by a
+    budget)"*. So the preferred spending order under a binding budget is **turn-complete**: exhaust
+    the current turn's frames (all its mains, all its breakpoint continuations) before spending on
+    the next turn's depth. Two consequences. (1) A cut should bound work **within** each frame of a
+    turn (a per-link price, a per-frame node ceiling) rather than dropping some of the turn's frames
+    — which is exactly why TOPMAIN is the wrong shape even before the completeness objection: it is
+    a *within-turn* truncation. (2) If a wave scheme is built, the wave boundary should be the TURN,
+    not the main phase — wave *k* = turn *k* fully explored. The concession ("something lossier") is
+    explicitly conditional on results, and is the user's call to make, never an agent's.
+
 - **A DECK MUST BE IN THE REGRESSION SUITE BEFORE THE VALUE LEAF OR MULLIGAN PROFILE (user
   directive, 2026-09-26).** Adding the deck to `test/regression_cases.sh` is a **required step of
   the analysis**, and both generators now **refuse to start** (exit 3) without it:
