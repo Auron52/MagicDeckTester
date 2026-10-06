@@ -41,3 +41,21 @@ installed for every deck, so the gate is the attached Wings, not the chooser).
   as an idempotent backstop -- would cover every present and future combat-time spend at once, but
   every reader of `tapped` between declaration and damage (attack triggers that count untapped
   creatures, Jorn's untap, convoke-like effects) has to be audited first. Not started.
+
+## STATUS 2026-10-06: the fix above is PARKED (branch `viewer-combat-swap-engine-parked`)
+
+Split out of the human-play swap-timing change at the user's request (it moves Bruna GT). The parked
+branch also carries `HoldForCombatAuraSwap` (`DecisionProvider::AttackWith`, `MTG_COMBAT_SWAP_ATTACK_HOLD`):
+with a combat swap pinned, the mana creatures the {2}{U} needs stay home instead of swinging.
+
+Measured with both (Bruna only moves; every other config byte-identical):
+* smoke: bruna d0 +21 (11 slower, 4 -> unwon), d3 +8, d5 +2, bruna2hg d3 +2; 0 faster.
+* regression: d0 s2002 +11, d3 s2002 +6, d3 s3003 +2 (2 faster), d5 s2002 +4, d5 s3003 0 (1 faster);
+  ref gate 0 play-drift / 0 board-diverged.
+* Attribution (smoke, 23 slower games): both levers `=0` reproduces GT on all 23; 21 had a REAL combat
+  swap paid by an attacking Birds / Pilgrim (`MTG_TRACE=swapatkpay`) -- illegal wins removed; d3/d5 gi1
+  = budget churn (recovers T4 at d8 b0). Regression attribution was started but not finished.
+* Bruna d5 b20, 1200 paired games: CR fix alone 2 better / 52 worse; CR fix + hold 0 / 35 (+0.032
+  turns/game); sampled worse games gi42/198/1110 all had the attacking host pay its own swap. Search
+  hit rate on the automatic-win state with the parked branch: 158/158 + 18/18.
+Decision needed (user): accept the GT-worse-on-purpose correctness fix (Karoo precedent) or not.

@@ -1544,67 +1544,6 @@ d3). This is the Wish-axis cost already raised as open question 1 -- it still st
 **Accepted** smoke + regression with one-line notes (the prior 2026-10-06c notes' still-binding parts carried);
 `check_gt_logs.py` 668 consistent / 0 stale; GT diff = exactly the 7 moved Bruna keys + the three header lines.
 
-## Human-play Wings swap timing + CR 508.1f + combat-swap attack hold (2026-10-06)
+## Human-play Wings swap timing (2026-10-06) -- BRANCH `viewer-combat-swap`, NOT YET LANDED
 
-USER: *"My recommendation for the viewer is that it should be automatically applied in the attack
-phase rather than the 1st main"*; *"It's a relatively common line since Colossification does the most
-damage of all Auras in the deck and using it with Arcanum Wings on a creature that is not summoning
-sick is an automatic win."* Full design note: `tools/play/DECISIONS.md` ("A host-tapping Aura swap
-committed in main 1 is applied IN COMBAT").
-
-1. **Human play (viewer + --claude-play, one engine path).** A committed pre-combat `auraswap=<Aura>`
-   whose Aura taps its host, onto an untapped `CanAttackFull` host, is applied in the combat swap
-   window when the {2}{U} stays payable there without an attacker's mana
-   (`TurnSolver::HumanSwapDefersToCombat` / `DeferHumanAuraSwapToCombat` / `SettleHumanDeferredSwap`;
-   pins `scripted_combat_aura_swap` + new `scripted_combat_aura_swap_in`). Summary suffix
-   "(in combat, after attacks)", `swap_in_combat` / `in_combat` keys, history events. "Attacker" =
-   the set `DeclareAttackerIndices` really declares with the pin set (the greedy's rule taps every
-   creature that could attack). `HumanCombatSwapOn` (`MTG_HUMAN_COMBAT_SWAP`, `--legacy-main-swap`).
-2. **Old recordings.** References written from now on carry `"combat_swap_timing": 1`;
-   `viewer_protocol_check.py` passes `--legacy-main-swap` for any reference without it.
-   `references/suboptimal/Bruna/claude_s3_gi2` (the only reference with a main-phase Colossification
-   swap, T4 on Avacyn's Pilgrim): legacy replay = T5 as recorded; under the new rule the same picks win
-   **T4** -- the user may want to re-play it (left as recorded).
-3. **CR 508.1f defect (found here).** Attackers were tapped only at combat damage, so an attacking
-   Birds / Pilgrim (including the host itself) paid the in-combat swap -- illegal, and offered to the
-   human by the `dig` prompt. `ApplyCombatAuraSwap` now taps non-vigilant attackers first
-   (`MTG_COMBAT_SWAP_TAPPED_ATTACKERS`, only when an attached Wings opens the window). Firebreathing's
-   twin of the defect is deferred: `docs/design/attackers-tapped-at-declaration.md`.
-4. **Attack hold for the combat swap** (`HoldForCombatAuraSwap` in `DecisionProvider::AttackWith`,
-   `MTG_COMBAT_SWAP_ATTACK_HOLD`): with a swap pinned for combat, the mana creatures the {2}{U} needs
-   (lowest power first) stay home instead of swinging for 0-1.
-
-**Search hit rate on the "automatic win" (task 2 of the request).** `MTG_TRACE=cswapwin` (new,
-measurement-only) logs every REAL pre-combat main where Wings sits on an attack-ready host,
-Colossification is in hand, the {2}{U} is payable in combat without attackers' mana and host + 20 >=
-opponent life. Bruna d5 b20 (play settings), seeds 9,600,000 + gi, 1200 games, one pooled batch each
-(`logs/durable/viewer_cswap_2026-10-06/hitrate*`):
-
-| binary | A: payable with every would-be attacker tapped | C: payable only if non-host creatures stay home | paired vs old |
-|---|---|---|---|
-| old (no CR 508.1f fix, no hold) | 131/131 won that turn | 13/13 | -- |
-| + CR 508.1f only | 178/178 | 4/8 (4 misses: a 0-power Birds swung and could not pay) | 2 better / 52 worse |
-| + CR 508.1f + attack hold (shipped) | **158/158** | **18/18** | 0 better / 35 worse, net +38 turns (+0.032/game) |
-
-Every miss of the CR-only arm was the attack default sending the {U} source in (root cause -> the
-hold). The 35 games the shipped binary loses vs old were ILLEGAL wins: sampled gi42 (T3: Pilgrim host
-attacked and paid its own {W}), gi198 and gi1110 (T3: the attacking Birds host was the only {U}) --
-each reproduces the old turn with both levers =0 on the same binary (attribution).
-
-### Suite verdicts (smoke) -- only Bruna moves (114 other configs pass byte-identically)
-
-| case | delta | slower | faster | verdict |
-|---|---|---|---|---|
-| bruna smoke d0 | +21 | 11 (4 -> unwon) | 0 | every one an ILLEGAL win removed |
-| bruna smoke d3 / d5 | +8 / +2 | 8 / 2 | 0 | 7 / 1 illegal; gi1 (both) churn |
-| bruna2hg smoke d3 | +2 | 2 | 0 | both illegal |
-
-Attribution (one pooled batch per arm, the 23 slower games, `logs/durable/viewer_cswap_2026-10-06/attr`):
-both levers `=0` (`MTG_COMBAT_SWAP_TAPPED_ATTACKERS`, `MTG_COMBAT_SWAP_ATTACK_HOLD`) reproduces GT on
-all 23; the CR 508.1f lever alone reproduces the new turn on all 23 (the hold moves none of them).
-`MTG_TRACE=swapatkpay` on the `=0` arm: 21 of 23 old wins had a REAL combat swap paid by an attacking
-Birds / Pilgrim at or before the win turn. The other two (smoke d3 gi1, d5 gi1, T4 -> T5): no real
-illegal payment, but the old search's rollouts credited illegal swaps (1000s of `real=0` hits); the
-new binary recovers T4 at stage 2 (d4 b100 T5, d8 b0 T4) = budget churn. The four d0 games that go
-unwon (gi315/682/822/861) had their only win from an attacking Birds paying its own swap; the d0
-greedy then keeps casting Auras onto its lone Birds -- masked, not caused, by this change.
+See `docs/design/viewer-combat-swap-status.md` for the full status, measurements and what is left.
