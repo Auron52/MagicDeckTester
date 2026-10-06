@@ -1352,3 +1352,111 @@ each produced a non-reproducible play change in a full pooled run, both in cells
 Wave X growth) moved; that commit adds no static/thread-local state, so the leak is elsewhere --
 some per-worker state carried between games of different decks. Worth an owner; not this branch's
 to fix and it changes no Bruna result.
+
+## Sideboard change -- USER list (2026-10-06, branch `bruna-sideboard`)
+
+**USER request:** sideboard -> 1 Bruna, 1 Almost Perfect, 1 Indrik Umbra, 1 Linvala, Shield of Sea Gate, 1 Troyan,
+Gutsy Explorer, 1 Detention Sphere, 1 Unflinching Courage, 1 Steel of the Godhead, 1 Vexing Shusher, 1 Auroral
+Procession, 2 Reborn Hope (out: Mythic Proportions, Avacyn's Pilgrim, Elgaud Shieldmate, Worldfire -- none was
+Wish-reachable). Mainboard unchanged. No archive: the removed cards were unreachable, and the three Bruna references
+replay `ok` on the new list (`viewer_protocol_check --strict --only Bruna/`: 3 ok, 0 drift). The four old sideboard
+names keep their old ORDER at the top of the zone, so a recorded tutor-menu index still points at the same card.
+
+Every card is multicolored (hybrids included: {W/U} Steel, {R/G} Shusher -- CR 202.2b), so **Glittering Wish's
+pool is 11 names** (was 4). `BrunaProvider::TutorSearchWidth` 8 -> 32: every name in every zone a tutor here can
+search (sideboard 11, Armory's library 7, a regrowth's graveyard), so the axis width is a cap, never a prune.
+Bruna can cast everything: Shusher's {R/G}{R/G} off {G}{G}, Steel's {W/U} off either.
+
+### Stage 2 -- card table (Scryfall-first; costs 8/8 match, field snapshot +7, hard fields all match)
+
+| Card | Tier | C++ / data summary | Deferrals (status) |
+|---|---|---|---|
+| Linvala, Shield of Sea Gate | 1 | 3/3 legendary flier body (vanilla_creature); W/U host (Steel +2/+2). | Flying inert (precedent). **PROVISIONAL:** full-party combat trigger (unreachable: no Rogue/Warrior in the list; and its effect only restrains the passive spawns, which never attack/block/activate); sac -> hexproof/indestructible (hexproof never stops our own spells, nothing destroys; the sac is a strict loss) -- not offered, viewer cannot activate. |
+| Troyan, Gutsy Explorer | 3 | `mana_dork` {G}{U} bundle + **`mana_only_spell_min_mv 5` / `mana_only_spell_or_x`** (new restriction, see engine); loot `tap_draw_cost {U}` + **`tap_draw_then_discard`** (provider non-cleanup discard pick, `discard` decision). | Disclosed approximation: a unit Troyan over-produces is DROPPED (no big-spell reserve), not floated for a second 5+ spell the same phase. |
+| Detention Sphere | 1 | castable enchantment, no effect. | **PROVISIONAL:** ETB "may exile" always declined -- legal targets are the passive spawns (exiling them is outcome-identical: they never attack/block) and our own permanents (only conceivable upside: exiling our own Greaves to un-shroud its lone host -- dominated by Bruna's gather / Wings' swap / a {0} re-equip); LTB return never fires. Viewer offers no target prompt. |
+| Steel of the Godhead | 2 | Aura + **`aura_color_bonuses`** (W: +1/+1 lifelink; U: +1/+1 can't-be-blocked) read off the HOST's colour in AuraBonusFor / CreatureHasLifelink (both worlds); gather + host ranking + Wings swap pick it up through AuraBonusFor; gather collapse keeps it fixed on a W+U gatherer. | Can't-be-blocked inert (no blockers; precedent). |
+| Vexing Shusher | 1 | existing card (EDF / Prevent Damage); note extended for Bruna ({G}{G} host, Steel gives it nothing). | existing D1/D2 deferrals (signed off in those decks). |
+| Auroral Procession | 2 | **`tutor_from_graveyard`** -- a tutor whose zone is the GRAVEYARD (the wish precedent): searched `tutor_choice` index axis ranked at resolution, acquisition re-solve (returned card castable same phase -- scenario-proven), human tutor chooser (mandatory: a targeted spell cannot decline), no CR 701.19c shuffle, Recur entry; cast gate `HasGraveyardTutorTarget` (CR 601.2c). | **PROVISIONAL:** instant speed collapsed onto our mains (Worldly Tutor / Pyrohemia precedent; no opponent's-turn window). NOT strictly inert: an end-step cast spends mana left open at the end of our turn. Disclosed edge: the cast gate reads the TURN-START graveyard (a plan that first puts the only target there is not offered the cast). |
+| Reborn Hope x2 | 2 | as Procession + `wish_requires_multicolored` (zone-agnostic conjunct). Can never return itself (on the stack while resolving). | same cast-gate edge. |
+
+Viewer (2c-ter): Troyan's loot = the `tap_draw_cost` main_phase line + `discard` (reuse, `ChooseNonCleanupDiscardIndex`);
+the regrowths ride the `tutor` chooser off the live graveyard (DECISIONS.md row added); Troyan's mana is engine-owned
+(never hand pre-tapped -- laundering, like Sage); manifest rows for `tutor_from_graveyard`, `aura_color_bonuses`,
+`mana_only_spell_*`. `audit_viewer_decisions.py --sideboard --no-sweep` rc 0 (types bounce/discard/dragon); live
+sweep NOT run (wished cards are too rare to force in a bounded sweep -- they would read UNVERIFIED).
+
+### Engine changes (commit `ed9f23b1`; every one inert without its new param -> other decks byte-identical by construction)
+* **Big-spell-only mana** (Troyan): `RestrictedManaUsable` -> `BigSpellManaUsable` off the paying spell
+  (`PayingSpellCard`) or the batch scope; unset identity = an activated ability -> refused at the two real-payment
+  sites, permissive at the two bound sites. Enumerator: `BigOnlySubsetPayable` adds the two Hall constraints (small
+  casts + activations payable without the big-only sources) in EnumeratePlans AND Solve. Batch prepay: all-qualifying
+  batch -> usable; mixed -> joint solve with it refused, then a STAGED solve (non-qualifying part first without it,
+  qualifying part after with it; a stage tapping creature-only Sage is rejected -> per-cast payer); over-production
+  dropped. Payer ranks it FIRST for a qualifying spell unless its tap costs an attack (the Giada lesson). Mana-cache
+  key folds the verdict. Never a filter feed (greedy + backtracker counter). Never hand pre-tapped. CheckLine pool.
+* **Graveyard-zone tutor** (`tutor_from_graveyard`) at the five zone sites (TutorCandidates, GenericTutorList,
+  cleanup-reach walk, AskHumanTutorPick, PerformTutor) + the cast gate (CollectActions + the re-solve castability
+  probe).
+* **Colour-conditional Aura** (`aura_color_bonuses`) in AuraBonusFor, CreatureHasLifelink, BoardSources' lifelink
+  superset, feeds_combat, Bruna's discard payload value, the gather collapse.
+* **Bruna discard policy:** a regrowth is overflow 25 (re-buys a card already seen; Bruna's gather already reads the
+  graveyard), not the tutor tier (70). `bruna-discard-policy-proposal.md` role table extended (all new cards).
+
+### Tests
+`test/unit/test_bruna_sideboard.cpp` (13 cases: Wish pool = exactly the 11 names, mono-green control excluded;
+Steel by host colour incl. lifelink; gather collapse fixed on Bruna / branched on a green gatherer; Troyan pays MV6 /
+MV7-noncreature, refused for MV3 and for an ability; over-production dropped vs a Simic Growth Chamber control;
+enumerator never offers Linvala off Troyan; Bruna + Mother mixed turn realised (staged prepay -- the per-cast payer
+tapped all three Plains for Bruna and dropped Mother before it); loot draws+discards, cannot pay its own {U};
+Reborn Hope multicolored-only / Procession any card; regrowth returns, no shuffle, needs a target; regrowth never
+offered without a legal target; discard sheds a regrowth before a Wish). Scenarios:
+`bruna_auroral_procession_regrow_same_turn` (T4: Procession -> Prodigious Growth on Mother the same main phase;
+control opp+1 not won T4), `bruna_troyan_funds_big_spell` (T4; control opp+1 not won), `bruna_troyan_small_spell_refused`
+(negative guard). `mtg-test` 450/450, scenarios 147/147. Coverage: `missing []`, 33/33 `full` (sideboard 11/11
+reachable via Glittering Wish).
+
+### Sanity -- old list vs new list, ONE pooled batch each (same binary, same seeds, profile attached)
+| cell | games | old avg | new avg | better / worse (paired) | ms new/old | units new/old |
+|---|---|---|---|---|---|---|
+| d3 b10, seed 9.7M | 300 | 5.0700 | **5.0100** | 15 / 3 (net -18 turns) | **1.77x** | 1.75x |
+| d5 b20 (play), seed 9.8M | 200 | 5.0750 | **5.0350** | 7 / 2 (net -8) | **1.52x** | 1.41x |
+
+**What Wish fetched (new list).** d3b10 195 fetches: Bruna 116, Indrik Umbra 40, Almost Perfect 16, **Troyan 9,
+Linvala 7**, Unflinching Courage 4, **Vexing Shusher 3**; d5b20 112: Bruna 74, Umbra 18, Almost Perfect 10, **Linvala 5,
+Troyan 2**, Courage 2, **Shusher 1**. Never fetched: Steel of the Godhead (Bruna's gather makes a fetched Umbra/Almost
+Perfect free, so +4/+9 beats +2), Detention Sphere, Auroral Procession, Reborn Hope (no regrowth resolved in 500 games).
+**Worse games** (d3b10, two-stage recovery on the new list): gi67 4->5 recovers at d4 b100 (stage 1); gi154 5->6 at
+d5 b100 (stage 1); gi268 5->7 stays T7 at d5 b100, T5 at d8 b0 (stage 2) -- budget churn, the wider Wish axis
+diluting a fixed budget; each recovered line's digest equals the old list's.
+
+### Decks other than Bruna that could move
+None expected: every new code path is gated on a param only these cards carry (`tutor_from_graveyard`,
+`aura_color_bonuses`, `mana_only_spell_min_mv`, `tap_draw_then_discard`), Vexing Shusher's data is unchanged (note
+text only), and the mana-cache key folds the new verdict only when a big-only source is on the battlefield. Not
+measured here (no suite run on this branch) -- the orchestrator's smoke/regression will show Bruna/bruna2hg moving
+(new sideboard) and everything else byte-identical.
+
+### Found while doing this (recorded, not changed)
+* **The passive opponent DOES have nonland permanents in Bruna's games**: `GoldFishRunner::PopulateOpponentSpawns`
+  stages 1/1-6/6 "Creature" bodies in 8 of every 10 games (28 of 50 sampled traces at T1). Eldrazi Conscription's
+  signed-off note says "no OpponentSpawn for this deck" -- the conclusion (annihilator inert) still holds (the
+  opponent's permanents never matter), but the stated reason is wrong. The new Linvala / Detention Sphere notes say it
+  right.
+* `{T}` permanent abilities (TapDraw et al.) gate on `Permanent::CanTap()` in both the enumeration and
+  `PermAbilitySourceLive`, which ignores GRANTED haste (Lightning Greaves) -- CR 302.6 lets a hasted creature use a {T}
+  ability the turn it enters (Greaves' own note claims this for "{T} abilities"; only mana abilities get it via
+  CanTapNow). For Bruna: Troyan + Greaves cannot loot the turn it lands. Cross-deck (Frost Augur etc.), so not changed.
+
+### Open user questions (none blocks anything; defaults taken)
+1. **Cost:** the new list costs **1.52x ms at d5 b20** (1.77x at d3 b10) -- the Wish axis went 4 -> 11 names. Against
+   the 3x cost rule (Bruna was 2.63 s/game vs the 3.10 budget) this likely BREACHES it. Options: (a) accept and raise the
+   budget; (b) a provider prune of the Wish pool measured against the full-width control (candidates: Detention Sphere,
+   a regrowth with an empty graveyard, Steel when Umbra/Almost Perfect are still in the sideboard -- 0 fetches in 500
+   games); (c) leave as is. Default taken: (c), full width (no unproven prune).
+2. Sign off the PROVISIONAL deferrals: Linvala's party trigger + sac ability; Detention Sphere's ETB exile (always
+   declined) + LTB return; Auroral Procession's instant speed (NOT strictly inert -- an end-step tempo edge).
+3. Troyan: the dropped over-production unit (no big-spell float reserve) -- OK as an approximation?
+4. Troyan's loot discard uses the provider's bucket pick (Neheb / Burning-Fist precedent), not a searched axis -- OK?
+5. The regrowths are discard-policy overflow 25 (below every body, above a blank) -- amend?
+6. The `CanTap()` granted-haste gap above -- fix engine-wide (moves any deck pairing Greaves-like haste with a {T}
+   ability) or leave?
