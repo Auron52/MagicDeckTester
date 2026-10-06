@@ -1,11 +1,13 @@
 # The equip route's per-link price was starving the detector that pays for itself (2026-10-06)
 
-Status: **MEASURED AND COMPLETE, NOTHING ADOPTED — awaiting the user's ruling on §5b.** All arms
-have run. The headline: the shipped per-link price was set just high enough to make the route's
+Status: **NOTHING ADOPTED. The PRICE result is complete and passes the adoption bar; the TOPMAIN
+result is UNPROVEN and a powered re-test is running** (§5a — the 250-game b1000 run was presented
+as establishing byte-identity and does not, per the user's challenge on 2026-10-06). The headline: the shipped per-link price was set just high enough to make the route's
 lethal detection FAIL on the boards where it was worth the most, and a failed detection is the worst
-case available — it spends the whole budget and collapses nothing. Lowering the price (and stacking
-the TOPMAIN fold, which measures answer-identical at large budgets) gives **0.714x wall and -51
-game-turns per 3,000 games**, with every slower game recovering at the adoption bar. The remaining
+case available — it spends the whole budget and collapses nothing. Lowering the price ALONE gives
+**0.817x wall and -48 game-turns per 3,000 games**, with every slower game recovering at the
+adoption bar; stacking TOPMAIN takes it to 0.714x / -51, but TOPMAIN is not yet established as
+sound and must not be quoted as though it were (§5a). The remaining
 order of magnitude is NOT in the route at all: it is one decision enumerating 31-145 million plans
 (§4b/§4c), which is non-lossy to fix and needs no ruling.
 
@@ -376,10 +378,36 @@ measurement:**
 | **b1000 (50x)** | 250 | **0** — digest `06f74dd3a70b9f7f` on BOTH arms | 0 | **0.746x** |
 | unlimited | 7 (the ones that moved at b200) | **0** | 0 | ~0.65x |
 
-At 50x the shipped budget TOPMAIN is byte-identical across 250 games while costing a quarter less.
-A lever whose effect on the answer shrinks monotonically to nothing as the budget grows, while its
-saving persists, is a redundancy fold — "adding more budget fills in more of these lines
-proportionally" is exactly what this table shows.
+**THE b1000 ROW IS NOT EVIDENCE OF BYTE-IDENTITY AND WAS WRONGLY PRESENTED AS SUCH (corrected
+2026-10-06, on the user's challenge: "I don't think 250 games is really enough").** It is not:
+
+* The difference rate at b200 was 7/1000 = **0.70%**. If that rate were entirely unchanged at
+  b1000, the chance of observing 0 differences in 250 games is `(1-0.007)^250` = **17%**. A null
+  result at that sample size was always reasonably likely even if nothing had converged.
+* Going the other way, the rule of three puts the 95% upper bound from 0/250 at **1.2%** — which
+  still CONTAINS the 0.70% measured at b200.
+
+So the 250-game run could not distinguish "converged to zero" from "unchanged". It is consistent
+with the fold reading and it is not evidence for it.
+
+**Two further weaknesses in the unlimited-budget evidence, recorded because they are the same
+mistake in a different place.** The 7 games re-run at `--budget-ms 0` were selected as the games
+that moved *at b200* — but moving at b200 is budget-REALLOCATION sensitivity, whereas the
+population that matters is games where the first main's playout genuinely fails to cover a
+later-main kill. Those two sets may be disjoint, in which case the sample is enriched for the wrong
+thing. The 36- and 44-game recovery sets inherit the same defect (selected as "got slower at b20").
+
+**Current status of TOPMAIN: UNPROVEN, not confirmed.** The shape argument — a gate predicate is
+consulted at every budget, so it CAN delete a line — stands, and the measurements so far do not
+overturn it. A properly powered test is running (`run_power.sh`): b1000 at **10,000 games** both
+arms, where a surviving 0.70% rate is essentially impossible to miss and a 0/10,000 result bounds
+the rate below **0.03%**, plus b5000 (250x shipped) at 2,000 games so the conclusion does not rest
+on b1000 being a sweet spot. It is affordable because a larger budget is CHEAPER per game here
+(b200 4,447 ms/game vs b1000 1,323 ms/game) — the §4c mechanism again.
+
+The directional claim that survives either way: TOPMAIN's effect on the answer SHRINKS as the
+budget grows (1.83% of games at b20 -> 0.70% at b200) while its saving persists, which is the shape
+a redundancy fold has. Whether it reaches exactly zero is what the powered run is for.
 
 **What this does and does not license.** The unlimited arm is 7 games, deliberately chosen as the
 ones most likely to expose a difference, which makes it the sharpest available probe but not a proof
@@ -450,16 +478,17 @@ wall still falls 0.847x -> 0.817x). The axis that argues the other way is **chur
 113 of 3,000 games, which is more GT movement to review and more exposure to a slower game that a
 future engine change stops recovering.
 
-**Recommended: price 2 + TOPMAIN** — 3.9017 avg, **0.719x wall**, net -44 game-turns, the tail down
-to 18 slow games / 3,473 s from 31 / 5,618 s, and 44/44 recovery. It banks nearly all the available
-win at meaningfully less churn than price 1 (111 games moved vs 129), and TOPMAIN's contribution is
-answer-neutral rather than a trade.
+**Recommended NOW: price 2 ALONE** — 3.9017 avg, 0.847x wall, net -44 game-turns, 36/36 recovery.
+It banks nearly all the aggregate win available from the price at meaningfully less churn than
+price 1 (88 games moved vs 113), and it rests only on the inertness argument, which is sound by
+construction and measured.
 
-`price 1 + TOPMAIN` is the maximum (3.8993, 0.714x, net -51) if the extra churn is acceptable;
-`price 4` alone is the conservative floor if TOPMAIN is to be held back for a wider soundness
-sample. **TOPMAIN is a gate justified by an argument rather than by construction**, so even though
-every measurement here supports it (byte-identical at b1000 over 250 games, 44/44 at unlimited), a
-reasonable position is to take the price now and TOPMAIN after a broader unlimited-budget check.
+**Do NOT bundle TOPMAIN into that decision yet.** It is a gate justified by an argument rather than
+by construction, and the evidence offered for it was under-powered (§5a): the 250-game b1000 run
+could not distinguish convergence from no change. If the powered re-test comes back 0/10,000 at
+b1000 and 0/2,000 at b5000, then `price 2 + TOPMAIN` (0.719x) and `price 1 + TOPMAIN` (0.714x,
+-51) become the live options and the extra 13 points of wall are worth taking. Until then the
+price is the part that is ready.
 
 **Sizing this against the actual complaint — the screens.** At 0.714x, kittyv2 goes from 2.48 to
 ~1.77 thread-s per game, so a 16-arm x 16,000-game screen goes from ~5.5 h to ~3.9 h on 32 cores.
