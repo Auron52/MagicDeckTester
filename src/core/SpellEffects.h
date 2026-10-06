@@ -2405,7 +2405,8 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
             }
             const std::string psrc = source_name.empty() ? std::string("Chord of Calling")
                                                          : source_name;
-            const int chosen = (*g_play_tutor_chooser)(state, controller, psrc, pick_names, heur);
+            const int chosen = (*g_play_tutor_chooser)(state, controller, psrc, pick_names, heur,
+                                                       /*suggested=*/std::vector<int>{});
             put_pref.clear();
             if (chosen >= 0 && chosen < static_cast<int>(pick_names.size()))
             {
@@ -12912,7 +12913,7 @@ inline bool PerformPodActivate(GameState& state, int controller, int pod_id, int
             for (int k = 0; k < static_cast<int>(fcands.size()); ++k)
             { if (fcands[k] == fetch) { heur = k; break; } }
             const int chosen = (*g_play_tutor_chooser)(
-                state, controller, pod_name, fcands, heur);
+                state, controller, pod_name, fcands, heur, /*suggested=*/std::vector<int>{});
             fetch = (chosen >= 0 && chosen < static_cast<int>(fcands.size()))
                   ? fcands[chosen] : std::string(kPodNoFetch);
         }

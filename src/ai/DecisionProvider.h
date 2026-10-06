@@ -144,6 +144,13 @@ public:
     virtual std::vector<std::string>
     TutorCandidates(const GameState& s, int controller, const CardParams& pp) const = 0;
 
+    // TutorMarksSuggested -- HUMAN PLAY only: should the tutor chooser MARK the provider's narrowed
+    // candidate set (its pruned TutorCandidates) among the full legal list it offers? The menu is never
+    // narrowed and never reordered (reference replays index into it) -- the marked names get a
+    // "suggested" badge, like the Aura host ranking's pick (USER 2026-10-06). Default false: every
+    // other tutor's decision payload stays byte-identical. BrunaProvider marks Glittering Wish.
+    virtual bool TutorMarksSuggested(const CardParams& /*pp*/) const { return false; }
+
     // TutorToBattlefieldPutOrder -- tutor-TO-BATTLEFIELD put ORDER + SELECTION (Dragonstorm). Returns the
     // ordered list of card NAMES to put onto the battlefield for a `tutor_to_battlefield` resolution that
     // puts up to `max_puts` (= the storm total, already capped at library Dragons by the caller). Names may

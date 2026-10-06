@@ -317,6 +317,7 @@ enum Slot : int
     BP_NODE_SHADOW,           // MTG_BP_NODE_SHADOW         a BP-NODE child of a BASE plan is numbered as a from-scratch (variant) apply counts -- every class-on occurrence plus site 9 -- not the base's own uncounted bp_seen (docs/design/site9-continuation-index-mismatch.md). Correctness fix, default ON; =0 reverts
     SOLVE_COMBAT_SWAP,        // MTG_SOLVE_COMBAT_SWAP      the greedy Solve (d0 runner + rollout leaves) drops a PRE-COMBAT Aura swap that brings in a host-tapping Aura (Colossification) onto a would-be attacker when the combat swap stays payable without tapping an attacker -- the in-combat swap brings it in for free (CR 506.4) -- and the d0 runner pins that combat swap like the rollout leaf does. USER 2026-10-06 ("I would fix depth-0 for colossification"). Default ON; =0 reverts
     COST_REFRAME,             // MTG_COST_REFRAME           the deck-agnostic over-optimistic cost relaxation in EnumeratePlans (see CostReframeEnabled). Default OFF. A slot so scripts/analyze_deck.py's cost diagnostic runs BOTH arms in ONE pooled batch at the deck's play settings
+    WISH_FULL_WIDTH,          // MTG_WISH_FULL_WIDTH        PROOF CONTROL ARM: Bruna's Glittering Wish offers its whole multicolored sideboard (GenericProvider::TutorCandidates, sideboard order) instead of BrunaProvider's narrowed candidate set (Bruna / the highest-power Aura / a cheap body when none can carry the Auras / Troyan when mana is short / a cheap second Aura without a cheat path). Default OFF; =1 is byte-identical to e1171a1d
     COUNT
 };
 
@@ -595,6 +596,7 @@ inline const char* Name(int slot)
         "MTG_BP_NODE_SHADOW",
         "MTG_SOLVE_COMBAT_SWAP",
         "MTG_COST_REFRAME",
+        "MTG_WISH_FULL_WIDTH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -4193,11 +4193,14 @@ function tutorPanelHtml(d){
   h+=`<div class="sub"><b>${esc(d.source||'Tutor')}</b> entered the battlefield — search your library for a card and put it into your hand. Click one, or decline (searching is optional).</div>`;
   h+=`<div class="tutgrid">`;
   if(!cands.length) h+=`<span class="hint">No legal card to search up.</span>`;
+  // `suggested` = the engine's narrowed candidate set (Bruna's Glittering Wish rule, USER 2026-10-06):
+  // a green badge + ring like the Aura host mark -- the tiles keep their order (replays index into it).
   cands.forEach(c=>{
     const def=c.index===d.heuristic_default;
-    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+    h+=`<span class="cardmini tdig${def?' def':''}${c.suggested?' suggested':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}${c.suggested?' (suggested by the Glittering Wish candidate rule)':''}">`+
        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
-       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+       (def?`<span class="deftag">AI pick</span>`:'')+
+       (c.suggested?`<span class="suggbadge" title="the engine's candidate rule searches this card">suggested</span>`:'')+`</span>`;
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="ghost" data-opt="-1">Decline — search for nothing</button></div>`;

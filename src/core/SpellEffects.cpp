@@ -129,7 +129,24 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
         }
     }
 
-    int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
+    // SUGGESTED MARKS (USER 2026-10-06, Glittering Wish): when the provider narrows this tutor
+    // (TutorMarksSuggested), mark the names its pruned set holds -- a badge only, the offered list
+    // and its order are untouched (reference replays index into it). Marked only when the pruned set
+    // is a strict subset, so a non-narrowing arm (MTG_WISH_FULL_WIDTH) marks nothing.
+    std::vector<int> suggested;
+    if (ResolveProvider(state).TutorMarksSuggested(pp))
+    {
+        HumanPlaySuppress pruned;   // the autonomous (pruned) view; restores on scope exit
+        const std::vector<std::string> narrowed =
+            LiveTutorCandidates(state, controller_index, pp);
+        for (int k = 0; k < static_cast<int>(uniq.size()); ++k)
+        {
+            if (std::find(narrowed.begin(), narrowed.end(), uniq[static_cast<std::size_t>(k)])
+                != narrowed.end()) { suggested.push_back(k); }
+        }
+        if (suggested.size() >= uniq.size()) { suggested.clear(); }
+    }
+    int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def, suggested);
     // A REGROWTH is a TARGETED spell, not "you may search": its target was chosen as it was cast
     // (CR 601.2c), so there is nothing to decline -- a -1 takes the default (or the first card).
     if (picked < 0 && pp.tutor_from_graveyard) { picked = def >= 0 ? def : 0; }

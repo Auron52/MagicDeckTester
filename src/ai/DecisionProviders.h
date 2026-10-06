@@ -458,6 +458,16 @@ public:
     // ranking -- so any cap below the pool would be a shuffle-order prune, not a heuristic. 32 covers
     // every distinct name this list can put in any of the three zones: still "every legal name".
     int TutorSearchWidth() const override { return 32; }
+    // GLITTERING WISH CANDIDATE RULE (USER spec 2026-10-06, docs/design/analysis-Bruna.md "Glittering
+    // Wish heuristic 2026-10-06"): the wish's 11-name pool narrows to 1-5 candidates (usually 1-3) and the SEARCH
+    // chooses among them -- Bruna (none in hand / on the battlefield), the highest-power Aura in
+    // context, the cheapest / hardest-hitting cheap bodies when nothing can carry the Auras, Troyan when mana is short, and a cheap
+    // second Aura only without a cheat-into-play path.
+    // Every other tutor (Open the Armory, the regrowths) is GenericProvider's list unchanged.
+    // MTG_WISH_FULL_WIDTH=1 (heurarm WISH_FULL_WIDTH) is the full-width PROOF CONTROL; MTG_UNPRUNED and
+    // human play keep every legal name (the human chooser MARKS this set, TutorMarksSuggested).
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    bool TutorMarksSuggested(const CardParams& pp) const override;
     // MTG_BRUNA_ORDER -- a PROPOSED cast order (analyze-deck Stage 4, 2026-10-05), DEFAULT OFF: cast
     // order is USER-OWNED (docs/design/analysis-Bruna.md, "Stage 4 -- proposed cast order"). Off =>
     // DeckProvider (Generic) byte-for-byte.
