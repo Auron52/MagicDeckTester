@@ -85,12 +85,14 @@ false. So the redundancy may not be collapsible by assertion; it has to be measu
 charges the same work fewer units by construction — so wall (`ms`, thread time) is the only honest
 cross-arm cost column here.
 
-| arm | price | avg win turn | wall (thread-s) | vs base | faster/slower | paired net |
-|---|---|---|---|---|---|---|
-| nu4 | 4 | **3.9083** | **6,272** | **0.856x** | 41 / 15 | **-24 game-turns** |
-| base | 8 (shipped) | 3.9163 | 7,324 | 1.000x | — | — |
-| nu12 | 12 | 3.9207 | 8,183 | 1.117x | 9 / 23 | +13 game-turns |
-| nu32 | 32 | 3.9380 | 9,877 | 1.349x | 32 / 100 | +65 game-turns |
+| arm | price | avg win turn | wall (thread-s) | vs base | faster/slower | paired net | slow games | tail sum |
+|---|---|---|---|---|---|---|---|---|
+| nu1 | 1 | **3.9003** | **5,986** | **0.817x** | 79 / 34 | **-48** | **20** | **3,777 s** |
+| nu2 | 2 | 3.9017 | 6,204 | 0.847x | 64 / 24 | -44 | 21 | 4,215 s |
+| nu4 | 4 | 3.9083 | 6,272 | 0.856x | 41 / 15 | -24 | 21 | 4,451 s |
+| base | 8 (shipped) | 3.9163 | 7,324 | 1.000x | — | — | 31 | 5,618 s |
+| nu12 | 12 | 3.9207 | 8,183 | 1.117x | 9 / 23 | +13 | 32 | — |
+| nu32 | 32 | 3.9380 | 9,877 | 1.349x | 32 / 100 | +65 | — | — |
 
 **Monotone on both axes across the whole range**, and in the direction opposite to the one this
 file's first draft predicted: halving the price is better AND cheaper; quadrupling it is worse AND
@@ -119,10 +121,26 @@ collapses and shorter games, and both of those cut the number of frames still to
 route pays for itself, so pricing it high starves the thing that was reducing the bill. This is the
 "COLLAPSE WASTED SEARCH UNCONDITIONALLY" dynamic seen from the other end.
 
-It is **not** a clean win in this repo's strict sense (15 games got worse), so it is subject to the
-adoption bar: every slower game must recover at `--depth 8 --budget-ms 0`, and the deck aggregate
-must be net <= 0 on a large held-out sample. The aggregate half passes at -24 game-turns on 3,000
-games; the per-game half is running (§6).
+It is **not** a clean win in this repo's strict sense (games do get worse: 15 at price 4, 24 at 2,
+34 at 1), so it is subject to the adoption bar — every slower game must recover at
+`--depth 8 --budget-ms 0`, and the deck aggregate must be net <= 0.
+
+**BOTH HALVES OF THE BAR PASS, for all three prices.** The union of every game that got slower in
+any arm is 36 games; re-run as one pooled manifest at `--depth 8 --budget-ms 0`:
+
+| arm | paired | identical to base | better | NOT RECOVERED |
+|---|---|---|---|---|
+| price 4 | 36 | **36** | 0 | **0** |
+| price 2 | 36 | **36** | 0 | **0** |
+| price 1 | 36 | **36** | 0 | **0** |
+
+Every slower game is byte-identical to base at the bar, which is exactly what "recover" means here:
+the loss was a budget artefact, not a capability difference.
+
+**That same table is also the empirical proof of the inertness claim.** `--depth 8 --budget-ms 0`
+IS an unlimited budget, so if the price were doing anything other than decrementing a budget, these
+36 games would diverge. 36/36 identical at three different prices is the measurement behind "the
+price cannot violate the completeness rule" — previously an argument from the code, now a result.
 
 **How low can it go is an open question with a known floor.** `NodeUnits()`'s comment records why
 the price exists at all: *"Charged at 1, the budget stopped bounding wall: the value-leaf row dump
@@ -320,12 +338,24 @@ trials DO find a kill, so there is almost no hopeless-board detection to skip.
 
 ## 5b. Recommendation (for the USER to rule on — it changes play, so it moves GT)
 
-**Lower `MTG_EQUIP_ROUTE_NODE_UNITS` from 8 to 4** (pending the nu2/nu1 knee and the recovery bar).
-It is non-lossy by construction, better on quality (-24 game-turns / 3,000), cheaper on mean wall
-(0.856x), cheaper on the tail (21 slow games vs 31; 4,451 s vs 5,618 s), and it dominates the lossy
-alternative. It is NOT a clean win — 15 of 3,000 games got worse — so under this repo's adoption bar
-it needs every slower game to recover at `--depth 8 --budget-ms 0` (running, §6) and it needs the
-user's sign-off rather than an agent's.
+**Lower `MTG_EQUIP_ROUTE_NODE_UNITS` from its default of 8. Prices 1, 2 and 4 ALL pass the repo's
+adoption bar** (aggregate net <= 0, and 36/36 slower games recover at `--depth 8 --budget-ms 0`),
+and all three are provably — now also measurably — inert at unlimited budget. Which one to ship is
+a genuine judgement call, so it is the user's:
+
+| | price 4 | price 2 | price 1 |
+|---|---|---|---|
+| aggregate | -24 game-turns | -44 | **-48** |
+| wall | 0.856x | 0.847x | **0.817x** |
+| tail sum | 4,451 s | 4,215 s | **3,777 s** |
+| games perturbed | **56** (41 better / 15 worse) | 88 (64 / 24) | 113 (79 / 34) |
+
+Lower is better on every aggregate axis, with diminishing returns below 2 (quality -44 -> -48 while
+wall still falls 0.847x -> 0.817x). The axis that argues the other way is **churn**: price 1 moves
+113 of 3,000 games, which is more GT movement to review and more exposure to a slower game that a
+future engine change stops recovering. **Recommended: price 2**, as the point where almost all the
+aggregate win is banked (-44 of -48) at two-thirds of price 1's churn. Price 4 is the conservative
+pick if churn is the dominant concern.
 
 Two caveats that belong in the same breath:
 * **The floor is real.** `NodeUnits()`'s comment records price 1 producing 2.5-3+ HOUR games in the
