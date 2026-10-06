@@ -4479,24 +4479,21 @@ function fetchBottomHint(d){
   }).catch(()=>{ d._aiHintPending=false; d._aiHint=null; if (S.decision===d) renderBoard(); });
 }
 // Expressive Iteration panel: look at the top cards; choose one for HAND (banked), one for EXILE
-// (playable this turn), the last -> BOTTOM. The looked cards are shown as art for context; each
-// option is one legal split (Hand/Play/Bottom). The AI's default split is tagged.
+// (playable this turn), the last -> BOTTOM. IMAGE-based like the Preordain / scry panel (USER
+// 2026-10-06: "make the Expressive Iteration picker more like the one for Preordain"): each option
+// is a row of card art -- Hand, then Play, then the bottomed card dimmed -- and the AI's split is
+// tagged. No separate strip of the looked cards: every option already shows all of them.
 function eiPanelHtml(d){
   const looked=d.looked||[];
   let h=`<h3>Expressive Iteration</h3>`;
   h+=`<div class="sub">Looking at the top ${looked.length}. Pick the split: one card to your <b>Hand</b>, one to <b>Exile</b> (playable this turn); the last goes to the <b>Bottom</b>.</div>`;
-  h+=`<div class="tutgrid" style="margin-bottom:8px">`;
-  looked.forEach(c=>{
-    h+=`<span class="cardmini" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
-       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em></span>`;
-  });
-  h+=`</div><div class="optgrid">`;
+  h+=`<div class="optgrid">`;
   (d.options||[]).forEach(o=>{
     const def=o.index===d.heuristic_default;
-    h+=`<button class="optcard${def?' def':''}" data-opt="${o.index}" style="text-align:left">`+
-       `<span class="dchip"><b>Hand</b> ${esc(o.hand)}</span>`+
-       `<span class="dchip"><b>Play</b> ${esc(o.exile)}</span>`+
-       `<span class="dchip" style="opacity:.6"><b>Bottom</b> ${esc(o.bottom||'—')}</span>`+
+    h+=`<button class="optcard${def?' def':''}" data-opt="${o.index}">`+
+       `<span class="lbl">hand</span><span class="grp top">${o.hand?cardMini(o.hand):'<span class="lbl">— none —</span>'}</span>`+
+       `<span class="lbl">play</span><span class="grp top">${o.exile?cardMini(o.exile):'<span class="lbl">— none —</span>'}</span>`+
+       (o.bottom?`<span class="div">▸ bottom</span><span class="grp away">${cardMini(o.bottom)}</span>`:'')+
        (def?`<span class="deftag">AI pick</span>`:'')+`</button>`;
   });
   return h+`</div>`;
