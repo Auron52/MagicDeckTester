@@ -4008,6 +4008,8 @@ struct ManaCacheTap
 // under tapping -- that one would have to bail, or hash whatever it does read).
 inline bool McScalingHashed()
 { static const bool v = EnvOn("MTG_MANA_CACHE_SCALING", true); return v; }
+inline bool McScaledDorkKeyed()
+{ static const bool v = EnvOn("MTG_MANA_CACHE_SCALED_DORK", true); return v; }
 inline bool McDomain(const CardDefinition* d)  { return d && d->params.domain_mana; }
 inline bool McScaled(const CardDefinition* d)  { return d && IsScaledManaLand(*d); }
 
@@ -4302,6 +4304,32 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (!canon) { mix(h1, static_cast<std::uint64_t>(i)); mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull); }
         smix(di, di ^ 0xD1B54A32D192ED03ull);
         smix(p.tapped ? 1ull : 2ull, p.tapped ? 3ull : 5ull);
+        // SCALED MANA DORK YIELD (Priest of Titania / Elvish Archdruid: the live Elf count; Accomplished
+        // Alchemist: life gained this turn). The DFS taps it for ScaledDorkCount, and the untap-burst
+        // branch (Wirewood Lodge) re-reads that yield on a TAPPED one -- state outside (def, tapped):
+        // a non-source Elf (Wellwisher, a Genesis Wave'd creature, an Elf that died in a line) or a
+        // mid-turn life gain changes the answer without touching any source the key sees. Unfolded,
+        // an entry stored at one count replayed at another -- MTG_MANA_CACHE_VERIFY measured 7,937
+        // stale hits while playing ONE SelesnyaLifegain d3 game (e.g. stored "payable, 9-mana pool",
+        // fresh UNPAYABLE). A stale positive is PHANTOM MANA, in the real game too: smoke d3 s1001
+        // gi74 cast Ageless Entity + Elvish Archdruid (8) off a T4 board that makes at most 7. And
+        // because the cache is thread_local and outlives a game and a batch job, which stale entries
+        // a game met depended on which games had shared its worker: the pooled-suite-only Selesnya
+        // play flicker (docs/design/analysis-Bruna.md, "flicker"). The burst also needs
+        // the tapped dork to be able to tap again (CanTapNow; a sick one is skipped), which the
+        // untapped-only eligibility fold below does not cover, so a TAPPED scaled dork folds it too.
+        // Only scaled dorks reach this -> every deck without one keys byte-identically.
+        // DEFAULT ON; MTG_MANA_CACHE_SCALED_DORK=0 restores the unsound key (A/B hatch only).
+        if (McScaledDorkKeyed() && d->tmpl == CardTemplate::ManaDork && IsScaledManaDork(*d))
+        {
+            const std::uint64_t y = static_cast<std::uint64_t>(ScaledDorkCount(state, active, *d));
+            smix(0x5CA1'ED'D0'01ull + y * 0x9E3779B97F4A7C15ull, 0x5CA1'ED'D0'02ull ^ (y << 20));
+            if (p.tapped)
+            {
+                const bool ct = CanTapNow(p, state.battlefield);
+                smix(ct ? 0x5CA1'ED'D0'11ull : 0x5CA1'ED'D0'12ull, ct ? 0x5CA1'ED'D0'13ull : 0x5CA1'ED'D0'15ull);
+            }
+        }
         // A fresh-hold-EXEMPT Treasure (MTG_ETB_TREASURE_SPEND) pays where a held fresh one does not
         // (PaySacSpendableNow), so the two must key apart. Mixed only when set -> byte-identical
         // keys for every deck that never makes an enter-trigger / Larcenist Treasure.
@@ -4555,6 +4583,78 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     return ok;
 }
 
+// MTG_MANA_CACHE_VERIFY=1 -- soundness gate for the payable-mana cache (DEFAULT OFF; diagnostic
+// only, expensive). On every HIT, re-run the real backtracker on a COPY of the state and compare its
+// verdict and produced/leftover pools with the stored entry. The cache claims to be a pure function
+// of its key; a mismatch names an input the key does not fold -- and because the cache is
+// thread_local and outlives a game AND a batch job switch, such a hole is a channel between games
+// (and decks) that share a worker. Counts print at exit; the first few mismatches print the board.
+namespace {
+inline bool McVerifyOn() { static const bool v = EnvOn("MTG_MANA_CACHE_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_mcv_checked{0}, g_mcv_mismatch{0};
+struct McVerifyReport
+{
+    ~McVerifyReport()
+    {
+        if (!McVerifyOn()) { return; }
+        std::fprintf(stderr, "=== MANA CACHE VERIFY: checked=%llu mismatches=%llu ===\n",
+                     g_mcv_checked.load(), g_mcv_mismatch.load());
+    }
+};
+inline McVerifyReport g_mcv_report;
+inline bool McPoolEq(const ManaPool& a, const ManaPool& b)
+{
+    return a.white == b.white && a.blue == b.blue && a.black == b.black && a.red == b.red
+        && a.green == b.green && a.colorless == b.colorless && a.wild == b.wild
+        && a.wild_c == b.wild_c && a.wild_phantom == b.wild_phantom && a.snow_units == b.snow_units;
+}
+} // namespace
+static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_creature,
+                        const ManaPool& floating, const std::vector<Color>* rp_colors,
+                        TapBacktrackMemo* fail_memo, ManaPool* out_leftover,
+                        std::uint64_t tapped_mask, int untapped_max, std::uint64_t reserved_mask,
+                        ManaPool* out_full_pool,
+                        const std::vector<std::pair<int, const CardDefinition*>>* src_cands,
+                        const ManaCacheEntry& e)
+{
+    GameState vs = state;
+    const bool saved_crack = g_paysac_cracked;
+    TapBacktrackMemo vmemo;
+    ManaPool vleft, vfull;
+    const bool vok = TapForCostBacktrackWorker(vs, cost, for_creature, floating, rp_colors,
+                                               fail_memo ? &vmemo : nullptr,
+                                               out_leftover ? &vleft : nullptr, tapped_mask,
+                                               untapped_max, reserved_mask,
+                                               out_full_pool ? &vfull : nullptr, src_cands);
+    g_paysac_cracked = saved_crack;
+    g_mcv_checked.fetch_add(1, std::memory_order_relaxed);
+    bool same = (vok == e.payable);
+    if (same && vok)
+    {
+        if (out_full_pool && !McPoolEq(vfull, e.produced)) { same = false; }
+        if (out_leftover && !McPoolEq(vleft, e.leftover))  { same = false; }
+    }
+    if (same) { return; }
+    const unsigned long long k = g_mcv_mismatch.fetch_add(1, std::memory_order_relaxed);
+    if (k >= static_cast<unsigned long long>(EnvInt("MTG_MANA_CACHE_VERIFY_DUMP", 8))) { return; }
+    const int a = state.active_player_index;
+    std::string board;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != a) { continue; }
+        board += p.card.m_name.str();
+        board += p.tapped ? "(T) " : " ";
+    }
+    std::fprintf(stderr,
+                 "[mc-verify] MISMATCH T%d cost=%dG+W%d U%d B%d R%d G%d C%d x=%d full=%d left=%d | "
+                 "stored ok=%d pool=%d/%d | fresh ok=%d pool=%d/%d | life_gained_this_turn=%d | %s\n",
+                 state.turn_number, cost.generic, cost.white, cost.blue, cost.black, cost.red,
+                 cost.green, cost.colorless, cost.has_x ? 1 : 0, out_full_pool ? 1 : 0,
+                 out_leftover ? 1 : 0, e.payable ? 1 : 0, e.produced.Total(), e.leftover.Total(),
+                 vok ? 1 : 0, vfull.Total(), vleft.Total(),
+                 state.players[a].life_gained_this_turn, board.c_str());
+}
+
 static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                          bool for_creature, ManaPool floating,
                          const std::vector<Color>* rp_colors,
@@ -4647,6 +4747,11 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         {
             if (tapstats::Enabled()) { tapstats::g_mc_hit.fetch_add(1, std::memory_order_relaxed); }
             const ManaCacheEntry& e = it->second;
+            if (McVerifyOn())
+            {
+                McVerifyHit(state, cost, for_creature, floating, rp_colors, fail_memo, out_leftover,
+                            tapped_mask, untapped_max, reserved_mask, out_full_pool, src_cands, e);
+            }
             if (!e.payable) { return false; }
             const int hit_active = state.active_player_index;
             for (const ManaCacheTap& t : e.taps)

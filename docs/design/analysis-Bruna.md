@@ -1353,6 +1353,26 @@ Wave X growth) moved; that commit adds no static/thread-local state, so the leak
 some per-worker state carried between games of different decks. Worth an owner; not this branch's
 to fix and it changes no Bruna result.
 
+**ROOT-CAUSED 2026-10-06 (branch `selesnya-pooled-flicker`):** the payable-mana cache
+(`g_mana_cache`, `src/core/SpellEffects.cpp`, thread_local, never cleared per game or per job) keyed
+each mana source on (def, tapped, ...) but NOT on a scaled dork's live yield -- Priest of Titania /
+Elvish Archdruid tap for the Elf count (Wellwisher is a non-source Elf), Accomplished Alchemist for
+life gained this turn. An entry stored at one count replayed at another; which stale entries a game
+met depended on the games that had shared its worker. `MTG_MANA_CACHE_VERIFY=1` (new, diagnostic)
+re-solves every hit: 11,394 stale of 1.19M hits over 33 Selesnya games (30 d3 s2002 + 3 targets),
+e.g. stored "payable, 9-mana pool" vs fresh UNPAYABLE; 0 of 1.20M with the fix. Deterministic repro at `--threads 1`: regression d0 s2002 gi984 alone (or after 30
+Stompy d3 games) = GT `fc435abe`; after 30 Selesnya d3 s2002 games = `b3821e7f` (T6 both -- the
+recorded flicker). A stale POSITIVE is phantom mana in the REAL game: GT's smoke d3 s1001 gi74 T5 casts
+Ageless Entity + Elvish Archdruid (8 mana) off a T4 board that makes at most 7. Fix: fold
+`ScaledDorkCount` (and CanTapNow on a tapped scaled dork, for the Lodge burst) into the key
+(`MTG_MANA_CACHE_SCALED_DORK`, default ON). With it gi984 is history-independent; Selesnya + Stompy
+smoke cells at 2 threads: stompy d0/d3/d5 and selesnya d0/d5 byte-identical to GT; selesnya d3
+5.4200 -> 5.4267 (gi74 5->6, the illegal T5 removed; gi89 digest-only, which of two identical
+Wellwishers activates); all 10 Selesnya + Stompy REGRESSION cells byte-identical to GT. gi74 recovers
+T5 LEGALLY at `--depth 8 --budget-ms 0` (T4 Wellwisher first -> 3 Elves -> Priest 3 + Archdruid 3 +
+2 lands = 8 for two Archdruids). Note: `9f3b5b13`'s measured smoke d3 gain (5.4267 -> 5.4200) WAS this
+phantom-mana gi74 line. GT for selesnya_smoke_d3_s1001 must be re-accepted on a full suite run.
+
 ## Sideboard change -- USER list (2026-10-06, branch `bruna-sideboard`)
 
 **USER request:** sideboard -> 1 Bruna, 1 Almost Perfect, 1 Indrik Umbra, 1 Linvala, Shield of Sea Gate, 1 Troyan,
