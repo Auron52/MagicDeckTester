@@ -1673,7 +1673,13 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         }
         // Pay {2}{U} from what is untapped now (the plan left it up). A swap that cannot be paid
         // does not happen -- the variant then scores like declining it.
-        if (!TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false)) { continue; }
+        if (!TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false))
+        {
+            TRACE("swapdefer", "T%d combat swap UNPAID (pin %d, real=%d)", state.turn_number, pin,
+                  g_real_resolution ? 1 : 0);
+            continue;
+        }
+        TRACE("swapdefer", "T%d combat swap paid (pin %d, real=%d)", state.turn_number, pin, g_real_resolution ? 1 : 0);
         std::vector<int> atk_nums;
         for (int ai : atk_idx)
         {

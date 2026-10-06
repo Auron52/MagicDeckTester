@@ -30509,8 +30509,8 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a); 
 // re-solves that carry no pin, and dropping the swap there removed the Aura from the turn outright
 // (measured: the in-Solve version cost searched d3 0 better / 3 worse in 650 paired games).
 // The plan's pre-combat swap that would tap a would-be attacker is dropped -- but only when the
-// combat swap stays payable: the plan's whole cost plus the swap must fit the supply left once
-// every would-be attacker is tapped (an attacking mana creature cannot tap for it in combat --
+// combat swap stays payable: the real payer must cover the plan's other costs and then the swap on
+// a copy where every would-be attacker is tapped (an attacking mana creature cannot tap for it in combat --
 // Bruna d0 s9420000 gi965: Birds carried the Wings, attacked, and the {2}{U} was gone; the main swap
 // paid with Birds' own mana in the respond window). Otherwise the main swap is the only way the
 // Aura comes in this turn and it is kept. Chains (K >= 2) are left alone. Self-gating.
@@ -30522,17 +30522,39 @@ void TurnSolver::DeferAuraSwapToCombat(const GameState& state, bool is_pre_comba
         const Action& sw = plan.actions[q];
         if (sw.kind != Action::Kind::AuraSwap || sw.chosen_x >= 2
             || !PrecombatSwapTapsAttacker(state, sw)) { continue; }
-        ManaCost total;
-        for (const Action& o : plan.actions) { AddManaCost(total, o.cost); }
         // The combat supply: every creature that could attack is tapped by its attack (a copy marks
-        // them so); sick creatures and non-creature sources still pay.
+        // them so); sick creatures and non-creature sources still pay. The REAL payer then pays the
+        // plan's other costs in plan order and the swap last -- a flat pool check was optimistic
+        // (~10% of deferred swaps went unpaid in combat on Bruna regression s3003 gi35: colours the
+        // pool counted twice), and an unpaid combat swap loses the Aura for the turn.
         GameState cs = state;
         for (Permanent& cp : cs.battlefield)
         {
             if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
                 && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
         }
-        if (!BuildNonCreaturePool(cs).CanPay(total)) { continue; }
+        RevealLogPause quiet;
+        bool payable = true;
+        for (std::size_t r = 0; r < plan.actions.size() && payable; ++r)
+        {
+            if (r == q) { continue; }
+            const Action& o = plan.actions[r];
+            if (o.cost.ManaValue() <= 0 && !o.cost.has_x) { continue; }
+            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+            const bool for_creature = o.kind == Action::Kind::CastFromHand && od && od->card.IsCreature();
+            payable = TapForCostDirect(cs, o.cost, for_creature);
+        }
+        if (!payable || !TapForCostDirect(cs, sw.cost, /*for_creature=*/false)) { continue; }
+        if (TRACE_ON("swapdefer"))
+        {
+            std::string acts;
+            for (const Action& o : plan.actions) { acts += o.card_name.str() + "(" + o.cost.ToString() + ") "; }
+            std::string untapped;
+            for (const Permanent& p : state.battlefield)
+            { if (p.controller_index == state.active_player_index && !p.tapped) { untapped += p.card.m_name.str() + ","; } }
+            TRACE("swapdefer", "T%d defer swap of %d land=%s acts=%s untapped=%s", state.turn_number,
+                  sw.sac_source_id, plan.land_to_play.c_str(), acts.c_str(), untapped.c_str());
+        }
         plan.actions.erase(plan.actions.begin() + static_cast<std::ptrdiff_t>(q));
         return;
     }
