@@ -7322,6 +7322,24 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     // strictly more subsets admitted) and HUMAN PLAY ONLY: execution of a human's picked order
     // rides the existing --cast-order / searched_order mechanism, while autonomous play keeps the
     // canonical-order-only walk byte-identical. MTG_SEQ_UNTAPPER_FIRST=0 restores that everywhere.
+    //
+    // The UNTAP RITUAL is the same shape and joins the hoist (USER, Hinata2 seed 5 gi=4 T6,
+    // 2026-10-06, logs/play/rejections/Hinata2_cod_s5_gi4_t6.json). Board: floating {U}, one
+    // untapped Island, two Forbidden Orchards + Izzet Boilerworks TAPPED, Hinata out. The line
+    // [Reality Spasm X=4; Sol Ring; Reality Spasm; Crackle with Power] -- and already its
+    // sub-line [Spasm; Sol Ring; Crackle] -- was "unsupported". Spasm costs {U}{U} under Hinata,
+    // and the only two blue units on the board are the float and the Island. CastOrderRank puts
+    // Sol Ring (mv 1) AHEAD of the ritual, so the canonical walk spent one of those two blue units
+    // on Sol Ring's {1} and then could not pay {U}{U}: an ORDER failure, not a mana one. The flat
+    // pool (mana_ok) admitted the subset; it fell at the colour gates -- no {R} untapped before
+    // the Spasm refloat -- whose only rescue is this walk. With the Spasm paid first it untaps
+    // all four lands (5 mana) and Sol Ring + Crackle's {R}{R} pay with room to spare -- exactly
+    // what the executor does when the human plays it. untap_x_mana_sources ONLY, not every ritual:
+    // a fixed burst can carry a cast restriction (Irencrag Feat's "one more spell"), judged by its
+    // own gate in CANONICAL rank, which a hoisted order would silently contradict. The untap
+    // ritual has no such clause. Same soundness as the Drake: a real sequential payment, retried
+    // only after the canonical one failed, so it can only ADD subsets, each genuinely payable in
+    // the hoisted order; same human-play scope, so autonomous play is byte-identical.
     static const bool s_untapper_first = EnvOn("MTG_SEQ_UNTAPPER_FIRST", true);
     if (s_untapper_first && HumanPlayActive())
     {
@@ -7329,7 +7347,9 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         for (int j : order)
         {
             const Action& a = cands[j];
-            if (a.def != nullptr && a.def->params.etb_untap_lands > 0) { hoisted.push_back(j); }
+            if (a.def != nullptr
+                && (a.def->params.etb_untap_lands > 0 || a.def->params.untap_x_mana_sources))
+            { hoisted.push_back(j); }
             else { rest_o.push_back(j); }
         }
         if (!hoisted.empty() && !rest_o.empty())
