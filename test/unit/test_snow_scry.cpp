@@ -12,6 +12,7 @@
 #include "core/GameSetup.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
 
 #include <string>
 
@@ -70,11 +71,12 @@ GameState Turn3(int hand_lands)
 
 struct Arm
 {
-    Arm(bool bucket, bool outlook)
+    Arm(bool bucket, bool outlook, bool user = false)
     {
         heurarm::Clear();
         heurarm::t_arm[heurarm::SNOW_SCRY]         = bucket ? 1 : 0;
         heurarm::t_arm[heurarm::SNOW_SCRY_OUTLOOK] = outlook ? 1 : 0;
+        heurarm::t_arm[heurarm::SNOW_SCRY_USER]    = user ? 1 : 0;
     }
     ~Arm() { heurarm::Clear(); }
 };
@@ -117,4 +119,52 @@ TEST_CASE("Snow scry: an OPEN land drop spends one land in hand before counting 
     GameState s = Turn3(1);
     s.players[0].lands_played_this_turn = 0;               // the Island in hand is this turn's drop
     CHECK(Keep(s, "Snow-Covered Mountain"));
+}
+
+int Verdict(const GameState& s, const std::string& top) { return SnowSs().ScryVerdict(s, CardSs(top, 99)); }
+
+TEST_CASE("Snow scry USER rule: firm calls (prune) and lean calls")
+{
+    Arm a(false, false, true);
+    // "ditch lands when we have enough (including one to play next turn)"
+    CHECK(Verdict(Turn3(1), "Snow-Covered Mountain") == 0);
+    CHECK(Verdict(Turn3(0), "Snow-Covered Mountain") == -1);
+    CHECK(Keep(Turn3(0), "Snow-Covered Mountain"));
+    // "always ditch Skred"; "Extra Marit-Lage's slumber should be pitched"
+    CHECK(Verdict(Turn3(0), "Skred") == 0);
+    CHECK(Verdict(Turn3(0), "Marit Lage's Slumber") == 0);
+    // "always keep Abominable Treefolk unless we have no means to play it" (Forest + Islands: G and U)
+    CHECK(Verdict(Turn3(0), "Abominable Treefolk") == 1);
+    // "Dragon and Owl are too slow unless we can play them this turn or maybe next turn"
+    CHECK(Verdict(Turn3(0), "Rimefeather Owl") == -1);
+    CHECK_FALSE(Keep(Turn3(0), "Rimefeather Owl"));
+    // "Cards that draw are usually good to keep, except for Frost Augur when we already have multiple
+    // draw sources" -- Turn3's hand holds one Frost Augur; add a Scrying Sheets on board for two.
+    CHECK(Keep(Turn3(0), "Frost Augur"));
+    CHECK(Keep(Turn3(0), "Ice-Fang Coatl"));
+    GameState two = Turn3(0);
+    Permanent sh; sh.card = CardSs("Scrying Sheets", 30); sh.controller_index = 0; sh.owner_index = 0;
+    two.battlefield.push_back(sh);
+    CHECK_FALSE(Keep(two, "Frost Augur"));
+    // "Accelerators are good unless we are lacking threats" -- no threat in Turn3's hand.
+    CHECK_FALSE(Keep(Turn3(0), "Coldsteel Heart"));
+    GameState th = Turn3(0);
+    th.players[0].hand.push_back(CardSs("Abominable Treefolk", 31));
+    CHECK(Keep(th, "Coldsteel Heart"));
+}
+
+TEST_CASE("Snow scry USER rule: a firm verdict prunes the searched candidates to the heuristic's")
+{
+    Arm a(false, false, true);
+    const GameState s = Turn3(0);
+    CHECK(TopDispositionCandidates(s, { CardSs("Skred", 99) }, LookKind::Scry).size() == 1);
+    CHECK(TopDispositionCandidates(s, { CardSs("Abominable Treefolk", 99) }, LookKind::Scry).size() == 1);
+    CHECK(TopDispositionCandidates(s, { CardSs("Frost Augur", 99) }, LookKind::Scry).size() == 2);
+}
+
+TEST_CASE("Snow scry: no verdicts (and no pruning) unless the USER rule is on")
+{
+    Arm a(false, true);
+    CHECK(Verdict(Turn3(0), "Skred") == -1);
+    CHECK(TopDispositionCandidates(Turn3(0), { CardSs("Skred", 99) }, LookKind::Scry).size() == 2);
 }

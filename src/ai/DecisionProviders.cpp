@@ -2934,13 +2934,127 @@ static int SnowScryVariant()
 {
     static const bool on      = EnvOn("MTG_SNOW_SCRY");
     static const bool outlook = EnvOn("MTG_SNOW_SCRY_OUTLOOK");
+    static const bool user    = EnvOn("MTG_SNOW_SCRY_USER");
+    if (heurarm::Flag(heurarm::SNOW_SCRY_USER, user)) { return 3; }
     if (heurarm::Flag(heurarm::SNOW_SCRY_OUTLOOK, outlook)) { return 2; }
     return heurarm::Flag(heurarm::SNOW_SCRY, on) ? 1 : 0;
+}
+
+// ---- the USER's rule (MTG_SNOW_SCRY_USER), 2026-10-06, verbatim: -------------------------------
+//   "The way I imagine it is that we create heuristic to prune the search. It should ditch lands when
+//    we have enough (including one to play next turn, since we want to play a land every turn to
+//    increase) and always ditch Skred. Overall, it should always keep Abominable Treefolk unless we
+//    have no means to play it. Cards that draw are usually good to keep, except for Frost Augur when
+//    we already have multiple draw sources. Extra Marit-Lage's slumber should be pitched because they
+//    are legendary. Accelerators are good unless we are lacking threats. Dragon and Owl are too slow
+//    unless we can play them this turn or maybe next turn."
+// Returned as {firm, lean}: `firm` is +1 / 0 for the calls the user stated as ALWAYS (they PRUNE the
+// searched fan via ScryVerdict), -1 otherwise; `lean` is the default for the rest ("usually", "unless").
+//   FIRM bottom: Skred (NeverCast); a legendary we already control or hold (an extra Slumber); a land
+//                once we already hold one for next turn's drop.
+//   FIRM keep:   a payoff whose every coloured pip has a producer on board or among the lands in hand
+//                (Abominable Treefolk -- "always keep ... unless we have no means to play it").
+//   LEAN:        no spare land -> keep the land. Draw (tap_draw_cost / etb_self_draw) -> keep, except a
+//                Frost Augur (tap_draw_cost creature) with 2+ repeatable draw sources already on board
+//                or in hand. Accelerant -> keep unless no threat is in hand. Mana value above next
+//                turn's mana (Rimefeather Owl, Rimescale Dragon early) -> bottom. Else keep.
+// "Threat" and "accelerant" are the user's discard buckets (CleanupDiscardCandidates), param-driven.
+struct SnowScryCall { int firm; bool lean; };
+static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, const CardDefinition& td,
+                                 const Card& top_card)
+{
+    const int     me = s.active_player_index;
+    const Player& ap = s.players[me];
+    auto is_accel  = [](const CardDefinition& d)
+    { return !d.card.IsLand() && (d.params.mana_rock || !d.params.produces.empty()); };
+    auto is_draw   = [&](const CardDefinition& d)
+    { return !d.card.IsLand() && (d.params.tap_draw_cost.has_value() || d.params.etb_self_draw > 0); };
+    auto is_threat = [&](const CardDefinition& d)
+    {
+        if (d.card.IsLand() || is_accel(d) || is_draw(d)) { return false; }
+        return d.card.IsCreature() || d.params.upkeep_sac_creates_token || d.params.gy_play_cost.has_value();
+    };
+
+    if (!td.card.IsLand() && prov.NeverCast(td)) { return { 0, false }; }
+
+    int board_mana = 0, draw_sources = 0;
+    bool same_name = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.m_name == top_card.m_name) { same_name = true; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (p.card.IsLand() || is_accel(*d)) { ++board_mana; }
+        if (d->params.tap_draw_cost.has_value()) { ++draw_sources; }
+    }
+    int lands_in_hand = 0;
+    bool threat_in_hand = false;
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        if (c.m_name == top_card.m_name) { same_name = true; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (CleanupDiscardIsLand(c)) { ++lands_in_hand; }
+        if (d == nullptr) { continue; }
+        if (d->params.tap_draw_cost.has_value()) { ++draw_sources; }
+        if (is_threat(*d)) { threat_in_hand = true; }
+    }
+    const int drop_open   = ap.lands_played_this_turn < ap.LandDropsAvailable() ? 1 : 0;
+    const int spare_lands = std::max(0, lands_in_hand - drop_open);
+
+    if (td.card.IsLand()) { return spare_lands >= 1 ? SnowScryCall{ 0, false } : SnowScryCall{ -1, true }; }
+
+    if (td.card.HasSupertype(Supertype::Legendary) && same_name) { return { 0, false }; }
+
+    const int next_mana = board_mana + ((drop_open && lands_in_hand >= 1) ? 1 : 0) + (spare_lands >= 1 ? 1 : 0);
+    if (is_threat(td) && td.params.pt_equals_snow_permanents_you_control)
+    {
+        // "no means to play it": a coloured pip nothing on board or among the lands in hand produces.
+        auto can_make = [&](Color want)
+        {
+            if (BoardCanProduceColor(s, me, want)) { return true; }
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d == nullptr || !d->card.IsLand()) { continue; }
+                for (Color col : EffectiveProduces(s, me, *d, /*in_hand=*/true)) { if (col == want) { return true; } }
+            }
+            return false;
+        };
+        const ManaCost& mc = td.card.m_mana_cost;
+        const bool means = (mc.white == 0 || can_make(Color::White)) && (mc.blue == 0 || can_make(Color::Blue))
+                        && (mc.black == 0 || can_make(Color::Black)) && (mc.red == 0 || can_make(Color::Red))
+                        && (mc.green == 0 || can_make(Color::Green));
+        return means ? SnowScryCall{ 1, true } : SnowScryCall{ -1, false };
+    }
+    if (is_draw(td))
+    {
+        const bool augur = td.params.tap_draw_cost.has_value() && td.card.IsCreature();
+        return { -1, !(augur && draw_sources >= 2) };
+    }
+    if (is_accel(td)) { return { -1, threat_in_hand }; }
+    if (CleanupDiscardManaValue(top_card) > next_mana) { return { -1, false }; }
+    return { -1, true };
+}
+
+int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
+{
+    if (SnowScryVariant() != 3) { return -1; }
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(card);
+    return td ? SnowUserScry(*this, s, *td, card).firm : -1;
 }
 
 bool SnowProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
     const int variant = SnowScryVariant();
+    if (variant == 3)
+    {
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(top_card);
+        if (td == nullptr) { return GenericProvider::ScryKeepOnTop(s, top_card); }
+        const SnowScryCall c = SnowUserScry(*this, s, *td, top_card);
+        return c.firm >= 0 ? c.firm == 1 : c.lean;
+    }
     if (variant != 1 && variant != 2) { return GenericProvider::ScryKeepOnTop(s, top_card); }
 
     const CardDefinition* td = CardDatabase::Instance().LookupCached(top_card);

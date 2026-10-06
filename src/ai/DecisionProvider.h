@@ -373,6 +373,12 @@ public:
     // SurveilTop); only the keep DECISION is provider-owned.
     virtual bool ScryKeepOnTop(const GameState& s, const Card& top_card) const = 0;
 
+    // ScryVerdict -- a FIRM scry/surveil verdict for `card`, used to PRUNE the searched disposition
+    // fan (TopDispositionCandidates): +1 = always keep it on top, 0 = always send it away, -1 = no firm
+    // verdict (the search tries both; ScryKeepOnTop is only the default). USER 2026-10-06: "we create
+    // heuristic to prune the search". Default -1 everywhere -> no pruning, byte-identical.
+    virtual int ScryVerdict(const GameState& s, const Card& card) const { (void)s; (void)card; return -1; }
+
     // KeepReorderTop -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
     // (top N). Return true to KEEP them on top (SituationalCardRank then ORDERS them), false to
     // SHUFFLE them all away. Unlike the per-card ScryKeepOnTop gate, this judges the WHOLE set --

@@ -320,6 +320,7 @@ enum Slot : int
     SNOW_SCRY,                // MTG_SNOW_SCRY              Snow's own scry keep (SnowProvider::ScryKeepOnTop) anchored on the USER's discard buckets, instead of the generic "bottom lands once two are in play". USER 2026-10-06. Measurement lever
     SNOW_SCRY_OUTLOOK,        // MTG_SNOW_SCRY_OUTLOOK      ...its OUTLOOK variant: land quota 1 and bottom a nonland not castable within a turn of next turn. Implies MTG_SNOW_SCRY. Measurement lever
     SCRY_SEARCH_TRIGGERED,    // MTG_SCRY_SEARCH_TRIGGERED  the searched land-ETB scry axis also reaches a scry the land drop TRIGGERS (Marit Lage's Slumber). USER 2026-10-06: "Scry should be optionally searched". Measurement lever
+    SNOW_SCRY_USER,           // MTG_SNOW_SCRY_USER         the USER's Snow scry rule (2026-10-06), firm calls PRUNE the searched scry (SnowProvider::ScryVerdict). Measurement lever
     COUNT
 };
 
@@ -601,6 +602,7 @@ inline const char* Name(int slot)
         "MTG_SNOW_SCRY",
         "MTG_SNOW_SCRY_OUTLOOK",
         "MTG_SCRY_SEARCH_TRIGGERED",
+        "MTG_SNOW_SCRY_USER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

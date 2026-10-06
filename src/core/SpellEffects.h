@@ -27193,9 +27193,32 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
     // is a bool + a small vector<int>; copying it once per call is negligible next to the
     // permutation enumeration it guards.
     const TopDisposition h = out.front();
+    // FIRM provider verdicts prune the alternatives (DecisionProvider::ScryVerdict): an alternative
+    // that keeps a card the provider always sends away, or sends away one it always keeps, is not
+    // offered. Scry / surveil only. Every provider without verdicts returns -1 -> nothing pruned.
+    std::vector<int> verdict;
+    if (kind == LookKind::Scry || kind == LookKind::Surveil)
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        bool any = false;
+        for (const Card& c : looked) { verdict.push_back(prov.ScryVerdict(state, c)); any |= verdict.back() >= 0; }
+        if (!any) { verdict.clear(); }
+    }
     for (const TopOption& o : EnumerateTopDispositions(kind, looked))
     {
         if (o.disp.shuffle == h.shuffle && o.disp.top_order == h.top_order) { continue; }
+        if (!verdict.empty())
+        {
+            bool violates = false;
+            for (std::size_t i = 0; i < verdict.size() && !violates; ++i)
+            {
+                if (verdict[i] < 0) { continue; }
+                const bool kept = std::find(o.disp.top_order.begin(), o.disp.top_order.end(),
+                                            static_cast<int>(i)) != o.disp.top_order.end();
+                violates = (verdict[i] == 1) != kept;
+            }
+            if (violates) { continue; }
+        }
         out.push_back(o.disp);
     }
     return out;

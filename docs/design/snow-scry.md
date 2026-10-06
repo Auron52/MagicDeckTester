@@ -30,6 +30,32 @@ same buckets.
 
 Both are per-job heurarm levers, so one pooled batch measures every arm.
 
+## The USER's rule (`MTG_SNOW_SCRY_USER`) -- a heuristic that PRUNES the search
+
+USER 2026-10-06, after the BUCKET / OUTLOOK arms were measured:
+
+> "The way I imagine it is that we create heuristic to prune the search. It should ditch lands when we
+> have enough (including one to play next turn, since we want to play a land every turn to increase)
+> and always ditch Skred. Overall, it should always keep Abominable Treefolk unless we have no means
+> to play it. Cards that draw are usually good to keep, except for Frost Augur when we already have
+> multiple draw sources. Extra Marit-Lage's slumber should be pitched because they are legendary.
+> Accelerators are good unless we are lacking threats. Dragon and Owl are too slow unless we can play
+> them this turn or maybe next turn."
+
+Encoded as `SnowUserScry` (DecisionProviders.cpp). The calls the user stated as ALWAYS are **firm**
+and prune the searched fan through the new provider hook `DecisionProvider::ScryVerdict` (+1 always
+keep, 0 always away, -1 no verdict; default -1 for every provider, so nothing else is pruned):
+
+* firm bottom: Skred; a legendary already controlled or held (an extra Slumber); a land once a spare
+  land for next turn's drop is already in hand;
+* firm keep: Abominable Treefolk while every coloured pip has a producer on board or among the lands
+  in hand.
+
+The rest are the **default** of a searched branch (the search still tries the other option): a land
+when no spare is held -> keep; draw cards -> keep, except Frost Augur with 2+ repeatable draw sources
+(tap_draw_cost on board or in hand); accelerants -> keep only with a threat in hand; a card whose mana
+value exceeds next turn's mana (Owl, Dragon early) -> bottom; else keep.
+
 ## The search (`MTG_SCRY_SEARCH_TRIGGERED`)
 
 The searched land-ETB scry axis (`MTG_SCRY_SEARCH`, `docs/design/searched-scry-disposition.md`)

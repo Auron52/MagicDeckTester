@@ -1820,6 +1820,8 @@ public:
     // deck whose lands are snow permanents. MTG_SNOW_SCRY selects the rule (0 = generic); see the
     // definition for the variants and their anchor in the user's discard buckets.
     bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+    // The USER rule's firm calls (MTG_SNOW_SCRY_USER): prune the searched scry. See the definition.
+    int ScryVerdict(const GameState& s, const Card& card) const override;
 
     // "STUCK -- PASS THE TURN" CERTIFICATE. Admissible: proves no line wins THIS turn, so the
     // unbounded label / depth-matrix search can drop the node without enumerating its plan space.
