@@ -376,8 +376,9 @@ Open questions for the user (none blocked anything; defaults taken):
    search window. Bruna opts in to a searched host; extend to Auras (Bogles) and the rest? Default: Bruna only.
 2. F changes the GENERIC cast rank (ramp land Auras with rocks) -- Fungus moves. Cast order is user-owned;
    I treated it as the same realisation rule as rocks. Approve, or restrict to Bruna?
-3. `MTG_ROLLOUT_AURA_SWAP` (future-turn leaf pins the damage-max combat swap): measured non-inferior and fixes
-   77008 at b200, but ships OFF until the site-9 mismatch it exposed is fixed. Want that mismatch prioritised?
+3. ~~`MTG_ROLLOUT_AURA_SWAP` ... ships OFF until the site-9 mismatch it exposed is fixed. Want that mismatch
+   prioritised?~~ **ANSWERED (USER 2026-10-05): "if it is preventing correct lines we should be fixing it."**
+   Fixed (BP-NODE child numbering) and the lever is now DEFAULT ON -- see "Site-9 numbering fix" at the end.
 4. G (creature-only source first) moves Angels/slivers tap order -- approve.
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
@@ -992,3 +993,47 @@ invocation per mode) at c70890c9 and overlaid them on the staged set (pre-overla
 * Accepted smoke + regression (full-tier accepts); `check_gt_logs.py` 668 consistent, 0 stale.
 * **Overnight GT for Bruna / bruna2hg is still OWED** -- rows exist, not run (USER: no overnight
   until asked). `regression_tiers` stays PARTIAL on overnight until then.
+
+## Site-9 numbering fix + MTG_ROLLOUT_AURA_SWAP adopted (2026-10-06)
+
+**USER DECISION (2026-10-05, relayed):** *"if it is preventing correct lines we should be fixing it"* --
+re: the site-9 continuation index mismatch that blocked `MTG_ROLLOUT_AURA_SWAP`.
+
+**Rebase.** `bruna-analysis` rebased onto origin `71d45d8b` (37 commits replayed, no merge). Conflicts:
+`Dominance.h` size assert (origin's `pay_ledger` +104 and Bruna's +48 -> 1016, both notes kept; it compiles,
+so the number is measured) and the GT files of `2faab457` (fungusb smoke + regression keys/`.wins` --
+resolved to OUR side consistently, `check_gt_logs.py` 668 consistent / 0 stale). Origin play changes:
+`1abff9bc` adopts the fungusb candidate-b value leaf (fungusb play moves -- origin re-accepted its GT in
+`71d45d8b`, which the rebase replaced with our pre-leaf fungusb keys, so **fungusb smoke + regression GT
+must be re-accepted** on the rebased binary); `53adc731` three mana levers, all default OFF (+ the Snow
+Sheets hold, human play only; GameState size change) -- default path declared byte-identical. Every tier
+needs the orchestrator's re-run anyway (two src fixes below).
+
+**Root cause** (`docs/design/site9-continuation-index-mismatch.md`): not two boards -- at the same board the
+executor's and rollout's site-9 lists are identical. The committed plan was a **BP-NODE child**, stamped
+`bp_at = bp_seen` from its BASE plan, which never advances `bp_seen` and never counts site 9 (gate
+short-circuits on `bp_choice >= 0`). The child was scored by RESUMING past site 9 (Wish, Wings,
+swap(Almost Perfect) at the wish's deferred site: Pilgrims untapped, lethal T5); the executor applies it
+from scratch, counts site 9 as occurrence 0 == `bp_at` and spent `bp_choice` 1 there (Lightning Greaves),
+so the swap tapped both Pilgrims -- T6. **Fix** `f0d61eda`: `bp_seen_shadow` counts as a variant would
+(every class-on occurrence + site 9 under the variant's own condition) and the node capture records it
+(`MTG_BP_NODE_SHADOW`, default ON, heurarm slot, =0 reverts). Fixture
+`test/scenarios/bruna_site9_node_child_numbering.json`: T5 with the fix, T6 under =0 (control).
+Scenarios 144/144, `mtg-test` 429/429.
+
+**Decks expected to move (flag-independent):** measured, every suite deck x {d5 b20, d3 b10} x 60, seed 7001:
+29/31 byte-identical. **Snow** (7 digests, gi24 T6 -> T7: the old T6 was the defect -- site 10's index applied
+to SITE 8's list, an unscored continuation; fixed arm re-solves the untargeted site 8 as designed; recovers
+d8 b0 T6 = budget churn) and **Melira** (2 digests, same turns). Bruna moves via the lever below.
+
+**`MTG_ROLLOUT_AURA_SWAP` -> DEFAULT ON** (`b4542a3e`). Paired, fixed tree, Stage-5a set (1001/2002/3003/4004 x
+{d3 b10, d5 b20} x 300 = 2,400 per arm, `MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1`): **14 better / 10 worse, -3 turns,
+0 `[fd-diverge]`, 0 `[nonconv]`.** Extra d5/b20 seed-4004 x 400: 5/2, 5.0250 -> 5.0175. Worse games, two-stage
+recovery: s2002 gi166, gi282; s3003 gi11, gi55; s4004 gi319 recover at stage 1 (d<off turn> b100); s3003 gi134
+(T4) and s4004 gi61 (T3) recover at stage 2 (d8 b0) -- all budget churn, none unexplained. Seed 4205 gi201:
+T5. 77008: T4 at b100/b200 in both arms (T5 at b20 with the pin, recovers at b100). d0 cells byte-identical.
+Only Bruna holds an `aura_swap_cost` card.
+
+**Owed:** the orchestrator's smoke + regression re-run and accept (all tiers -- src changed; fungusb GT
+re-accept from the rebase); Bruna overnight GT still owed (USER: no overnight until asked).
+

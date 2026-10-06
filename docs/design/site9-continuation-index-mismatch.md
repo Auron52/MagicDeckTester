@@ -1,9 +1,9 @@
-# Site-9 continuation: executor/rollout index mismatch (deferred, 2026-10-05)
+# Site-9 continuation "index mismatch" -- ROOT-CAUSED AND FIXED (2026-10-05)
 
-Status: **OPEN, deferred.** Found while fixing the Bruna Stage-5d claude-play sweep findings
-(`docs/design/analysis-Bruna.md`, "Claude-play sweep", finding E). Not reachable on the shipped
-default flags over the Stage-5a seed set (2,400 games, 0 `[fd-diverge]`); reproduced only with the
-experiment lever `MTG_ROLLOUT_AURA_SWAP=1`, whose changed trajectories reach it.
+Status: **FIXED** in `fix(search): number a BP-NODE child the way a from-scratch apply counts it`
+(`MTG_BP_NODE_SHADOW`, default ON, `=0` reverts). USER decision recorded with it: *"if it is
+preventing correct lines we should be fixing it."* Found while fixing the Bruna Stage-5d claude-play
+sweep findings (`docs/design/analysis-Bruna.md`, "Claude-play sweep", finding E).
 
 ## Repro
 
@@ -12,53 +12,78 @@ experiment lever `MTG_ROLLOUT_AURA_SWAP=1`, whose changed trajectories reach it.
 MTG_ROLLOUT_AURA_SWAP=1 MTG_FD_ORACLE=1 ./build/Release/mtg decks/Bruna/Bruna.cod \
     --profile decks/Bruna/Bruna.profile.json --games 1 --seed 4205 --game-index 201 \
     --depth 5 --budget-ms 20
-# [fd-diverge] seed=4205 realized_win=6 predicted_win=5 proven_at_turn=5 leaf_est=none
+# before: [fd-diverge] seed=4205 realized_win=6 predicted_win=5   after: avg 5.0000, no diverge
+# MTG_BP_NODE_SHADOW=0 reproduces the old behaviour.
 ```
 
-(Batch form: job `seed 4004, games 300, depth 5, budget_ms 20`, game index 201.)
+Fixture: `test/scenarios/bruna_site9_node_child_numbering.json` (the T5 board; T5 with the fix,
+T6 under `MTG_BP_NODE_SHADOW=0` -- the control).
 
-## What happens
+## What the first diagnosis got wrong
 
-Turn 5, committed plan `[Razorverge Thicket] Glittering Wish (tutor_choice 1 = Almost Perfect),
-Arcanum Wings -> Avacyn's Pilgrim #3`, `bp_choice = 1 @ 0`. The FD line's continuation is
-`[Aura swap: Almost Perfect]`; with it the two Pilgrims stay untapped and attack for exactly lethal.
+It read the defect as "the scoring rollout and the executor build the site-9 list on different
+boards". They do not: `MTG_SITE9_TRACE=5` (print-only, both worlds) shows the executor's list and the
+rollout's list at the same board are byte-identical (`#0 Greaves + swap`, `#1 Greaves`, `#2 swap`).
+The boards with the Pilgrims tapped were OTHER plans (different land / wish target). The real
+mismatch is in the breakpoint NUMBERING, not in the list.
 
-The executor reaches breakpoint SITE 9 (post-entry activation: the freshly cast Wings' {2}{U} swap)
-and, by design, takes `EnumerateBreakpointPlans(state, ...)[plan.bp_choice]` -- an INDEX into a list
-it rebuilds from its own board. Its list was
+## Root cause
 
-```
-#0 Lightning Greaves + swap(Almost Perfect)
-#1 Lightning Greaves
-#2 swap(Almost Perfect)
-```
+The committed T5 plan was a **BP-NODE child** (`MTG_BP_NODE`, default ON, hosting sites 3 and 10):
 
-so index 1 cast Lightning Greaves, which (with the swap) tapped both Pilgrims for mana: no attack,
-realised T6. The scoring rollout's list at the same index named the swap alone -- its board at that
-point differed (dumped rollout boards for this plan show both Pilgrims already TAPPED by the batch
-prepay, float 3, so "Greaves + swap" was unaffordable there and dropped out of the list). The
-executor's prepay held the Pilgrims (dork reserve, `reserved_crea` = both) and tapped the lands.
+1. The base plan `[Thicket] Glittering Wish (-> Almost Perfect), Arcanum Wings` is applied with a
+   capture. A base plan (`bp_choice < 0`) **never advances `bp_seen`**, and **site 9 is not even
+   counted for it** -- its gate short-circuits on `plan.bp_choice >= 0` (Wings' fresh swap ability
+   opens site 9 only for variants).
+2. The wish's tutor-to-hand arms the deferred re-solve; the node pends the base there and stamps each
+   child `bp_choice = k, bp_at = snap.bp_seen` = **0**, then RESUMES it from the snapshot -- past
+   site 9. Child k=1 at the deferred site was `swap(Almost Perfect)`: seven land/rock mana pay Wish +
+   Wings + swap, both Pilgrims attack, 9+4 + 1 = 14 = lethal. The node returned that as a T5 win
+   (before any root dump), recording the swap into `breakpoint_actions`.
+3. The executor applies the child **from scratch**, counting as a variant does: site 9 is occurrence
+   0 == `bp_at`, so `bp_choice = 1` landed on **site 9's** list -> Lightning Greaves. The recorded
+   swap then replayed on top, and Greaves + swap tapped both Pilgrims: no attack, realised T6. The
+   fd-pred replay (also from scratch) shows the same wrong line.
 
-So the defect class is: **a site-9 continuation is index-addressed, and the index is only
-meaningful if both worlds build the list on the same board -- which the whole-turn prepay's
-reservation does not guarantee across the scoring rollout and the executor.** Site 9 records no
-breakpoint script (`bp_sink_push` is not called there), so the executor cannot fall back to
-replaying the scored actions the way the deferred sites (3/5/6) do.
+So: **a node child is numbered in the base plan's count, while every from-scratch apply of it (the
+executor, the fd-pred replay, any re-score) numbers in the variant's count.** The two differ by every
+class-on occurrence the base walked past uncounted -- site 9 is the one that is never even evaluated
+for a base, and the one whose executor twin re-derives by index rather than replaying a script.
 
-## Not yet established
+## Fix
 
-* Why the scoring rollout's prepay tapped the Pilgrims for the same (state, plan.actions) the
-  executor prepaid without them. The rollout boards printed for this plan were not byte-equal to
-  the executor's (e.g. the Thicket entered TAPPED in them -- three other lands), so the scoring
-  board itself may be a different node (FSLine verification at an earlier root), not a prepay
-  divergence on one board.
+`ApplyPlanDirect` keeps `bp_seen_shadow`: the count a choice-carrying plan would have at the same
+point -- every class-on `bp_searched_plan` occurrence, plus site 9 under the variant's own
+`bp_seen == 0` condition (evaluated only in a node-hosting apply, `bp_capture != nullptr`, so nothing
+else pays the battlefield scan). The node capture records the shadow. Consequences:
 
-## Candidate fixes (none built)
+* resumed scoring is unchanged: the resume restores the same index the child now carries, so the
+  deferred site is still the eligible one;
+* the executor counts site 9 as occurrence 0 != `bp_at` (=1), applies nothing there (site 9 is
+  searched-only), and replays the recorded continuation -- the line that was scored;
+* a from-scratch rollout re-apply of the child agrees with both.
 
-1. Record the site-9 continuation into the plan's breakpoint script in the rollout (as the deferred
-   sites do) and have the executor REPLAY it when the plan is committed, instead of re-enumerating.
-2. Or key the continuation by CONTENT (a fingerprint of the scored continuation) rather than index,
-   standing the site down when the executor's list does not contain it.
+Both node hosts (main 1 and the second-main host) use the same capture, so both are fixed.
 
-Either needs the mismatch harness (`MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1`, Stage-5a seed set) with
-`MTG_ROLLOUT_AURA_SWAP=1` to read 0 before that lever can be considered for adoption.
+## Which decks can move with the experiment lever OFF
+
+The defect predates `MTG_ROLLOUT_AURA_SWAP`: it needs (a) a plan that puts a permanent with a newly
+activatable ability onto the battlefield (site 9 gate: walkers, Equipment equip abilities such as
+Lightning Greaves / Kitty's Equipment, Wings' swap, sac outlets, ...) and (b) a node-hosted deferred
+site later in the same apply (site 3: tutor-to-hand / plain cantrip; site 10: put-in-hand), with the
+node child committed. A shadow-mask count of ANY class-on occurrence before the pend (e.g. Snow's
+site-8 Frost Augur / Scrying Sheets look before a site-10 put) shifts the number the same way.
+
+Measured (one pooled batch, `MTG_BP_NODE_SHADOW` 1 vs 0 per job, every suite deck x {d5 b20, d3 b10}
+x 60 games, seed 7001, `MTG_FD_ORACLE=1`): **29 of 31 decks byte-identical.** Moved:
+
+* **Snow** -- 7 digests, 1 game slower (gi24 T6 -> T7, both cells). Verdict: the OLD arm's T6 came
+  from the defect itself -- an unverified T4 commit whose node child targeted site 10 was applied by
+  the executor at SITE 8 (Frost Augur's look) with site 10's index, an unscored continuation that
+  happened to be good. With the fix the untargeted site 8 re-solves (the designed route for an
+  estimate commit) and the targeted site 10 plays the scored choice. Recovers at d8 b0 (T6):
+  expressible, budget churn.
+* **Melira** -- 2 digests per cell, same turns.
+
+0 `[fd-diverge]` in either arm over the batch. The orchestrator's smoke/regression rerun is the
+authoritative per-deck read.
