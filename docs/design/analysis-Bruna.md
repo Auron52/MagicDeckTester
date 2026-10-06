@@ -332,7 +332,7 @@ reads T5 there, and its opponent-22 control does not win T4 on the fixed tree).
 | A-i | 77012: Sage's creature-only surplus in a MIXED batch ended as general float | CONFIRMED -- the mixed two-stage prepay pays its creature stage with for_creature=true; surplus was booked general. Creature stage's pre-paid pool now goes to floating_creature_mana | `a80ebbb8` |
 | A-ii | 77003: Sage + Colossification/Mythic Proportions + equip offered (10 mana vs 7) | CONFIRMED -- the hasted-dork credit let restricted units "pay" the enablers in the joint check. Restricted credit capped at the subset's other creature MV; credited dork colours widen the colour-presence gate (Forests + Sage -> Mother of Runes was rejected) | `a80ebbb8` |
 | A-iii | (found fixing A) Greaves -> Sage never offered beside a bigger creature | CONFIRMED legal line inexpressible (width-1 haste ranking is attack-only). Best locked mana-dork host always kept | `a80ebbb8` |
-| B | 77002: "Courage -> Pilgrim" priced but realised on Mother (silent retarget); 77014 equip-then-Aura | CONFIRMED -- shrouded hosts never Aura candidates; equips trail casts; and the autonomous dedup keyed creature Auras by NAME (host never searched). Inject Greaves-shrouded hosts + co-selected-move reject, shroud-release fires before the Aura (both worlds), unlock equip onto an Aura target deferred, Bruna opts into a host-keyed signature (`MTG_BRUNA_AURA_HOST_SIG`), retargets counted/reported (`[enchant-retarget]`, `MTG_ENCHANT_RETARGET_ABORT`). Host axis measured 400 paired d5/b20: 5.0575 -> 5.0425 (7 better / 1 worse, t=-2.13; gi370 recovers at b100), +5.6% ms | `aee1aa79`, `7414e9c8` |
+| B | 77002: "Courage -> Pilgrim" priced but realised on Mother (silent retarget); 77014 equip-then-Aura | CONFIRMED -- shrouded hosts never Aura candidates; equips trail casts; and the autonomous dedup keyed creature Auras by NAME (host never searched). Inject Greaves-shrouded hosts + co-selected-move reject, shroud-release fires before the Aura (both worlds), unlock equip onto an Aura target deferred, Bruna opts into a host-keyed signature (`MTG_BRUNA_AURA_HOST_SIG`; SUPERSEDED 2026-10-06 by the shared host ranking, `49a261c6`), retargets counted/reported (`[enchant-retarget]`, `MTG_ENCHANT_RETARGET_ABORT`). Host axis measured 400 paired d5/b20: 5.0575 -> 5.0425 (7 better / 1 worse, t=-2.13; gi370 recovers at b100), +5.6% ms | `aee1aa79`, `7414e9c8` |
 | C | 77001: Wild Growth stays attached to a land that left until combat | CONFIRMED (CR 704.5m). Sweep inside SacrificeDepletedLands (when it sacked) and BounceKarooLand (shared by both worlds); karoo re-located by identity | `4f803e5a` |
 | D | 77001: Wild Growth on a same-turn Azorius Chancery inexpressible | CONFIRMED -- the deferred karoo is never on the battlefield at enumeration. The karoo branch publishes its card number as a land-Aura host; both worlds hold that Aura until the deferred karoo lands (same mana as the in-response tap) | `70807259` |
 | E1 | 77008: Claude T4, AI T5 | (b) BUDGET STARVATION -- expressible: from the T2 handoff T4 at b1600 (T5 at b200); game start T4 at b800. Contributing: the horizon leaf never swaps in combat. A rollout swap pin (`MTG_ROLLOUT_AURA_SWAP`) found T4 at b200 and measured 1 better/0 worse over 400, but its trajectory exposed a latent executor/rollout site-9 mismatch (seed 4205) -> shipped DEFAULT OFF, deferred in `docs/design/site9-continuation-index-mismatch.md`. Final binary: T4 in the d5/b200 batch cell | `c9f2291b`, `a0b8e7ab` |
@@ -372,8 +372,10 @@ Decks other than Bruna whose play may change (for the GT verdicts):
   creature-Aura decks (Auras) widen (diagnostic only).
 
 Open questions for the user (none blocked anything; defaults taken):
-1. The autonomous dedup folds a creature Aura's HOST by name in every deck -- a heuristic substitute in the
-   search window. Bruna opts in to a searched host; extend to Auras (Bogles) and the rest? Default: Bruna only.
+1. ~~The autonomous dedup folds a creature Aura's HOST by name in every deck -- a heuristic substitute in the
+   search window. Bruna opts in to a searched host; extend to Auras (Bogles) and the rest? Default: Bruna only.~~
+   **ANSWERED (USER 2026-10-06): "not a difficult decision. It makes sense to have a heuristic for it."** One
+   proven host ranking replaces both the fold and Bruna's branching -- see "Aura host ranking" at the end.
 2. F changes the GENERIC cast rank (ramp land Auras with rocks) -- Fungus moves. Cast order is user-owned;
    I treated it as the same realisation rule as rocks. Approve, or restrict to Bruna?
 3. ~~`MTG_ROLLOUT_AURA_SWAP` ... ships OFF until the site-9 mismatch it exposed is fixed. Want that mismatch
@@ -1037,3 +1039,93 @@ Only Bruna holds an `aura_swap_cost` card.
 **Owed:** the orchestrator's smoke + regression re-run and accept (all tiers -- src changed; fungusb GT
 re-accept from the rebase); Bruna overnight GT still owed (USER: no overnight until asked).
 
+## Aura host ranking -- one heuristic for every creature-Aura cast (2026-10-06, `49a261c6`)
+
+**USER DECISION (2026-10-06, relayed):** which creature gets an Aura is *"not a difficult decision. It makes
+sense to have a heuristic for it."* Combined with the standing rules: a heuristic may PRUNE (pick one host)
+only if PROVEN against a fully-branched control; a counterexample is root-caused and the RANKING fixed (never
+a fall-back to branching); escalate only if no correct ranking exists; executor and rollout identical; no
+greedy substitute elsewhere in the search window.
+
+**What it replaced.** (a) Every deck's autonomous dedup keyed a creature Aura by NAME and kept the FIRST
+enumerated host (battlefield order); (b) Bruna opted out (per-host branching, `MTG_BRUNA_AURA_HOST_SIG`, sweep
+B); (c) Solve (d0 + rollout leaves) took its first candidate; (d) ResolveEnchantTarget's fallback ranked by
+Aura count. Now ONE key (`core/SpellEffects.h` "AURA CAST HOST RANKING", `TurnSolver` `AuraPlanHostBase` /
+`AuraPlanHostKeyOn`) decides the host at every site: EnumeratePlans' dedup keeps each plan class's best-keyed
+member (ties: first enumerated); Solve re-points its chosen plan's Auras among its own candidates + creatures
+the same plan casts (`RetargetSolveAuraHosts`, shroud-checked); the resolution fallback ranks with the same
+board key. Both apply worlds then realise the plan's `enchant_target` -> lockstep by construction. Human play
+and `MTG_UNPRUNED` (viewer / claude-play) still offer every legal host; the viewer menu is unchanged (no
+reorder -- reference replays index into it). Land Auras (Wild Growth) are untouched.
+
+**The ranking** (goldfish objective, measured on a copy): the plan's creatures enter (sick), its Equips attach
+(Greaves haste, and the shroud-release move of finding B), the REAL payer (`BatchPrepayMainCasts`, the same
+call both worlds open a plan with) taps what it taps, the Auras attach (Colossification's ETB tap incl. the
+main-phase respond window). Key: **lethal this turn > team damage this turn + next turn > more of it this
+turn > fewer Auras on mana creatures**. Next turn leaves out the mana creatures the deck must tap for the most
+expensive nonland card left in hand (lands/rocks + a land drop first, then mana creatures least-powerful
+first; a creature-only source pays only for a creature card). A gathering attacker (Bruna) takes the better
+of gather-all / gather-all-but-base-setters / none. Evasion/trample/lifelink: goldfish-irrelevant, not in the
+key; no deck-specific tie-break was needed. Legal targets only: the candidates are the enumerator's (shroud /
+hexproof / Enchant restrictions / Greaves order per finding B); Solve's re-point re-checks the shroud rule.
+
+**Control arm:** `MTG_AURA_HOST_BRANCH=1` (heurarm slot `AURA_HOST_BRANCH`, renames `BRUNA_AURA_HOST_SIG`,
+default OFF) = the fully-branched per-host search; Solve keeps the ranking in both arms (it never branched).
+Instruments: `MTG_TRACE=hostproof` (every committed autonomous plan's hosts vs the key's best: heur / tie /
+worse), `MTG_TRACE=hostkey` (the next-turn mana estimate). Artifacts `logs/ahproof/` (gitignored).
+
+**Proof.** One pooled batch per round, both arms, play settings (d5 = Bruna/Auras `value_play`, d3 b10):
+
+| round | counterexamples (control wins sooner) | root cause -> ranking fix |
+|---|---|---|
+| 1 | Bruna d5 gi49, gi52, gi165, gi238 | gi52/gi238: the key's own tap model spent Somberwald Sage's CREATURE-ONLY mana on Almost Perfect / Eldrazi Conscription, steering the Aura onto a Pilgrim the payer really tapped -> creature-only split. gi49: Wings tie Pilgrim/Mother kept the Pilgrim, which paid for the next turn's swap -> tie-break off mana creatures. gi165 -> see below |
+| 2 | gi165, gi282 (new) | gi282: an enters-tapped land drop changed which dork the payer tapped -> the key now runs the REAL payer (`BatchPrepayMainCasts`) on the copy (the model only as fall-back when the prepay declines) |
+| 3-7 | gi165 only | -- |
+
+d0 has no branched control; vs the old binary its worse games were root-caused too: gi100 (Sol Ring's same-turn
+{C}{C} missing from the fall-back supply -> plan ramp counted), gi566 / gi214 (Colossification on a dork that
+paid for Eldrazi Conscription NEXT turn -> next-turn mana estimate), plus the "more of it this turn" tie-break.
+
+**Final (round 7 binary; later commits perf-only, digests re-verified identical):**
+
+| cell | games | heur vs control (better / worse) | avg heur / control |
+|---|---|---|---|
+| Bruna d5 s9.1M | 400 | 2 / **1** (gi165) | 5.1275 / 5.1300 |
+| Bruna d5 s9.5M (fresh) | 400 | 0 / 0 | 5.1175 / 5.1175 |
+| Bruna d3 s9.2M | 200 | 0 / 0 | 5.1450 / 5.1450 |
+| Bruna 2HG d3 s9.6M | 100 | 0 / 0 | 5.7100 / 5.7100 |
+| Auras d5 s9.1M | 400 | 0 / 0 | 4.1100 / 4.1100 |
+| Auras d5 s9.5M (fresh) | 400 | 0 / 0 | 4.0800 / 4.0800 |
+| Auras d3 s9.2M | 200 | 0 / 0 | 4.0400 / 4.0400 |
+| Auras 2HG d3 s9.6M | 100 | 1 / 0 | 4.5400 / 4.5500 |
+
+Commit level (hostproof): heuristic arm 7,700 committed creature-Aura plans, **0** not the key's best (2,491
+ties). Control arm 4,398 commits, 503 on a host the key ranks strictly lower -- and none of those games won
+sooner except gi165. **gi165 is not a ranking counterexample:** the heuristic arm recovers the control's T4 at
+d8 b0 (stage 2 of the two-stage recovery check; d4/d5 b100 stay T5), and the control's winning line committed
+hosts that TIE the key (Colossification -> a Pilgrim, `verdict=tie`), i.e. the line is inside the heuristic's
+space; the arms diverge at T1 (no Aura decision) from different deeper plan lists = search allocation.
+
+**vs the old binary (HEAD 9106b0d8, Bruna branched / others first-enumerated):** Bruna d5 400: 2/2 (gi165;
+gi267 recovers at d5 b100), fresh 400: 3/0; d3: 0/0; 2HG: 0/0; **d0 8,000 (4 fresh seeds): 476 better / 31
+worse, -587 turns (-0.073/game)**. Auras d5 2/0 + 1/0, d3 0/0, 2HG 2/0, d0 8,000: 10/0. `[enchant-retarget]`
+fallbacks on the same jobs 24,491 -> 14,174.
+
+**Cost** (paired, same box, each arm twice; ms = summed game time): Bruna d5 1.078-1.082M vs 1.110-1.121M ms
+(**-3%**), units 57.4M vs 60.7M (-5.5%); Bruna d3 -2% ms, -6.9% units; Auras d5 ~0 ms, -5.8% units; Auras d3
+21.5-22.6k vs 20.2-20.6k ms (**~+7%**, ~7 ms/game: the key's board copies in Solve), -1% units.
+
+**Decks expected to move at the suite run:** bruna, bruna2hg, auras, auras2hg (every tier, d0 included). The
+other 29 suite decks are byte-identical (all decks x {d0 200, d3 40} digests, new vs old binary).
+
+**Tests:** `test_bruna_sweep.cpp` -- one ranked host per class + control keeps all; tapped-for-mana host;
+Colossification tap; Bruna gather; never a Greaves-shrouded host without the move (search + Solve); creature-
+only source; next-turn mana; resolution fallback. The sweep-B expressibility cases run under the control arm.
+`mtg-test` 436/436, scenarios 144/144.
+
+Open (none blocks anything; defaults taken):
+1. d0 gi681 (Bruna, d0 only): Arcanum Wings' recast host ties (flying only) and the tie-break puts it on Mother;
+   next turn Solve's MAIN-phase swap brings Colossification in and its ETB taps Mother (the combat-window swap
+   would have been free). A swap-timing matter of the greedy, not of the host key; left as is.
+2. The viewer menu is not re-ordered to put the ranking's host first (index-stable for reference replays); the
+   human still sees every host. Want the ranking's pick marked/first in the viewer? Default: unchanged.
