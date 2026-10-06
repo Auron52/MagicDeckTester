@@ -99,13 +99,23 @@ inline bool SporeSourcePoolEnabled()
     return heurarm::Flag(heurarm::FUNGUS_SPORE_POOL, env_on);
 }
 
-// MTG_ATTACK_BODY_TAP_ORDER -- DEFAULT OFF until measured. The attack-turn creature tap order: see
-// DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce), so
-// executor and rollout see one value; heurarm slot so a pooled batch can carry both arms.
-inline bool AttackBodyTapOrderOn()
+// MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
+// DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
+// heurarm slot so a pooled batch can carry both arms.
+//
+// DEFAULT: ON IN HUMAN PLAY, OFF AUTONOMOUSLY (2026-10-06). In the viewer the engine pays the
+// human's line, and a payment that taps a creature the human is about to attack with silently
+// costs them damage they never chose to give up -- Mirrorwing v2 s51_gi50 T4 (USER-saved reference):
+// Luxurious Libation X=5 tapped both 1-power Mystics over two 0-power Hierarchs, 19 damage against
+// the recorded 21 kill. USER 2026-10-06: a reference that stops replaying is ours to fix. Autonomous
+// play keeps it OFF until the held-out A/B the USER calls for (regression evidence so far: 6 games
+// faster / 0 slower of 56,060), so no GT moves. HumanPlayActive() is false inside rollouts, so the
+// search arm is unchanged too. An explicit MTG_ATTACK_BODY_TAP_ORDER=0/1 overrides both defaults.
+inline bool AttackBodyTapOrderOn(bool human_play)
 {
+    static const bool explicit_set = EnvSet("MTG_ATTACK_BODY_TAP_ORDER");
     static const bool env_on = EnvOn("MTG_ATTACK_BODY_TAP_ORDER");
-    return heurarm::Flag(heurarm::ATTACK_BODY_TAP_ORDER, env_on);
+    return heurarm::Flag(heurarm::ATTACK_BODY_TAP_ORDER, explicit_set ? env_on : human_play);
 }
 
 // MTG_NEEDS_TAP_ORDER -- DEFAULT OFF until measured. Needs-based mana-source choice: see the

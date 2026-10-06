@@ -2475,7 +2475,7 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
 int GenericProvider::ManaSourceHoldValue(const GameState& s, const Permanent& p,
                                          const CardDefinition&) const
 {
-    if (!AttackBodyTapOrderOn()) { return 0; }
+    if (!AttackBodyTapOrderOn(HumanPlayActive())) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (pt == nullptr || !pt->attack_matters) { return 0; }
     if (!p.card.IsCreature() && !p.is_animated) { return 0; }
