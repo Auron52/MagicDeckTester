@@ -30495,6 +30495,49 @@ void TurnSolver::PinRolloutAuraSwap(const GameState& state, bool is_pre_combat, 
     MaybePinRolloutAuraSwap(state, is_pre_combat, plan);
 }
 
+bool TurnSolver::RolloutAuraSwapOn()
+{
+    static const bool s_on = EnvOn("MTG_ROLLOUT_AURA_SWAP", true);
+    return heurarm::Flag(heurarm::ROLLOUT_AURA_SWAP, s_on);
+}
+
+static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a);   // defined below
+
+// Greedy Aura-swap timing (MTG_SOLVE_COMBAT_SWAP; see PrecombatSwapTapsAttacker). Applied ONLY where
+// the combat pin follows -- the d0 runner's plan and the rollout's future-turn horizon-leaf plan,
+// each immediately before its PinRolloutAuraSwap. NOT inside Solve: Solve also serves continuation
+// re-solves that carry no pin, and dropping the swap there removed the Aura from the turn outright
+// (measured: the in-Solve version cost searched d3 0 better / 3 worse in 650 paired games).
+// The plan's pre-combat swap that would tap a would-be attacker is dropped -- but only when the
+// combat swap stays payable: the plan's whole cost plus the swap must fit the supply left once
+// every would-be attacker is tapped (an attacking mana creature cannot tap for it in combat --
+// Bruna d0 s9420000 gi965: Birds carried the Wings, attacked, and the {2}{U} was gone; the main swap
+// paid with Birds' own mana in the respond window). Otherwise the main swap is the only way the
+// Aura comes in this turn and it is kept. Chains (K >= 2) are left alone. Self-gating.
+void TurnSolver::DeferAuraSwapToCombat(const GameState& state, bool is_pre_combat, Plan& plan)
+{
+    if (!is_pre_combat || !SolveCombatSwapOn()) { return; }
+    for (std::size_t q = 0; q < plan.actions.size(); ++q)
+    {
+        const Action& sw = plan.actions[q];
+        if (sw.kind != Action::Kind::AuraSwap || sw.chosen_x >= 2
+            || !PrecombatSwapTapsAttacker(state, sw)) { continue; }
+        ManaCost total;
+        for (const Action& o : plan.actions) { AddManaCost(total, o.cost); }
+        // The combat supply: every creature that could attack is tapped by its attack (a copy marks
+        // them so); sick creatures and non-creature sources still pay.
+        GameState cs = state;
+        for (Permanent& cp : cs.battlefield)
+        {
+            if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
+                && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
+        }
+        if (!BuildNonCreaturePool(cs).CanPay(total)) { continue; }
+        plan.actions.erase(plan.actions.begin() + static_cast<std::ptrdiff_t>(q));
+        return;
+    }
+}
+
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
@@ -30555,8 +30598,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, c
 // (CR 506.4) and deals the +20 THIS turn. Bruna d0 smoke gi12 (Bruna 5/5 swapped T5 main -> no attack,
 // won T6; the combat swap is lethal T5), gi885 (Mother with Eldrazi Conscription, opp at 5, swapped
 // Colossification in main -> no attack T7), seed 9300000 gi681 (Mother, T7 -> T5). So the greedy
-// policy drops it from its chosen plan (SolveUncached's materialize_best, when the combat swap stays
-// payable without tapping an attacker) and the swap is left to the combat window -- the rollout leaf's
+// policy drops it from the plan (TurnSolver::DeferAuraSwapToCombat, when the combat swap stays payable
+// without tapping an attacker) and the swap is left to the combat window -- the rollout leaf's
 // PinRolloutAuraSwap and, with this flag, the d0 runner's pin (AIEngine). A host that cannot attack (sick, already tapped, a dork whose ETB tap is
 // pending) keeps the main swap: there the tap costs nothing and the +20 is next turn either way. The
 // ranking the host key prices Colossification's tap with (AuraPlanHostKey) is untouched; this is the
@@ -30813,35 +30856,6 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // shared damage key puts them (see RetargetSolveAuraHosts). Self-gating: no creature Aura
         // with two candidate hosts in the plan -> nothing scored, nothing changes.
         RetargetSolveAuraHosts(state, is_pre_combat, cands, best_sel, pre.aura_shroud_src, best.actions);
-        // Greedy Aura-swap timing (see PrecombatSwapTapsAttacker): the chosen plan's pre-combat swap
-        // that would tap a would-be attacker is left to the combat window -- but only when the combat
-        // swap is still payable: its cost on top of everything else the plan casts must fit the supply
-        // left once every would-be attacker is tapped (an attacking mana creature cannot tap for it in combat -- Bruna d0
-        // s9420000 gi965: Birds carried the Wings, attacked, and the {2}{U} was gone; the main swap
-        // paid with Birds' own mana in the respond window). When it does not fit, the main swap is
-        // the only way the Aura comes in this turn, so it is kept. Self-gating: no AuraSwap -> no-op.
-        if (is_pre_combat && SolveCombatSwapOn())
-        {
-            for (std::size_t q = 0; q < best.actions.size(); ++q)
-            {
-                const Action& sw = best.actions[q];
-                if (sw.kind != Action::Kind::AuraSwap || sw.chosen_x >= 2
-                    || !PrecombatSwapTapsAttacker(state, sw)) { continue; }
-                ManaCost total;
-                for (const Action& o : best.actions) { AddManaCost(total, o.cost); }
-                // The combat supply: every creature that could attack is tapped by its attack (a copy
-                // marks them so); sick creatures and non-creature sources still pay.
-                GameState cs = state;
-                for (Permanent& cp : cs.battlefield)
-                {
-                    if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
-                        && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
-                }
-                if (!BuildNonCreaturePool(cs).CanPay(total)) { continue; }
-                best.actions.erase(best.actions.begin() + static_cast<std::ptrdiff_t>(q));
-                break;
-            }
-        }
         ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
         return best;
     };
@@ -51109,7 +51123,13 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // INSIDE the root turn -- a breakpoint continuation re-solve -- is applied by the rollout
         // and not by the executor's action replay: the seed-4205 fd-diverge (predicted T5, realised
         // T6) when the pin lived in Solve() / the leaf itself.
-        if (pre_plan.horizon_leaf) { TurnSolver::PinRolloutAuraSwap(state, /*is_pre_combat=*/true, pre_plan); }
+        if (pre_plan.horizon_leaf)
+        {
+            // Greedy Aura-swap timing first (MTG_SOLVE_COMBAT_SWAP), only when the pin below will
+            // carry the swap into combat.
+            if (TurnSolver::RolloutAuraSwapOn()) { TurnSolver::DeferAuraSwapToCombat(state, /*is_pre_combat=*/true, pre_plan); }
+            TurnSolver::PinRolloutAuraSwap(state, /*is_pre_combat=*/true, pre_plan);
+        }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);   // future turn: no stamp (root-turn authority)
         // OWN DEATH (own_death_live decks only -- Prevent Damage, or MTG_OWN_DEATH_ALL): a line

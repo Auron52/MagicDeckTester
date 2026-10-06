@@ -809,10 +809,13 @@ struct SolveSwapArm
     ~SolveSwapArm() { heurarm::t_arm[heurarm::SOLVE_COMBAT_SWAP] = prev; }
 };
 
+// The greedy plan as the d0 runner / horizon leaf commits it: Solve, then the swap-timing pass that
+// runs right before the combat pin.
 bool SolveTakesSwap(const GameState& s)
 {
-    const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+    TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
         TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    TurnSolver::DeferAuraSwapToCombat(s, /*is_pre_combat=*/true, plan);
     for (const Action& a : plan.actions) { if (a.kind == Action::Kind::AuraSwap) { return true; } }
     return false;
 }

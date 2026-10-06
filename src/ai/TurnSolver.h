@@ -1347,6 +1347,11 @@ public:
     // The rollout / d0 Arcanum Wings combat-swap pin (MTG_ROLLOUT_AURA_SWAP, Bruna sweep E): applied
     // ONLY to a whole main-phase greedy plan (the horizon leaf, the d0 runner's plan).
     static void PinRolloutAuraSwap(const GameState& state, bool is_pre_combat, Plan& plan);
+    // MTG_ROLLOUT_AURA_SWAP's reader (the pin above is a no-op when it is off).
+    static bool RolloutAuraSwapOn();
+    // Greedy Aura-swap timing (MTG_SOLVE_COMBAT_SWAP): drop a pre-combat swap that would tap a
+    // would-be attacker when the combat swap stays payable. Call ONLY right before the combat pin.
+    static void DeferAuraSwapToCombat(const GameState& state, bool is_pre_combat, Plan& plan);
 
     // THE SEARCH'S QUERY INTO THE COMBO OFF RULE TABLE (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK).
     // Index of a candidate `DecisionProvider::ComboOffPossible` says wins this turn, or -1.
