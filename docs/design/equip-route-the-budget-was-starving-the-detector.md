@@ -215,7 +215,48 @@ re-enumerating a wide equipment board at ~2,275 plans per rollout.** With `MTG_D
 **38.0% of those root candidates are duplicates** (`dedup_seen` 24,445, `dedup_dup` 9,302, of which
 `dedup_exactdup` 3,501 and `dedup_copy_perm` 5,271).
 
-**Two negative results worth keeping, so nobody re-runs them:**
+### 4d. The candidate-mass route is CLOSED — three ways, all already documented in-tree
+
+The 38% duplicate rate among scored candidates looks like the obvious prize. It is not available,
+and the reasons are structural rather than tuning, so they are recorded here to stop the next
+session re-deriving them.
+
+**(i) `MTG_CAND_DEDUP` is inert on this deck.** Armed on gi=371, every counter is byte-identical —
+`units` 70,077, `cand_scored` 24,445, `space_plans` 31,144,648, `rollout_calls` 13,686, and
+`dedup_dup` 9,302 — with only run-to-run wall variance between them (repeat runs of this game span
+114-132 s, so the apparent 11% was noise, not an effect).
+
+**(ii) Because every duplicate here is a BREAKPOINT variant, and a prune upstream of a fixed-width
+index cannot save work.** `dedup_why drop_dup=0 nodrop_dup=9748`, `dup_bp=9748 dup_nobp=0`. The
+breakpoint wave emits variants *by rank* — `candidates scored = W x BpSearchDepth() x bases` — and
+the candidate list's LENGTH appears nowhere in that product, so removing an entry only changes which
+plan occupies slot `k`. The only things that CAN reduce breakpoint work are: shrink `BpSearchWidth`,
+shrink `BpSearchDepth`, shrink the base fan-out, or **make an individual APPLY cheaper**.
+
+**(iii) The two 100%-duplicate ARMS are not harvestable either, and the tree says so in advance.**
+Aggregated over 1,000 games at b200: `base=1,401,797/dup=2,987 (0.21%)`, `rank=409,881/dup=246,077
+(60.0%)`, **`unif=76,092/dup=76,092 (100%)`**, **`empty=204,763/dup=204,723 (99.98%)`** — two arms
+carrying 13.4% of all candidate mass and producing 40 unique post-apply states between them. Since
+an arm is fan-out rather than a list entry, (ii) does not forbid it. But the collapse that would
+harvest it is **already ON by default** (`MTG_BP_W0_UNIF_COLLAPSE`, `MTG_BP_W0_NOBP`) and firing —
+67,611 collapses on 300 games — and the repo's own miss counters say why the rest survive:
+
+```
+w0_unif_miss nomemo=0 multi=26947
+```
+
+`nomemo` is the coverage case and IS a lever; `multi` means the apply reached 2+ class-on
+breakpoints, where uniform *k* is NOT rank *k* and declining it **deletes a line**. On kitty the
+split is 0 / 26,947 — *all* of it is the case the identity does not cover. The comment at the
+counter's definition anticipates exactly this reading: *"The first is a lever; the second is not,
+and no amount of measured post-apply duplication makes it one."*
+
+**So the only non-lossy lever left on the candidate side is the last item of (ii): make an
+individual APPLY cheaper** — which is the wide-board plan enumeration, 88-116 plans per
+`EnumeratePlans` call inside ~13,686 rollouts. That is where the remaining order of magnitude is,
+and nothing above touches it.
+
+**Two further negative results worth keeping, so nobody re-runs them:**
 * `MTG_FOLD_SEARCH_ODO=1` (the canonical-prefix fold adopted on Snow) moves gi=371's plan count by
   **-0.19%** (15,648,149 vs 15,677,338). This is genuine menu WIDTH, not the prefix redundancy that
   lever folds. Do not reach for it here.
@@ -477,12 +518,15 @@ comment. Every number above is from env-var arms.
 
 ### Left to do, in value order
 
-1. **THE BIG ONE, and it needs no ruling: the wide-board plan explosion** (§4b/§4c). One decision
-   enumerating 31-145 million plans is where the remaining order of magnitude is, and ~30-38% of
-   its scored root candidates are duplicates. Non-lossy, pre-approved by "COLLAPSE WASTED SEARCH
-   UNCONDITIONALLY", and the thing the screens actually need. Start from the equip-assignment
-   symmetry (which Equipment on which interchangeable host); `MTG_FOLD_SEARCH_ODO` is NOT it
-   (-0.19%, measured).
+1. **THE BIG ONE, and it needs no ruling: make an individual APPLY cheaper on a wide board**
+   (§4b/§4c, narrowed by §4d). One decision enumerating 31-145 million plans is where the remaining
+   order of magnitude is. §4d closes every *candidate-side* route to it — the duplicates are all
+   breakpoint variants upstream of a fixed-width index, and the two 100%-duplicate arms are all
+   `multi`, which the identity does not cover — so the target is specifically the **88-116 plans per
+   `EnumeratePlans` call** inside the ~13,686 rollouts, not the candidate count. Non-lossy,
+   pre-approved by "COLLAPSE WASTED SEARCH UNCONDITIONALLY". Start from the equip-assignment
+   symmetry (which Equipment on which interchangeable host). Already excluded: `MTG_FOLD_SEARCH_ODO`
+   (-0.19%), `MTG_CAND_DEDUP` (byte-identical), arm removal (lossy).
 2. **The user's ruling** on §5b, then rebaseline the smoke and regression tiers for whichever
    configuration is taken, and re-check the chosen price against the GENERATION shapes (value-leaf
    matrix, mulligan gen at d1/b3) before any generation run — that is where price 1 historically
