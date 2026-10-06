@@ -492,6 +492,11 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   accidental (the user may have re-saved it via the play viewer). Only the user
   decides to change or remove a reference. This rule exists because reverting a
   re-saved reference already destroyed unrecoverable user work once.
+  **A reference that stops replaying is the AGENT's to fix, never the user's to re-save** (user
+  directive, 2026-10-06: *"I shouldn't need to re-save a reference. It is up to you to fix it if the
+  reference broke."*). A play-drift / board-diverged / enum-gap / shuffle-dead reference is a defect
+  in the engine or in the replay checker: root-cause it and make the recorded game replay again.
+  Never list "user re-save" as an owed item or a remedy.
 
 - **Deferred work goes in `docs/design/`, not private agent memory.** If a
   project, plan, or idea is *deferred* — i.e. not being worked on right now — write

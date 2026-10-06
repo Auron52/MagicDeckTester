@@ -23,11 +23,12 @@ docs/design/decision-indexed-choice-protocol.md: absent answer -> engine
 default). What the walk can then still surface, as information:
 
   repaired      the line reproduces after index repair / default answers
-                (re-save via the GUI to make it permanent),
+                (no action: the checker reproduces it -- the user is NEVER asked to re-save),
   play-drift    the line replays mechanically but ends in a DIFFERENT
                 outcome -- a real behaviour change to review,
   shuffle-dead  a recorded plan is gone AND the hand differs: a mid-game
-                reshuffle moved the draws (the ACCEPTED class; re-play by hand),
+                reshuffle moved the draws -- an AGENT's job to root-cause and restore (USER
+                2026-10-06: "I shouldn't need to re-save a reference. It is up to you to fix it"),
   ENUM-GAP      a recorded plan is gone with an IDENTICAL hand: the engine
                 stopped offering a plan for the same state -- investigate,
   mull-drift    the engine opens a different hand; the recorded game no longer
@@ -1814,12 +1815,12 @@ def main():
           f"{counts['contract']} contract-fail  ({len(refs)} refs)")
     if counts["repaired"]:
         print("  repaired     = recorded line REPRODUCED after repairing stale indices / answering decision")
-        print("                 points the reference predates. Not a regression; re-save to make it permanent")
+        print("                 points the reference predates. Not a regression; no action (never ask the user to re-save)")
     if counts["play"]:
         print("  play-drift   = the recorded line replays to a DIFFERENT outcome -> a real behaviour change")
     if counts["shuffle-dead"]:
         print("  shuffle-dead = a mid-game reshuffle moved the draws; the recorded line targets cards no")
-        print("                 longer drawn. The accepted class -- restore only by re-playing by hand")
+        print("                 longer drawn. An AGENT must root-cause what moved the shuffle and restore the replay")
     if counts["unresolvable"]:
         print("  ENUM-GAP     = the hand is IDENTICAL yet a previously-offered plan is no longer enumerated:")
         print("                 the engine changed under the same state. Investigate before re-saving anything")

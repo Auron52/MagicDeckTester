@@ -56,8 +56,8 @@ Aligns on decision IDENTITY `(type, turn, source)`, never stream position:
 - NO casts-only/any-land fallback tier: measured on s8_gi7 it compounds substitutions into a
   false loss. A shuffle-dead reference is dead; the checker says so instead of approximating.
 
-Categories: `ok` / `repaired` (reproduces after index repair or default answers — re-save via
-the GUI to make it permanent) / `play-drift` (replays to a DIFFERENT outcome — real behaviour
+Categories: `ok` / `repaired` (reproduces after index repair or default answers — no action;
+the user is never asked to re-save) / `play-drift` (replays to a DIFFERENT outcome — real behaviour
 change) / `shuffle-dead` / `ENUM-GAP` / `mull-drift` (like-for-like hand comparison). Exit code:
 contract failures always gate; `--strict` also gates play-drift + enum-gap (the engine-moved
 categories). shuffle-dead and mull-drift are accepted classes and never gate.
@@ -92,9 +92,10 @@ categories). shuffle-dead and mull-drift are accepted classes and never gate.
    they should differ in `summary` or `land`/`casts`; where they legitimately cannot (MDFC
    faces), the recorded index is the tie-break — do not reorder duplicate groups gratuitously.
 3. **Run `bash test/viewer_checks.sh` after touching the emitter, the enumerator, or
-   tools/play/** — `repaired` is fine (re-save when convenient), `play-drift`/`ENUM-GAP` are
-   findings to investigate BEFORE re-saving anything (re-saving on top of a regression would
-   bake it in).
+   tools/play/** — `repaired` is fine (no action), `play-drift`/`ENUM-GAP`/`BOARD-DIVERGED` are
+   findings an AGENT root-causes and fixes -- in the engine or the checker, never by asking the
+   user to re-save (USER 2026-10-06: "I shouldn't need to re-save a reference. It is up to you to
+   fix it if the reference broke.").
 4. **References are commit-only** (CLAUDE.md): the checker never writes them. To make repairs
    permanent, `scripts/ref_regenerate.py` (user-directed, 2026-07-30) re-writes a `repaired`
    reference as a fresh engine trace of the SAME game -- overwriting only when the candidate
