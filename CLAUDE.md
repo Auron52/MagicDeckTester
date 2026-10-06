@@ -362,6 +362,27 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   produce the same result for the same seed, which is what `src/core/Library.h`'s open-coded
   MSVC shuffle exists to guarantee. If it goes red, root-cause it; never rebaseline over it.
 
+- **WORKTREES LIVE UNDER `.claude/worktrees/` (the persistent host mount), NEVER `/tmp` (user
+  directive, 2026-10-06).** `/tmp` and `/workspaces` are the container's overlay filesystem: a
+  stopped or replaced container takes them with it. Only the repo itself
+  (`/workspaces/MagicDeckTester2`, a 9p mount of the host folder) survives, so a worktree is
+  retrievable later ONLY if it is under the repo: `git worktree add .claude/worktrees/<name> ...`
+  (gitignored; the agent harness already uses it). The user's words: *"having a location where they
+  can be retrieved is important as sometimes the container is stopped or even replaced."*
+  * **What it cost:** on 2026-10-05 another agent ran the play viewer from a worktree under `/tmp`;
+    the hand-played references it saved were lost with the container. The viewer now refuses to
+    start from a temporary root (`c7487fb9`), but that guard covers the viewer only -- a worktree
+    holding unpushed commits or uncommitted edits under `/tmp` is just as exposed.
+  * **Clean up occasionally, but only what has NOTHING TO ADD** (the user's words: *"we probably do
+    want to occasionally clean them up if there are old outdated worktrees with nothing to add"*).
+    `python3 scripts/worktree_audit.py` is the test, made explicit: a worktree is STALE only when it
+    is clean (no modified/untracked files), every commit is on origin by hash OR on the main branch
+    by patch (`git cherry`), no process is working in it, and it has not been touched for 2 days.
+    Everything else is KEEP with the reason named. `--prune-stale --yes` removes STALE ones with
+    `git worktree remove` (the branch stays; it is retrievable from the remote, which is what the
+    test guarantees). Removing a worktree is destructive for whichever session owns it, so run the
+    prune only when the user asks, and show the dry-run list first.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level

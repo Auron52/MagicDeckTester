@@ -4554,6 +4554,15 @@ function promptPanelHtml(d, dec){
       (mayDecline?`<button id="sacdecline" class="ghost">Decline — sacrifice nothing</button>`:'')+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='attach_host' && d.soulbond){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>Soulbond: pair ${esc(d.source||'this creature')} — with which creature?</h3>`+
+      `<div class="sub">${esc(d.source||'It')} may be paired with one of your other unpaired creatures (click it), or not paired at all. While paired, both creatures keep the bonus for as long as you control both.</div>`+
+      `<div class="pbtns"><span class="pcount">Pairing with: <b>${opt?esc(opt.name):'(pick a creature)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">Don't pair</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
   if (dec==='attach_host'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
@@ -4738,6 +4747,7 @@ function wireDecisionPanel(d, dec){
     const na=panel.querySelector('#decnoattach');
     if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline flicker`
                                            : dec==='treasurify' ? `${d.source}: no Treasure (${d.side==='opponent'?'opponent':'yours'})`
+                                           : (dec==='attach_host' && d.soulbond) ? `${d.source}: soulbond — not paired`
                                                              : `${d.source}: leave unattached`);
   }
 }
@@ -5196,7 +5206,9 @@ function commitBoardSel(d, dec){
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: sacrifice ${opt?opt.name:'(default)'}`;
   } else if (dec==='attach_host'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
-    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: attach to ${opt?opt.name:'creature'}`;
+    oi=opt?opt.index:d.heuristic_default;
+    lab=d.soulbond ? `${d.source}: soulbond → pair with ${opt?opt.name:'creature'}`
+                   : `${d.source}: attach to ${opt?opt.name:'creature'}`;
   } else if (dec==='flicker'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: flicker ${opt?opt.name:'permanent'}`;
@@ -5392,7 +5404,12 @@ function autoResolveDecision(dec){
   // `revive`, which LOOK similar but answer with ONE INT PER CANDIDATE rather than a single option
   // index -- pushing one int for those would desynchronise the whole --choices stream.
   const ONE_OPTION_AUTO = { attach_host:'attach', flicker:'flicker' };
-  if ((dec.type in ONE_OPTION_AUTO) && (dec.options||[]).length<=1){
+  // SOULBOND IS THE EXCEPTION (USER 2026-10-06: "We should always be able to choose to pair with any
+  // creature OR not pair at all"). The engine flags the pairing consumer of attach_host with
+  // `soulbond: true`; a lone legal partner is still a real decision there because "don't pair" is
+  // always on the table (CR 702.46b "you MAY pair"). The Equipment attach keeps the auto rule.
+  if ((dec.type in ONE_OPTION_AUTO) && !(dec.type==='attach_host' && dec.soulbond)
+      && (dec.options||[]).length<=1){
     const def=(dec.heuristic_default==null?-1:dec.heuristic_default);
     const o=(dec.options||[])[0];
     dec._autoStep = true;

@@ -14,7 +14,7 @@ summaries. The reconstructions reproduce the user's hands, draws and lines exact
 | 2 | SelesnyaLifegain seed 4, T5 Ageless Entity | "Wirewood Lodge is left untapped ... should not be kept over creatures" | The Lodge's live untap-burst reserve (rank 68, past the whole creature band) fired unconditionally | Hold only when the burst is NEEDED by the turn's remaining bill (`UntapBurstNeededByLine`, `MTG_LODGE_HOLD_NEEDED`) |
 | 3 | SelesnyaLifegain seed 9, T5 Blighted Steppe | "It should tap all lands rather than the lord" | `ActLineHoldMask` held a {W} provider for the Steppe's own {W} WHILE paying the Steppe | Pending-only demand: the activation being paid, and ones already paid, no longer count (`ActLinePayScope` / `ActLinePassScope`) |
 | 4 | SelesnyaLifegain seed 12, T5 Priest + Steppe | "the Alchemist should not be tapped" | Same mask: the Sanctuary held for the Steppe's {W} during the Steppe's own payment | Same fix |
-| 5 | WhiteKnights seed 13, T3 Silverblade Paladin | "No decision was given about soulbond" | ONE legal partner (Adeline; the Human token is created when she attacks, after the cast) and the viewer auto-takes one-option attach dialogs by the USER's own rulings of 2026-08-27 ("That shouldn't exist") and 2026-09-07 ("if there is no choice, just choose the only option") | None -- working as ruled; see "Open questions" |
+| 5 | WhiteKnights seed 13, T3 Silverblade Paladin | "No decision was given about soulbond" | ONE legal partner (Adeline; the Human token is created when she attacks, after the cast) and the viewer auto-took one-option attach dialogs by the 2026-08-27 / 2026-09-07 rulings | USER 2026-10-06: "We should always be able to choose to pair with any creature OR not pair at all" -- soulbond is now ALWAYS a dialog (engine flags `soulbond: true` on the attach_host decision; the viewer exempts it from the one-option auto rule and offers "Don't pair"). The Equipment attach keeps the auto rule. |
 | 6 | Snow seed 13, T4 Scrying Sheets | "we should not be holding up Red" | NOT REPRODUCED: on the user's line the current tree AND origin `c7487fb9` both pay the dig's `{1}{S}` with Forest + Mountain (Red is spent); the ideal is Mountain + Boreal Druid, keeping {G} and {U} for the found Druid and the Frost Augur in hand | None at default; see "Open questions" |
 
 ## The two mechanisms, in detail
@@ -81,9 +81,15 @@ matcher.
 
 ## Open questions (surfaced, not blocking)
 
-1. **Soulbond with one partner.** The dialog is suppressed by the user's own one-option rule. If
-   soulbond should be an exception (declining a pairing is legal, if dominated here), the change is a
-   one-line exclusion in `index.html`'s `ONE_OPTION_AUTO`.
+1. **Soulbond partner quality in the SEARCH (USER 2026-10-06: "even in the search I would say it is
+   wrong to pair with a 1/1").** `SoulbondPartner` picks the highest effective power among the legal
+   candidates. The list's printed creatures are all 2+ power; its 1/1s are tokens (Adeline and Hero
+   of Bladehold on attack, Worthy Knight on a Knight cast, Basri on tap) -- and, as the user pointed
+   out, a token only exists once its maker, itself a 2+-power creature, is on the board, so a Paladin
+   pairs with that on entry and is never unpaired when a token enters. The residual case is a LATER
+   Paladin entering when every 2+-power creature is already paired, where the entry trigger's only
+   unpaired candidates are tokens. Rare, and in a goldfish race pairing with a token (+2 double
+   strike on the Paladin) still beats not pairing. No lever built; revisit only if a game shows it.
 2. **Snow seed 13.** The report does not reproduce on the user's line on either binary. The better
    payment (Mountain + Druid) needs the needs-based lever to value the dig's expected find; the
    lever's library-reveal expectation does not yet cover Scrying Sheets / Frost Augur finds. That is

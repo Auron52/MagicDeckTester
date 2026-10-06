@@ -3566,6 +3566,12 @@ static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
     // Discriminated on the SOURCE card's own param -- for the Skyhunter path `source` is the
     // Equipment's name (soulbond false); for soulbond it is the pairing creature's.
     const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
+    // `soulbond` is a FIELD, not just a note, because the viewer treats the two consumers
+    // differently: a one-option Equipment attach is auto-taken (USER 2026-08-27), while a soulbond
+    // pairing is ALWAYS a dialog -- "We should always be able to choose to pair with any creature OR
+    // not pair at all" (USER 2026-10-06, WhiteKnights viewer seed 13 T3: the Paladin's only legal
+    // partner was Adeline and the pairing was taken silently).
+    d.Bool("soulbond", sd != nullptr && sd->params.soulbond);
     if (sd != nullptr && sd->params.soulbond)
     {
         d.Note("reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), "
