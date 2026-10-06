@@ -1,0 +1,471 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 8, "won": true,
+  "mulligan": { "count": 1, "bottom": [41] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 12, "name": "Botanical Sanctum" }, { "num": 39, "name": "Mother of Runes" }, { "num": 41, "name": "Mythic Proportions" }, { "num": 45, "name": "Prodigious Growth" }, { "num": 40, "name": "Mother of Runes" }, { "num": 46, "name": "Razorverge Thicket" }, { "num": 9, "name": "Birds of Paradise" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 31, "name": "Forest" }, { "num": 41, "name": "Mythic Proportions" }, { "num": 22, "name": "Colossification" }, { "num": 29, "name": "Forest" }, { "num": 45, "name": "Prodigious Growth" }, { "num": 59, "name": "Somberwald Sage" }, { "num": 49, "name": "Remote Farm" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 31, "name": "Forest", "win_optimal": true }, { "num": 41, "name": "Mythic Proportions", "win_optimal": true }, { "num": 22, "name": "Colossification", "win_optimal": true }, { "num": 29, "name": "Forest", "win_optimal": true }, { "num": 45, "name": "Prodigious Growth", "win_optimal": true }, { "num": 59, "name": "Somberwald Sage", "win_optimal": true }, { "num": 49, "name": "Remote Farm", "win_optimal": true }],
+  "ai_choice": { "index": 6, "num": 49, "name": "Remote Farm" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 49, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Remote Farm", "idx": 0, "num": 49, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 59, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Remote Farm", "idx": 0, "num": 49, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 59, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Somberwald Sage" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 59, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Somberwald Sage", "land": "Forest", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 0, "num": 49, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 0, "num": 49, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Eldrazi Conscription" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 29, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Somberwald Sage", "land": "Forest", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Arcanum Wings" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Avacyn's Pilgrim" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 3, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Avacyn's Pilgrim, Somberwald Sage", "land": null, "casts": ["Avacyn's Pilgrim", "Somberwald Sage"], "cast_order_canonical": ["Avacyn's Pilgrim", "Somberwald Sage"], "actions": [{ "card": "Avacyn's Pilgrim" }, { "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Somberwald Sage, Avacyn's Pilgrim", "land": null, "casts": ["Somberwald Sage", "Avacyn's Pilgrim"], "cast_order_canonical": ["Somberwald Sage", "Avacyn's Pilgrim"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Avacyn's Pilgrim" }] },
+    { "index": 2, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 3, "summary": "land=none; cast: Avacyn's Pilgrim", "land": null, "casts": ["Avacyn's Pilgrim"], "actions": [{ "card": "Avacyn's Pilgrim" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 4, "num": 3, "is_land": false }, { "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1, "floating_creature_mana": {"G": 2} },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 4, "num": 3, "is_land": false }, { "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Remote Farm" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 4, "num": 3, "is_land": false, "taps": "W" }, { "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 50, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Remote Farm; cast: Somberwald Sage", "land": "Remote Farm", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 2, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 4, "num": 3, "is_land": false, "taps": "W" }, { "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 5, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 4, "num": 3, "tapped": true, "is_land": false }, { "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 5, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 25, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 7, "card": "Seaside Citadel" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 4, "num": 3, "is_land": false, "taps": "W" }, { "name": "Forest", "idx": 1, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 0, "num": 49, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 5, "num": 50, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 2, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Colossification → Somberwald Sage #1, Somberwald Sage", "land": "Seaside Citadel", "casts": ["Colossification", "Somberwald Sage"], "cast_order_canonical": ["Colossification", "Somberwald Sage"], "actions": [{ "card": "Colossification", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }, { "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Colossification → Somberwald Sage #1", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Colossification"], "cast_order_canonical": ["Somberwald Sage", "Colossification"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Colossification", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 2, "summary": "land=Seaside Citadel; cast: Colossification → Avacyn's Pilgrim, Somberwald Sage", "land": "Seaside Citadel", "casts": ["Colossification", "Somberwald Sage"], "cast_order_canonical": ["Colossification", "Somberwald Sage"], "actions": [{ "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Somberwald Sage" }] },
+    { "index": 3, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Colossification → Avacyn's Pilgrim", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Colossification"], "cast_order_canonical": ["Somberwald Sage", "Colossification"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 4, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Colossification → Somberwald Sage #2", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Colossification"], "cast_order_canonical": ["Somberwald Sage", "Colossification"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Colossification", "enchant_target": 58, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #2" }] },
+    { "index": 5, "summary": "land=Seaside Citadel; cast: Prodigious Growth → Somberwald Sage #1, Somberwald Sage", "land": "Seaside Citadel", "casts": ["Prodigious Growth", "Somberwald Sage"], "cast_order_canonical": ["Prodigious Growth", "Somberwald Sage"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }, { "card": "Somberwald Sage" }] },
+    { "index": 6, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Prodigious Growth → Somberwald Sage #1", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Prodigious Growth"], "cast_order_canonical": ["Somberwald Sage", "Prodigious Growth"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Prodigious Growth", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 7, "summary": "land=Seaside Citadel; cast: Prodigious Growth → Avacyn's Pilgrim, Somberwald Sage", "land": "Seaside Citadel", "casts": ["Prodigious Growth", "Somberwald Sage"], "cast_order_canonical": ["Prodigious Growth", "Somberwald Sage"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Somberwald Sage" }] },
+    { "index": 8, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Prodigious Growth → Avacyn's Pilgrim", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Prodigious Growth"], "cast_order_canonical": ["Somberwald Sage", "Prodigious Growth"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Prodigious Growth", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 9, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Prodigious Growth → Somberwald Sage #2", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Prodigious Growth"], "cast_order_canonical": ["Somberwald Sage", "Prodigious Growth"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Prodigious Growth", "enchant_target": 58, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #2" }] },
+    { "index": 10, "summary": "land=none; cast: Colossification → Somberwald Sage #1, Somberwald Sage", "land": null, "casts": ["Colossification", "Somberwald Sage"], "cast_order_canonical": ["Colossification", "Somberwald Sage"], "actions": [{ "card": "Colossification", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }, { "card": "Somberwald Sage" }] },
+    { "index": 11, "summary": "land=none; cast: Somberwald Sage, Colossification → Somberwald Sage #1", "land": null, "casts": ["Somberwald Sage", "Colossification"], "cast_order_canonical": ["Somberwald Sage", "Colossification"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Colossification", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 12, "summary": "land=none; cast: Colossification → Avacyn's Pilgrim, Somberwald Sage", "land": null, "casts": ["Colossification", "Somberwald Sage"], "cast_order_canonical": ["Colossification", "Somberwald Sage"], "actions": [{ "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Somberwald Sage" }] },
+    { "index": 13, "summary": "land=none; cast: Somberwald Sage, Colossification → Avacyn's Pilgrim", "land": null, "casts": ["Somberwald Sage", "Colossification"], "cast_order_canonical": ["Somberwald Sage", "Colossification"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 14, "summary": "land=none; cast: Somberwald Sage, Colossification → Somberwald Sage #2", "land": null, "casts": ["Somberwald Sage", "Colossification"], "cast_order_canonical": ["Somberwald Sage", "Colossification"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Colossification", "enchant_target": 58, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #2" }] },
+    { "index": 15, "summary": "land=none; cast: Prodigious Growth → Somberwald Sage #1, Somberwald Sage", "land": null, "casts": ["Prodigious Growth", "Somberwald Sage"], "cast_order_canonical": ["Prodigious Growth", "Somberwald Sage"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }, { "card": "Somberwald Sage" }] },
+    { "index": 16, "summary": "land=none; cast: Somberwald Sage, Prodigious Growth → Somberwald Sage #1", "land": null, "casts": ["Somberwald Sage", "Prodigious Growth"], "cast_order_canonical": ["Somberwald Sage", "Prodigious Growth"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Prodigious Growth", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 17, "summary": "land=none; cast: Prodigious Growth → Avacyn's Pilgrim, Somberwald Sage", "land": null, "casts": ["Prodigious Growth", "Somberwald Sage"], "cast_order_canonical": ["Prodigious Growth", "Somberwald Sage"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Somberwald Sage" }] },
+    { "index": 18, "summary": "land=none; cast: Somberwald Sage, Prodigious Growth → Avacyn's Pilgrim", "land": null, "casts": ["Somberwald Sage", "Prodigious Growth"], "cast_order_canonical": ["Somberwald Sage", "Prodigious Growth"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Prodigious Growth", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 19, "summary": "land=none; cast: Somberwald Sage, Prodigious Growth → Somberwald Sage #2", "land": null, "casts": ["Somberwald Sage", "Prodigious Growth"], "cast_order_canonical": ["Somberwald Sage", "Prodigious Growth"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Prodigious Growth", "enchant_target": 58, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #2" }] },
+    { "index": 20, "summary": "land=Seaside Citadel; cast: Colossification → Somberwald Sage #1", "land": "Seaside Citadel", "casts": ["Colossification"], "actions": [{ "card": "Colossification", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 21, "summary": "land=Seaside Citadel; cast: Colossification → Avacyn's Pilgrim", "land": "Seaside Citadel", "casts": ["Colossification"], "actions": [{ "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 22, "summary": "land=Seaside Citadel; cast: Prodigious Growth → Somberwald Sage #1", "land": "Seaside Citadel", "casts": ["Prodigious Growth"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 23, "summary": "land=Seaside Citadel; cast: Prodigious Growth → Avacyn's Pilgrim", "land": "Seaside Citadel", "casts": ["Prodigious Growth"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 24, "summary": "land=Seaside Citadel; cast: Somberwald Sage", "land": "Seaside Citadel", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 25, "summary": "land=none; cast: Colossification → Somberwald Sage #1", "land": null, "casts": ["Colossification"], "actions": [{ "card": "Colossification", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 26, "summary": "land=none; cast: Colossification → Avacyn's Pilgrim", "land": null, "casts": ["Colossification"], "actions": [{ "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 27, "summary": "land=none; cast: Prodigious Growth → Somberwald Sage #1", "land": null, "casts": ["Prodigious Growth"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 59, "enchant_target_name": "Somberwald Sage", "enchant_target_label": "Somberwald Sage #1" }] },
+    { "index": 28, "summary": "land=none; cast: Prodigious Growth → Avacyn's Pilgrim", "land": null, "casts": ["Prodigious Growth"], "actions": [{ "card": "Prodigious Growth", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 29, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 30, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 14,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 7, "kind": "trigger", "text": "Colossification: taps Somberwald Sage (its mana ability may still be used this phase)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Colossification", "idx": 5, "num": 22, "is_aura": true, "attached_to": 59, "is_land": false }, { "name": "Forest", "idx": 0, "num": 31, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 29, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 4, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 1, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Remote Farm"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Somberwald Sage", "land": "Seaside Citadel", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 2, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 15,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Colossification", "idx": 5, "num": 22, "is_aura": true, "attached_to": 59, "is_land": false }, { "name": "Forest", "idx": 0, "num": 31, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 29, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 4, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 1, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Remote Farm"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 16,
+  "type": "main_phase",
+  "turn": 8,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 8, "card": "Somberwald Sage" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Colossification", "idx": 5, "num": 22, "is_aura": true, "attached_to": 59, "is_land": false }, { "name": "Forest", "idx": 0, "num": 31, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 2, "num": 29, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 4, "num": 50, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Somberwald Sage", "idx": 1, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Remote Farm"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Somberwald Sage, Somberwald Sage", "land": "Seaside Citadel", "casts": ["Somberwald Sage", "Somberwald Sage"], "cast_order_canonical": ["Somberwald Sage", "Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Somberwald Sage, Somberwald Sage", "land": null, "casts": ["Somberwald Sage", "Somberwald Sage"], "cast_order_canonical": ["Somberwald Sage", "Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Somberwald Sage" }] },
+    { "index": 2, "summary": "land=Seaside Citadel; cast: Somberwald Sage", "land": "Seaside Citadel", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 3, "summary": "land=none; cast: Somberwald Sage", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 4, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 8, "kind": "combat", "text": "⚔ attacked: Somberwald Sage (20), Avacyn's Pilgrim (1) — 21 to opponent (19→-2)" }
+  ]
+}
