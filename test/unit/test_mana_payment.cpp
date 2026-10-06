@@ -739,6 +739,55 @@ TEST_CASE("mana cache: attaching a land aura splits the key (no stale unpayable 
                               nullptr, nullptr, &leftover));
 }
 
+// MANA-CACHE KEY vs SCALED MANA DORKS (2026-10-06, the pooled-suite-only SelesnyaLifegain play
+// flicker). Elvish Archdruid / Priest of Titania tap for the live Elf count and Accomplished
+// Alchemist for this turn's life gained -- inputs outside every source's (def, tapped), so a
+// non-source Elf (Wellwisher) or a life gain changes the payment without changing what the key saw.
+// The cache is thread_local and outlives a game and a batch job, so an entry stored at one count and
+// replayed at another made a game's play depend on which games had shared its worker
+// (MTG_MANA_CACHE_VERIFY: 7,937 stale hits in one Selesnya d3 game). Each pair below poses the SAME
+// source board and cost twice, differing only in the scaled yield; the second answer must be its
+// own, in BOTH directions (a stale negative and a stale positive).
+TEST_CASE("mana cache: a scaled dork's live yield splits the key (Elf count, life gained)")
+{
+    EnsureCards();
+    const ManaCost cost = Cost(2, 0, 0, 0, 0, /*g=*/1);   // {2}{G}
+
+    // Forest + Elvish Archdruid: 1 + (1 Elf) = 2 mana. + Wellwisher (an Elf, not a mana source):
+    // 1 + 2 = 3 mana. Wellwisher is not a source, so both boards present the same source list.
+    const GameState lone = MakeBoard({"Forest", "Elvish Archdruid"});
+    GameState with_elf = lone;
+    with_elf.battlefield.push_back(MakeLand("Wellwisher"));
+
+    {   // stale NEGATIVE: unpayable first, then the grown board must still pay
+        GameState a = lone;  ManaPool la;
+        CHECK_FALSE(TapForCostBacktrack(a, cost, false, ManaPool{}, nullptr, nullptr, &la));
+        GameState b = with_elf;  ManaPool lb;
+        CHECK(TapForCostBacktrack(b, cost, false, ManaPool{}, nullptr, nullptr, &lb));
+    }
+    {   // stale POSITIVE: payable first (cached), then the smaller board must refuse
+        const ManaCost c2 = Cost(2, 0, 0, 0, 0, 2);   // {2}{G}{G}: 4 = Forest + 3-Elf Archdruid
+        GameState two = with_elf;
+        two.battlefield.push_back(MakeLand("Wellwisher"));
+        ManaPool lt;
+        CHECK(TapForCostBacktrack(two, c2, false, ManaPool{}, nullptr, nullptr, &lt));
+        GameState one = with_elf;  ManaPool lo;
+        CHECK_FALSE(TapForCostBacktrack(one, c2, false, ManaPool{}, nullptr, nullptr, &lo));
+    }
+
+    // Accomplished Alchemist: max(1, life gained this turn) of one colour.
+    if (CardDatabase::Instance().Lookup("Accomplished Alchemist") != nullptr)
+    {
+        const GameState alch = MakeBoard({"Forest", "Accomplished Alchemist"});
+        GameState gained = alch;
+        gained.players[0].life_gained_this_turn = 2;      // Alchemist yields 2 -> 3 total
+        GameState none = alch;                            // Alchemist yields 1 -> 2 total
+        ManaPool lg, ln;
+        CHECK(TapForCostBacktrack(gained, cost, false, ManaPool{}, nullptr, nullptr, &lg));
+        CHECK_FALSE(TapForCostBacktrack(none, cost, false, ManaPool{}, nullptr, nullptr, &ln));
+    }
+}
+
 // ENERGY REFUND ON FAILED PAYMENT (USER-found, EDF s3 T2, 2026-09-07: "Fertile Ground -> Adarkar
 // Wastes was silently ignored"). tap_source spends Aether Hub's {E} as part of the coloured tap's
 // activation cost, but the total-failure restore in TapForCostSharedOnce put back the battlefield,
