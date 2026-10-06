@@ -1532,7 +1532,10 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
     // other tutor looks at the library. Only the pool differs -- the type filter, the colour
     // filter, the ranking and the whole searched-index axis are shared, which is the entire reason
     // a wish is modelled as a tutor rather than as its own mechanic.
-    const std::vector<Card>* wish_pool = pp.wish_from_sideboard ? &ap.sideboard : nullptr;
+    // A REGROWTH (tutor_from_graveyard: Auroral Procession / Reborn Hope) searches the GRAVEYARD --
+    // the same "only the pool differs" rule.
+    const std::vector<Card>* wish_pool = pp.wish_from_sideboard  ? &ap.sideboard
+                                       : pp.tutor_from_graveyard ? &ap.graveyard : nullptr;
 
     // Unpruned audit (MTG_UNPRUNED): return EVERY legal tutor target (distinct names)
     // so the search branches over all of them, instead of the heuristic-narrowed pick.
@@ -2912,6 +2915,12 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
         ++aura_count;
         pw += d->params.aura_power_bonus;
         tb += d->params.aura_tough_bonus;
+        // Steel of the Godhead: each colour-conditional grant applies while the HOST has that
+        // colour (read off the battlefield Permanent's own mask). Empty for every other Aura.
+        for (const CardParams::AuraColorBonus& cb : d->params.aura_color_bonuses)
+        {
+            if (creature.card.HasColor(cb.color)) { pw += cb.power; tb += cb.toughness; }
+        }
         if (d->params.aura_set_base_power >= 0)
         { set_p = d->params.aura_set_base_power; set_t = d->params.aura_set_base_toughness; }
         if (!d->params.aura_scale_kind.empty())
@@ -3314,6 +3323,12 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
         if (!d) { return false; }
         if (a.aura_attached_to == creature.card.m_number
             && d->params.is_aura && d->params.aura_grants_lifelink) { return true; }
+        // Steel of the Godhead: lifelink "as long as enchanted creature is white".
+        if (a.aura_attached_to == creature.card.m_number && d->params.is_aura)
+        {
+            for (const CardParams::AuraColorBonus& cb : d->params.aura_color_bonuses)
+            { if (cb.lifelink && creature.card.HasColor(cb.color)) { return true; } }
+        }
         if (a.equipped_to == creature.card.m_number
             && d->params.is_equipment && d->params.equip_grants_lifelink) { return true; }
         // Static subtype lifelink LORD (Lyra Dawnbringer: "Other Angels you control have
@@ -4540,6 +4555,7 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
             || pp.quest_anthem_threshold > 0)
         { bs.anthems.push_back(i); }
         if ((pp.is_aura && pp.aura_grants_lifelink)
+            || (pp.is_aura && !pp.aura_color_bonuses.empty())   // Steel: a CONDITIONAL lifelink (superset)
             || (pp.is_equipment && pp.equip_grants_lifelink)
             || pp.grants_lifelink
             || pp.etb_choose_keyword_count > 0)   // Rick: a chosen lifelink grant (superset contract)
@@ -19681,6 +19697,29 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 }
             }
             else { TrickDraw(state, controller, 1); }
+            // Troyan, Gutsy Explorer: "{U}, {T}: Draw a card, then discard a card." The discard is
+            // the provider's non-cleanup pick (the deck's own bucketed discard doctrine -- the Neheb /
+            // Burning-Fist precedent; MTG_NONCLEANUP_SHED_WORST brackets it), surfaced to a human as
+            // a `discard` decision by ChooseNonCleanupDiscardIndex itself. This shared resolution is
+            // what both worlds call, so executor and rollout discard the same card.
+            if (d->params.tap_draw_then_discard)
+            {
+                Player& ap = state.players[controller];
+                const int hi = ChooseNonCleanupDiscardIndex(state, controller, src_name);
+                if (hi >= 0 && hi < static_cast<int>(ap.hand.size()))
+                {
+                    const Card gone = ap.hand[static_cast<std::size_t>(hi)];
+                    ap.hand.erase(ap.hand.begin() + hi);
+                    ap.graveyard.push_back(gone);
+                    ++ap.cards_cycled_or_discarded_this_turn;
+                    if (g_reveal_logger) { g_reveal_logger->LogDiscard(gone.m_number, gone.m_name.str()); }
+                    if (g_play_event_sink && !g_tap_speculating)
+                    {
+                        EmitPlayEvent(state.turn_number, "ability",
+                                      src_name + ": draws, then discards " + gone.m_name.str());
+                    }
+                }
+            }
             break;
         case PermAbilityMode::Drain:
         {
@@ -24959,10 +24998,51 @@ inline bool SubtypeManaOk(const CardParams& pp)
     return false;
 }
 
+// ---- BIG-SPELL-ONLY MANA (Troyan, Gutsy Explorer) ------------------------------------------
+// "Spend this mana only to cast spells with mana value 5 or greater or spells with {X} in their mana
+// costs." The test is the PAYING SPELL's printed cost, so it rides the same thread_local identity as
+// Giada's subtype restriction (PayingSpellCard), plus one more scope for the whole-turn batch prepay
+// (BatchPrepayMainCasts pays several casts in one solve, so no single card is "the" spell):
+//   BigSpellBatchState() == -1  not inside a batch prepay -> decide off PayingSpellCard();
+//                        ==  1  a batch whose EVERY cast qualifies -> usable;
+//                        ==  0  a batch holding a non-qualifying cast -> refused (the batch
+//                               declines first whenever such a source is live -- see the prepay).
+// An UNSET identity is the OPPOSITE default from Giada's on the two real-payment sites (1 = the
+// payer's usable(), 3 = the backtracker): no spell = an ACTIVATED ability (Greaves' equip, Arcanum
+// Wings' swap, Troyan's own loot), which this mana may never pay -- so refusing there is the rule,
+// not a guess. The two BOUND sites (2 = TapFlowInfeasible's early-bail probe, 4 =
+// UntappedManaUpperBound) stay permissive: a bound must not under-count.
+inline int& BigSpellBatchState()
+{
+    static thread_local int v = -1;
+    return v;
+}
+struct BigSpellBatchScope
+{
+    int prev;
+    explicit BigSpellBatchScope(int st) : prev(BigSpellBatchState()) { BigSpellBatchState() = st; }
+    ~BigSpellBatchScope() { BigSpellBatchState() = prev; }
+};
+inline bool BigSpellOnlySource(const CardParams& pp) { return pp.mana_only_spell_min_mv > 0; }
+inline bool SpellQualifiesForBigMana(const Card& spell, const CardParams& pp)
+{
+    return spell.m_mana_cost.ManaValue() >= pp.mana_only_spell_min_mv
+        || (pp.mana_only_spell_or_x && spell.m_mana_cost.has_x);
+}
+inline bool BigSpellManaUsable(const CardParams& pp, int site)
+{
+    const int batch = BigSpellBatchState();
+    if (batch >= 0) { return batch == 1; }
+    const Card* c = PayingSpellCard();
+    if (c == nullptr) { return site == 2 || site == 4; }
+    return SpellQualifiesForBigMana(*c, pp);
+}
+
 // The one predicate every payment site asks of a restricted source: "creature-only, and (if it also
 // names a subtype) a spell of that subtype". Returns false when the source may NOT pay.
 inline bool RestrictedManaUsable(const CardParams& pp, bool for_creature, int site = 0)
 {
+    if (BigSpellOnlySource(pp)) { return BigSpellManaUsable(pp, site); }
     if (!pp.creature_mana_only) { return true; }
     if (!for_creature)          { return false; }
     if (SubtypeManaAuditOn() && !pp.mana_only_subtype.empty() && PayingSpellCard() == nullptr)
@@ -25639,6 +25719,7 @@ inline bool HasUntappedRampFeeder(const GameState& state)
         // Creature-only mana (Somberwald Sage, Ancient Ziggurat) cannot pay a mana ability's {1}
         // (CR 106.6 + the card's restriction) -- not a feeder. Inert for every other source.
         if (def->params.creature_mana_only) { continue; }
+        if (BigSpellOnlySource(def->params)) { continue; }   // Troyan: spells only, never a feed
         return true;
     }
     return false;
@@ -26388,6 +26469,28 @@ inline int ReanimateTargetIndex(const GameState& state, int controller, int max_
 inline bool HasReanimateTarget(const GameState& state, int controller, int max_mv)
 {
     return ReanimateTargetIndex(state, controller, max_mv) >= 0;
+}
+
+// A REGROWTH (tutor_from_graveyard: Auroral Procession / Reborn Hope) is a TARGETED spell -- "return
+// target [multicolored] card from your graveyard" -- so it cannot be cast with no legal graveyard
+// card (CR 601.2c), unlike a library tutor, which may legally whiff. The legal set is exactly the
+// tutor filters every zone tutor applies (empty tutor_types = any card; colour; TutorNumericFilterOk,
+// which carries Reborn Hope's multicolored conjunct), read off each card's DEFINITION. true for every
+// non-regrowth card, so the cast gates that call it are byte-identical elsewhere.
+inline bool HasGraveyardTutorTarget(const GameState& state, int controller, const CardParams& pp)
+{
+    if (!pp.tutor_from_graveyard) { return true; }
+    for (const Card& gc : state.players[static_cast<std::size_t>(controller)].graveyard)
+    {
+        const Card& card = ZoneCard(gc);
+        bool type_ok = pp.tutor_types.empty();
+        for (const std::string& t : pp.tutor_types)
+        { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (!type_ok || !CardHasColorNamed(card, pp.tutor_color)) { continue; }
+        if (!TutorNumericFilterOk(card, pp)) { continue; }
+        return true;
+    }
+    return false;
 }
 
 // Returns true if a creature was reanimated. `controller` owns the graveyard and the permanent.

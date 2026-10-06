@@ -1,0 +1,50 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 8,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Troyan, Gutsy Explorer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Prodigious Growth"
+  ],
+  "library_filler": "Boseiju, Who Endures",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "expect_win_turn": 4,
+  "comment": "TROYAN FUNDS A 5+ SPELL (Bruna sideboard, 2026-10-06). Troyan's '{T}: Add {G}{U}. Spend this mana only to cast spells with mana value 5 or greater' (mana_only_spell_min_mv 5) pays Prodigious Growth ({4}{G}{G}, MV 6) with four lands + the T4 Boseiju drop: Mother of Runes 1 + 7 = 8 = the opponent's life. Lands alone make 5. Control: at opponent life 9 this must NOT win on turn 4."
+}

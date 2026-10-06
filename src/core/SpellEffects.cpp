@@ -83,6 +83,11 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
             for (const Card& c : ap.sideboard) { if (c.m_name == nm) { return true; } }
             return false;
         }
+        if (pp.tutor_from_graveyard)
+        {
+            for (const Card& c : ap.graveyard) { if (c.m_name == nm) { return true; } }
+            return false;
+        }
         for (std::size_t i = 0; i < ap.library.size(); ++i)
         { if (ap.library[i].m_name == nm) { return true; } }
         return false;
@@ -124,7 +129,10 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
         }
     }
 
-    const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
+    int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
+    // A REGROWTH is a TARGETED spell, not "you may search": its target was chosen as it was cast
+    // (CR 601.2c), so there is nothing to decline -- a -1 takes the default (or the first card).
+    if (picked < 0 && pp.tutor_from_graveyard) { picked = def >= 0 ? def : 0; }
     if (picked < 0) { return TutorAskResult::Declined; }   // -1 = decline the optional search
     // Out of range keeps the CALLER's current pick rather than declining -- the exact prior
     // semantics of this path. Unreachable from the shipped harness (the --choices reader validates
@@ -294,11 +302,20 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // is a SINGLETON, and erasing it here is what makes four Living Wishes see a shrinking pool
     // instead of fetching the same one-of four times.
     const bool wish = pp.wish_from_sideboard;
+    // A REGROWTH (Auroral Procession / Reborn Hope): the zone is the GRAVEYARD. Like the wish it
+    // searches no library, so it is exempt from the shuffle below for the same reason; the most
+    // RECENT copy of a name is taken (any copy is the same card to every reader).
+    const bool regrow = !wish && pp.tutor_from_graveyard;
     int idx = -1;
     if (wish)
     {
         for (int i = 0; i < static_cast<int>(ap.sideboard.size()); ++i)
         { if (ap.sideboard[i].m_name == want) { idx = i; break; } }
+    }
+    else if (regrow)
+    {
+        for (int i = static_cast<int>(ap.graveyard.size()) - 1; i >= 0; --i)
+        { if (ap.graveyard[static_cast<std::size_t>(i)].m_name == want) { idx = i; break; } }
     }
     else
     {
@@ -306,11 +323,13 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         { if (ap.library[i].m_name == want) { idx = i; break; } }
     }
     if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
-    Card c = wish ? ap.sideboard[idx] : ap.library[idx];
+    Card c = wish ? ap.sideboard[idx] : regrow ? ap.graveyard[static_cast<std::size_t>(idx)]
+                                               : ap.library[idx];
     const int         fetched_num  = c.m_number;   // capture before the move into hand/library
     const std::string fetched_name = c.m_name;
-    if (wish) { ap.sideboard.erase(ap.sideboard.begin() + idx); }
-    else      { ap.library.erase(ap.library.begin() + idx); }
+    if (wish)        { ap.sideboard.erase(ap.sideboard.begin() + idx); }
+    else if (regrow) { ap.graveyard.erase(ap.graveyard.begin() + idx); }
+    else             { ap.library.erase(ap.library.begin() + idx); }
     // Searching the library shuffles it (CR 701.19) -- BEFORE a "put on top" placement
     // (you shuffle, then put the card on top). Deterministic + lockstep, ON BY DEFAULT
     // (opt-OUT is MTG_NO_SEARCH_SHUFFLE).
@@ -321,9 +340,10 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // it run would shuffle a library nobody searched AND advance search_count, which seeds every
     // later fetch's deterministic reshuffle, so one wish would silently re-order every subsequent
     // fetch in the game.
-    if (!wish) { ShuffleAfterSearch(state, controller_index); }
+    if (!wish && !regrow) { ShuffleAfterSearch(state, controller_index); }
     if (pp.tutor_to_hand)     { EnterHand(state, controller_index, std::move(c),
-                                          HandEntryReason::Tutor); }
+                                          regrow ? HandEntryReason::Recur
+                                                 : HandEntryReason::Tutor); }
     else if (pp.tutor_to_top)
     {
         ap.library.insert(ap.library.begin(), std::move(c));
@@ -340,7 +360,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     {
         // Disposition must match the tutor's actual placement: Enlightened/Idyllic Tutor put the
         // card on TOP of the library, not in hand (2026-08-06 claude-play sweep flag, seed 9005).
-        EmitReveal(state.turn_number, source_name + " (searched)",
+        EmitReveal(state.turn_number, source_name + (regrow ? " (returned from graveyard)"
+                                                            : " (searched)"),
                    { fetched_num }, { fetched_name }, { fetched_num }, {},
                    /*dispositions*/ { pp.tutor_to_top ? "to top" : "to hand" });
     }
@@ -2435,6 +2456,10 @@ static thread_local bool g_bt_pay_with_pain = false;
 // fed-filter branches are skipped on such a path (conservative: the DFS still explores the orders
 // that feed the filter BEFORE tapping the restricted source). Reset per top-level solve.
 static thread_local int g_bt_restricted = 0;
+// BIG-SPELL-ONLY units (Troyan) on the current DFS path: the same rule, but such a source is tapped
+// for a QUALIFYING spell whether or not it is a creature, so the fed-filter skip below reads this
+// counter on every payment rather than only on a creature one. 0 on every board without one.
+static thread_local int g_bt_restricted_big = 0;
 
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
@@ -3302,6 +3327,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 explicit RestrictedPath(bool o) : on(o) { if (on) { ++g_bt_restricted; } }
                 ~RestrictedPath() { if (on) { --g_bt_restricted; } }
             } _restricted_path(def->params.creature_mana_only);
+            struct RestrictedBigPath
+            {
+                bool on;
+                explicit RestrictedBigPath(bool o) : on(o) { if (on) { ++g_bt_restricted_big; } }
+                ~RestrictedBigPath() { if (on) { --g_bt_restricted_big; } }
+            } _restricted_big_path(BigSpellOnlySource(def->params));
             state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
             // CRACK FLAG on the BACKTRACKER path (see CommitPaySacSacrifices). A pay-sac source is
@@ -3433,7 +3464,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (def->params.is_filter)
         {
             { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }  // {T}: Add {C}
-            if (floating.Total() >= 1 && !produces.empty() && !(for_creature && g_bt_restricted > 0))                                            // feed 1, Add 2
+            if (floating.Total() >= 1 && !produces.empty() && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))                                            // feed 1, Add 2
             {
                 if (FilterFeedStrictOn())
                 {
@@ -3492,7 +3523,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
         else if (def->params.ramp_filter)
         {
-            if (floating.Total() >= 1 && !produces.empty() && !(for_creature && g_bt_restricted > 0))   // {1},{T}: feed 1, Add one of each colour
+            if (floating.Total() >= 1 && !produces.empty() && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))   // {1},{T}: feed 1, Add one of each colour
             {
                 ManaPool f = floating; Color took;
                 if (ConsumeFloatingAny(f, took))
@@ -3509,7 +3540,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             // Astrolabe (filter_no_free_colorless) has NO free mode -- fed branch only.
             if (!def->params.filter_no_free_colorless)
             { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }
-            if (floating.Total() >= 1 && !produces.empty() && !(for_creature && g_bt_restricted > 0))
+            if (floating.Total() >= 1 && !produces.empty() && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))
             {
                 // Branch over BOTH the feed unit and the output colour. The feed is GENERIC (any
                 // float pays it, as for ramp_filter), but unlike ramp_filter the output is a
@@ -3776,7 +3807,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             {
                 const int feeder = def->params.mana_per_creature_feeder_generic;
                 const int give   = ScaledManaCreatureCount(state);        // N of the chosen colour
-                if (give >= 1 && floating.Total() >= feeder && !(for_creature && g_bt_restricted > 0))
+                if (give >= 1 && floating.Total() >= feeder && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))
                 {
                     const Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
                     for (Color c : cols)
@@ -4313,15 +4344,32 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // the answer can differ -- leaving every board that has never seen one bit-for-bit
         // unchanged, Angels included until a Giada actually lands.
         bool board_has_restricted = false;
+        // BIG-SPELL-ONLY MANA (Troyan) -- the same rule: with such a source on the battlefield the
+        // answer for one board+cost differs between a 5+ spell and a small one (or an ability), so
+        // the source's verdict for THIS payment is folded below. Found in the same walk; boards that
+        // never hold one key exactly as before.
+        const CardParams* board_big = nullptr;
         if (CardDatabase::Instance().HasSubtypeRestrictedMana())
         {
             for (const Permanent& bp : state.battlefield)
             {
                 const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
-                if (bd && !bd->params.mana_only_subtype.empty())
-                { board_has_restricted = true; break; }
+                if (bd == nullptr) { continue; }
+                if (!bd->params.mana_only_subtype.empty()) { board_has_restricted = true; }
+                if (board_big == nullptr && BigSpellOnlySource(bd->params)) { board_big = &bd->params; }
+                if (board_has_restricted && board_big != nullptr) { break; }
             }
         }
+        else
+        {
+            for (const Permanent& bp : state.battlefield)
+            {
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd != nullptr && BigSpellOnlySource(bd->params)) { board_big = &bd->params; break; }
+            }
+        }
+        if (board_big != nullptr)
+        { mix(h, BigSpellManaUsable(*board_big, 3) ? 0xB16B16ull : 0xB16B17ull); }
         if (board_has_restricted)
         {
             const Card* paying = PayingSpellCard();

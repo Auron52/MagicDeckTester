@@ -330,6 +330,7 @@ add_executable(mtg-test
     test/unit/test_dork_growth_x.cpp
     test/unit/test_bruna.cpp
     test/unit/test_bruna_sweep.cpp
+    test/unit/test_bruna_sideboard.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

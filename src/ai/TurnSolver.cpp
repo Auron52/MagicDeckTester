@@ -7806,6 +7806,8 @@ static bool AnyHandCastableNow(const GameState& state)
         if (d->params.reanimate_creature_max_mv > 0
             && !HasReanimateTarget(state, state.active_player_index,
                                    d->params.reanimate_creature_max_mv)) { continue; }
+        // A regrowth (Auroral Procession / Reborn Hope) likewise needs a legal graveyard card.
+        if (!HasGraveyardTutorTarget(state, state.active_player_index, d->params)) { continue; }
         if (pool.CanPay(EffectiveCost(*d, state))) { return true; }
     }
     return false;
@@ -9557,6 +9559,60 @@ static void AddCostCarryingHybrids(ManaCost& dst, const ManaCost& src)
     dst.colorless += src.colorless;
     for (int i = 0; i < src.hybrid_count && dst.hybrid_count < 4; ++i)
     { dst.hybrid_pair[dst.hybrid_count++] = src.hybrid_pair[i]; }
+}
+
+// ---- BIG-SPELL-ONLY MANA in the subset affordability test (Troyan, Gutsy Explorer) ------------
+// The flat pools (`pool`, `pool_noncreature`) credit every untapped source to every cast. That is a
+// sound BOUND for an unrestricted source, but a big-spell-only source ("spend this mana only to cast
+// spells with mana value 5 or greater or spells with {X}") would let the enumerator offer a subset
+// whose SMALL casts and activations are paid out of it -- the payer then refuses the source and the
+// plan silently drops a cast. Hall's condition adds the two constraints the restriction implies:
+// everything in the subset that is NOT a qualifying spell (small casts + every activation) must be
+// payable with the big-only sources removed, and the same for its noncreature part. Exact for the
+// flat totals; colours stay with the colour gates (which only ever reject). Built ONCE per
+// enumeration; `live` is false on every board without such a source -> byte-identical elsewhere.
+struct BigOnlyCtx
+{
+    bool              live = false;
+    ManaPool          pool;              // what the big-only sources add to the flat pools
+    const CardParams* pp   = nullptr;    // the restriction (one shape exists: Troyan's)
+};
+static BigOnlyCtx BuildBigOnlyCtx(const GameState& state)
+{
+    BigOnlyCtx bc;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !BigSpellOnlySource(d->params)) { continue; }
+        if (d->tmpl == CardTemplate::ManaDork && !CanTapNow(p, state.battlefield)) { continue; }
+        AddSourceToPool(bc.pool, state, *d, PermanentManaYield(state, p, *d), &p);
+        bc.live = true;
+        bc.pp   = &d->params;
+    }
+    return bc;
+}
+static bool BigOnlySubsetPayable(const BigOnlyCtx& bc, const std::vector<Action>& cands,
+                                 const std::vector<int>& sel, ManaPool base, ManaPool base_nc)
+{
+    ManaCost small, small_nc;
+    bool any = false;
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::CastFromGraveyard)
+        {
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+            if (d != nullptr && SpellQualifiesForBigMana(d->card, *bc.pp)) { continue; }
+        }
+        AddCostCarryingHybrids(small, c.cost);
+        if (c.is_noncreature) { AddCostCarryingHybrids(small_nc, c.cost); }
+        any = true;
+    }
+    if (!any) { return true; }
+    SubtractPoolClamped(base, bc.pool);
+    SubtractPoolClamped(base_nc, bc.pool);
+    return base.CanPay(small) && base_nc.CanPay(small_nc);
 }
 
 // The colours THIS subset adds to the domain, and the cost of the casts that add them. Only a
@@ -19492,6 +19548,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (def.params.reanimate_creature_max_mv > 0
             && !HasReanimateTarget(state, state.active_player_index,
                                    def.params.reanimate_creature_max_mv)) { continue; }
+        // Regrowth (Auroral Procession / Reborn Hope): "Return TARGET [multicolored] card from your
+        // graveyard to your hand" -- the same CR 601.2c rule. Gated on tutor_from_graveyard (true
+        // for every other card) -> every other deck byte-identical. The legal set is read at the
+        // turn-start graveyard: a plan that FIRST puts the only target there (a legend-rule
+        // casualty, a cleanup discard is next turn) is not offered the cast -- a disclosed edge.
+        if (!HasGraveyardTutorTarget(state, state.active_player_index, def.params)) { continue; }
         // Duplicate legend with nothing on entry: the legend rule kills it the moment it resolves,
         // so the cast buys nothing and costs a card plus this turn's mana. Provider-owned, and a
         // PRUNE rather than a ranking -- it drops a plan variant that cannot be better, which
@@ -30670,6 +30732,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     const Player& ap = state.ActivePlayer();
     ManaPool pool             = AvailableManaPool(state);
     ManaPool pool_noncreature = BuildNonCreaturePool(state);
+    const BigOnlyCtx big_only = BuildBigOnlyCtx(state);   // Troyan's restricted mana (inert elsewhere)
     int total_lands  = CountLands(state);
     // PHASE-HONEST pending attack (see the sibling in EnumeratePlans): in the POST-combat main
     // this turn's combat is over, so no attack damage is pending. Counting it there is a phantom
@@ -31438,6 +31501,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         bool mana_ok = mc_hit ? mc_mana_ok
                      : credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                 : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        if (mana_ok && big_only.live
+            && !BigOnlySubsetPayable(big_only, cands, sel, credited ? eff : pool,
+                                     credited ? eff_nc : pool_noncreature))
+        { mana_ok = false; }
         // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
         // simultaneous one, so a position the cheap model already rejects would be rejected by the
         // sequenced model too -- only the SURVIVORS need the walk. Most odometer positions are
@@ -33129,7 +33196,7 @@ namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
-                     PP_MINT_HOLD, PP_N };
+                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -33137,7 +33204,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: <2 casts (single-cast turn)", "declined: combined UNPAYABLE",
     "declined: wild -> pip pinning ambiguous",
     "PREPAID mixed two-stage (MTG_PREPAY_MIXED)",
-    "declined: every hold failed on a mint line (MTG_MINT_CREDIT_EXACT)" };
+    "declined: every hold failed on a mint line (MTG_MINT_CREDIT_EXACT)",
+    "declined: big-spell-only mana + a non-qualifying cast (Troyan)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -33499,6 +33567,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // that land contributes {C} only. Fixes an all-creature batch reading as unaffordable off these
     // lands -> casting fewer creatures. See docs/design/slivers-restricted-mana-tap-order-bug.md.
     bool all_creatures = true;
+    // Troyan's big-spell-only mana (see the scope note after the loop): the restriction, if such a
+    // source is untapped on our side, and the qualifying casts' share of `combined`.
+    const CardParams* big_only_p = nullptr;
+    for (const Permanent& bp : state.battlefield)
+    {
+        if (bp.controller_index != state.active_player_index || bp.tapped || bp.def_absent) { continue; }
+        const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+        if (bd != nullptr && BigSpellOnlySource(bd->params)) { big_only_p = &bd->params; break; }
+    }
+    ManaCost c_bigq;
     bool any_reveal_act = false;   // a reveal_or_pay cast (Daring Buccaneer) -> order-aware debit below
     for (const Action& a : acts)
     {
@@ -33590,6 +33668,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         part.colorless += ec.colorless;
         if (!d->card.IsCreature()) { all_creatures = false; }
         if (d->params.reveal_or_pay_cost.has_value()) { any_reveal_act = true; }
+        if (big_only_p != nullptr && SpellQualifiesForBigMana(d->card, *big_only_p)) { AddManaCost(c_bigq, ec); }
         ++eligible;
     }
     // Daring Buccaneer: the per-cast EffectiveCost above prices every reveal against the FULL hand,
@@ -33624,6 +33703,36 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
+
+    // BIG-SPELL-ONLY MANA (Troyan, Gutsy Explorer: spend only on spells of MV 5+ or with {X}). The
+    // joint solve pays the whole batch out of ONE pool, so it can honour a per-spell restriction only
+    // by WHO it lets pay: when every cast qualifies the source pays freely (scope 1); when none does,
+    // or the batch MIXES the two, the joint solve runs with the source REFUSED (scope 0) -- a legal
+    // payment whenever the board pays the turn without it -- and only if that fails does the staged
+    // solve below pay the non-qualifying part first without it and the qualifying part after with
+    // it. No such source untapped on our side -> scope unset (-1): every other board byte-identical.
+    // An ordered Garth activation is an ability, never a qualifying spell.
+    int big_batch = -1;
+    bool big_mixed = false;
+    bool small_all_creatures = true, big_all_creatures = true;
+    if (big_only_p != nullptr)
+    {
+        int yes = 0, no = 0;
+        for (const Action& a : acts)
+        {
+            if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
+            { ++no; small_all_creatures = false; continue; }
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr) { continue; }
+            const bool q = SpellQualifiesForBigMana(d->card, *big_only_p);
+            (q ? yes : no) += 1;
+            if (!d->card.IsCreature()) { (q ? big_all_creatures : small_all_creatures) = false; }
+        }
+        big_mixed = yes > 0 && no > 0;
+        big_batch = (yes > 0 && no == 0) ? 1 : 0;
+    }
+    BigSpellBatchScope _big_batch_scope(big_batch);
 
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
@@ -33888,6 +33997,71 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
                                  /*out_full_pool=*/&produced);
+    }
+    // BIG-SPELL STAGED SOLVE (Troyan). The joint solve above ran with the big-spell-only source
+    // REFUSED (scope 0) because the batch mixes casts it may and may not pay. When the board cannot
+    // pay the turn without it, pay the NON-qualifying part first with the source still refused,
+    // then the qualifying part with it allowed (scope 1) -- the creature/noncreature two-stage
+    // shape below, and aggregate-legal the same way: each stage's taps cover exactly its own casts'
+    // pips. Either order is tried, under the same hold ladder. A stage that taps a creature-only
+    // source (Somberwald Sage) would need the creature-float routing this path does not do, so such
+    // a solve is rejected and the turn declines to the per-cast payer (exact, by identity).
+    if (!ok && big_mixed)
+    {
+        ManaCost c_small = combined;
+        c_small.generic -= c_bigq.generic; c_small.white -= c_bigq.white; c_small.blue -= c_bigq.blue;
+        c_small.black -= c_bigq.black; c_small.red -= c_bigq.red; c_small.green -= c_bigq.green;
+        c_small.colorless -= c_bigq.colorless;
+        auto restore_big = [&]()
+        {
+            state.battlefield                  = bf_snap;
+            state.floating_mana                = fm_snap;
+            state.players[active].life         = la;
+            state.players[1 - active].life     = lo;
+            state.opponent_lost_life_this_turn = oll;
+            produced = ManaPool{};
+        };
+        bool staged_ok = false;
+        for (int r = 0; r <= n_rungs && !staged_ok; ++r)
+        {
+            const std::uint64_t hold = (r < n_rungs) ? rungs[r] : 0;
+            for (int order = 0; order < 2 && !staged_ok; ++order)
+            {
+                restore_big();
+                ManaPool p1, p2;
+                bool o = true;
+                for (int st = 0; st < 2 && o; ++st)
+                {
+                    const bool big_stage = (order == 0) ? (st == 1) : (st == 0);
+                    BigSpellBatchScope _stage(big_stage ? 1 : 0);
+                    o = TapForCostBacktrack(state, big_stage ? c_bigq : c_small,
+                                            big_stage ? big_all_creatures : small_all_creatures,
+                                            ManaPool{}, /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
+                                            /*out_leftover=*/nullptr, /*tapped_mask=*/0,
+                                            /*untapped_max=*/-1, /*reserved_mask=*/hold,
+                                            /*out_full_pool=*/st == 0 ? &p1 : &p2);
+                }
+                if (!o) { continue; }
+                ManaPool sum = p1;
+                sum.white += p2.white; sum.blue += p2.blue; sum.black += p2.black;
+                sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
+                sum.wild += p2.wild;
+                if (sum.wild != 0) { continue; }
+                bool crea_only_tapped = false;
+                const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+                for (int bi = 0; bi < nb && !crea_only_tapped; ++bi)
+                {
+                    const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+                    if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
+                    const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                    if (bd != nullptr && bd->params.creature_mana_only) { crea_only_tapped = true; }
+                }
+                if (crea_only_tapped) { continue; }
+                produced = sum; ok = true; staged_ok = true; won_hold = hold;
+                big_batch = 1;   // the surplus rule below now applies: Troyan may have been tapped
+            }
+        }
+        if (!staged_ok) { restore_big(); return Pp(PP_BIGMANA_MIXED); }
     }
     // MIXED-BATCH TWO-STAGE SOLVE (MTG_PREPAY_MIXED, default off; =1 enables). A mixed batch's
     // single combined solve runs with for_creature=false, so a colored_creature_only land
@@ -34195,6 +34369,34 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // was thrown away, which is precisely what let a Sol Ring's {C}{C} pay {U}. Should be 0.
         if (WildPipAuditOn() && pool.wild > combined.generic)
         { g_wild_prepay_excess.fetch_add(pool.wild - combined.generic, std::memory_order_relaxed); }
+    }
+    // BIG-SPELL-ONLY PROVENANCE (Troyan): an all-qualifying batch may tap the source, and a unit it
+    // over-produced must not survive as GENERAL float (a later non-qualifying cast could spend it).
+    // Drop min(big-only yield this solve tapped, surplus) from the FREE part of the pre-load only --
+    // never a pinned pip or the generic `wild`, which this batch still owes. The per-cast payer's
+    // commit_leftover applies the same rule. Inert unless big_batch == 1 and such a source tapped.
+    if (big_batch == 1 && s_true_colours)
+    {
+        int big = 0;
+        const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+        for (int bi = 0; bi < nb; ++bi)
+        {
+            const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+            if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+            if (bd == nullptr || !BigSpellOnlySource(bd->params)) { continue; }
+            const int y = PermanentManaYield(state, bp, *bd);
+            big += (y >= 0 ? y : ManaProducedPerTap(*bd));
+        }
+        int drop = std::min(big, std::max(0, produced.Total() - combined.ManaValue()));
+        int* col[6] = { &pool.green, &pool.blue, &pool.white, &pool.black, &pool.red, &pool.colorless };
+        const int pin[6] = { combined.green, combined.blue, combined.white, combined.black,
+                             combined.red, combined.colorless };
+        for (int k = 0; k < 6 && drop > 0; ++k)
+        {
+            const int t = std::min(drop, std::max(0, *col[k] - pin[k]));
+            *col[k] -= t; drop -= t;
+        }
     }
     state.floating_mana = pool;
     // CREATURE-ONLY PROVENANCE (see GameState::floating_creature_mana). An all-creature batch may tap
@@ -41490,6 +41692,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
+    const BigOnlyCtx big_only = BuildBigOnlyCtx(state);   // Troyan's restricted mana (inert elsewhere)
     int           total_lands     = CountLands(state);
     // PHASE-HONEST pending attack. In the POST-combat main the attack has already happened, so
     // nothing is pending -- but PendingAttackDamage counts every creature that COULD attack, and
@@ -42805,6 +43008,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                  : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        if (mana_ok && big_only.live
+            && !BigOnlySubsetPayable(big_only, cands, sel, credited ? eff : pool,
+                                     credited ? eff_nc : pool_noncreature))
+        { mana_ok = false; }
         // FRESH-SPEND AT THE BASE (MTG_MINT_CREDIT_EXACT; see the mint block above): unpayable in
         // the doctrine world, payable with the subset's own magnetless mint -> credit it and TAG the
         // plan as the released-hold variant. The payability decision is made here so every gate
@@ -48863,6 +49070,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // the subtype itself, so two different tribal restrictions never collapse together. Empty
         // for every other card, so no existing digest moves.
         s += pp.mana_only_subtype;
+        // ...and a big-spell-only source (Troyan) likewise pays a strictly smaller set. 0 on every
+        // other card -> the term is omitted, so no existing digest moves.
+        if (pp.mana_only_spell_min_mv > 0)
+        { s += "B" + std::to_string(pp.mana_only_spell_min_mv) + (pp.mana_only_spell_or_x ? "x" : ""); }
         // Fetchlands with different target colours are NOT interchangeable; distinguish
         // them. Empty for ordinary lands -> sig unchanged (other decks byte-identical).
         for (const std::string& ft : pp.fetch_land_types) { s += "f" + ft; }
@@ -65913,6 +66124,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 // The two restrictions the card data models. Ancient Ziggurat / Cavern of Souls
                 // collapse to creature_mana_only; Giada adds mana_only_subtype on top of it.
                 if (pd->params.creature_mana_only && !pc.def->card.IsCreature()) { continue; }
+                // Troyan: only a spell of mana value 5+ (or with {X}) may spend it.
+                if (BigSpellOnlySource(pd->params)
+                    && !SpellQualifiesForBigMana(pc.def->card, pd->params)) { continue; }
                 if (!pd->params.mana_only_subtype.empty())
                 {
                     bool has_sub = false;

@@ -239,7 +239,9 @@ static std::vector<std::string> GenericTutorList(const GameState& s, int control
     const Player& ap = s.players[controller];
     // A WISH searches OUTSIDE THE GAME (the sideboard); every other tutor searches the library.
     // Only the zone differs -- type filter, colour filter and ranking are shared.
-    const std::vector<Card>* wish_pool = pp.wish_from_sideboard ? &ap.sideboard : nullptr;
+    // A REGROWTH (tutor_from_graveyard) searches the GRAVEYARD -- same rule, third zone.
+    const std::vector<Card>* wish_pool = pp.wish_from_sideboard  ? &ap.sideboard
+                                       : pp.tutor_from_graveyard ? &ap.graveyard : nullptr;
     std::vector<std::string>        all;
     std::vector<std::string>        lands;   // nonlands_first only: the second half
     std::vector<const std::string*> seen;
@@ -1007,10 +1009,14 @@ std::vector<int> DecisionProvider::AttackDigPutCandidates(
 //   (iv)  the counter-example is a HOST-DEPENDENT Aura -- Almost Perfect sets BASE 9/10, worth +4 on
 //         Bruna (5/5) but +9 on a 0/1 dork, and moving it off an attacking dork LOSES power. So every
 //         Aura carrying aura_set_base_power branches take/skip (2^m subsets, take-first; m <= 4, any
-//         excess is taken), everything else is always taken.
+//         excess is taken), everything else is always taken. A COLOUR-CONDITIONAL Aura (Steel of
+//         the Godhead: +1/+1 per white / blue condition) is host-dependent in general, but on a
+//         gatherer that has every colour it names it is worth its maximum, so moving it there never
+//         loses power -- Bruna is white and blue, so Steel is always taken; only a gatherer missing
+//         a named colour would branch it.
 // MTG_BRUNA_GATHER_FULL=1 is the PROOF's control arm only: the full powerset (n <= 10), take-all first.
 std::vector<std::vector<int>> DecisionProvider::BrunaGatherCandidates(
-    const GameState& /*s*/, int /*controller*/, const Permanent& /*bruna*/,
+    const GameState& /*s*/, int /*controller*/, const Permanent& bruna,
     const std::vector<AuraGatherCand>& cands) const
 {
     const int n = static_cast<int>(cands.size());
@@ -1030,7 +1036,16 @@ std::vector<std::vector<int>> DecisionProvider::BrunaGatherCandidates(
     for (int i = 0; i < n; ++i)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(cands[static_cast<std::size_t>(i)].name);
-        const bool host_dependent = d != nullptr && d->params.aura_set_base_power >= 0;
+        // A colour-conditional grant (Steel of the Godhead) is host-dependent too, UNLESS the
+        // gathering attacker has every colour it conditions on: then it is worth its maximum on the
+        // gatherer and moving it there can never lose power (Bruna is white AND blue -> always taken).
+        bool colour_dep = false;
+        if (d != nullptr)
+        {
+            for (const CardParams::AuraColorBonus& cb : d->params.aura_color_bonuses)
+            { if (!bruna.card.HasColor(cb.color)) { colour_dep = true; break; } }
+        }
+        const bool host_dependent = d != nullptr && (d->params.aura_set_base_power >= 0 || colour_dep);
         if (host_dependent && dep.size() < 4) { dep.push_back(i); }
         else                                  { fixed.push_back(i); }
     }
@@ -11591,8 +11606,9 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
             if (is_drain(lp)) { r.drain = true; r.min_engine = std::min(r.min_engine, mv); }
             if (is_amp(lp))   { r.amp = true; }
         };
-        if (pp.wish_from_sideboard) { for (const Card& lc : ap.sideboard) { visit(lc); } }
-        else                        { for (const Card& lc : ap.library)   { visit(lc); } }
+        if (pp.wish_from_sideboard)       { for (const Card& lc : ap.sideboard) { visit(lc); } }
+        else if (pp.tutor_from_graveyard) { for (const Card& lc : ap.graveyard) { visit(lc); } }
+        else                              { for (const Card& lc : ap.library)   { visit(lc); } }
         reach_of[static_cast<std::size_t>(i)] = r;
     }
     for (int i = 0; i < n; ++i)
@@ -15632,7 +15648,8 @@ const char* BrunaProvider::CastOrderTierName(int rank) const
 //       (no gatherer on board or kept). A payload already attached on the battlefield fills a slot.
 //     HASTE (equip_grants_haste): 1 while none is on the battlefield.
 //     HOST: 1 creature while no creature is on the battlefield or kept.
-//   OVERFLOW value (higher = kept longer): tutor_to_hand 70; aura_swap_cost 64 (30 once one is on
+//   OVERFLOW value (higher = kept longer): tutor_to_hand 70 (a graveyard REGROWTH -- Auroral
+//     Procession / Reborn Hope, sideboard 2026-10-06 -- 25: it re-buys a card already seen); aura_swap_cost 64 (30 once one is on
 //     board); payload 40 + 2*bonus (Colossification 80, Conscription 60, Mythic 56, Prodigious 54),
 //     -30 if FAR (mana value >= reach + 2, reach = board mana + hand lands/accel) and no gather or
 //     swap path; extra gatherer 50; other creature 35; accel 30.
@@ -15682,14 +15699,20 @@ std::vector<int> BrunaProvider::CleanupDiscardCandidates(
         if (d == nullptr) { return false; }
         const CardParams& p = d->params;
         return p.is_aura && !p.is_land_aura && !p.aura_swap_cost.has_value()
-            && (p.aura_power_bonus > 0 || p.aura_set_base_power >= 0);
+            && (p.aura_power_bonus > 0 || p.aura_set_base_power >= 0
+                || !p.aura_color_bonuses.empty());   // Steel of the Godhead (+2/+2 on Bruna)
     };
     // The power an Aura adds. A base-setter (Almost Perfect: 9/10) is read as its base minus a 1-power
     // host, the deck's usual pre-Bruna carrier (Mother of Runes / a dork).
     auto payload_bonus = [](const CardDefinition* d)
     {
         const CardParams& p = d->params;
-        return std::max(p.aura_power_bonus, p.aura_set_base_power >= 0 ? p.aura_set_base_power - 1 : 0);
+        // A colour-conditional grant (Steel of the Godhead) is read at its full value: every
+        // condition met, which is what it gives Bruna (white AND blue), the deck's carrier.
+        int colour = 0;
+        for (const CardParams::AuraColorBonus& cb : p.aura_color_bonuses) { colour += cb.power; }
+        return std::max(p.aura_power_bonus + colour,
+                        p.aura_set_base_power >= 0 ? p.aura_set_base_power - 1 : 0);
     };
     auto is_accel = [](const CardDefinition* d)
     {
@@ -15750,7 +15773,10 @@ std::vector<int> BrunaProvider::CleanupDiscardCandidates(
         if (is_payload(d))                    { payloads.push_back(i); continue; }
         if (p.equip_grants_haste)             { haste.push_back(i); continue; }
         if (p.aura_swap_cost.has_value())     { swaps.push_back(i); continue; }
-        if (p.tutor_to_hand)                  { tutors.push_back(i); continue; }
+        // A REGROWTH (tutor_from_graveyard: Auroral Procession / Reborn Hope, sideboard 2026-10-06)
+        // fetches nothing NEW -- it re-buys a card already seen, and Bruna's own gather already reads
+        // the graveyard for Auras -- so it is overflow, not the tutor tier.
+        if (p.tutor_to_hand && !p.tutor_from_graveyard) { tutors.push_back(i); continue; }
         if (d->card.IsCreature())             { hosts.push_back(i); continue; }
         other.push_back(i);
     }
@@ -15850,6 +15876,7 @@ std::vector<int> BrunaProvider::CleanupDiscardCandidates(
         const CardDefinition* d = def_at(i);
         if (d == nullptr) { return 20; }
         const CardParams& p = d->params;
+        if (p.tutor_from_graveyard) { return 25; }   // regrowth: above a blank (20), below a body
         if (p.tutor_to_hand) { return 70; }
         if (p.aura_swap_cost.has_value()) { return board_swap ? 30 : 64; }
         if (is_payload(d))

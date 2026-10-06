@@ -1,0 +1,40 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Troyan, Gutsy Explorer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Unflinching Courage"
+  ],
+  "library_filler": "Eldrazi Conscription",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "expect_no_win": true,
+  "comment": "TROYAN'S MANA CANNOT PAY A SMALL SPELL (Bruna sideboard, 2026-10-06; negative guard). Unflinching Courage ({1}{G}{W}, MV 3) on Mother of Runes would make her 3/3 -- lethal at 3 -- but beyond Forest + Plains the only mana is Troyan's {G}{U}, spendable only on a spell of mana value 5+ (mana_only_spell_min_mv). The draw is an uncastable Eldrazi Conscription (no land drop). Must NOT win on turn 4: Mother 1 + Troyan 1 = 2 < 3. Fails if the restriction is dropped anywhere on the path (enumerator offer + payer)."
+}

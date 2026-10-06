@@ -225,6 +225,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             ap2.aura_power_bonus  = def.params.aura_power_bonus;
             ap2.aura_tough_bonus  = def.params.aura_tough_bonus;
             ap2.aura_grants_lifelink = def.params.aura_grants_lifelink;
+            ap2.aura_color_bonuses   = def.params.aura_color_bonuses;
             ap2.aura_enchant_requires = def.params.aura_enchant_requires;
             ap2.aura_set_base_power     = def.params.aura_set_base_power;
             ap2.aura_set_base_toughness = def.params.aura_set_base_toughness;
@@ -798,6 +799,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_replicate_to_subtypes   = params.value("grants_replicate_to_subtypes", false);
     p.creature_mana_only             = params.value("creature_mana_only", false);
     p.mana_only_subtype              = params.value("mana_only_subtype", std::string());
+    p.mana_only_spell_min_mv         = params.value("mana_only_spell_min_mv", 0);
+    p.mana_only_spell_or_x           = params.value("mana_only_spell_or_x", false);
     p.colored_creature_only          = params.value("colored_creature_only", false);
     p.colored_creature_ability_ok    = params.value("colored_creature_ability_ok", false);
     if (params.contains("gy_return_cost"))
@@ -1039,6 +1042,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.wish_from_sideboard       = params.value("wish_from_sideboard", false);
     p.wish_requires_name        = params.value("wish_requires_name", std::string());
     p.wish_requires_multicolored = params.value("wish_requires_multicolored", false);
+    p.tutor_from_graveyard       = params.value("tutor_from_graveyard", false);
     p.etb_energy                = params.value("etb_energy", 0);
     p.energy_per_colored_tap    = params.value("energy_per_colored_tap", 0);
     p.exiles_self_on_resolve    = params.value("exiles_self_on_resolve", false);
@@ -1231,7 +1235,22 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.aura_enchant_requires     = params.value("aura_enchant_requires", std::string());
     p.aura_set_base_power       = params.value("aura_set_base_power", -1);
     p.aura_set_base_toughness   = params.value("aura_set_base_toughness", -1);
-    p.aura_etb_tap_host         = params.value("aura_etb_tap_host", false);
+    // Steel of the Godhead's colour-conditional grants: [{"color":"W","power":1,"toughness":1,
+    // "lifelink":true}, ...]. Absent => empty (every other card byte-identical).
+    if (params.contains("aura_color_bonuses"))
+    {
+        for (const auto& b : params["aura_color_bonuses"])
+        {
+            CardParams::AuraColorBonus cb;
+            cb.color       = ColorFromString(b.value("color", std::string("C")));
+            cb.power       = b.value("power", 0);
+            cb.toughness   = b.value("toughness", 0);
+            cb.lifelink    = b.value("lifelink", false);
+            cb.unblockable = b.value("unblockable", false);
+            p.aura_color_bonuses.push_back(cb);
+        }
+    }
+    p.aura_etb_tap_host        = params.value("aura_etb_tap_host", false);
     p.attack_gather_auras       = params.value("attack_gather_auras", false);
     if (params.contains("aura_swap_cost"))
     { p.aura_swap_cost = ManaCostFromString(params["aura_swap_cost"].get<std::string>()); }
@@ -1517,6 +1536,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.exile_opponent_top_may_bounce_on_land =
         params.value("exile_opponent_top_may_bounce_on_land", false);
     p.tap_draw_cost_less_per_rad    = params.value("tap_draw_cost_less_per_rad", false);
+    p.tap_draw_then_discard         = params.value("tap_draw_then_discard", false);
     p.etb_optional_tapped_rad       = params.value("etb_optional_tapped_rad", 0);
     if (params.contains("tap_investigate_cost"))
         p.tap_investigate_cost = ManaCostFromString(params["tap_investigate_cost"].get<std::string>());

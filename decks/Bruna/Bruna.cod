@@ -32,9 +32,12 @@
         <card number="1" name="Indrik Umbra"/>
         <card number="1" name="Almost Perfect"/>
         <card number="1" name="Unflinching Courage"/>
-        <card number="1" name="Mythic Proportions"/>
-        <card number="1" name="Avacyn's Pilgrim"/>
-        <card number="1" name="Elgaud Shieldmate"/>
-        <card number="1" name="Worldfire"/>
+        <card number="1" name="Linvala, Shield of Sea Gate"/>
+        <card number="1" name="Troyan, Gutsy Explorer"/>
+        <card number="1" name="Detention Sphere"/>
+        <card number="1" name="Steel of the Godhead"/>
+        <card number="1" name="Vexing Shusher"/>
+        <card number="1" name="Auroral Procession"/>
+        <card number="2" name="Reborn Hope"/>
     </zone>
 </cockatrice_deck>

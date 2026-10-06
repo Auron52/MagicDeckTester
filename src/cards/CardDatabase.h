@@ -274,6 +274,18 @@ struct CardParams
     // SpellSubtypePayScope thread_local -- see the long note there for why "any creature" is NOT an
     // acceptable collapse for this deck.
     std::string mana_only_subtype;
+    // BIG-SPELL-ONLY mana (Troyan, Gutsy Explorer: "{T}: Add {G}{U}. Spend this mana only to cast
+    // spells with mana value 5 or greater or spells with {X} in their mana costs."). > 0 arms it: the
+    // source may pay only a SPELL whose printed mana value is >= this (or, with mana_only_spell_or_x,
+    // whose cost has {X}) -- never an activated ability (an equip, an Aura swap, its own loot), and
+    // never a mana ability's feed. Unlike creature_mana_only this does not ride `for_creature` (the
+    // test is the spell's MV, creature or not: Colossification qualifies, Linvala does not), so it is
+    // read off the paying spell's identity (PayingSpellCard / the batch-prepay scope) inside
+    // RestrictedManaUsable. A unit it produces beyond the paid spell's need is DROPPED, never booked
+    // as general float (the laundering class of Bruna sweep finding A-i). 0 = unrestricted
+    // (byte-identical for every other source).
+    int  mana_only_spell_min_mv = 0;
+    bool mana_only_spell_or_x   = false;
 
     // Colored-creature-only mana (Unclaimed Territory / Cavern of Souls / Secluded Courtyard):
     // "{T}: Add {C}. {T}: Add one mana of any color -- spend only on a creature spell of the chosen
@@ -1201,6 +1213,19 @@ struct CardParams
     // plus a resolution guard in PerformTutor. ALSO READ BY scripts/analyze_deck.py's
     // sideboard-reachability scan. false = unrestricted (byte-identical).
     bool                     wish_requires_multicolored = false;
+    // A REGROWTH -- "Return target [multicolored] card from your graveyard to your hand" (Auroral
+    // Procession, Reborn Hope) -- modelled EXACTLY as the wish is: a tutor_to_hand whose search ZONE
+    // is the GRAVEYARD (Player::graveyard), so it rides the whole searched-tutor apparatus (the
+    // Plan::tutor_choice index axis ranked at RESOLUTION -- which sees a card that reached the
+    // graveyard earlier in the same plan --, the plan-signature folds, the mid-phase acquisition
+    // re-solve, the human tutor chooser) with only the pool swapped. Reborn Hope's "multicolored"
+    // restriction is wish_requires_multicolored (the zone-agnostic TutorNumericFilterOk conjunct).
+    // Three differences from a library tutor, each handled where the zone is chosen: (1) no
+    // CR 701.19c shuffle (no library is searched); (2) the card enters hand as a Recur, not a Tutor;
+    // (3) it is a TARGETED spell, so it cannot be CAST with no legal graveyard card (CR 601.2c --
+    // the cast gate beside Unearth's), where a library tutor may legally whiff. false = every other
+    // tutor byte-identical.
+    bool                     tutor_from_graveyard = false;
     // "Exile <this card>" on resolution, instead of the graveyard (Living Wish). NOT inert, though
     // nothing in this deck can interact with an exiled card: MidGameFeature::GraveyardSize and
     // ExileSize are real learned-model features, and EOT dominance folds each zone when the attached
@@ -2070,6 +2095,23 @@ struct CardParams
     // base exceeds 9) and is not clamped. -1 = no base-set (0 is a legal set value).
     int  aura_set_base_power     = -1;
     int  aura_set_base_toughness = -1;
+    // Steel of the Godhead: "As long as enchanted creature is white, it gets +1/+1 and has lifelink.
+    // As long as enchanted creature is blue, it gets +1/+1 and can't be blocked." A COLOUR-CONDITIONAL
+    // grant, one entry per printed condition, each read off the HOST's current colour (a battlefield
+    // Permanent carries its real colour mask) inside AuraBonusFor (P/T) and CreatureHasLifelink (the
+    // lifelink half) -- so a white-and-blue host (Bruna, Linvala) gets +2/+2 and both riders, a green
+    // dork nothing. "can't be blocked" is carried for fidelity and read nowhere: the goldfish opponent
+    // never blocks (the flying / trample precedent). Empty => no conditional grant (every other
+    // card byte-identical).
+    struct AuraColorBonus
+    {
+        Color color      = Color::Colorless;
+        int   power      = 0;
+        int   toughness  = 0;
+        bool  lifelink   = false;
+        bool  unblockable = false;
+    };
+    std::vector<AuraColorBonus> aura_color_bonuses;
     // Colossification: "When this Aura enters, tap enchanted creature." A mandatory ETB, resolved by
     // the shared ResolveAuraEnterTapHost right AFTER aura_attached_to is set, at EVERY aura-ENTER
     // site (cast executor + rollout, Bruna's put, Arcanum Wings' swap) -- CR 603.6a, a put fires it
@@ -3344,6 +3386,12 @@ struct CardParams
     // byte-identical. Augur is the first {T} activation on a non-mana-dork CREATURE, so the
     // enumeration gates on CanTapNow (summoning sickness), not just !tapped.
     std::string             tap_draw_requires_top_supertype;
+    // Troyan, Gutsy Explorer: "{U}, {T}: Draw a card, then discard a card." Rides tap_draw_cost
+    // ("{U}") with this rider: after the draw, ONE card is discarded -- the provider's
+    // non-cleanup discard pick (ChooseNonCleanupDiscardIndex: the deck's own bucketed discard
+    // doctrine, the Neheb / Burning-Fist precedent), surfaced to a human as a `discard` decision.
+    // Shared resolution (ApplyPermAbility) -> executor and rollout identical. false = a plain draw.
+    bool                    tap_draw_then_discard = false;
 
     // Conservatory / Kitchen: "{4}, {T}: Investigate." Creates one Clue artifact token, whose own
     // "{2}, Sacrifice this token: Draw a card" lives on the "Clue Token" NAMED TOKEN DEF in

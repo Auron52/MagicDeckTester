@@ -366,6 +366,15 @@
     "toughness": "1",
     "type_line": "Creature — Human Cleric"
   },
+  "Auroral Procession": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{U}",
+    "oracle_text": "Return target card from your graveyard to your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Avacyn's Pilgrim": {
     "cmc": 1.0,
     "keywords": [],
@@ -1179,6 +1188,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant — Arcane"
+  },
+  "Detention Sphere": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}{U}",
+    "oracle_text": "When this enchantment enters, you may exile target nonland permanent not named Detention Sphere and all other permanents with the same name as that permanent.\nWhen this enchantment leaves the battlefield, return the exiled cards to the battlefield under their owner's control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Dimensional Infiltrator": {
     "cmc": 2.0,
@@ -2697,6 +2715,17 @@
     "toughness": "1",
     "type_line": "Creature — Angel Wizard"
   },
+  "Linvala, Shield of Sea Gate": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{W}{U}",
+    "oracle_text": "Flying\nAt the beginning of combat on your turn, if you have a full party, choose target nonland permanent an opponent controls. Until your next turn, it can't attack or block, and its activated abilities can't be activated.\nSacrifice Linvala: Choose hexproof or indestructible. Creatures you control gain that ability until end of turn.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Angel Wizard"
+  },
   "Lion Umbra": {
     "cmc": 2.0,
     "keywords": [
@@ -3533,6 +3562,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Reborn Hope": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "Return target multicolored card from your graveyard to your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Reclamation Sage": {
     "cmc": 3.0,
@@ -4386,6 +4424,17 @@
     "toughness": null,
     "type_line": "Land — Island Mountain"
   },
+  "Steel of the Godhead": {
+    "cmc": 3.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{2}{W/U}",
+    "oracle_text": "Enchant creature\nAs long as enchanted creature is white, it gets +1/+1 and has lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)\nAs long as enchanted creature is blue, it gets +1/+1 and can't be blocked.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Stingscourger": {
     "cmc": 2.0,
     "keywords": [
@@ -4710,6 +4759,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact Land"
+  },
+  "Troyan, Gutsy Explorer": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}{U}",
+    "oracle_text": "{T}: Add {G}{U}. Spend this mana only to cast spells with mana value 5 or greater or spells with {X} in their mana costs.\n{U}, {T}: Draw a card, then discard a card.",
+    "power": "1",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Vedalken Scout"
   },
   "Tukatongue Thallid": {
     "cmc": 1.0,

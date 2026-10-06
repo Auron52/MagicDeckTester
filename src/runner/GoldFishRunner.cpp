@@ -415,7 +415,8 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         // stated WIDE direction (a false positive only keeps casts pre-combat).
         if (p.aura_power_bonus > 0 || p.aura_tough_bonus > 0
             || p.aura_scale_power > 0 || p.aura_scale_tough > 0
-            || p.aura_set_base_power >= 0)                                   { return true; }   // Almost Perfect's base 9/10
+            || p.aura_set_base_power >= 0                                     // Almost Perfect's base 9/10
+            || !p.aura_color_bonuses.empty())                                { return true; }   // Steel of the Godhead
         if (p.pump_per_cards_drawn_power > 0 || p.pump_per_treasure_power > 0
             || p.pump_per_life_gained_power > 0 || p.pump_per_x_power > 0
             || p.counters_on_target > 0)                                     { return true; }

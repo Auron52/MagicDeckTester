@@ -6603,7 +6603,7 @@
    "keywords": [],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "This spell can't be countered.\n{R/G}: Target spell can't be countered. [Vanilla 2/2 Goblin Shaman for goldfishing -- a SIDEBOARD card, reachable off Living Wish (a creature, so a legal wish target). The two {R/G} HYBRID pips are real either-colour pips (ManaCost::hybrid_pair): the deck runs NO red source and casts it off {G}{G}, and CR 202.2b makes the card RED AND GREEN (derived from the pips, so no explicit colors array). ManaCost::ToString renders a hybrid as its FIRST colour, so logs show {R}{R} -- deliberate, for digest stability; payment is unaffected. NOT a dead card: with no blocker path it is an unopposed 2/2 clock -- in EldraziDisplacerFlicker's sideboard one badly dominated by that sideboard's two {C} mana sinks; in Prevent Damage's (which has no {C} sink) a vanilla body no engine piece reads. [PARTIAL: the static \"This spell can't be countered\" is inert. It is a stack-functioning ability (CR 113.6a) that only removes an option from a would-be COUNTERER; unlike shroud (CR 702.18a) it is NOT symmetric, so it places no restriction on our OWN plays, and having no cost it consumes nothing. The passive opponent casts nothing, and the engine's only counter path (EffectHandler::ResolveCounterSpell) is an explicit no-op. Disclosed deferral D1.] [PARTIAL: the activated \"{R/G}: Target spell can't be countered\" is inert AND NEVER LEGALLY ACTIVATABLE -- implementing it would ADD an illegal play, not restore a real one. There is no spell/stack target type (GameState::Target is Player|Permanent) and no priority window with a non-empty stack (ResolveStack drains after every cast), so a legal target can never exist and CR 601/602 forbid activating it. Carrying NO param is also what keeps this {T}-less repeatable mana sink out of the go-off: SpendSurplusOnDrain, SpendSurplusOnDamageSinks and TurnSolver's ActivatePermAbility ModeSpec table are each keyed on specific params, so ApplyBlinkLoop's per-iteration spend cannot latch onto it and eat the loop's margin (the Emiel {G/W} lesson). Disclosed deferral D2.]]",
+   "oracle_text": "This spell can't be countered.\n{R/G}: Target spell can't be countered. [Vanilla 2/2 Goblin Shaman for goldfishing -- a SIDEBOARD card, reachable off Living Wish (a creature, so a legal wish target) and, in Bruna's sideboard (2026-10-06), off Glittering Wish (the hybrid pips make it red AND green -- multicolored, CR 105.2c). The two {R/G} HYBRID pips are real either-colour pips (ManaCost::hybrid_pair): the deck runs NO red source and casts it off {G}{G}, and CR 202.2b makes the card RED AND GREEN (derived from the pips, so no explicit colors array). ManaCost::ToString renders a hybrid as its FIRST colour, so logs show {R}{R} -- deliberate, for digest stability; payment is unaffected. NOT a dead card: with no blocker path it is an unopposed 2/2 clock -- in EldraziDisplacerFlicker's sideboard one badly dominated by that sideboard's two {C} mana sinks; in Prevent Damage's (which has no {C} sink) a vanilla body no engine piece reads. In Bruna's it is a {G}{G} two-drop Aura host (green and red: Steel of the Godhead gives it nothing). [PARTIAL: the static \"This spell can't be countered\" is inert. It is a stack-functioning ability (CR 113.6a) that only removes an option from a would-be COUNTERER; unlike shroud (CR 702.18a) it is NOT symmetric, so it places no restriction on our OWN plays, and having no cost it consumes nothing. The passive opponent casts nothing, and the engine's only counter path (EffectHandler::ResolveCounterSpell) is an explicit no-op. Disclosed deferral D1.] [PARTIAL: the activated \"{R/G}: Target spell can't be countered\" is inert AND NEVER LEGALLY ACTIVATABLE -- implementing it would ADD an illegal play, not restore a real one. There is no spell/stack target type (GameState::Target is Player|Permanent) and no priority window with a non-empty stack (ResolveStack drains after every cast), so a legal target can never exist and CR 601/602 forbid activating it. Carrying NO param is also what keeps this {T}-less repeatable mana sink out of the go-off: SpendSurplusOnDrain, SpendSurplusOnDamageSinks and TurnSolver's ActivatePermAbility ModeSpec table are each keyed on specific params, so ApplyBlinkLoop's per-iteration spend cannot latch onto it and eat the loop's margin (the Emiel {G/W} lesson). Disclosed deferral D2.]]",
    "template": "vanilla_creature",
    "parameters": {}
   },
@@ -10944,7 +10944,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "You may reveal a multicolored card you own from outside the game and put it into your hand. Exile Glittering Wish. [Bruna's sideboard access (4 mainboard copies). Built EXACTLY as Living Wish: a WISH is a TUTOR whose search ZONE is the sideboard (CR 400.11b), so tutor_to_hand + wish_from_sideboard ride the whole searched-tutor apparatus -- the Plan::tutor_choice index axis, the plan-signature folds, the breakpoint pin, the human tutor chooser -- with only the pool swapped. The ONE difference is the restriction: 'a MULTICOLORED card' (any card type) is tutor_types [] (empty = any type, the Beseech the Queen precedent; the sorcery resolution path is not gated on a non-empty type list) plus wish_requires_multicolored, a conjunct inside TutorNumericFilterOk -- the same move wish_requires_name made for Legion Angel -- so the filter reaches the unpruned branch, the heuristic branch, GenericProvider's GenericTutorList and the cleanup-reach walk at once, plus a resolution guard in PerformTutor so enumeration and resolution cannot drift. Colour is read off the card DEFINITION (a zone Card is a bare placeholder with an empty colour mask, so a raw IsMulticolored() on a sideboard card is always false), and an UNIMPLEMENTED sideboard card (no definition) correctly fails the filter. Multicolored = two or more colours (CR 105.2c); hybrid pips count every colour they show. In this sideboard the legal pool is Bruna, Light of Alabaster (W/U), Indrik Umbra, Almost Perfect and Unflinching Courage (all G/W); Mythic Proportions (G), Avacyn's Pilgrim (G), Elgaud Shieldmate (U) and Worldfire (R) are NOT fetchable and the last two are never in any game. KEY INTERACTION: Bruna's attack trigger puts an Aura from HAND onto the battlefield attached to her for free, so a pre-combat Wish for Indrik Umbra / Almost Perfect turns a 6-mana aura into a 2-mana one -- which is why the wish target must be SEARCHED (in main 1, before attacks) and never pre-picked. Each sideboard card is a SINGLETON consumed on fetch (four Wishes see the pool shrink); a second Bruna fetched while one is on the battlefield is legal and the legend rule applies on cast. NO shuffle: a wish searches no library (CR 701.19c never fires; PerformTutor's wish branch skips ShuffleAfterSearch). Exile on resolution (not the graveyard). [PARTIAL: 'You may' -- declining is offered to a HUMAN (the tutor chooser returns -1) but is not emitted as an autonomous variant. WHY inert: the fetch costs nothing beyond the spell already cast and taking is weakly dominant -- even at 8+ cards the cleanup discard can shed the fetched card, and an Aura in the graveyard is still reachable by Bruna's attack trigger. Disclosed, not silently dropped.] [PARTIAL: 'reveal' -- the information half is inert (the passive opponent makes no decisions and nothing reads 'was revealed'); the viewer half rides PerformTutor's existing '(searched)' reveal.]]",
+   "oracle_text": "You may reveal a multicolored card you own from outside the game and put it into your hand. Exile Glittering Wish. [Bruna's sideboard access (4 mainboard copies). Built EXACTLY as Living Wish: a WISH is a TUTOR whose search ZONE is the sideboard (CR 400.11b), so tutor_to_hand + wish_from_sideboard ride the whole searched-tutor apparatus -- the Plan::tutor_choice index axis, the plan-signature folds, the breakpoint pin, the human tutor chooser -- with only the pool swapped. The ONE difference is the restriction: 'a MULTICOLORED card' (any card type) is tutor_types [] (empty = any type, the Beseech the Queen precedent; the sorcery resolution path is not gated on a non-empty type list) plus wish_requires_multicolored, a conjunct inside TutorNumericFilterOk -- the same move wish_requires_name made for Legion Angel -- so the filter reaches the unpruned branch, the heuristic branch, GenericProvider's GenericTutorList and the cleanup-reach walk at once, plus a resolution guard in PerformTutor so enumeration and resolution cannot drift. Colour is read off the card DEFINITION (a zone Card is a bare placeholder with an empty colour mask, so a raw IsMulticolored() on a sideboard card is always false), and an UNIMPLEMENTED sideboard card (no definition) correctly fails the filter. Multicolored = two or more colours (CR 105.2c); hybrid pips count every colour they show. In this sideboard (USER list, 2026-10-06) EVERY card is multicolored, so the legal pool is all ELEVEN names: Bruna, Light of Alabaster (W/U), Linvala, Shield of Sea Gate (W/U), Detention Sphere (W/U), Steel of the Godhead ({W/U} hybrid -> W/U), Troyan, Gutsy Explorer (G/U), Auroral Procession (G/U), Indrik Umbra, Almost Perfect, Unflinching Courage, Reborn Hope x2 (all G/W) and Vexing Shusher ({R/G} hybrid -> R/G; cast off {G}{G}). BrunaProvider::TutorSearchWidth (32) covers every name, so the pick is fully searched. (The previous list's Mythic Proportions, Avacyn's Pilgrim -- mono-green -- Elgaud Shieldmate and Worldfire were never fetchable.) KEY INTERACTION: Bruna's attack trigger puts an Aura from HAND onto the battlefield attached to her for free, so a pre-combat Wish for Indrik Umbra / Almost Perfect turns a 6-mana aura into a 2-mana one -- which is why the wish target must be SEARCHED (in main 1, before attacks) and never pre-picked. Each sideboard card is a SINGLETON consumed on fetch (four Wishes see the pool shrink); a second Bruna fetched while one is on the battlefield is legal and the legend rule applies on cast. NO shuffle: a wish searches no library (CR 701.19c never fires; PerformTutor's wish branch skips ShuffleAfterSearch). Exile on resolution (not the graveyard). [PARTIAL: 'You may' -- declining is offered to a HUMAN (the tutor chooser returns -1) but is not emitted as an autonomous variant. WHY inert: the fetch costs nothing beyond the spell already cast and taking is weakly dominant -- even at 8+ cards the cleanup discard can shed the fetched card, and an Aura in the graveyard is still reachable by Bruna's attack trigger. Disclosed, not silently dropped.] [PARTIAL: 'reveal' -- the information half is inert (the passive opponent makes no decisions and nothing reads 'was revealed'); the viewer half rides PerformTutor's existing '(searched)' reveal.]]",
    "template": "custom",
    "parameters": {
     "tutor_to_hand": true,
@@ -11135,6 +11135,135 @@
     "aura_tough_bonus": 2,
     "aura_grants_lifelink": true,
     "is_aura": true
+   }
+  },
+  {
+   "name": "Linvala, Shield of Sea Gate",
+   "mana_cost": "{1}{W}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Angel",
+    "Wizard"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Flying\nAt the beginning of combat on your turn, if you have a full party, choose target nonland permanent an opponent controls. Until your next turn, it can't attack or block, and its activated abilities can't be activated.\nSacrifice Linvala: Choose hexproof or indestructible. Creatures you control gain that ability until end of turn. [Bruna SIDEBOARD card (2026-10-06), reached by Glittering Wish: white AND blue (CR 105.2c multicolored). Modelled as a 3/3 legendary body (vanilla_creature; the engine-wide legend rule applies) -- a Bruna-style Aura host, and white + blue, so Steel of the Godhead gives it the full +2/+2. Flying inert (the goldfish opponent never blocks; the user-approved Bruna/Arcanum Wings precedent). [PARTIAL, PROVISIONAL (awaiting user sign-off): the full-party beginning-of-combat trigger is inert -- its only target is a nonland permanent an OPPONENT controls, which the passive opponent never has in this deck's games, so the trigger has no legal target and is removed (CR 603.3d); and the condition itself is unreachable here: a full party needs a Cleric, Rogue, Warrior AND Wizard, and this list holds a Cleric (Mother of Runes) and a Wizard (Linvala) but no Rogue or Warrior (Bruna is an Angel).] [PARTIAL, PROVISIONAL: 'Sacrifice Linvala: ... hexproof or indestructible' is not offered. Hexproof only stops an OPPONENT's spells and abilities (CR 702.11b) -- our own Aura spells still target -- and indestructible only answers destroy effects, which nothing in this game deals; the cost (losing a 3/3 legend and orphaning any Aura on it, CR 704.5m) is therefore a strict loss in every goldfish state. The viewer cannot activate it (disclosed, like Mother of Runes' protection).]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Troyan, Gutsy Explorer",
+   "mana_cost": "{1}{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Vedalken",
+    "Scout"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 3,
+   "oracle_text": "{T}: Add {G}{U}. Spend this mana only to cast spells with mana value 5 or greater or spells with {X} in their mana costs.\n{U}, {T}: Draw a card, then discard a card. [Bruna SIDEBOARD card (2026-10-06), reached by Glittering Wish (green AND blue). MANA: mana_dork producing the fixed {G}{U} BUNDLE (produces G,U + produces_amount 2 -- one of each, the Karoo bundle rule) + mana_only_spell_min_mv 5 + mana_only_spell_or_x: RestrictedManaUsable lets it pay only a SPELL of mana value 5+ or with {X} (read off the paying spell, PayingSpellCard / the batch-prepay scope), never an activated ability (Lightning Greaves' equip, Arcanum Wings' swap, its own loot) and never a filter's feed. In this list it pays Bruna (6), Eldrazi Conscription (8), Colossification (7), Mythic Proportions (7), Prodigious Growth (6), Indrik Umbra (6), Almost Perfect (6); not Linvala, Wish, Armory, Courage, Steel, Wings. The subset enumerator adds the two Hall constraints the restriction implies (BigOnlySubsetPayable), the whole-turn batch prepay declines a batch that mixes qualifying and non-qualifying casts (the per-cast payer is exact), a unit it over-produces is DROPPED rather than booked as general float (no big-spell reserve exists -- a disclosed approximation: a second 5+ spell the same phase could have used it), and a human cannot pre-tap it into the general float. Summoning sickness applies to both {T} abilities. LOOT: tap_draw_cost {U} + tap_draw_then_discard -- the shared TapDraw activation (Frost Augur's), then ONE discard chosen by the provider's non-cleanup discard pick (the deck's bucketed discard doctrine; the Neheb / Burning-Fist precedent), surfaced to a human as a `discard` decision. The {T} is shared, so the loot and the mana are mutually exclusive per untap.]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "produces_amount": 2,
+    "mana_only_spell_min_mv": 5,
+    "mana_only_spell_or_x": true,
+    "tap_draw_cost": "{U}",
+    "tap_draw_then_discard": true
+   }
+  },
+  {
+   "name": "Detention Sphere",
+   "mana_cost": "{1}{W}{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this enchantment enters, you may exile target nonland permanent not named Detention Sphere and all other permanents with the same name as that permanent.\nWhen this enchantment leaves the battlefield, return the exiled cards to the battlefield under their owner's control. [Bruna SIDEBOARD card (2026-10-06), reached by Glittering Wish (white AND blue). Modelled as a castable enchantment with no effect -- it is an enchantment we control for any reader that counts them (none in this list). [PARTIAL, PROVISIONAL (awaiting user sign-off): the ETB 'you MAY exile target nonland permanent ...' is always DECLINED. The passive opponent controls no nonland permanent in this deck's games, so the only legal targets are OUR OWN permanents, and exiling one of ours (with every same-name copy) only removes our own Aura / creature / Equipment. The one conceivable own-side upside is exiling our own Lightning Greaves to un-shroud its lone host so later Aura SPELLS can target it -- not modelled: it costs Wish + {1}{W}{U}, and the same host already takes Auras through Bruna's attack trigger and Arcanum Wings' swap (both non-targeting), or Greaves re-equips for {0} to a second creature. The viewer offers no target prompt for it.] [PARTIAL, PROVISIONAL: the leaves-the-battlefield return never fires -- nothing in this list or the passive opponent removes our enchantments, and with the ETB declined there is nothing to return.]]",
+   "template": "custom",
+   "parameters": {}
+  },
+  {
+   "name": "Steel of the Godhead",
+   "mana_cost": "{2}{W/U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nAs long as enchanted creature is white, it gets +1/+1 and has lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)\nAs long as enchanted creature is blue, it gets +1/+1 and can't be blocked. [Bruna SIDEBOARD card (2026-10-06), reached by Glittering Wish: the {W/U} HYBRID pip makes it white AND blue (CR 202.2b, derived from the pip) and is payable with either colour (ManaCost::hybrid_pair). Enchant creature: is_aura, host = the searched enchant_target / the shared Aura host ranking; Bruna's attack trigger gathers it (AuraCouldEnchant) and Arcanum Wings can swap it in. COLOUR-CONDITIONAL grant (aura_color_bonuses), read off the HOST's current colour in AuraBonusFor / CreatureHasLifelink at every combat site, executor and rollout alike: white -> +1/+1 and lifelink; blue -> +1/+1 (so Bruna and Linvala, white-and-blue, get +2/+2; Mother of Runes +1/+1 + lifelink; Troyan +1/+1; the green dorks and Vexing Shusher nothing). Bruna's gather takes it unconditionally (worth its maximum on a white-and-blue gatherer -- BrunaGatherCandidates). Lifelink modelled (our life total is read by nothing in this list, so faithful but outcome-inert). 'Can't be blocked' carried in the data and inert: the goldfish opponent never blocks (the flying / trample precedent).]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_color_bonuses": [
+     {
+      "color": "W",
+      "power": 1,
+      "toughness": 1,
+      "lifelink": true
+     },
+     {
+      "color": "U",
+      "power": 1,
+      "toughness": 1,
+      "unblockable": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "Auroral Procession",
+   "mana_cost": "{G}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Return target card from your graveyard to your hand. [Bruna SIDEBOARD card (2026-10-06), reached by Glittering Wish (green AND blue). A REGROWTH built exactly as the wish is: tutor_to_hand + tutor_from_graveyard + an empty tutor_types (any card) -- a tutor whose search ZONE is the graveyard, so WHICH card returns is the searched Plan::tutor_choice index axis ranked at RESOLUTION (it sees a card that reached the graveyard earlier in the same plan; Bruna's TutorSearchWidth covers every name), the returned card can be cast the same phase through the mid-phase acquisition re-solve (MTG_ACQ_RESOLVE), and a human picks off the live graveyard (tutor chooser; mandatory -- a targeted spell has no 'decline'). No library shuffle; the card enters hand as a Recur. Targeted (CR 601.2c): not castable with an empty graveyard (HasGraveyardTutorTarget; the legal set is read at the turn-start graveyard -- a plan that first puts the only target there is not offered the cast, a disclosed edge). [PARTIAL, PROVISIONAL (awaiting user sign-off): instant speed is collapsed onto our own main phases (the Worldly Tutor / Pyrohemia precedent; the engine has no opponent's-turn priority window). NOT strictly inert: casting it in the opponent's end step would spend mana left open at the end of our turn (e.g. after a cleanup discard put the target there) instead of next turn's -- a {G}{U} tempo edge the engine cannot express.]]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_from_graveyard": true
+   }
+  },
+  {
+   "name": "Reborn Hope",
+   "mana_cost": "{G}{W}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Return target multicolored card from your graveyard to your hand. [Bruna SIDEBOARD card (2 copies, 2026-10-06), reached by Glittering Wish (green AND white). A REGROWTH built exactly as the wish is: tutor_to_hand + tutor_from_graveyard + an empty tutor_types + wish_requires_multicolored (the zone-agnostic 'two or more colours' conjunct of TutorNumericFilterOk, read off each card's DEFINITION) -- a tutor whose search ZONE is the graveyard: searched Plan::tutor_choice index axis ranked at RESOLUTION, same-phase cast of the returned card via the acquisition re-solve, human tutor chooser off the live graveyard (mandatory -- targeted). No library shuffle; enters hand as a Recur. Targeted (CR 601.2c): not castable without a multicolored card in the graveyard (HasGraveyardTutorTarget, turn-start graveyard -- a plan that first puts the only target there is not offered the cast, a disclosed edge). In this list the multicolored cards are Bruna, Glittering Wish (it exiles itself on resolution, but a DISCARDED Wish is a legal target), Almost Perfect, Indrik Umbra, Unflinching Courage, Steel of the Godhead, Detention Sphere, Linvala, Troyan, Vexing Shusher, Auroral Procession and Reborn Hope itself (a resolving sorcery is on the stack, not in the graveyard, so it can never return itself).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_from_graveyard": true,
+    "wish_requires_multicolored": true
    }
   }
  ]

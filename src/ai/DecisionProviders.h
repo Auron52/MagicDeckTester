@@ -450,9 +450,14 @@ public:
     // Mythic Proportions, Colossification, Arcanum Wings, Wild Growth) against the base width 6, and
     // GenericProvider::TutorCandidates returns LIBRARY (shuffle) order -- so one legal target went
     // unscored every cast, chosen by shuffle rather than merit (the KittyEquipment width-8
-    // precedent). Glittering Wish's pool is at most 4 names. 8 = every legal name, so the target is
-    // fully searched.
-    int TutorSearchWidth() const override { return 8; }
+    // precedent). 8 = every legal name, so the target is fully searched.
+    // 2026-10-06 sideboard change (USER): Glittering Wish's pool is now ELEVEN multicolored names
+    // (Bruna, Almost Perfect, Indrik Umbra, Linvala, Troyan, Detention Sphere, Unflinching Courage,
+    // Steel of the Godhead, Vexing Shusher, Auroral Procession, Reborn Hope), and Auroral Procession /
+    // Reborn Hope search the GRAVEYARD (tutor_from_graveyard), whose list is ZONE order, not a
+    // ranking -- so any cap below the pool would be a shuffle-order prune, not a heuristic. 32 covers
+    // every distinct name this list can put in any of the three zones: still "every legal name".
+    int TutorSearchWidth() const override { return 32; }
     // MTG_BRUNA_ORDER -- a PROPOSED cast order (analyze-deck Stage 4, 2026-10-05), DEFAULT OFF: cast
     // order is USER-OWNED (docs/design/analysis-Bruna.md, "Stage 4 -- proposed cast order"). Off =>
     // DeckProvider (Generic) byte-for-byte.

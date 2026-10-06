@@ -415,6 +415,11 @@ MANIFEST = {
     # ApplyCombatAuraSwap.
     "attack_gather_auras":       ("dragon",           truthy),
     "aura_swap_cost":            ("main_phase",       truthy),
+    # ---- Bruna sideboard (2026-10-06) ----
+    # Troyan, Gutsy Explorer's loot: the activation is the tap_draw_cost main_phase line; WHICH card
+    # is discarded after the draw asks through ChooseNonCleanupDiscardIndex (the `discard` decision,
+    # the Neheb / Burning-Fist shape), provider bucket pick preselected.
+    "tap_draw_then_discard":     ("discard",          truthy),
     # Unexpectedly Absent: target rides the shared `target` decision (tuck branch consults
     # g_play_target_chooser); X rides the chosen_x plan-variant axis.
     "tuck_to_library":       ("target",               truthy),
@@ -882,6 +887,11 @@ INERT_PARAMS = {
     "wish_requires_name": "NAME filter on an already-mapped tutor (rides tutor_to_hand -> main_phase plan variants); narrows the pool, adds no decision",
     # ---- Bruna (2026-10-05) ----
     "wish_requires_multicolored": "COLOUR-COUNT filter on an already-mapped tutor (Glittering Wish; rides tutor_to_hand -> main_phase plan variants); narrows the pool, adds no decision",
+    # ---- Bruna sideboard (2026-10-06) ----
+    "tutor_from_graveyard": "tutor search-ZONE redirect to the GRAVEYARD (Auroral Procession / Reborn Hope regrowth; rides tutor_to_hand -> main_phase/tutor chooser off the live graveyard)",
+    "aura_color_bonuses": "Steel of the Godhead's colour-conditional static grant -- continuous, no choice (the host is the Aura's already-mapped enchant target)",
+    "mana_only_spell_min_mv": "mana-usage restriction (Troyan: spells of MV 5+), like creature_mana_only; allocation is the payment engine's, never hand pre-tapped",
+    "mana_only_spell_or_x": "mana-usage restriction detail (rides mana_only_spell_min_mv)",
     "produces_one_color": "mana-ability shape (Somberwald Sage: three of ONE colour) -- the colour is allocated at payment like every mana source; no viewer decision of its own (a creature-only source is never hand pre-tapped, disclosed 6a)",
     "aura_etb_tap_host": "Colossification's mandatory, untargeted ETB tap of its own host -- no choice (the host was chosen when the Aura was cast/put)",
     "aura_set_base_power": "Almost Perfect's static base-P/T set -- continuous, no choice (the host is the Aura's already-mapped enchant target)",
@@ -1435,6 +1445,7 @@ def modeled_tokens(card):
     if p.get("damage_divided"):                                           t.add("divide")
     if p.get("etb_bounce_land"):                                          t.add("bounce")
     if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
+    if p.get("tap_draw_then_discard"):                                    t.add("discard")   # Troyan's loot
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0:

@@ -893,7 +893,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
         if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
-        if (feeding && def.params.creature_mana_only) { return false; }
+        if (feeding && (def.params.creature_mana_only || BigSpellOnlySource(def.params))) { return false; }
         if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
         {
             const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
@@ -914,7 +914,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // Tap one non-filter source: THE shared mechanic (TapSourceIntoFloat above), which the
     // human pre-tap calls too so the two can never drift.
     auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
-    { if (def.params.creature_mana_only) { restricted_in_float = true; }
+    { if (def.params.creature_mana_only || BigSpellOnlySource(def.params)) { restricted_in_float = true; }
       TapSourceIntoFloat(state, active, p, def, col, floating, available, for_creature); };
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour
@@ -1275,6 +1275,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (for_creature && def->params.creature_mana_only && kind == 1
                     && CreatureOnlyFirstEnabled()
                     && !(def->card.IsCreature() && SacPayFodderCostsAttack(state, p))) { rank = -500; }
+                // BIG-SPELL-ONLY MANA PAYS A QUALIFYING SPELL FIRST (Troyan, Gutsy Explorer) -- the same
+                // argument: usable() admits it only for a spell of mana value 5+ (or with {X}), it can
+                // pay nothing else this turn, so spending it here and leaving the GENERAL sources up is
+                // never worse -- with the same attack exception (a Troyan that could swing keeps its
+                // provider rank). No such source on the board -> unreachable (byte-identical).
+                if (kind == 1 && BigSpellOnlySource(def->params)
+                    && !(def->card.IsCreature() && SacPayFodderCostsAttack(state, p))) { rank = -500; }
                 // Reference-replay tap preference (--tap-pref; nulled by RevealLogPause -> real
                 // payments only): a source the RECORDING tapped in this same (turn, phase)
                 // outranks every unpinned source. Order bias only -- never legality; among
@@ -1482,7 +1489,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (s.controller_index != active || s.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
-                        if (sd->params.creature_mana_only) { continue; }   // never a filter's feed
+                        if (sd->params.creature_mana_only || BigSpellOnlySource(sd->params)) { continue; }   // never a filter's feed
                         bool m = false;
                         for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                         { for (Color ic : fd->params.produces) { if (pc == ic) { m = true; break; } } if (m) { break; } }
@@ -1617,7 +1624,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (s.controller_index != active || s.tapped) { continue; }
                     const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                     if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
-                    if (sd->params.creature_mana_only) { continue; }   // never a filter's feed
+                    if (sd->params.creature_mana_only || BigSpellOnlySource(sd->params)) { continue; }   // never a filter's feed
                     bool m = false; Color match = Color::Colorless;
                     for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
@@ -1733,7 +1740,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (s.controller_index != active || s.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
-                        if (sd->params.creature_mana_only) { continue; }   // never a filter's feed
+                        if (sd->params.creature_mana_only || BigSpellOnlySource(sd->params)) { continue; }   // never a filter's feed
                         bool m = false;
                         for (Color c : EffectiveProducesFor(state, active, *sd, &s)) { if (c == ic) { m = true; break; } }  // RP feeder
                         if (!m) { continue; }
@@ -1941,6 +1948,32 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               }
               if (FloatLeftoverManaEnabled()) { state.floating_creature_mana.AddPool(r); }
           }
+      }
+      // BIG-SPELL-ONLY PROVENANCE (Troyan, Gutsy Explorer): its {G}{U} may pay only a spell of mana
+      // value 5+ (or with {X}). Within THIS payment it was legal, but a unit it over-produced must not
+      // survive as GENERAL float (the laundering class of sweep finding A-i). The engine keeps no
+      // big-spell-only reserve, so such a unit is DROPPED -- min(big-only yield this payment tapped,
+      // leftover), taken from the colours it makes (G/U) first. Conservative: a later 5+ spell this
+      // phase could have spent it (a disclosed approximation, Bruna ledger). Inert unless such a
+      // source was tapped AND mana was left over.
+      if (lo.Total() > 0)
+      {
+          int big = 0;
+          const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
+          for (int bi = 0; bi < nb; ++bi)
+          {
+              const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+              if (!bp.tapped || bf_pre[static_cast<std::size_t>(bi)].tapped) { continue; }
+              if (bp.controller_index != active || bp.def_absent) { continue; }
+              const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+              if (bd == nullptr || !BigSpellOnlySource(bd->params)) { continue; }
+              const int y = PermanentManaYield(state, bp, *bd);
+              big += (y >= 0 ? y : ManaProducedPerTap(*bd));
+          }
+          big = std::min(big, lo.Total());
+          int* order[7] = { &lo.green, &lo.blue, &lo.wild, &lo.white, &lo.black, &lo.red, &lo.colorless };
+          for (int k = 0; k < 7 && big > 0; ++k)
+          { const int t = std::min(big, *order[k]); *order[k] -= t; big -= t; }
       }
       if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
       // NO GENERIC MANA IN A HUMAN-PLAY POOL (see ConcretiseHumanFloat). This is the REQUEST site,
@@ -4785,7 +4818,9 @@ std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
                      || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                      || q.mana_rock;
     if (!is_src) { return std::string(); }
-    if (IsManaConversionSource(q) || IsScaledManaLand(*def) || q.creature_mana_only)
+    // Big-spell-only mana (Troyan) is engine-owned for the same laundering reason.
+    if (IsManaConversionSource(q) || IsScaledManaLand(*def) || q.creature_mana_only
+        || BigSpellOnlySource(q))
     { return std::string(); }
     if (!StorageSourceLive(p, *def))               { return std::string(); }
     if (!GraveyardFuelLive(state, active, *def))   { return std::string(); }

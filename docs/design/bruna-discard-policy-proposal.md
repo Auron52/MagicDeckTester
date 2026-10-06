@@ -58,6 +58,12 @@ promotion.
 | Wild Growth | 1 | {G} | `is_land_aura`, `land_aura_extra_mana 1` | MANA/ACCEL |
 | Somberwald Sage | 4 | {2}{G} 0/1 | `produces_amount 3`, `creature_mana_only` | MANA/ACCEL (last: its mana pays Bruna, never an Aura) |
 | Azorius Chancery | 3 | land | `etb_bounce_land`, 2 mana W/U | MANA/LANDS; BLANK (S2) with no other land |
+| Steel of the Godhead (SB, 2026-10-06) | -- | {2}{W/U} | `is_aura`, `aura_color_bonuses` (+1/+1 per white / blue host) | KILL/PAYLOAD -- 44 (read at its +2 on Bruna) |
+| Linvala, Shield of Sea Gate (SB, 2026-10-06) | -- | {1}{W}{U} 3/3 legendary | (party trigger / sac deferred) | KILL/HOST when no creature exists; else 35 |
+| Troyan, Gutsy Explorer (SB, 2026-10-06) | -- | {1}{G}{U} 1/3 legendary | `produces` G+U bundle, 5+-MV-only; loot | MANA/ACCEL (counted as 2: every payload is MV 5+) |
+| Vexing Shusher (SB, 2026-10-06) | -- | {R/G}{R/G} 2/2 | -- | KILL/HOST when no creature exists; else 35 |
+| Detention Sphere (SB, 2026-10-06) | -- | {1}{W}{U} | (ETB declined -- deferred) | overflow 20 (other) |
+| Auroral Procession / Reborn Hope (SB, 2026-10-06) | -- | {G}{U} / {G}{W} | `tutor_to_hand`, `tutor_from_graveyard` | overflow 25 -- NOT the tutor tier: a regrowth re-buys a card already seen, and Bruna's gather already reads the graveyard |
 | Remote Farm | 3 | land | 2 W, enters tapped (depletion) | MANA/LANDS |
 | Seaside Citadel | 2 | land | G/W/U, tapped | MANA/LANDS |
 | Botanical Sanctum / Razorverge Thicket | 4 / 3 | land | fastlands | MANA/LANDS |
