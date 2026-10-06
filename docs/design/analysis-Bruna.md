@@ -1184,3 +1184,106 @@ worktree `/home/vscode/wt/bruna-originchk`) -- none is this branch:
 
 **Accepted** smoke + regression (full-tier accepts with one-line notes carrying the binding origin rulings);
 `check_gt_logs.py` 668 consistent / 0 stale. Overnight not run (USER: not until asked); Bruna overnight GT still owed.
+
+## USER decisions 2026-10-06 (later) -- viewer host mark, d0 Colossification swap timing, cost check at play settings
+
+Recorded verbatim (relayed by the orchestrator), each with what was done:
+
+1. **"Marking it is fine"** -- mark the Aura host ranking's preferred host in the viewer's host-choice
+   menu, WITHOUT reordering it (reference replays index into the menu). Done in `b7b3f84a`:
+   `CheckLine` marks, per plan CLASS (choose-variants identical but for their enchant subs), the member
+   the autonomous dedup would keep (best `AuraPlanHostKey`, ties to the lowest plan index -- the
+   `EnumeratePlans` survivor rule) with `"suggested": true` on its creature-Aura enchant subs
+   (`MarkSuggestedAuraHosts`; land Auras are outside the ranking and never marked). `--validate-line`
+   emits the key only when true, so every other payload is byte-identical; `linebuild.js`
+   `nextDimension` carries the mark onto the choice in first-seen order; `index.html`'s dimension
+   dialog draws a green "suggested" pill + ring (grid and list shapes). Viewer-only, GT-neutral.
+   Verified: `references/Auras/claude_s15_gi14` frame 13 (T3, `cast=Ethereal Armor`): Slippery Bogle
+   suggested, Gladecover Scout not. Viewer checks: below.
+2. **"I would fix depth-0 for colossification to improve our ranking"** -- `af66b701` + `81472475` + `a62d6696`,
+   lever `MTG_SOLVE_COMBAT_SWAP` (DEFAULT ON, `=0` reverts, heurarm slot, one reader in
+   `EngineFlags.h`). The greedy policy (d0 runner; rollout future-turn horizon leaf) drops a single
+   pre-combat Arcanum Wings swap whose pick carries `aura_etb_tap_host` when the host could attack
+   (untapped, no pending ETB tap, `CanAttackFull`) AND the combat swap stays payable (the REAL payer
+   covers the plan's other costs and then the swap on a copy where every would-be attacker is tapped
+   -- s9420000 gi965: Birds held the Wings, attacked, and only its own mana completed the {2}{U}, so
+   the main swap is kept there; a flat pool check let ~10% of deferrals go unpaid in combat,
+   `MTG_TRACE=swapdefer`, so `a62d6696` uses the payer; the residue is Glittering Wish lines whose
+   continuation spends the mana). The d0 runner now pins the damage-max combat swap
+   (`PinRolloutAuraSwap`) exactly as the horizon leaf already did. The pass runs ONLY right before
+   the pin (`TurnSolver::DeferAuraSwapToCombat`), never inside Solve: Solve also serves continuation
+   re-solves that carry no pin. Chains (K>=2) and Aura CASTS are untouched (a cast's host is the host
+   ranking's, which already prices Colossification's tap). The searched tree still branches both
+   windows. Only Bruna holds an `aura_swap_cost` card.
+   **Paired A/B (one pooled batch, on vs `=0`, final tree `a62d6696`):** d0 9,000 games (s1001 x1000,
+   s2002 x1000, s9.40/9.41/9.42/9.43M x2000): **514 better / 4 worse, net -737 turns (-0.082/game)**,
+   every cell -75..-149 (the flat-check tree: 520/4, -748). d5 play settings 800 (s9.1M, s9.5M x400): 1/1, net 0. d3 b10 s9.2M x200: 0/1 (+1).
+   2HG d3 b10 450 (s1001 x50, s9.6M, s9.7M x200): 0/2 (+2). Searched worse, two-stage recovery: s9.5M
+   d5 gi69 4->5 recovers at d4 b100; s9.2M d3 gi11 4->5 recovers at d8 b0; 2HG s1001 gi43 5->6
+   recovers at d5 b100 (kept hand + draws identical; T1 Pilgrim not cast at d3 b10 -- allocation);
+   2HG s9.7M gi11 5->6 recovers at d8 b0. All four are allocation churn of the d3/d5 search after
+   the horizon leaf's estimate changed (searched total over every paired cell + the suite: 8 better /
+   7 worse -- neutral). **Named games:** smoke d0 gi12 6->5, gi885 8->7; gi681
+   (seed 9,300,000, the host-ranking proof's d0 cell) 7->6. Unit (`test_bruna_sweep.cpp`): no
+   main-phase Colossification swap onto a would-be attacker (control arm `=0` takes it, so it fails
+   without the fix) + the pin names the Wings; a sick host keeps the main swap; a swap only a
+   mana-creature host can pay stays in main.
+3. **"search should be used for almost everything"** (the analyze_deck cost check) -- `aed5456c`:
+   the cost-aggregate diagnostic ran `--depth 3 --ignore-play-profile` with NO budget (unbounded d3),
+   200 games x 2 serial runs, and never finished on Bruna. Now ONE pooled `mtg --batch`, jobs omit
+   depth and budget so the batch resolves the deck's PLAY settings exactly as the suite's d5 cases
+   (value_play, else d5 / budget 20), profile attached, arms seed-paired via a new per-job heurarm
+   slot `MTG_COST_REFRAME` (EnvOn, default OFF -> engine byte-identical). Still searched. Bruna: 93 s
+   wall, base 5.1300 vs reframe 5.1850 -> HIGH_DISCOUNT_COMBO. The analyze-deck skill (Stage 4) now
+   documents it (it did not mention the old behaviour).
+
+## Suite verdicts 2026-10-06b -- smoke + regression on `a62d6696` (origin `584efea3` + the three decisions)
+
+Rebased onto origin `584efea3` (refsafe tooling + reference-checker fixes; no engine src change),
+`./build.sh`, smoke then regression serially at `THREADS=20`. Results:
+`logs/suite_results_2026-10-06b/{smoke,regression}/` and durable copy
+`/workspaces/MagicDeckTester/logs/durable/bruna_suite_2026-10-06b/`. Only Bruna cells moved; every
+other deck/cell is identical to GT (turns and digests). Loss = 9.
+
+| Tier | Cell | net | better | worse | verdict |
+|---|---|---|---|---|---|
+| smoke | bruna d0 | -89 | 60 | 0 | swap timing (gi12 6->5, gi885 8->7 -- the previous accept's two worse games) |
+| smoke | bruna d3 / d5 | -3 / -2 | 3 / 2 | 0 / 0 | rollout horizon-leaf swap timing |
+| smoke | bruna2hg d3 | **+1** | 0 | 1 | gi43 5->6, see below |
+| regression | bruna d0 | -75 | 61 | 0 | swap timing |
+| regression | bruna d3 s2002 / d5 s2002 | 0 / 0 | 0 | 0 | digest-only |
+| regression | bruna d3 s3003 / d5 s3003 | 0 / 0 | 1 / 1 | 1 / 1 | gi35, see below |
+
+**Deck nets:** Bruna smoke -94 (+1 on its 2HG variant: deck incl. 2HG -93), regression -75.
+
+**Every worse game** (mulligan first: kept hand + draws identical in all three -> like-for-like line changes):
+* smoke bruna2hg d3 gi43 5->6: T1 Avacyn's Pilgrim not cast at d3 b10; stage 1 (d5 b100, 2HG) wins
+  T5 = budget churn.
+* regression bruna d3 + d5 s3003 gi35 4->5 (same line at both depths: T1 Remote Farm over Forest, the
+  T4 Pilgrim + Wings + combat-swap Colossification kill not found): stage 1 (d4 b100) T5, stage 2
+  (d8 b0) T4 = budget churn. Attributed: `MTG_SOLVE_COMBAT_SWAP=0` on the same binary gives T4 at
+  d3 b10, so it is the horizon leaf's changed estimate redirecting the search, not a new defect;
+  `MTG_TRACE=swapdefer` on it is what found the flat-pool affordability optimism fixed in `a62d6696`.
+
+**Open (surfaced, not blocking; default taken):** bruna2hg's smoke key is +1 on its own. I treated the
+2HG case as a variant of deck Bruna (same decklist + profile; only the GT key differs), whose net is
+-93, and accepted, because its one worse game recovers at stage 1. If 2HG keys must clear the bar on
+their own, the remedy is a re-accept after whatever re-tunes the d3 leaf; nothing here is unexplained.
+
+**Reference gate (`--strict`):** 103 ok / 368 repaired / **1 play-drift** / 0 shuffle-dead / 0
+board-diverged / 0 enum-gap / 0 contract-fail (472 refs). The play-drift is Mirrorwing v2
+`claude_s51_gi50` (T5 vs recorded T4) -- pre-existing, listed in the previous verdicts, the
+ATTACK_BODY_TAP_ORDER question still with the user; every Mirrorwing GT cell is byte-identical, so
+this branch did not move it. Origin's 584efea3 fixes cleared the Soldiers CONTRACT-FAILs, Angels
+s5_gi4 and StompySurprise v1 s11_gi10.
+
+**Accepted** smoke then regression (`--accept-with-regressions`, notes carry the binding rulings);
+`check_gt_logs.py` 668 consistent / 0 stale. Overnight not run (USER: not until asked); Bruna
+overnight GT still owed.
+
+**Viewer checks** (`bash test/viewer_checks.sh --sample` on `a62d6696`): every layer green except the
+jsdom client check's "loop macro" (EDF `loop x3` queues `act=Kitchen` lines) and "ability tag
+affordance" (`act=Utopia Mycon` where `cast=` expected) -- both reproduce identically on a fresh
+`./build.sh` of pure origin `584efea3` (scratch worktree, removed), so they are origin's, not this
+branch's; the Aura-host mark touches neither path. `viewer_linebuild_check.js` and
+`viewer_decision_types_check.js` pass; the sample protocol sweep is 12 ok / 24 repaired / 0 drift.
