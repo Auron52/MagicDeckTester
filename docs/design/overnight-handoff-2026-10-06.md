@@ -16,11 +16,23 @@ and what must be true before any of them starts.
    `/tmp` and `~` (other than `~/.claude`) are container overlay.
 5. Two agent branches were being wound down at handoff. Check whether they landed on
    `phase-1-2-deck-analyzer` or were parked:
-   * `viewer-combat-swap`: human-play auto-defer of the main-phase Arcanum Wings → Colossification
-     swap onto a would-be attacker into the combat window (`MTG_SOLVE_COMBAT_SWAP` rule). Its first
-     full regression run showed 5 failed / 14 slower. Those changes leaked into search, so the
-     viewer-only part was to land separately. Any engine-side remainder needs its own suite verdict
-     and is NOT part of the overnight run.
+   * `viewer-combat-swap` (pushed, NOT landed; base e1171a1d): human-play only. A main-phase
+     Arcanum Wings → Colossification (host-tapping Aura) swap onto a would-be attacker is applied
+     automatically in combat, after attackers are declared, when its {2}{U} is payable without
+     attackers' mana. Old references replay with the old timing via a recording stamp. 460/460
+     unit tests pass. Search wins 131/131 of the "Wings + Colossification is lethal" states.
+     **LAND IT FIRST, before the overnight run.** The user will not record Bruna references until
+     it is in. Steps: rebase onto the tip, `./build.sh`, run smoke + regression (must be
+     byte-identical: human play only), run the viewer checks, push, watch CI (Windows), restart
+     the viewer from the primary checkout. Full steps: `docs/design/viewer-combat-swap-status.md` (on that branch).
+     Logs: `logs/durable/viewer_cswap_2026-10-06/`.
+   * `viewer-combat-swap-engine-parked` (pushed, parked, AWAITS THE USER): a CR 508.1f fix. The
+     engine taps attackers only at combat damage, so an attacking Birds or Pilgrim could pay the
+     combat swap, which is illegal. The branch also keeps a mana creature home when the swap needs
+     its mana. Cost: only Bruna moves (smoke +33 turns, regression +23). 21 of 23 slower smoke games
+     were wins that relied on the illegal payment; the other 2 recover at a higher budget. Search
+     wins 158/158 automatic-win states. The same bug affects firebreathing:
+     `docs/design/attackers-tapped-at-declaration.md`. The user decides whether it lands.
    * `wish-heuristic`: Glittering Wish candidate shortlist (user spec: at most 2 Auras, the
      highest-power Aura first; a cheap Aura only as a searched second candidate when no
      cheat-into-play path exists; no duplicate Bruna, which is the fallback/enabler; Troyan when
