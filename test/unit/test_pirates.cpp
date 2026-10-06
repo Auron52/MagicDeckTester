@@ -20,6 +20,7 @@
 #include "mtg_test_seam.h"
 
 #include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -423,11 +424,12 @@ TEST_CASE("Daring Buccaneer: Vial-putting the only other Pirate leaves the Bucca
     CHECK(both);          // offered -- but ONLY in the puts-last order (next test)
 }
 
-TEST_CASE("Daring Buccaneer: a Vial put + Buccaneer affordable only puts-last is offered puts-last, and resolves at {R}")
+TEST_CASE("Daring Buccaneer: a Vial put + Buccaneer affordable only with the put AFTER the cast is offered, and resolves at {R}")
 {
     // One Mountain. Puts-first the Corsair has left the hand -> Buccaneer is {2}{R}: unaffordable.
-    // Puts-last (Plan::vial_after_casts) it reveals the Corsair still in hand -> {R}. The enumerator's
-    // puts-last pricing retry must emit that plan, flagged, and never the puts-first one.
+    // With the put sequenced AFTER the cast it reveals the Corsair still in hand -> {R}. A put is
+    // ordered like a cast of its card (USER 2026-10-06), and the pricing walks the put at that
+    // position, so the plan must be offered and must resolve both.
     EnsureCardsLoaded();
     GameState s = BuccaneerBoard(1, {"Daring Buccaneer", "Corsair Captain"});
     const int vi = Put(s, "Aether Vial", 0, 70);
@@ -437,7 +439,6 @@ TEST_CASE("Daring Buccaneer: a Vial put + Buccaneer affordable only puts-last is
     for (const TurnSolver::Plan& p : plans)
     {
         if (!(HasVialPut(p, "Corsair Captain") && BuccaneerCasts(p) > 0)) { continue; }
-        CHECK(p.vial_after_casts);
         pick = &p;
     }
     REQUIRE(pick != nullptr);
@@ -775,7 +776,9 @@ TEST_CASE("Forerunner drain lethal in a main phase is a win the rollout apply se
     CHECK(OpponentHasLost(s));
 }
 
-// ---- Vial-put order (Plan::vial_after_casts) ---------------------------------------------------
+// ---- Vial-put order: a put is sequenced like a CAST (USER 2026-10-06) ---------------------------
+// On the explicit route (the human's queued order / a searched ordering) a put resolves at its
+// VECTOR position; there is no separate before/after-the-casts axis.
 
 namespace
 {
@@ -788,12 +791,12 @@ TurnSolver::Plan CastAndVial(const std::string& cast, const std::string& vial, b
     c.kind      = Action::Kind::CastFromHand;
     c.card_name = cast;
     c.def       = &Def(cast);
-    plan.actions.push_back(c);
     Action v;
     v.kind      = Action::Kind::ActivateVial;
     v.card_name = vial;
-    plan.actions.push_back(v);
-    plan.vial_after_casts = after;
+    if (after) { plan.actions.push_back(c); plan.actions.push_back(v); }
+    else       { plan.actions.push_back(v); plan.actions.push_back(c); }
+    plan.searched_order = true;   // the explicit route: vector order is the realised order
     return plan;
 }
 
@@ -819,7 +822,6 @@ TEST_CASE("Vial order: cast Metallic Mimic THEN Vial-put a Pirate gives the Pira
         s.players[0].hand.push_back(HandCard("Metallic Mimic", 3));
         s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
         const TurnSolver::Plan plan = CastAndVial("Metallic Mimic", "Dire Fleet Captain", after);
-        CHECK(TurnSolver::VialOrderMatters(plan));
         TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
         REQUIRE(CountNamed(s, "Metallic Mimic") == 1);
         REQUIRE(CountNamed(s, "Dire Fleet Captain") == 1);
@@ -846,43 +848,30 @@ TEST_CASE("Vial order: a Daring Buccaneer cast before the Vial put still reveals
     }
 }
 
-TEST_CASE("Vial order: the enumerator offers the casts-first variant only where the order can matter")
+TEST_CASE("Vial order: the enumerator offers ONE line per put/cast set -- no timing twin")
 {
     EnsureCardsLoaded();
-    auto variants = [](const GameState& s)
+    GameState s = PiratesState();
+    for (int k = 0; k < 2; ++k) { Put(s, "Mountain", 0, 300 + k); }
+    const int vi = Put(s, "Aether Vial", 0, 2);
+    s.battlefield[vi].charge_counters = 2;
+    s.players[0].hand.push_back(HandCard("Metallic Mimic", 3));
+    s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
+    std::map<std::string, int> seen;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
     {
-        int n = 0;
-        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
-        {
-            if (!p.vial_after_casts) { continue; }
-            ++n;
-            CHECK(TurnSolver::VialOrderMatters(p));
-        }
-        return n;
-    };
-    {
-        GameState s = PiratesState();
-        for (int k = 0; k < 2; ++k) { Put(s, "Mountain", 0, 300 + k); }
-        const int vi = Put(s, "Aether Vial", 0, 2);
-        s.battlefield[vi].charge_counters = 2;
-        s.players[0].hand.push_back(HandCard("Metallic Mimic", 3));
-        s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
-        CHECK(variants(s) > 0);
-    }
-    {
-        // No entering-effect source among the casts: Vial-put Dire Fleet Captain + cast Goblin Tomb
-        // Raider resolves identically either way -> no variant (and no other deck ever gets one).
-        GameState s = PiratesState();
-        for (int k = 0; k < 2; ++k) { Put(s, "Mountain", 0, 300 + k); }
-        const int vi = Put(s, "Aether Vial", 0, 2);
-        s.battlefield[vi].charge_counters = 2;
-        s.players[0].hand.push_back(HandCard("Goblin Tomb Raider", 3));
-        s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
-        CHECK(variants(s) == 0);
+        if (p.searched_order) { continue; }
+        std::vector<std::string> k;
+        for (const Action& a : p.actions)
+        { k.push_back(std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str()); }
+        std::sort(k.begin(), k.end());
+        std::string key = p.land_to_play;
+        for (const std::string& e : k) { key += "|" + e; }
+        CHECK_MESSAGE(++seen[key] == 1, "duplicate line ", key);
     }
 }
 
-TEST_CASE("Vial order: a searched_order plan with the Vial put deferred puts it after EVERY cast")
+TEST_CASE("Vial order: a searched_order plan with the Vial put LAST in its vector puts it after EVERY cast")
 {
     // "Metallic Mimic, Siren Stormtamer, then Staunch Crewmate (vial)": with a Mimic already on the
     // board the Crewmate enters with TWO counters (one per Mimic), and the explicit cast order holds.
@@ -907,8 +896,6 @@ TEST_CASE("Vial order: a searched_order plan with the Vial put deferred puts it 
     v.kind = Action::Kind::ActivateVial; v.card_name = "Staunch Crewmate";
     plan.actions.push_back(v);
     plan.searched_order   = true;
-    plan.vial_after_casts = true;
-    CHECK(TurnSolver::VialOrderMatters(plan));
     TurnSolver::ApplyPlan(s, plan, true);
     CHECK(PlusCounters(ByNumber(s, 5)) == 2);   // Crewmate: both Mimics
     CHECK(PlusCounters(ByNumber(s, 4)) == 2);   // Stormtamer: both Mimics (cast after the 2nd Mimic)

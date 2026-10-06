@@ -146,7 +146,8 @@ static const bool s_flag_nonconv = EnvOn("MTG_FLAG_NONCONV");
 //
 // With the marker (below) present, `order` is the FULL declared sequence and the reorderable slot
 // set widens from "non-sac hand casts" to "non-sac hand casts + every board activation"
-// (TurnSolver::IsTrailingActivation). Sac casts, graveyard casts, Vial deploys, SacForMana,
+// (TurnSolver::IsTrailingActivation). Vial deploys are slots in both forms (sequenced like casts,
+// USER 2026-10-06). Sac casts, graveyard casts, SacForMana,
 // DigDraw and the land keep their positions -- they run in separate canonical loops and the viewer
 // has no way to sequence them against the rest.
 //
@@ -228,7 +229,11 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
     for (size_t i = 0; i < plan.actions.size(); ++i)
     {
         const auto& a = plan.actions[i];
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        // An AETHER VIAL PUT is a slot in BOTH forms: it is sequenced like a cast of its card (USER
+        // 2026-10-06: "the viewer should use my order"), and the viewer names it by its creature
+        // (a queued Vial entry, and `cast_order_canonical` lists it at its realised position).
+        if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            || a.kind == Action::Kind::ActivateVial)
         { slots.push_back(i); }
         else if (full_order && TurnSolver::IsTrailingActivation(a.kind))
         { slots.push_back(i); any_activation = true; }
@@ -240,6 +245,17 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
     // Greedily pick, for each name in `order`, the first not-yet-used slot whose card matches.
     std::vector<size_t> remaining = slots;   // slot positions still to place
     std::vector<Action> seq;                 // reordered actions
+    // A put the list does NOT name comes FIRST: that is a cast-only pin saved before puts were
+    // sequenced (every reference before 2026-10-06), and every plan then deployed its puts ahead of
+    // its casts -- so the replay keeps the order the human actually played.
+    for (auto it = remaining.begin(); it != remaining.end();)
+    {
+        const Action& a = plan.actions[*it];
+        if (a.kind == Action::Kind::ActivateVial
+            && std::find(order.begin(), order.end(), a.card_name.str()) == order.end())
+        { seq.push_back(a); it = remaining.erase(it); }
+        else { ++it; }
+    }
     for (const std::string& name : order)
     {
         for (auto it = remaining.begin(); it != remaining.end(); ++it)
@@ -4650,18 +4666,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      && (a.convoke_green > 0 || a.convoke_other > 0))
             { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
         }
-        // Plan::vial_after_casts on a CONTINUATION (lockstep with ApplyPlanDirect's
-        // apply_continuation_plan): its puts deploy after its casts, below. Two routes reach here with
-        // the flag set -- a continuation-list twin (AppendVialOrderVariants now twins those) and the
-        // searched re-solve, whose fresh enumeration has always twinned; before this branch the
-        // latter deployed its puts FIRST, i.e. the executor played a line the search never scored.
         PlanSoulbondDeclineScope _sbd_cont(extra.soulbond_decline);   // Plan::soulbond_decline, continuation twin
-        const bool cont_vial_after = extra.vial_after_casts;
-        if (!cont_vial_after)
-        {
-            for (const Action& a : extra.actions)
-            { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
-        }
         // Continuation casts in the SAME canonical order the rollout's apply_plan_actions
         // realises (ordering-audit 2026-08-15, item 2: this loop ran in RAW plan order, so a
         // continuation holding more than one cast could execute a different sequence than the
@@ -4674,7 +4679,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i = 0; i < static_cast<int>(extra.actions.size()); ++i)
         {
             const Action& a = extra.actions[i];
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { cont_order.push_back(i); }
+            // Vial puts ride the cast sequence (sequenced like casts of their card, USER 2026-10-06;
+            // lockstep with ApplyPlanDirect's apply_plan_actions).
+            if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+                || a.kind == Action::Kind::ActivateVial) { cont_order.push_back(i); }
         }
         if (!extra.searched_order && cont_order.size() > 1)
         {
@@ -4687,7 +4695,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 for (int i : cont_order)
                 {
                     const Action& a = extra.actions[i];
-                    const bool is_ena = !a.alt_cost
+                    const bool is_ena = a.kind == Action::Kind::CastFromHand && !a.alt_cost
                         && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
                     (is_ena ? ena : rest).push_back(i);
                 }
@@ -4724,6 +4732,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int ci : cont_order)
         {
             const Action& a = extra.actions[ci];
+            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); continue; }
             {
                 m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
                 const bool put_armed_c = put_in_hand_armed(a.card_name);
@@ -4754,13 +4763,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
-        }
-        // ...the deferred puts, at the point the rollout's apply_plan_actions deploys them (after the
-        // graveyard casts, before the trailing activations).
-        if (cont_vial_after)
-        {
-            for (const Action& a : extra.actions)
-            { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
         }
         // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
         // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw
@@ -5799,20 +5801,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ranking's best (see TurnSolver::TraceAuraHostProof). Autonomous play only; read-only.
     if (TRACE_ON("hostproof") && !HumanPlayActive())
     { TurnSolver::TraceAuraHostProof(state, is_pre_combat_main, plan); }
-    // Plan::vial_after_casts (lockstep twin of ApplyPlanDirect's vial_after_armed): this plan's Vial
-    // puts are deployed after its graveyard casts instead of here. Top-level plan only -- the
-    // continuation and recorded-script replays above deploy theirs first, as always.
-    const bool vial_after = plan.vial_after_casts;
+    // AETHER VIAL PUTS are sequenced like CASTS of their card (USER 2026-10-06): each is a member of
+    // the ordered cast sequence below -- vector position on the searched/human route, its card's
+    // CastOrderRank otherwise. Lockstep twin: ApplyPlanDirect's apply_plan_actions.
+    auto is_put = [](const Action& a) { return a.kind == Action::Kind::ActivateVial; };
     // Plan::soulbond_decline (lockstep twin of ApplyPlanDirect's scope): a plan the search scored
     // as "cast the Paladin, do not pair it" is realised that way here too.
     PlanSoulbondDeclineScope _sbd_plan(plan.soulbond_decline);
-    if (!vial_after)
-    {
-        for (const Action& a : plan.actions)
-        {
-            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
-        }
-    }
     // Lotus Bloom: apply SacForMana (float the chosen colour) and Suspend BEFORE the batch pre-pay /
     // casts, exactly as the rollout's ApplyPlanDirect does at this same logical point -> lockstep. Both
     // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
@@ -5850,7 +5845,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
-    // logical point (after the land drop + Vial deploys) -> identical prepay. Declined -> greedy.
+    // logical point (after the land drop; Vial puts now ride the cast sequence) -> identical prepay. Declined -> greedy.
     TurnSolver::BatchPrepayMainCasts(state, plan.actions);
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
     // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
@@ -5875,6 +5870,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         for (const Action& a : plan.actions)
         {
+            if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
@@ -6009,6 +6005,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // sequence at the copy's rank (mirrors ApplyPlanDirect -- lockstep).
         if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
         { ord.push_back(i); continue; }
+        if (is_put(a)) { ord.push_back(i); continue; }
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         if (!a.alt_cost && (a.sacrifice_land
                             || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
@@ -6029,6 +6026,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
+        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -6099,7 +6097,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[i];
         if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
-            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate))
+            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate) || is_put(a))
         { order.push_back(i); }
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
@@ -6115,6 +6113,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
+        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -6185,17 +6184,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
-    }
-    // Plan::vial_after_casts: the deferred Vial puts, at the point ApplyPlanDirect's apply_plan_actions
-    // deploys them (after its graveyard casts). Unguarded by staged_break / bp_trunc_exec on purpose,
-    // like the rollout's apply_vial: the variant is only ever emitted for plans that open no
-    // breakpoint (AppendVialOrderVariants), so neither flag can be set here.
-    if (vial_after)
-    {
-        for (const Action& a : plan.actions)
-        {
-            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
-        }
     }
 
     // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land

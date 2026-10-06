@@ -310,8 +310,6 @@ enum Slot : int
     AURA_HOST_BRANCH,         // MTG_AURA_HOST_BRANCH      PROOF CONTROL ARM: the search keeps every creature-Aura host as its own plan instead of the shared host ranking (AuraPlanHostKey). Default OFF
     ROLLOUT_AURA_SWAP,        // MTG_ROLLOUT_AURA_SWAP     a future-turn horizon-leaf plan pins the damage-max Arcanum Wings combat swap. Default ON since 2026-10-06 (the fd-diverge it exposed was the BP-NODE numbering defect, fixed by MTG_BP_NODE_SHADOW); =0 disables
     PD_M2_ROOT_ONLY,          // MTG_PD_M2_ROOT_ONLY       Prevent Damage (with MTG_PD_ALL_M2): the main-phase split applies at the ROOT turn only; projected future turns keep every cast in main 1 (PhaseFilterRootTurnOnly). Diagnostic arm for the ALL_M2 regression, default OFF
-    VIAL_TWIN_DEDUP,          // MTG_VIAL_TWIN_DEDUP      a Vial-put ORDER twin (Plan::vial_after_casts) joins the post-apply EXACT-duplicate skip (PlanDupSkippable). Default ON
-    VIAL_TWIN_ROLLOUT_LEGACY, // MTG_VIAL_TWIN_ROLLOUT_LEGACY  inside a leaf ROLLOUT the Vial-order twin keeps its pre-0cb72937 param gate. Default ON
     CANON_CONT_NOACTS,        // MTG_CANON_CONT_NOACTS    an UNBRANCHED canon continuation (BpUnbranchedCanon) applies its casts only, not its board activations (Plan::cont_canon). Default ON
     NEEDS_TAP_ORDER,          // MTG_NEEDS_TAP_ORDER        needs-based mana-source choice: among the plain-land tiers a source is ranked FIRST by the unmet demand its tap would create (demand = hand cast costs + our board's activation pips + one expected reveal from the LIBRARY's castable pips when a dig/draw is live, net of this payment's own coloured pips; supply = untapped sources per colour, decremented as the payment taps), THEN by the flexibility ladder. Colourless stops being "spend first" the moment a {C} pip is in demand (EDF's Displacer); a needed colour is held while an unneeded one pays a generic pip. USER 2026-10-05: "needs based ... first hand and then deck for cases where we are drawing cards". Measurement lever, default OFF
     PAY_ROLLBACK,             // MTG_PAY_ROLLBACK           same-turn mana-payment ROLLBACK: when a later line is short of a colour (a real payment fails, or a dig's find has the mana but not the colour), re-pay ONE earlier pip of this turn from a still-untapped side-effect-free source that cannot make that colour, freeing the source that can (src/ai/PayRollback.h; docs/design/mana-payment-rollback.md). At most one rescue per turn, dominant swaps only, lockstep on the state. USER 2026-10-05: "a backup which attempts to bridge this consistency gap". Measurement lever, default OFF
@@ -588,8 +586,6 @@ inline const char* Name(int slot)
         "MTG_AURA_HOST_BRANCH",
         "MTG_ROLLOUT_AURA_SWAP",
         "MTG_PD_M2_ROOT_ONLY",
-        "MTG_VIAL_TWIN_DEDUP",
-        "MTG_VIAL_TWIN_ROLLOUT_LEGACY",
         "MTG_CANON_CONT_NOACTS",
         "MTG_NEEDS_TAP_ORDER",
         "MTG_PAY_ROLLBACK",

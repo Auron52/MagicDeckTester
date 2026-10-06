@@ -570,10 +570,9 @@ See `no-greedy-in-search-window.md` step 35 (`ContPins`). Lockstep contract: the
 installed for a continuation ride the first recorded action of that continuation
 (`Action::cont_pins`); the executor's record replay resets its pin scope on every tagged action (an
 EMPTY tag is how a later pin-less continuation stops an earlier one's pins leaking forward), and
-the three index-based routes install `ContPinsOf(extra)` directly. Known remaining asymmetry: the
-Vial-ORDER axis (`vial_after_casts`, a whole-plan ordering flag) still does not fan inside a
-continuation -- the record replay has no way to reproduce a plan-level ordering -- so a
-continuation's Vial-put-vs-cast order is the default rule. OPEN.
+the three index-based routes install `ContPinsOf(extra)` directly. (The Vial-ORDER asymmetry once
+noted here is CLOSED 2026-10-06: the `vial_after_casts` axis is deleted, and a Vial put is sequenced
+like a cast in both worlds' continuation loops -- `vial-put-interleaving.md`.)
 
 ## #14 — the executor replayed a DEFERRED acquisition continuation INLINE (FIXED 2026-10-02)
 

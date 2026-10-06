@@ -487,13 +487,11 @@ more cast variant whose `tutor_target` is the sentinel `(decline search)` (`kTut
 `PerformTutor` resolves as a decline on both the executor and rollout paths. A tutor SPELL needs none (its
 resolution `tutor_etb` frame already takes -1), and a Vial/put-route ETB tutor asks `tutor_etb` with -1 =
 decline. Autonomous enumeration never emits it (the search's decline is the `tutor_choice` index axis).
-**Vial-put ORDER is a plan variant** (`Plan::vial_after_casts`; Pirates). Both apply worlds deploy a
-plan's Aether Vial puts before its hand casts by default; where the order can change the outcome
-(`TurnSolver::VialOrderMatters`: a Metallic Mimic / Forerunner of the Coalition / Daring Buccaneer cast
-alongside a Vial put) the enumerator adds a casts-first twin. The menu summary lists entries in
-RESOLUTION order (`X (vial), Mimic` vs `Mimic, X (vial)`), the plan JSON carries `"vial_after_casts":
-true` on the twin, and `CheckLine` exposes an `Aether Vial timing` sub (`before the casts` / `after the
-casts`, kind `vial_order`) so a hand-assembled line can pick either.
+**Vial-put ORDER is NOT a decision** (USER 2026-10-06: "I should not be asked for an order. The order
+is apparent."). A put is sequenced like a cast of its creature: the human's queued order is applied as-is
+(the put is a `--cast-order` slot under its creature's name), and the search uses the deck's cast order.
+The menu summary lists puts and casts in RESOLUTION order. There is no `Aether Vial timing` sub and no
+`vial_after_casts` plan field any more (`docs/design/vial-put-interleaving.md`).
 `land_face` follows the same pattern: `EnumeratePlansWithLand` emits one land-play variant per face
 (both carry the front hand-card `land_to_play`, so both survive `CheckLine`'s land-name match and
 surface as a `face` choose sub); the DB synthesizes the back face (`mdfc_back_name`/`mdfc_back_produces`)

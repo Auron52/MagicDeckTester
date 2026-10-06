@@ -300,22 +300,36 @@ function main() {
       // carries no structured flag for this (unlike `activate`/`sacout`), so key off the summary
       // tag the emitter appends -- exact-match per cast name, since names contain commas
       // ("Krenko, Mob Boss") and a regex over the joined summary would mis-split them.
-      // Walk the summary's cast section in plan order with a cursor: a plan can hold TWO copies of
-      // one card with only the second vialled ("cast: Marshal of Zhalfir, Marshal of Zhalfir
-      // (vial)"), and a bare `summary.includes(name + " (vial)")` would mark both. Cursor-matching
-      // whole names also survives commas inside names ("Krenko, Mob Boss"), which splitting on ", "
-      // would tear in half.
+      // PER NAME, not one cursor over the whole section: the summary lists entries in RESOLUTION
+      // order (a Vial put is sequenced like a cast -- it can sit anywhere among them) while `casts`
+      // is plan-vector order, so a single left-to-right cursor missed a put the summary printed
+      // FIRST (Soldiers s5_gi4 T2: "Champion of the Parish (vial), Harbin" against casts
+      // [Harbin, Champion] read the Champion as a hand cast). For each name, collect its whole-name
+      // occurrences in summary order and hand their (vial) flags to that name's casts in order, so
+      // "Marshal of Zhalfir, Marshal of Zhalfir (vial)" still marks only the second copy. Whole-name
+      // matching (bounded by the section start / ", " and by ", " / " (" / the end) survives commas
+      // inside names ("Krenko, Mob Boss") and a name that prefixes another.
       const summary = plan.summary || '';
       const ci = summary.indexOf('cast:');
-      const castSec = ci >= 0 ? summary.slice(ci + 5) : '';
-      let cursor = 0;
+      const castSec = ci >= 0 ? summary.slice(ci + 5).replace(/^ /, '') : '';
+      const flagsByName = {};
+      const flagsOf = nm => {
+        if (flagsByName[nm]) return flagsByName[nm];
+        const out = [];
+        for (let at = castSec.indexOf(nm); at >= 0; at = castSec.indexOf(nm, at + 1)) {
+          const pre = at === 0 || castSec.startsWith(', ', at - 2);
+          const end = at + nm.length;
+          const post = end === castSec.length || castSec.startsWith(', ', end) || castSec.startsWith(' (', end)
+                    || castSec.startsWith(';', end);
+          if (pre && post) out.push(castSec.startsWith(' (vial)', end));
+        }
+        return (flagsByName[nm] = out);
+      };
+      const seenName = {};
       const vialFlag = casts.map(nm => {
-        const at = castSec.indexOf(nm, cursor);
-        if (at < 0) { return false; }
-        cursor = at + nm.length;
-        const v = castSec.startsWith(' (vial)', cursor);
-        if (v) { cursor += ' (vial)'.length; }
-        return v;
+        const k = seenName[nm] = (seenName[nm] || 0) + 1;
+        const f = flagsOf(nm);
+        return f.length >= k ? f[k - 1] : false;
       });
       let built = [];
       if (plan.land) built = LB.queueCard(d, built, plan.land, 'land');

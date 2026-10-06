@@ -2882,7 +2882,10 @@ void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& 
 
 static bool IsEtbTreasureMakerCast(const Action& a)
 {
-    if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.rock_mana.Total() <= 0) { return false; }
+    // A Vial PUT of the maker counts too: puts are sequenced like casts (USER 2026-10-06), so the
+    // hoist that moves a cast Corsair Captain ahead of the casts its Treasure funds moves a put one.
+    if ((a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial)
+        || a.alt_cost || a.rock_mana.Total() <= 0) { return false; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
     return d != nullptr && d->params.etb_creates_treasures > 0;
 }

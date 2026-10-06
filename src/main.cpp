@@ -780,28 +780,31 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                            : (a.kind == Action::Kind::CastFromHand
                               || a.kind == Action::Kind::CastFromGraveyard) ? 2 : 0);
     }
-    // RESOLUTION ORDER of Vial puts vs casts (Plan::vial_after_casts). The summary lists the entries
-    // in the order they RESOLVE: every plan deploys its Vial puts FIRST (both apply worlds), and a
-    // vial_after_casts plan deploys them right after its last cast (before the trailing board
-    // activations) -- so "Siren Stormtamer (vial), Metallic Mimic" vs "Metallic Mimic, Siren
-    // Stormtamer (vial)". UNCONDITIONAL whenever a put is present (Soldiers 5d sweep, seeds 9100047 /
-    // 9100043 / 9100019, 2026-10-04): this used to be keyed on VialOrderMatters' old param list, so
-    // every plan outside it -- "Champion of the Parish, Esper Sentinel, Esper Sentinel (vial)" -- was
-    // printed in action-vector order, the put LAST, while it resolved FIRST; the human picked lines by
-    // a description of a different line.
+    // RESOLUTION ORDER of Vial puts vs casts. A put is sequenced like a CAST of its card (USER
+    // 2026-10-06), so whenever the plan holds one, the summary lists the puts and the non-sacrifice
+    // hand casts in the order they RESOLVE -- vector order for a searched/pinned plan, the canonical
+    // CastOrderLess sort (+ the payable-order fallback) otherwise, as apply_plan_actions does -- so the
+    // human never picks a line by a description of a different line (Soldiers 5d sweep, 2026-10-04).
+    // Plans without a put print in action order as they always have.
     if (std::find(vial_tag.begin(), vial_tag.end(), 1) != vial_tag.end())
     {
-        std::vector<std::string> puts, ordered;
-        int last_cast = -1;   // position in `ordered` (the put-less list) of the last cast
-        for (size_t i = 0; i < casts.size(); ++i)
+        std::vector<int> slots;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
         {
-            if (vial_tag[i] == 1) { puts.push_back(casts[i]); continue; }
-            if (vial_tag[i] == 2) { last_cast = static_cast<int>(ordered.size()); }
-            ordered.push_back(casts[i]);
+            const Action& a = plan.actions[i];
+            if (a.kind == Action::Kind::ActivateVial
+                || (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land))
+            { slots.push_back(i); }
         }
-        const std::size_t at = plan.vial_after_casts ? static_cast<std::size_t>(last_cast + 1) : 0;
-        ordered.insert(ordered.begin() + static_cast<long>(at), puts.begin(), puts.end());
-        casts.swap(ordered);
+        std::vector<int> order = slots;
+        if (!plan.searched_order)
+        {
+            std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+            { return CastOrderLess(s, plan.actions[x], plan.actions[y]); });
+            if (PayableOrderOn()) { ApplyPayableCastOrder(s, plan.actions, order); }
+        }
+        const std::vector<std::string> before = casts;
+        for (size_t k = 0; k < slots.size(); ++k) { casts[slots[k]] = before[order[k]]; }
     }
     if (casts.empty()) { os << "cast: (nothing)"; }
     else
@@ -1382,8 +1385,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (hide_bundle[i]) { continue; }
             bool has_collapse = false;
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "|"
-                            + std::to_string(plans[i].rad_mode)
-                            + (plans[i].vial_after_casts ? "|va" : "") + "#";
+                            + std::to_string(plans[i].rad_mode) + "#";
             for (const Action& a : plans[i].actions)
             {
                 if (a.kind == Action::Kind::ActivatePod)
@@ -1551,7 +1553,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // seed-8 representative logic below keeps its job.
         auto plan_identity = [&](const TurnSolver::Plan& p) -> std::string
         {
-            std::string k = p.land_to_play + "|" + p.land_face + (p.vial_after_casts ? "|va" : "") + "#";
+            std::string k = p.land_to_play + "|" + p.land_face + "#";
             for (const Action& a : p.actions) { k += payload_key(a); k += ';'; }
             return k;
         };
@@ -1701,9 +1703,6 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             { if (k) { os << ", "; } JsonStr(os, p.would_drop[k]); }
             os << "]";
         }
-        // Plan::vial_after_casts, structured (the summary's entry order is the human-readable half).
-        // Emitted only when set, so every other plan serialises byte-identically.
-        if (p.vial_after_casts) { os << ", \"vial_after_casts\": true"; }
         // The searched rad mode, structured (the summary above carries the human-readable half).
         // Emitted only when the plan actually HAS the choice, so every existing reference and every
         // deck without such a land serialises byte-identically. 1 = enter tapped and take the
