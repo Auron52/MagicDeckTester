@@ -146,9 +146,22 @@ TEST_CASE("Snow scry USER rule: firm calls (prune) and lean calls")
     Permanent sh; sh.card = CardSs("Scrying Sheets", 30); sh.controller_index = 0; sh.owner_index = 0;
     two.battlefield.push_back(sh);
     CHECK_FALSE(Keep(two, "Frost Augur"));
-    // "Accelerators are good unless we are lacking threats" -- no threat in Turn3's hand.
+    // ...and a CANTRIP in hand is a draw source too (USER: "also includes the cantrip ones").
+    GameState cant = Turn3(0);
+    cant.players[0].hand.push_back(CardSs("Ice-Fang Coatl", 32));
+    CHECK_FALSE(Keep(cant, "Frost Augur"));
+    // "Accelerators are good unless we are lacking threats" -- Turn3 has a Slumber IN PLAY, which every
+    // snow permanent feeds, so that is a threat; without it (and none in hand) the Heart is bottomed.
+    // ...but "Acceleration that goes into nothing is a waste": Turn3's hand is one Frost Augur (1 mana)
+    // against 3 mana next turn -- no sink, so the Heart is bottomed even with the Slumber in play.
     CHECK_FALSE(Keep(Turn3(0), "Coldsteel Heart"));
-    GameState th = Turn3(0);
+    GameState sink = Turn3(0);
+    sink.players[0].hand.push_back(CardSs("Abominable Treefolk", 33));   // 1 + 4 > 3: a Treefolk sooner
+    CHECK(Keep(sink, "Coldsteel Heart"));
+    GameState bare = Turn3(0);
+    bare.battlefield.pop_back();                            // the Slumber
+    CHECK_FALSE(Keep(bare, "Coldsteel Heart"));
+    GameState th = bare;
     th.players[0].hand.push_back(CardSs("Abominable Treefolk", 31));
     CHECK(Keep(th, "Coldsteel Heart"));
 }

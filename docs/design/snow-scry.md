@@ -52,8 +52,14 @@ keep, 0 always away, -1 no verdict; default -1 for every provider, so nothing el
   in hand.
 
 The rest are the **default** of a searched branch (the search still tries the other option): a land
-when no spare is held -> keep; draw cards -> keep, except Frost Augur with 2+ repeatable draw sources
-(tap_draw_cost on board or in hand); accelerants -> keep only with a threat in hand; a card whose mana
+when no spare is held -> keep; draw cards -> keep, except Frost Augur with 2+ draw sources
+(repeatable ones on board; in hand those plus cantrips -- USER: *"Draw sources here also includes the
+cantrip ones. They are great when your goal is to fill the board, which you can do as long as you have
+threats."*); accelerants -> keep only with a threat in hand or in play AND a mana sink -- the hand's castable
+spells cost more than next turn's mana (USER: *"good early in the game if you have none"*, *"If they let
+you cast a Treefolk a turn earlier that is great. But you need to have something to use their mana for.
+Acceleration that goes into nothing is a waste."*), and (USER: the snow permanents *"can even just help
+Marit-Lage's Slumber themselves and get the 20/20 token"*); a card whose mana
 value exceeds next turn's mana (Owl, Dragon early) -> bottom; else keep.
 
 ## The search (`MTG_SCRY_SEARCH_TRIGGERED`)

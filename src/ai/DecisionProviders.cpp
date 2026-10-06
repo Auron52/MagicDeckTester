@@ -2955,8 +2955,9 @@ static int SnowScryVariant()
 //   FIRM keep:   a payoff whose every coloured pip has a producer on board or among the lands in hand
 //                (Abominable Treefolk -- "always keep ... unless we have no means to play it").
 //   LEAN:        no spare land -> keep the land. Draw (tap_draw_cost / etb_self_draw) -> keep, except a
-//                Frost Augur (tap_draw_cost creature) with 2+ repeatable draw sources already on board
-//                or in hand. Accelerant -> keep unless no threat is in hand. Mana value above next
+//                Frost Augur (tap_draw_cost creature) with 2+ draw sources: repeatable ones on board
+//                (Augur, Scrying Sheets), and in hand those plus the cantrips (Coatl, Astrolabe). Accelerant -> keep when a threat is in hand or in play AND the
+//                hand's castable spells cost more than next turn's mana (something to spend it on). Mana value above next
 //                turn's mana (Rimefeather Owl, Rimescale Dragon early) -> bottom. Else keep.
 // "Threat" and "accelerant" are the user's discard buckets (CleanupDiscardCandidates), param-driven.
 struct SnowScryCall { int firm; bool lean; };
@@ -2978,7 +2979,7 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
     if (!td.card.IsLand() && prov.NeverCast(td)) { return { 0, false }; }
 
     int board_mana = 0, draw_sources = 0;
-    bool same_name = false;
+    bool same_name = false, threat_present = false;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -2987,9 +2988,12 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
         if (d == nullptr) { continue; }
         if (p.card.IsLand() || is_accel(*d)) { ++board_mana; }
         if (d->params.tap_draw_cost.has_value()) { ++draw_sources; }
+        // A threat ALREADY IN PLAY counts: Slumber and the Treefolk grow with every snow permanent we
+        // add, so an accelerant (itself snow) feeds them. USER 2026-10-06: the snow permanents "can
+        // even just help Marit-Lage's Slumber themselves and get the 20/20 token".
+        if (is_threat(*d)) { threat_present = true; }
     }
-    int lands_in_hand = 0;
-    bool threat_in_hand = false;
+    int lands_in_hand = 0, hand_demand = 0;
     for (const Card& c : ap.hand)
     {
         if (c.m_is_staged) { continue; }
@@ -2997,8 +3001,11 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (CleanupDiscardIsLand(c)) { ++lands_in_hand; }
         if (d == nullptr) { continue; }
-        if (d->params.tap_draw_cost.has_value()) { ++draw_sources; }
-        if (is_threat(*d)) { threat_in_hand = true; }
+        // In hand a CANTRIP counts too (USER 2026-10-06: "Draw sources here also includes the cantrip
+        // ones"). On the battlefield only a repeatable source does: a resolved cantrip has drawn.
+        if (is_draw(*d)) { ++draw_sources; }
+        if (is_threat(*d)) { threat_present = true; }
+        if (!d->card.IsLand() && !prov.NeverCast(*d)) { hand_demand += CleanupDiscardManaValue(c); }
     }
     const int drop_open   = ap.lands_played_this_turn < ap.LandDropsAvailable() ? 1 : 0;
     const int spare_lands = std::max(0, lands_in_hand - drop_open);
@@ -3033,7 +3040,12 @@ static SnowScryCall SnowUserScry(const SnowProvider& prov, const GameState& s, c
         const bool augur = td.params.tap_draw_cost.has_value() && td.card.IsCreature();
         return { -1, !(augur && draw_sources >= 2) };
     }
-    if (is_accel(td)) { return { -1, threat_in_hand }; }
+    // Accelerant (USER 2026-10-06): "good unless we are lacking threats", "good early in the game if
+    // you have none", "If they let you cast a Treefolk a turn earlier that is great. But you need to
+    // have something to use their mana for. Acceleration that goes into nothing is a waste." -> keep
+    // it only when a threat exists AND the hand's spells cost more than next turn's mana (a sink). An
+    // early hand with no accelerant is normally exactly that state; a flooded late hand is not.
+    if (is_accel(td)) { return { -1, threat_present && hand_demand > next_mana }; }
     if (CleanupDiscardManaValue(top_card) > next_mana) { return { -1, false }; }
     return { -1, true };
 }
