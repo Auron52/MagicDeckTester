@@ -30016,14 +30016,14 @@ TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
 // policy only (the permitted greedy class); the searched tree still branches swap vs no-swap.
 static void MaybePinRolloutAuraSwap(const GameState& state, bool is_pre_combat, TurnSolver::Plan& plan)
 {
-    // DEFAULT OFF (=1 enables) -- an EXPERIMENT lever, not an adoption. Measured with the pin in
-    // Solve(): 400 paired d5/b20 games 5.0400 -> 5.0375 (1 better / 0 worse) and seed 77008 T4 at b200
-    // instead of b800. But its changed trajectories reach a latent executor/rollout mismatch the
-    // pre-change tree never hit on the 5a seeds: seed 4004 gi201 (4205) d5/b20, predicted T5,
-    // realised T6 -- the executor's site-9 continuation is INDEX-addressed into a list built from a
-    // board that differs from the one the scoring rollout saw (docs/design/analysis-Bruna.md,
-    // "Claude-play sweep"). Off until that mismatch is root-caused; MTG_ROLLOUT_AURA_SWAP=1 is its repro.
-    static const bool s_on = EnvOn("MTG_ROLLOUT_AURA_SWAP");
+    // DEFAULT ON since 2026-10-06 (=0 disables). It shipped OFF because its trajectories exposed an
+    // fd-diverge (seed 4205 gi201, predicted T5 / realised T6); that was a BP-NODE child numbering
+    // defect, not this pin -- root-caused and fixed by MTG_BP_NODE_SHADOW
+    // (docs/design/site9-continuation-index-mismatch.md). Re-measured on the fixed tree, Stage-5a
+    // seeds 1001/2002/3003/4004 x {d3 b10, d5 b20} x 300, paired: 14 better / 10 worse, -3 turns,
+    // 0 [fd-diverge] / 0 [nonconv]; every worse game recovers (two-stage check: d<off turn> b100, else
+    // d8 b0). Bruna-only in effect (the only aura_swap_cost card is Arcanum Wings).
+    static const bool s_on = EnvOn("MTG_ROLLOUT_AURA_SWAP", true);
     if (!heurarm::Flag(heurarm::ROLLOUT_AURA_SWAP, s_on) || !is_pre_combat || plan.combat_aura_swap_choice >= 0) { return; }
     const int me = state.active_player_index;
     for (const Permanent& p : state.battlefield)
