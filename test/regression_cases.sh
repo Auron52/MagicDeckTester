@@ -59,7 +59,6 @@ declare -A DECK_FILE=(
   [pirates]=decks/Pirates/Pirates.cod
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
   [soldiers]=decks/Soldiers/soldiers.cod
-  [bruna]=decks/Bruna/Bruna.cod
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
@@ -92,7 +91,6 @@ declare -A DECK_PROF=(
   [pirates]=decks/Pirates/Pirates.profile.json
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
   [soldiers]=decks/Soldiers/soldiers.profile.json
-  [bruna]=decks/Bruna/Bruna.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -363,7 +361,6 @@ SMOKE_CASES=(
   "melira2hg          3 1001 25 10"
   "pirates2hg         3 1001 50 10"
   "soldiers2hg        3 1001 50 10"
-  "bruna2hg           3 1001 50 10"
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
   # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
@@ -415,17 +412,15 @@ SMOKE_CASES=(
   "soldiers 0 1001 1000 0"
   "soldiers 3 1001  150 10"
   "soldiers 5 1001   75 20"
-  # bruna: Bant voltron-ramp around Bruna, Light of Alabaster (attack-trigger Aura gather from hand +
-  # graveyard, Arcanum Wings' aura swap, Colossification's ETB tap, Glittering Wish into a multicoloured
-  # sideboard). ADDED 2026-10-05 (analysis-Bruna.md) at PIRATES'/SOLDIERS' counts. Measured in ONE pooled
-  # 20-thread batch (seed 8900000, 400 games/cell): d3 b10 1.56 s/game, d5 b20 2.63 s/game, d5 b40
-  # 4.33 s/game (core-ms per game under 20-way contention, the suite's own conditions); slowest game
-  # 56 s (d5 b40). d5 b20 2.63 s is inside the 3x rule's 3.10 s budget (3x fivecolour). 2HG: smoke
-  # canary only (bruna2hg above) -- nothing in the 60 or the wishable sideboard reads opponent heads or
-  # starting life (annihilator is a signed-off goldfish-inert deferral).
-  "bruna 0 1001 1000 0"
-  "bruna 3 1001  150 10"
-  "bruna 5 1001   75 20"
+  # bruna: REMOVED FROM ALL THREE TIERS 2026-10-06 (USER: "Yes, we should take Bruna out.") -- it fails
+  # the 3x suite-cost rule (CLAUDE.md): ~3.9 s/game after the Glittering Wish sideboard widened from 4 to
+  # 11 names, against a 3.10 s budget (3x fivecolour), and it was 35% of the overnight tier's work units.
+  # Getting it under 3x is the FIRST goal (the Wish heuristic is the intended fix); re-measure on a QUIET
+  # box with a pooled batch, then restore the rows below (and the DECK_FILE / DECK_PROF entries
+  # [bruna]=decks/Bruna/Bruna.cod / decks/Bruna/Bruna.profile.json) and accept GT for all three tiers.
+  # smoke: "bruna2hg 3 1001 50 10", "bruna 0 1001 1000 0", "bruna 3 1001 150 10", "bruna 5 1001 75 20"
+  # regression: "bruna 0 2002 1000 0", "bruna 3 {2002,3003} 150 10", "bruna 5 {2002,3003} 75 20"
+  # overnight: "bruna 0 {4004,6006,8008,10010} 2000 0", "bruna 3 {4004..7007} 1000 20", "bruna 5 {4004..7007} 500 40"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -668,12 +663,7 @@ REGRESSION_CASES=(
   "soldiers 3 3003  150 10"
   "soldiers 5 2002   75 20"
   "soldiers 5 3003   75 20"
-  # bruna: see the SMOKE block (pirates'/soldiers' counts).
-  "bruna 0 2002 1000 0"
-  "bruna 3 2002  150 10"
-  "bruna 3 3003  150 10"
-  "bruna 5 2002   75 20"
-  "bruna 5 3003   75 20"
+  # bruna: removed 2026-10-06, see the SMOKE block.
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -1090,22 +1080,7 @@ OVERNIGHT_CASES=(
   "soldiers 5 5005  500 40"
   "soldiers 5 6006  500 40"
   "soldiers 5 7007  500 40"
-  # bruna: see the SMOKE block. Full angels/pirates overnight shape. Estimated from the gate-cell
-  # rates (d3 b20 ~2.5 s/game, d5 b40 4.33 s/game): ~5.2 core-h -- the most expensive overnight block
-  # of the pirates-shaped decks; to be confirmed by the first overnight run (NOT yet run: the USER
-  # starts overnight tiers).
-  "bruna 0  4004 2000 0"
-  "bruna 0  6006 2000 0"
-  "bruna 0  8008 2000 0"
-  "bruna 0 10010 2000 0"
-  "bruna 3 4004 1000 20"
-  "bruna 3 5005 1000 20"
-  "bruna 3 6006 1000 20"
-  "bruna 3 7007 1000 20"
-  "bruna 5 4004  500 40"
-  "bruna 5 5005  500 40"
-  "bruna 5 6006  500 40"
-  "bruna 5 7007  500 40"
+  # bruna: removed 2026-10-06, see the SMOKE block.
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.

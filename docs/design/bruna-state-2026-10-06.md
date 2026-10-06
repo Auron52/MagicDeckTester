@@ -114,6 +114,8 @@ Alabaster. Glittering Wish fetches from a multicolored sideboard.
 
 ## Cost: probably over the 3x rule now
 
+**UPDATE 2026-10-06 (evening): Bruna is OUT of the suite.** USER: *"Yes, we should take Bruna out."* All 23 rows (smoke incl. `bruna2hg`, regression, overnight) and the `DECK_FILE`/`DECK_PROF` entries were removed from `test/regression_cases.sh`, and its GT keys + `gt_logs` dropped. `suite_gate.py --require decks/Bruna` now exits 3, so the value leaf and mulligan generators refuse it. Bruna was 35% of the overnight tier's work units. To restore: get it under 3x (the Wish heuristic), re-measure on a QUIET box with a pooled batch (a `--cost` run on a contended box reads inflated -- it said 8.24x at load ~47), then re-add the rows listed in the comment in `regression_cases.sh` and accept GT for all three tiers.
+
 Before the sideboard change, Bruna cost 2.63 s/game against a budget of 3.10 s (3x FiveColour). The
 new sideboard widened Glittering Wish from 4 names to 11. Search units rose 1.5x at d5 b20 and 1.8x
 at d3 b10, which puts the deck at roughly 3.9 s/game, **likely over the budget**. CLAUDE.md says that
