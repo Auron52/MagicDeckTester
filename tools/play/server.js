@@ -116,11 +116,28 @@ function extractBlock(text, startMarker, endMarker) {
 // to be an immediate child of the deck folder. path.basename() still strips components off the
 // deck name itself, exactly as before.
 const VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+// The entry of directory `dir` named `name`, matched CASE-INSENSITIVELY (exact match first), or
+// null. The layout says decks/<Name>/<Name>.cod but nothing enforces the CASE of the file stem, and
+// the user's Windows filesystem cannot tell the difference: Soldiers shipped as
+// decks/Soldiers/soldiers.cod, played and saved references normally on Windows, and was INVISIBLE
+// on Linux (absent from listDecks, unreplayable by every exact-name resolver). So entries are
+// matched the way the user's filesystem matches them. Same contract as deck_registry.ci_entry.
+function ciEntry(dir, name) {
+  if (fs.existsSync(path.join(dir, name))) return name;
+  let hits = [];
+  try { hits = fs.readdirSync(dir).filter(e => e.toLowerCase() === name.toLowerCase()); }
+  catch (e) { return null; }
+  return hits.length === 1 ? hits[0] : null;
+}
+
 function resolveDeck(deckName, version) {
   if (typeof deckName !== 'string' || !deckName) throw new Error('deck required');
   const base = path.basename(deckName);                    // strip any path components
   const stem = base.replace(/\.[^.]+$/, '');
-  const deckDir = path.join(DECKS_DIR, stem);              // per-deck folder
+  // `stem` stays the name the client sent (it names the references/ folder); every FILE below is
+  // resolved case-insensitively to what is actually on disk.
+  const deckDir = path.join(DECKS_DIR, ciEntry(DECKS_DIR, stem) || stem);   // per-deck folder
   let dir = deckDir;
   if (version) {
     if (!VERSION_RE.test(version) || version === '.' || version === '..') {
@@ -129,13 +146,14 @@ function resolveDeck(deckName, version) {
     dir = path.join(deckDir, version);
     if (path.dirname(dir) !== deckDir) throw new Error('version must be one folder under the deck');
   }
-  const deckPath = path.join(dir, base);
+  const deckPath = path.join(dir, ciEntry(dir, base) || base);
   if (path.dirname(deckPath) !== dir) throw new Error('deck must be under decks/<name>/');
   if (!fs.existsSync(deckPath)) throw new Error('deck not found: ' + base);
-  const profilePath = path.join(dir, stem + '.profile.json');
+  const fstem = path.basename(deckPath).replace(/\.[^.]+$/, '');   // the stem ON DISK (names the sidecars)
+  const profilePath = path.join(dir, fstem + '.profile.json');
   // The exhaustive keep/bottom sidecar (mulligan TABLE). Its presence gates whether the viewer's
   // pre-game keep/bottom suggestions come from the table (see runStep) rather than the live heuristic.
-  const sidecarPath = path.join(dir, stem + '.keepmodel.exhaustive.profile.json.gz');
+  const sidecarPath = path.join(dir, fstem + '.keepmodel.exhaustive.profile.json.gz');
   return { deckPath, profilePath: fs.existsSync(profilePath) ? profilePath : null, stem,
            version: version || null, hasSidecar: fs.existsSync(sidecarPath) };
 }
@@ -970,7 +988,8 @@ function tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepMo
 // `version` describes an ARCHIVED list. Its key is the COMPOUND key deck_registry.discover()
 // assigns a variant folder (`<deck>_<variant>`), so it reads its OWN bench row and counts its OWN
 // references -- never the shipping list's, and never the reverse.
-function deckMaturity(dir, name, hasProfile, version) {
+function deckMaturity(dir, name, hasProfile, version, fstem) {
+  fstem = fstem || name;     // the decklist's stem ON DISK (may differ from the folder name in case)
   const key = version ? pySlug(name) + '_' + pySlug(version) : pySlug(name);
   const owner = REF_OWNERS[key] || key;
   const saved = countOptimalRefs(name, version);
@@ -978,12 +997,12 @@ function deckMaturity(dir, name, hasProfile, version) {
   // WHY a deck with a full folder reads zero -- otherwise it looks like the count is broken.
   const refsOnArchivedList = owner === key ? 0 : saved;
   const refs = owner === key ? saved : 0;
-  const hasValueLeaf = fs.existsSync(path.join(dir, name + '.value.json'));
+  const hasValueLeaf = fs.existsSync(path.join(dir, fstem + '.value.json'));
   // Rejected-for-play model shipped inert by the value-leaf skill -- see tierFrom for why this
   // counts as a decided apparatus rather than a missing one.
   const valueLeafDisabled = !hasValueLeaf
-    && fs.existsSync(path.join(dir, name + '.value.DISABLED.json'));
-  const hasKeepModel = KEEPMODEL_EXTS.some(ext => fs.existsSync(path.join(dir, name + ext)));
+    && fs.existsSync(path.join(dir, fstem + '.value.DISABLED.json'));
+  const hasKeepModel = KEEPMODEL_EXTS.some(ext => fs.existsSync(path.join(dir, fstem + ext)));
   // ref_bench.py keys its results by the deck the references were PLAYED on. So a deck whose folder
   // belongs to an archived list must NOT read that entry: the bench under `owner` describes the
   // archived list's play, and lending its green to the deck that replaced it is precisely the
@@ -1318,14 +1337,18 @@ function listDecks() {
   for (const name of fs.readdirSync(DECKS_DIR)) {
     const dir = path.join(DECKS_DIR, name);
     if (!fs.statSync(dir).isDirectory()) continue;
-    let deckFile = null;
+    // `deckFile` is the FOLDER-named id the client sends back (resolveDeck maps it to the file on
+    // disk case-insensitively, and the folder name is what names references/<Deck>/); `onDisk` is
+    // the actual file, whose stem names the sidecars.
+    let deckFile = null, onDisk = null;
     for (const ext of ['.cod', '.txt']) {
-      if (fs.existsSync(path.join(dir, name + ext))) { deckFile = name + ext; break; }
+      const hit = ciEntry(dir, name + ext);
+      if (hit) { deckFile = name + ext; onDisk = hit.slice(0, -ext.length); break; }
     }
     if (!deckFile) continue;                                 // folder without a matching decklist
-    const hasProfile = fs.existsSync(path.join(dir, name + '.profile.json'));
+    const hasProfile = fs.existsSync(path.join(dir, onDisk + '.profile.json'));
     out.push(Object.assign({ id: deckFile, deck: deckFile, name, version: null, label: name, hasProfile },
-                           deckMaturity(dir, name, hasProfile, null)));
+                           deckMaturity(dir, name, hasProfile, null, onDisk)));
     // ARCHIVED / VARIANT lists: decks/<Name>/<Variant>/<Name>.cod, kept beside the shipping list
     // with the artifacts fitted to it. Offered as their own selectable entries so an older list can
     // still be played and replayed -- its references are inputs to the system and still catch bugs,
@@ -1335,15 +1358,16 @@ function listDecks() {
     for (const sub of fs.readdirSync(dir)) {
       const subdir = path.join(dir, sub);
       if (!fs.statSync(subdir).isDirectory()) continue;
-      let vFile = null;
+      let vFile = null, vOnDisk = null;
       for (const ext of ['.cod', '.txt']) {
-        if (fs.existsSync(path.join(subdir, name + ext))) { vFile = name + ext; break; }
+        const hit = ciEntry(subdir, name + ext);
+        if (hit) { vFile = name + ext; vOnDisk = hit.slice(0, -ext.length); break; }
       }
       if (!vFile) continue;
-      const vProfile = fs.existsSync(path.join(subdir, name + '.profile.json'));
+      const vProfile = fs.existsSync(path.join(subdir, vOnDisk + '.profile.json'));
       out.push(Object.assign({ id: vFile + '@' + sub, deck: vFile, name, version: sub,
                               label: name + '  \u2014  ' + sub, hasProfile: vProfile },
-                             deckMaturity(subdir, name, vProfile, sub)));
+                             deckMaturity(subdir, name, vProfile, sub, vOnDisk)));
     }
   }
   // shipping lists first, then archived variants, then alpha by label

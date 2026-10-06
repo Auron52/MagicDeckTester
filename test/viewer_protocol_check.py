@@ -188,13 +188,31 @@ def _resolve_deck_dir(ref_dir):
         if not os.path.isdir(os.path.join(_REPO_ROOT, base)):
             continue
         stem = cparts[0]          # the decklist is named for the DECK, never for the version folder
+        # Matched CASE-INSENSITIVELY, as the user's (Windows) filesystem matches it: Soldiers ships as
+        # decks/Soldiers/soldiers.cod, which the viewer finds and saves references for, while an
+        # exact-name lookup here found nothing and its six references were never replayed.
         for ext in (".cod", ".txt"):
-            deck = f"{base}/{stem}{ext}"
-            prof = f"{base}/{stem}.profile.json"
-            if (os.path.exists(os.path.join(_REPO_ROOT, deck))
-                    and os.path.exists(os.path.join(_REPO_ROOT, prof))):
+            hit = _ci_entry(os.path.join(_REPO_ROOT, base), stem + ext)
+            if not hit:
+                continue
+            fstem = hit[:-len(ext)]
+            deck = f"{base}/{hit}"
+            prof = f"{base}/{fstem}.profile.json"
+            if os.path.exists(os.path.join(_REPO_ROOT, prof)):
                 return (deck, prof)
     return None
+
+
+def _ci_entry(d, name):
+    """-> the entry of `d` named `name`, case-insensitively (exact match first), else None.
+    Same contract as scripts/deck_registry.ci_entry."""
+    if os.path.exists(os.path.join(d, name)):
+        return name
+    try:
+        hits = [e for e in os.listdir(d) if e.lower() == name.lower()]
+    except OSError:
+        return None
+    return hits[0] if len(hits) == 1 else None
 
 
 class _DeckMap(dict):

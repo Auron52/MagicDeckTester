@@ -49,15 +49,36 @@ class Deck(object):
         return "Deck(%s)" % self.key
 
 
-def _deck_at(d, stem):
-    """-> the decklist path if `d` holds <stem>.cod|.txt AND <stem>.profile.json, else None."""
-    deck_file = next((p for p in ("%s/%s.cod" % (d, stem), "%s/%s.txt" % (d, stem))
-                      if os.path.exists(p)), None)
-    if not deck_file:
+def ci_entry(d, name):
+    """-> the entry of directory `d` named `name`, matched CASE-INSENSITIVELY (exact match first), or None.
+
+    WHY: the layout says decks/<Name>/<Name>.cod, but nothing enforces the CASE of the file stem, and
+    a case-insensitive filesystem (the user's Windows viewer) cannot tell the difference. Soldiers
+    shipped as decks/Soldiers/soldiers.cod: on Windows it played and saved references normally, while
+    on Linux every exact-name resolver (this registry, ref_bench, viewer_protocol_check, the viewer's
+    deck list) silently found NO deck -- its six hand-played references were never replayed. So the
+    stem is matched the way the user's filesystem matches it."""
+    if os.path.exists(os.path.join(d, name)):
+        return name
+    try:
+        hits = [e for e in os.listdir(d) if e.lower() == name.lower()]
+    except OSError:
         return None
-    if not os.path.exists("%s/%s.profile.json" % (d, stem)):
-        return None       # never measured at shipped play -> not a deck this tooling can describe
-    return deck_file
+    return hits[0] if len(hits) == 1 else None
+
+
+def _deck_at(d, stem):
+    """-> (decklist path, ACTUAL file stem) if `d` holds <stem>.cod|.txt AND <stem>.profile.json
+    (stem matched case-insensitively -- see ci_entry), else None."""
+    for ext in (".cod", ".txt"):
+        hit = ci_entry(d, stem + ext)
+        if not hit:
+            continue
+        fstem = hit[:-len(ext)]
+        if not ci_entry(d, fstem + ".profile.json") == fstem + ".profile.json":
+            return None   # never measured at shipped play -> not a deck this tooling can describe
+        return ("%s/%s" % (d, hit), fstem)
+    return None
 
 
 def discover(root="decks"):
@@ -98,16 +119,17 @@ def discover(root="decks"):
         if not os.path.isdir(d):
             continue
         stem = os.path.basename(d)
-        deck_file = _deck_at(d, stem)
-        if deck_file:
-            out[slug(stem)] = Deck(slug(stem), d, stem, deck_file)
+        hit = _deck_at(d, stem)
+        if hit:
+            # The Deck's stem is the FILE stem (it names the sidecars); the key is the FOLDER's slug.
+            out[slug(stem)] = Deck(slug(stem), d, hit[1], hit[0])
         for sub in sorted(glob.glob("%s/*" % d)):
             if not os.path.isdir(sub):
                 continue
-            sub_file = _deck_at(sub, stem)
-            if sub_file:
+            sub_hit = _deck_at(sub, stem)
+            if sub_hit:
                 key = "%s_%s" % (slug(stem), slug(os.path.basename(sub)))
-                out[key] = Deck(key, sub, stem, sub_file)
+                out[key] = Deck(key, sub, sub_hit[1], sub_hit[0])
     _assign_seed_bases(out)
     return out
 
