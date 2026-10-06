@@ -28486,6 +28486,19 @@ inline bool MaxManaGateEnabled()
 // month). See TapForCostBacktrackWorker for the threading.
 inline bool TapColorGateEnabled()
 { static const bool v = EnvOn("MTG_TAP_COLOR_GATE", true); return v; }
+// EXACT PER-COLOUR PRICING of two source shapes in the backtracker's two relaxations -- the flow
+// oracle (TapFlowInfeasible) and the colour gate (SourceColorCapLive). DEFAULT ON; =0 restores the
+// old over-credit from ONE binary (the output must be byte-identical either way: both relaxations
+// are pure prunes of a DFS whose answer they never change, so the arms differ in nodes only).
+//   * KAROO / BUNDLE ("{T}: Add {G}{W}"): one of EACH colour, never two of either. Was credited as
+//     `amt` (2) of every colour it lists.
+//   * UNTAP-LAND BURST (Wirewood Lodge): its own {C} or the FEED colour ({G}), never anything else.
+//     Was widened to all six colours at the burst yield (a Priest of Titania's live Elf count).
+// Together they let every {W}-short Nykthos Paragon payment on a Sanctuary + Lodge board read as
+// colour-feasible, so the DFS proved each one unpayable by exhausting its tree: 0.2-0.9M nodes per
+// failed payment, the SelesnyaLifegain keep-gen tail (docs/design/selesnya-keepgen-tail.md).
+inline bool BundleExactEnabled()
+{ static const bool v = EnvOn("MTG_TAP_BUNDLE_EXACT", true); return v; }
 // PROBE (MTG_TAP_COLOR_PROBE): run the test but do NOT act on it, so the ceiling is readable on the
 // unmodified engine before the gate is trusted. Counts nodes where the bound proves the subtree dead.
 inline bool TapColorProbeEnabled()
@@ -28687,9 +28700,45 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
                                                 /*require_tapped=*/false));
     }
     if (amt < 1) { amt = 1; }   // never under-credit a live source
+    // UNTAP-LAND BURST, exact colours (BundleExactEnabled): the DFS's Lodge branches add either the
+    // land's own `produces` ({C}) or `by` units of the FEED colour (consume one {G}, add `by` {G}) --
+    // no other colour is reachable from this source, so {produces, feed, C} at the burst amount is
+    // still an over-count on every axis. A burst with no single-pip feed never fires (the DFS skips
+    // it), leaving just `produces`.
+    if (BundleExactEnabled() && dd.params.untap_creature_cost.has_value() && !dd.params.reflecting
+        && !dd.params.domain_mana && !IsScaledManaLand(dd))
+    {
+        mask = static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+        for (Color c : dd.params.produces)
+        { mask |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+        if (const std::optional<Color> feed = UntapBurstFeedColor(dd); feed.has_value())
+        { mask |= static_cast<std::uint8_t>(1u << static_cast<int>(*feed)); }
+        mask |= static_cast<std::uint8_t>(LandAuraColorMask(state, pp) & 0x1F);
+        return;
+    }
     if (dd.params.reflecting || dd.params.domain_mana || IsScaledManaLand(dd)
         || dd.params.untap_creature_cost.has_value())
     { mask = kAll; return; }
+    // KAROO / BUNDLE, exact amount (BundleExactEnabled): the DFS's bundle_src branch adds ONE unit
+    // per `produces` entry and has no single-colour branch, so the most of any one colour a tap can
+    // add is that colour's multiplicity in `produces` (1 for a Karoo) -- plus any land-aura bonus,
+    // which SourceMaxNetLive folded into `amt` and which may share a colour. Same predicate as the
+    // DFS's bundle_src; the plain shapes the predicate excludes keep the old amount.
+    if (BundleExactEnabled() && !LegacyKarooPay() && !dd.params.is_filter && !dd.params.ramp_filter
+        && !dd.params.any_color_filter && !dd.params.storage_land && !IsScaledManaDork(dd)
+        && dd.params.tap_opponent_lifegain == 0 && dd.params.energy_per_colored_tap == 0
+        && !dd.params.colored_creature_only && !dd.params.etb_choose_color
+        && ManaProducedPerTap(dd) > 1 && dd.params.produces.size() > 1
+        && !IsSingleColorBurstSource(dd))
+    {
+        int mult[6] = { 0, 0, 0, 0, 0, 0 }, per = 0;
+        for (Color c : dd.params.produces)
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 6) { per = std::max(per, ++mult[ci]); }
+        }
+        amt = std::max(1, per + LandAuraBonus(state, pp));
+    }
     mask = static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
     for (Color c : dd.params.produces)
     { mask |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }

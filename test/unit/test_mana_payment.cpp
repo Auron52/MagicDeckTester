@@ -922,3 +922,50 @@ TEST_CASE("scarcity-first: a {C}-only land outranks a mono-coloured one (eaccc12
         CHECK(prov.ManaSourceRank(s, *muta) > mono);
     }
 }
+
+// EXACT BUNDLE / UNTAP-BURST PRICING in the backtracker's two relaxations (MTG_TAP_BUNDLE_EXACT,
+// 2026-10-06, docs/design/selesnya-keepgen-tail.md). The flow oracle used to credit a Karoo with TWO
+// of either colour and the colour gate credited Wirewood Lodge with ALL SIX colours at the Priest's
+// burst yield, so every {W}-short Nykthos Paragon prepay read as feasible and the DFS proved it
+// unpayable by exhausting its tree (11.7 M nodes for one solve). The relaxations may only ever claim
+// INFEASIBLE when the DFS cannot pay, so the verdicts below are the soundness contract: the
+// tightened bounds must refuse what is really unpayable and still admit every payable cost --
+// including a {W}{W} that needs the Karoo's ONE {W} plus another source's, and a {G}-heavy cost that
+// is payable ONLY through the Lodge's burst.
+TEST_CASE("payment: Karoo and untap-land are priced exactly by the flow oracle and colour gate")
+{
+    EnsureCards();
+    // Selesnya Sanctuary ({G}{W} bundle) + Brushland ({G}/{W}/{C}) + Lodge + Priest + 2 Elves.
+    const GameState board = MakeBoard({"Selesnya Sanctuary", "Brushland", "Wirewood Lodge",
+                                       "Priest of Titania", "Llanowar Elves", "Elvish Mystic"});
+    {   // three {W} pips against exactly two {W} sources: unpayable, however much {G} there is
+        GameState s = board; ManaPool lo;
+        CHECK_FALSE(TapForCostBacktrack(s, Cost(0, /*w=*/3), true, ManaPool{}, nullptr, nullptr, &lo));
+    }
+    {   // {2}{W}{W}: the Sanctuary's ONE {W} + Brushland's {W} -- must still pay
+        GameState s = board; ManaPool lo;
+        CHECK(TapForCostBacktrack(s, Cost(2, /*w=*/2), true, ManaPool{}, nullptr, nullptr, &lo));
+    }
+    {   // a lone Sanctuary cannot make {W}{W}
+        GameState s = MakeBoard({"Selesnya Sanctuary"}); ManaPool lo;
+        CHECK_FALSE(TapForCostBacktrack(s, Cost(0, /*w=*/2), true, ManaPool{}, nullptr, nullptr, &lo));
+    }
+    {   // the whole-turn prepay shape (out_full_pool), the site the keep-gen tail lived in
+        GameState s = board; ManaPool full;
+        CHECK_FALSE(TapForCostBacktrack(s, Cost(0, /*w=*/3), true, ManaPool{}, nullptr, nullptr, nullptr,
+                                        0, -1, 0, &full));
+        GameState t = board; ManaPool full2;
+        CHECK(TapForCostBacktrack(t, Cost(2, /*w=*/2), true, ManaPool{}, nullptr, nullptr, nullptr,
+                                  0, -1, 0, &full2));
+    }
+    {   // Forest 1 + Priest 3 (three Elves) + Llanowar 1 + Mystic 1 = 6 {G}; the Lodge's plain mode is
+        // {C}, so {G}x7 is payable ONLY through the burst (feed one {G}, re-tap the Priest for 3: +2).
+        const GameState g = MakeBoard({"Forest", "Priest of Titania", "Llanowar Elves",
+                                       "Elvish Mystic", "Wirewood Lodge"});
+        GameState s = g; ManaPool lo;
+        CHECK(TapForCostBacktrack(s, Cost(0, 0, 0, 0, 0, /*g=*/7), true, ManaPool{}, nullptr, nullptr, &lo));
+        GameState t = g; ManaPool lt;   // ...but the burst makes {G}, never {W}
+        CHECK_FALSE(TapForCostBacktrack(t, Cost(0, /*w=*/1, 0, 0, 0, /*g=*/5), true, ManaPool{}, nullptr,
+                                        nullptr, &lt));
+    }
+}

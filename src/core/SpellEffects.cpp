@@ -2239,6 +2239,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             continue;
         }
         const int amt = ManaProducedPerTap(*def);   // 1 for a normal land/dork/rock; 2 for a Karoo
+        int bundle_per_col = 0, bundle_total = 0;   // >0 = an exactly-priced bundle (see below)
 
         // Colour set (SUPERSET, over-credit safe) -- mirror the worker's produces/reflecting/cco
         // handling. A drip land additionally offers a {C} mode, so add Colorless there.
@@ -2276,6 +2277,30 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             { bits |= (1u << static_cast<int>(Color::Colorless)); }   // {C}-only source (empty produces)
             if (def->params.tap_opponent_lifegain > 0)
             { bits |= (1u << static_cast<int>(Color::Colorless)); }   // drip land's {C} mode
+            // KAROO / BUNDLE SOURCE, priced EXACTLY (MTG_TAP_BUNDLE_EXACT, default ON; =0 reverts).
+            // "{T}: Add {G}{W}" is one mana of EACH colour, never two of either -- the backtracker's
+            // bundle_src branch adds exactly `produces` (one unit per entry) and has NO single-colour
+            // branch. Crediting `per_col = amt` here let this oracle believe a Selesnya Sanctuary
+            // makes {W}{W}, so a {W}-short cost that is provably unpayable passed as FEASIBLE and the
+            // DFS walked its whole tree to prove it (SelesnyaLifegain keep-gen tail: 921,025 nodes for
+            // ONE failed {4}{W}{W}+... prepay, docs/design/selesnya-keepgen-tail.md). Byte-identical:
+            // the edge caps now equal what the DFS can realise (per colour = that colour's multiplicity
+            // in `produces`, total = produces.size()), so an infeasible verdict is still a proof; a
+            // feasible cost is never cut. Same predicate as the DFS (bundle_src); drip lands, stripped
+            // (energy / creature-only) and reflecting shapes are left on the old over-credit.
+            if (BundleExactEnabled() && !LegacyKarooPay() && amt > 1 && produces.size() > 1
+                && !IsSingleColorBurstSource(*def) && !def->params.reflecting
+                && def->params.tap_opponent_lifegain == 0)
+            {
+                int mult[6] = { 0, 0, 0, 0, 0, 0 }, per = 0;
+                for (Color c : produces)
+                {
+                    const int ci = static_cast<int>(c);
+                    if (ci >= 0 && ci < 6) { per = std::max(per, ++mult[ci]); }
+                }
+                bundle_per_col = per;
+                bundle_total   = std::max(amt, static_cast<int>(produces.size()));
+            }
         }
         if (bits == 0) { continue; }   // solo Reflecting Pool etc.: makes nothing usable -> no supply
         // LAND AURAS. This oracle can declare a cost INFEASIBLE and short-circuit the payment
@@ -2295,6 +2320,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                 srcs.push_back({ abits, aura_units, aura_units, i });
             }
         }
+        if (bundle_per_col > 0) { srcs.push_back({ bits, bundle_total, bundle_per_col, i }); continue; }
         srcs.push_back({ bits, amt, amt, i });   // non-domain: one colour takes the whole tap
     }
 
@@ -4789,6 +4815,34 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                                        out_leftover, tapped_mask, untapped_max, reserved_mask,
                                        out_full_pool, src_cands);
         const std::uint64_t dn = tapstats::g_nodes.load(std::memory_order_relaxed) - nodes0;
+        // MTG_TAP_BIG_DUMP=<nodes> (diagnostic, needs MTG_TAP_STATS=1, run single-threaded): print the
+        // board of any ONE top-level solve that walked more than <nodes> DFS nodes. Off (0) by default.
+        static const int s_big_dump = EnvInt("MTG_TAP_BIG_DUMP", 0);
+        if (s_big_dump > 0 && dn > static_cast<std::uint64_t>(s_big_dump))
+        {
+            const int a = state.active_player_index;
+            std::string board;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != a) { continue; }
+                board += p.card.m_name.str();
+                if (p.tapped) { board += "(T)"; }
+                for (const Counter& c : p.counters)
+                { board += "[" + std::to_string(static_cast<int>(c.type)) + ":" + std::to_string(c.count) + "]"; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork))
+                { board += "{" + std::to_string(SourceMaxNetLive(state, p, *d)) + (CanTapNow(p, state.battlefield) ? "" : "s") + "}"; }
+                board += "; ";
+            }
+            std::fprintf(stderr,
+                "[tap-big] nodes=%llu ok=%d T%d cost=gen%d W%d U%d B%d R%d G%d C%d hyb%d x=%d crt=%d "
+                "float=%d res=%llx umax=%d full=%d left=%d rp=%d | %s\n",
+                static_cast<unsigned long long>(dn), ok ? 1 : 0, state.turn_number, cost.generic,
+                cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless,
+                cost.hybrid_count, cost.has_x ? 1 : 0, for_creature ? 1 : 0, floating.Total(),
+                static_cast<unsigned long long>(reserved_mask), untapped_max,
+                out_full_pool ? 1 : 0, out_leftover ? 1 : 0, rp_colors ? 1 : 0, board.c_str());
+        }
         if (ok) { tapstats::g_entries_ok.fetch_add(1, std::memory_order_relaxed);
                   tapstats::g_nodes_ok.fetch_add(dn, std::memory_order_relaxed); }
         else    { tapstats::g_entries_fail.fetch_add(1, std::memory_order_relaxed);
