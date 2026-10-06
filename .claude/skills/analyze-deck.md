@@ -362,6 +362,14 @@ The analyzer is a fixed-recipe **profile generator** — it produces the deck's 
 **evaluation is the regression suite's job** (see the regression-testing skill /
 `test/regression.sh`).
 
+**Its cost-aggregate diagnostic (stage 7, `cost_diagnostic` in the JSON) runs at the deck's PLAY
+settings** (USER 2026-10-06: *"search should be used for almost everything"*): both arms
+(`MTG_COST_REFRAME` off/on, 200 games each, `--cost-diag-games`) go into ONE pooled `mtg --batch`
+whose jobs omit depth and budget, so the batch resolves them from the deck's `value_play` (else the
+built-in d5 / budget 20) — the same route as the regression suite's d5 cases. It used to run d3 with
+NO budget (an unbounded search no deck ships), as two serial runs; that never finished on Bruna. Its
+`play_settings` field echoes the resolved `[play]` line. `--no-cost-diagnostic` skips it.
+
 Parse the JSON output:
 - `analysis.mulligan_profile`: the **baseline** mulligan settings (defaults/static; also written to
   disk). Do NOT drive exhaustive keep/bottom generation or threshold optimisation here — that is

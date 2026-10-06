@@ -729,27 +729,47 @@ def ScanCostMechanics(card_names: list[str], cards_json: Path) -> list[dict]:
                 seen.append({"card": name, "param": p, "mechanic": mech})
     return seen
 
-def RunGoldfishAvg(deck_path: Path, games: int, seed: int, depth: int, extra_env: dict) -> float:
-    """Run the goldfish binary and return the avg-turn-to-win metric (lower = better)."""
+def _CostDiagProfile(deck_path: Path) -> Path | None:
+    """The deck's shipped profile (directory-relative, the per-deck folder layout), or None."""
+    prof = deck_path.parent / (deck_path.stem + ".profile.json")
+    return prof if prof.exists() else None
+
+
+def RunCostDiagBatch(deck_path: Path, games: int, seed: int, scratch: Path,
+                     threads: int) -> tuple[float, float, str]:
+    """Both cost-diagnostic arms (MTG_COST_REFRAME off / on) as ONE pooled `mtg --batch`, at the
+    deck's PLAY settings. Returns (avg_base, avg_reframe, play_line).
+
+    USER 2026-10-06 ("search should be used for almost everything"): the diagnostic used to run
+    `--depth 3 --ignore-play-profile` with NO --budget-ms -- an UNBOUNDED d3 search, 200 games per arm,
+    two serial single-arm runs -- which measured a policy nothing ships and never finished on Bruna.
+    Now each job omits depth AND budget_ms, so the batch runner resolves them exactly as the regression
+    suite's value_play-driven (d5) cases do: the deck's value_play block, else the built-in d5 / budget
+    20 (ResolvePlaySettings). Still searched -- no greedy substitute. The arm rides the per-job heurarm
+    slot (`flags`), so both arms share one work queue and are seed-paired game for game.
+    """
     if not MTG_BIN.exists():
         raise RuntimeError(f"goldfish binary not found: {MTG_BIN} (build first)")
-    env = os.environ.copy()
-    env.update(extra_env)
-    # --ignore-play-profile so a fixed --depth drives BOTH conditions consistently (a deck whose
-    # profile enables value_play depth otherwise rejects --depth). The A/B only needs a common,
-    # cheap depth; the deck's shipped play policy is irrelevant to the cost-offer question.
-    cmd = [str(MTG_BIN), str(deck_path), "--ignore-play-profile",
-           "--games", str(games), "--seed", str(seed), "--depth", str(depth)]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, env=env)
-    if result.returncode != 0:
-        raise RuntimeError(f"goldfish run exited {result.returncode}")
-    m = re.search(r"avg \(turns\)\s*:\s*([0-9.]+)", result.stdout)
-    if not m:
-        raise RuntimeError("could not parse 'avg (turns)' from goldfish output")
-    return float(m.group(1))
+    prof = _CostDiagProfile(deck_path)
+    jobs = []
+    for tag, on in (("base", False), ("reframe", True)):
+        job = {"name": f"costdiag_{tag}", "deck": str(deck_path), "games": games, "seed": seed,
+               "weight": 0, "flags": {"MTG_COST_REFRAME": on}}
+        if prof is not None:
+            job["profile"] = str(prof)
+        jobs.append(job)
+    err = _RunBatch({"jobs": jobs}, scratch, threads=threads, extra_env={})
+    play = next((ln.strip() for ln in err.splitlines() if ln.startswith("[play] costdiag_base")), "")
+
+    def _avg(tag: str) -> float:
+        wins = _ParseWins(scratch / "wins" / f"costdiag_{tag}.wins")
+        if len(wins) != games:
+            raise RuntimeError(f"cost diagnostic arm {tag}: {len(wins)} of {games} games recorded")
+        return sum(wins.values()) / len(wins)
+    return _avg("base"), _avg("reframe"), play
 
 def CostAggregateDiagnostic(deck_path: Path, cards_json: Path, card_names: list[str],
-                            games: int = 200, seed: int = 90001, depth: int = 3) -> dict:
+                            games: int = 200, seed: int = 90001, threads: int = 0) -> dict:
     """
     Automated onboarding test for same-turn cost handling. Verdicts:
       NO_COST_INTERACTIONS -- no cost-mechanic cards; base aggregate suffices (no game run).
@@ -760,6 +780,7 @@ def CostAggregateDiagnostic(deck_path: Path, cards_json: Path, card_names: list[
                               aggregate (its generic credit), NOT the reframe.
     Metric = avg-turn-to-win (lower = better); delta = reframe_on - base. seed disjoint from the
     regression suite's (1001/2002/3003/700001) so the diagnostic never overlaps its ground truth.
+    Runs at the deck's PLAY settings (value_play, else d5 / budget 20) -- see RunCostDiagBatch.
     """
     mechanics = ScanCostMechanics(card_names, cards_json)
     out = {"cost_mechanics": mechanics}
@@ -768,16 +789,17 @@ def CostAggregateDiagnostic(deck_path: Path, cards_json: Path, card_names: list[
         out["detail"]  = "No same-turn cost-interaction cards; the base mana aggregate suffices."
         return out
     try:
-        base    = RunGoldfishAvg(deck_path, games, seed, depth, {"MTG_COST_REFRAME": "0"})
-        reframe = RunGoldfishAvg(deck_path, games, seed, depth, {"MTG_COST_REFRAME": "1"})
+        scratch = REPO_ROOT / "logs" / "analyze" / deck_path.stem / "cost_diag"
+        base, reframe, play = RunCostDiagBatch(deck_path, games, seed, scratch,
+                                               threads or min(20, os.cpu_count() or 8))
     except RuntimeError as e:
         out["verdict"] = "SKIPPED"
         out["detail"]  = f"cost A/B skipped: {e}"
         return out
     delta = round(reframe - base, 4)
     NOISE = 0.02
-    out.update({"avg_base": base, "avg_reframe": reframe, "delta": delta,
-                "games": games, "seed": seed, "depth": depth})
+    out.update({"avg_base": round(base, 4), "avg_reframe": round(reframe, 4), "delta": delta,
+                "games": games, "seed": seed, "play_settings": play})
     if delta <= -NOISE:
         out["verdict"] = "REFRAME_HELPS"
         out["detail"]  = ("base aggregate UNDER-credits this deck's same-turn cost lines; the reframe "

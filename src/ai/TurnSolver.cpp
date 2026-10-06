@@ -5850,10 +5850,12 @@ static bool CostTricksEnabled()
 // generic is same-turn-coverable (what reducers/affinity cut, or rituals float), require only the COLOURED
 // pips to be really payable -- and let the scoring apply (SolveWithLookahead 9446/9467) validate for real.
 // Replaces per-deck credit patches: a new deck's cost mechanic is offered without one.
+// Read through the heurarm slot (2026-10-06) so the analyze_deck.py cost diagnostic can carry both arms
+// in ONE pooled batch ("flags": {"MTG_COST_REFRAME": ...}); the env read is the EnvOn convention.
 static bool CostReframeEnabled()
 {
-    static const bool on = []{ const char* e = std::getenv("MTG_COST_REFRAME"); return e && std::string(e) == "1"; }();
-    return on;
+    static const bool on = EnvOn("MTG_COST_REFRAME");   // DEFAULT OFF
+    return heurarm::Flag(heurarm::COST_REFRAME, on);
 }
 
 // Per-candidate half of the affinity credit below. Factored out so the SEQUENCED ritual walk can

@@ -316,6 +316,7 @@ enum Slot : int
     ATTACK_BODY_TAP_ORDER,    // MTG_ATTACK_BODY_TAP_ORDER  on a pre-combat main with an eligible attacker (PlanTraits::attack_matters), equal-rank mana CREATURES tap lowest-attack-power first (DecisionProvider::ManaSourceHoldValue), ahead of the demand-surplus colour tiebreak. USER 2026-10-05 (Mirrorwing v2 s51_gi50 T4: Libation X=5 tapped two 1-power Mystics over two 0-power Hierarchs, 19 damage vs a 21 kill). Default ON in human play, OFF autonomously (held-out A/B owed)
     BP_NODE_SHADOW,           // MTG_BP_NODE_SHADOW         a BP-NODE child of a BASE plan is numbered as a from-scratch (variant) apply counts -- every class-on occurrence plus site 9 -- not the base's own uncounted bp_seen (docs/design/site9-continuation-index-mismatch.md). Correctness fix, default ON; =0 reverts
     SOLVE_COMBAT_SWAP,        // MTG_SOLVE_COMBAT_SWAP      the greedy Solve (d0 runner + rollout leaves) drops a PRE-COMBAT Aura swap that brings in a host-tapping Aura (Colossification) onto a would-be attacker when the combat swap stays payable without tapping an attacker -- the in-combat swap brings it in for free (CR 506.4) -- and the d0 runner pins that combat swap like the rollout leaf does. USER 2026-10-06 ("I would fix depth-0 for colossification"). Default ON; =0 reverts
+    COST_REFRAME,             // MTG_COST_REFRAME           the deck-agnostic over-optimistic cost relaxation in EnumeratePlans (see CostReframeEnabled). Default OFF. A slot so scripts/analyze_deck.py's cost diagnostic runs BOTH arms in ONE pooled batch at the deck's play settings
     COUNT
 };
 
@@ -593,6 +594,7 @@ inline const char* Name(int slot)
         "MTG_ATTACK_BODY_TAP_ORDER",
         "MTG_BP_NODE_SHADOW",
         "MTG_SOLVE_COMBAT_SWAP",
+        "MTG_COST_REFRAME",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
