@@ -283,6 +283,11 @@ function main() {
       const ch = fr.recorded_index;
       if (!(typeof ch === 'number' && ch >= 0 && ch < (d.plans || []).length)) { continue; }  // a pass
       const plan = d.plans[ch];
+      // A COMBO-OFF plan is committed from its own button (index.html excludes combo_off from the
+      // hand-built walk), never as a queued line, so there is no human line here to validate. It
+      // only ever "validated" as a bare `cast=<outlet>` name match, which LineSpec's hand-cast
+      // mirror (2026-10-06) now correctly reads as casting the copy in hand.
+      if (plan.combo_off) { tally.skipped++; continue; }
       const casts = plan.casts || [];
       const hand = (d.me && d.me.hand) || [];
       // Non-hand casts (retrace from yard) go through a different GUI path than queueCard ->
@@ -314,7 +319,30 @@ function main() {
       });
       let built = [];
       if (plan.land) built = LB.queueCard(d, built, plan.land, 'land');
+      // A name that is ALSO a board permanent may be that permanent's ACTIVATION (`activate: true`
+      // on the recorded action -- Goblins s13 T2: the Lackey-put Siege-Gang's sacrifice ability
+      // with a second copy in hand). The viewer queues a board click as an 'activate' entry, which
+      // encodes as `act=`; queueing it as a hand cast wrote `cast=`, which CheckLine now reads as
+      // "cast the copy in HAND" (LineSpec::board_acts and its mirror). Walk the recorded actions
+      // with a cursor so two same-named entries keep their own flags. Only a plain activation (no
+      // verb, or verb 'cast') is rebuilt this way; a verbed one keeps the historical hand path.
+      const acts = plan.actions || [];
+      const used = new Array(acts.length).fill(false);
       casts.forEach((nm, i) => {
+        const j = acts.findIndex((a, k) => !used[k] && a && a.card === nm);
+        if (j >= 0) used[j] = true;
+        const a = j >= 0 ? acts[j] : null;
+        if (a && a.activate && (!a.verb || a.verb === 'cast') && !vialFlag[i]) {
+          built = built.concat([{ name: nm, src: nm, kind: 'activate', verb: 'cast' }]);
+          return;
+        }
+        // A blink activation the same way (Emiel s9 T4: one Emiel in play blinking, one in hand),
+        // carrying the target and count the viewer's board click stamps on it.
+        if (a && a.activate && a.verb === 'blink' && !vialFlag[i]) {
+          built = built.concat([{ name: nm, src: nm, kind: 'activate', verb: 'blink',
+                                  blinkTarget: a.blink_target || 0, blinkCount: a.blink_count || 1 }]);
+          return;
+        }
         const hc = hand.find(c => c.name === nm);
         built = LB.queueCard(d, built, nm, vialFlag[i] ? 'vial' : hc.kind);
       });

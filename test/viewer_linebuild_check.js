@@ -243,7 +243,7 @@ function checkActivationVerbs() {
   const fails = [];
   const enc = (entry) => LB.encodeLine([entry]);
   const cases = [
-    [{ name: 'Krenko, Mob Boss', src: 'Krenko, Mob Boss', kind: 'activate' }, 'cast=Krenko, Mob Boss'],
+    [{ name: 'Krenko, Mob Boss', src: 'Krenko, Mob Boss', kind: 'activate' }, 'act=Krenko, Mob Boss'],
     [{ name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', verb: 'sacout', sacout: true }, 'sacout=Skirk Prospector'],
     [{ name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', sacout: true }, 'sacout=Skirk Prospector'],  // legacy entry, no verb
     [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip' }, 'equip=Bonesplitter'],
@@ -429,7 +429,7 @@ function checkLineMacros() {
                          kind:'activate', verb:'cast' });
   const blink = () => ({ name:'Emiel the Blessed', src:'Emiel the Blessed', kind:'activate',
                          verb:'blink', repeatable:true, blinkTarget:10, blinkCount:1 });
-  const ITER = 'cast=Mariposa Military Base;blink=Emiel the Blessed@10*1';
+  const ITER = 'act=Mariposa Military Base;blink=Emiel the Blessed@10*1';
 
   // ---- repeatBlock: N iterations, each its own committed line ----------------------------------
   const x3 = LB.repeatBlock([draw(), blink()], 0, 2, 3);
@@ -462,13 +462,13 @@ function checkLineMacros() {
   // The byte-identity claim for every recorded line, asserted directly rather than inferred.
   const plain = [draw(), blink(), blink()];
   if (!eq(LB.encodeSegments(plain),
-          ['cast=Mariposa Military Base;blink=Emiel the Blessed@10*1',
+          ['act=Mariposa Military Base;blink=Emiel the Blessed@10*1',
            'blink=Emiel the Blessed@10*1']))
     fails.push(`undeferred plan -> ${JSON.stringify(LB.encodeSegments(plain))}`);
 
   // ---- fused "investigate & crack" --------------------------------------------------------------
   const fused = LB.fusedInvestigateEntries('Conservatory', { verb:'cast', mode:null });
-  if (!eq(LB.encodeSegments(fused), ['cast=Conservatory', 'cast=Clue Token']))
+  if (!eq(LB.encodeSegments(fused), ['act=Conservatory', 'act=Clue Token']))
     fails.push(`fused clue -> ${JSON.stringify(LB.encodeSegments(fused))}`);
   // Removing EITHER half removes both -- half a fused gesture is a different play.
   if (LB.removeFusedAt(fused, 0).length !== 0) fails.push('removing the investigate left the crack');
@@ -487,7 +487,7 @@ function checkLineMacros() {
   // The block the user repeats is the Kitchen loop, which with clue fusion ON (the default) is
   // queued as a FUSED investigate + its DEFERRED crack + a blink. repeatBlock used to stamp
   // `defer:false` on every non-first entry of each copy, which erased that deferral and collapsed
-  // iterations 2..N into ONE line -- `cast=Kitchen;cast=Clue Token;blink=...`, the exact one-line
+  // iterations 2..N into ONE line -- `act=Kitchen;act=Clue Token;blink=...`, the exact one-line
   // form test/scenarios/edf_fused_clue_needs_two_lines.json pins as ILLEGAL, because the Clue does
   // not exist while the Investigate is being committed. Iteration 1 played, iteration 2 was
   // rejected, and the game picked up a reject it can never be saved as a clean reference with.
@@ -495,7 +495,7 @@ function checkLineMacros() {
   const dis = () => ({ name:'Eldrazi Displacer', src:'Eldrazi Displacer', kind:'activate',
                        verb:'blink', repeatable:true, blinkTarget:42, blinkCount:1 });
   const loopBlk = kitchen().concat([dis()]);
-  const KITCH = 'cast=Kitchen', CRACK = 'cast=Clue Token;blink=Eldrazi Displacer@42*1';
+  const KITCH = 'act=Kitchen', CRACK = 'act=Clue Token;blink=Eldrazi Displacer@42*1';
   const want3 = [KITCH, CRACK, KITCH, CRACK, KITCH, CRACK];
   const got3 = LB.encodeSegments(LB.repeatBlock(loopBlk, 0, loopBlk.length, 3));
   if (!eq(got3, want3)) fails.push(`repeat over a FUSED block flattened its deferral -> ${JSON.stringify(got3)}`);
@@ -503,8 +503,8 @@ function checkLineMacros() {
   // per iteration, exactly as before.
   const flatBlk = [{ name:'Kitchen', src:'Kitchen', kind:'activate', verb:'cast' }, dis()];
   if (!eq(LB.encodeSegments(LB.repeatBlock(flatBlk, 0, 2, 3)),
-          ['cast=Kitchen;blink=Eldrazi Displacer@42*1', 'cast=Kitchen;blink=Eldrazi Displacer@42*1',
-           'cast=Kitchen;blink=Eldrazi Displacer@42*1']))
+          ['act=Kitchen;blink=Eldrazi Displacer@42*1', 'act=Kitchen;blink=Eldrazi Displacer@42*1',
+           'act=Kitchen;blink=Eldrazi Displacer@42*1']))
     fails.push('the defer fix disturbed an unfused repeat');
 
   // ---- LOOP: repeat the last K COMMITTED segments ------------------------------------------------
@@ -537,7 +537,7 @@ function checkLineMacros() {
   const tapSeg = [{ kind:'pretap', name:'Kitchen', num:29, color:'U' },
                   { name:'Kitchen', src:'Kitchen', kind:'activate', verb:'cast' }];
   if (!eq(LB.encodeSegments(LB.loopBlock([tapSeg], 2)),
-          ['tap=Kitchen#29:U;cast=Kitchen', 'tap=Kitchen#29:U;cast=Kitchen']))
+          ['tap=Kitchen#29:U;act=Kitchen', 'tap=Kitchen#29:U;act=Kitchen']))
     fails.push(`a looped pre-tap did not survive -> ${JSON.stringify(LB.encodeSegments(LB.loopBlock([tapSeg], 2)))}`);
   // ...and a pre-tap keeps its BOARD m_number, while a hand cast loses its stamped hand m_number
   // (that one belongs to the frame it was queued on; stampPlanNums re-stamps it on the new frame).

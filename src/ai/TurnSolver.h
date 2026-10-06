@@ -2014,6 +2014,15 @@ public:
         // because equipping that one MOVES it. 0 == any.
         struct EquipSpec { std::string name; int source = 0; int host = 0; };
         std::vector<EquipSpec> equips;
+        // "act=<source name>": a BOARD activation the viewer queued by clicking a permanent (Frost
+        // Augur's look, Krenko's tap, Call of the Wild's reveal...). The name is ALSO pushed into
+        // `casts`, so ordering and every multiset rule are untouched; this list adds one constraint:
+        // a matched plan must ACTIVATE that many same-named sources (any non-CastFromHand action in
+        // the cast multiset), not cast a same-named copy from HAND. Without it, Snow seed 9 T3's
+        // "activate the Augur in play" also matched "cast the Augur in hand", and the viewer asked the
+        // human to pick between them under a meaningless "Frost Augur X?" (USER 2026-10-06). EMPTY
+        // (every line written before the verb) => no constraint, the legacy match.
+        std::vector<std::string> board_acts;
         // "equipallfree=<host m_number>": AttachAllFreeEquipment, one entry per activation (in
         // practice at most one -- the variants are one mutual-exclusion family). Matched ALWAYS
         // against its own verb, never folded into the ordinary cast multiset, for exactly the

@@ -74,7 +74,8 @@
   // 'cast': the engine tags each activation with the verb CheckLine matches it by (see the
   // `verb` field in main.cpp's plan-action JSON). `sacout` predates the field, so an entry that
   // only carries the old flag still resolves to sacout=.
-  //   cast=       Krenko's tap, a loyalty ability, Call of the Wild            (orderNames match)
+  //   act=        Krenko's tap, a loyalty ability, Call of the Wild            (orderNames match,
+  //               and the plan must ACTIVATE it -- LineSpec::board_acts; a hand cast is cast=)
   //   sacout=     Skirk Prospector / Siege-Gang / Pashalik                     (LineSpec::sac_outlets)
   //   equip=      attach an Equipment to a creature, "<name>[#src][@host]"     (LineSpec::equips)
   //   attachall=  Balan's "attach all Equipment"                               (LineSpec::attach_all)
@@ -113,7 +114,12 @@
     // board activation, so it carries its own verb (names the graveyard card).
     if (p.kind === 'eternalize') return 'eternalize';
     if (p.kind !== 'activate') return 'cast';
-    return p.verb || (p.sacout ? 'sacout' : 'cast');
+    // A plain board activation (Frost Augur's look, Krenko's tap) writes `act=`, not `cast=`: the
+    // engine keeps it in the same ordered multiset but requires the matched plan to ACTIVATE the
+    // source, so a same-named copy in HAND cannot match instead. Snow seed 9 T3 (USER 2026-10-06):
+    // `cast=Frost Augur` matched both, and the human got a "Frost Augur X?" dialog for nothing.
+    const v = p.verb || (p.sacout ? 'sacout' : 'cast');
+    return v === 'cast' ? 'act' : v;
   }
 
   // A multi-land plan (a Scale the Heights bonus drop) as the SEGMENTS the engine can accept: one
@@ -419,7 +425,7 @@
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
     // Taps first: they are what the rest of the line is paid from.
     for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
-    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
+    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
     // ADVENTURE (CR 715) rides ALONGSIDE its own `cast=`, not instead of it -- the adventure half is
@@ -435,7 +441,7 @@
     for (const p of plan) {
       if (isPreTap(p)) continue;               // already emitted above, and it has no verb
       const v = lineVerb(p);
-      if (v === 'cast') continue;
+      if (v === 'cast' || v === 'act') continue;   // emitted in clicked order with the casts
       parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode)
                             : NUM_VERBS[v] ? String(p.hostNum || 0)
                             : p.name)

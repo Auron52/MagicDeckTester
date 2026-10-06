@@ -3722,7 +3722,7 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
-// "land=<name>", "cast=<name>", "vial=<name>", "retrace=<name>", "landsedge=<n>",
+// "land=<name>", "cast=<name>", "act=<board source name>" (a cast= that must be an ACTIVATION), "vial=<name>", "retrace=<name>", "landsedge=<n>",
 // "sacout=<outlet name>" (repeat for repeat activations),
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
 // "attachall=<name>", "equipallfree=<host m_number>", "sfput=<equipment name>",
@@ -3750,6 +3750,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         std::string val = tok.substr(eq + 1);
         if      (key == "land")      { ls.has_land = true; ls.land = val; }
         else if (key == "cast")      { ls.casts.push_back(val); }
+        else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }
         else if (key == "retrace")   { ls.retrace_casts.push_back(val); }

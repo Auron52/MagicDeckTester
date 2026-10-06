@@ -64393,6 +64393,28 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     }
 
     const std::string wantLand = spec.has_land ? spec.land : std::string();
+    // Names a plain `cast=` must satisfy with a HAND cast (see the mirror check in the plan loop):
+    // non-`act=` cast tokens for a card both in hand and on the battlefield, capped at hand copies.
+    std::map<std::string, int> hand_cast_need;
+    static const bool s_hand_mirror = EnvOn("MTG_LINE_HAND_CAST_MIRROR", true);   // =0 off
+    if (s_hand_mirror)
+    {
+        std::map<std::string, int> tok;
+        for (const std::string& n : spec.casts) { ++tok[n]; }
+        for (const std::string& n : spec.board_acts) { --tok[n]; }
+        const Player& me = state.ActivePlayer();
+        for (const auto& kv : tok)
+        {
+            if (kv.second <= 0) { continue; }
+            int in_hand = 0;
+            for (const Card& c : me.hand) { if (c.m_name.str() == kv.first) { ++in_hand; } }
+            if (in_hand == 0) { continue; }
+            bool on_board = false;
+            for (const auto& perm : state.battlefield)
+            { if (perm.controller_index == state.active_player_index && perm.card.m_name.str() == kv.first) { on_board = true; break; } }
+            if (on_board) { hand_cast_need[kv.first] = std::min(kv.second, in_hand); }
+        }
+    }
     std::vector<std::string> sortedCasts = spec.casts;
     std::sort(sortedCasts.begin(), sortedCasts.end());
     std::vector<std::string> sortedVial = spec.vial_deploys;
@@ -64541,6 +64563,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
         std::vector<LineSpec::BlinkSpec> blinkActs;
         std::vector<int> freeAllHosts;   // one host m_number per AttachAllFreeEquipment action
+        std::vector<std::string> boardActNames;   // cast-multiset names that are NOT hand casts
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
@@ -64614,8 +64637,34 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { blinkActs.push_back({ a.card_name.str(), a.sac_victim_id,
                                     std::max(1, a.chosen_x) }); continue; }
             orderNames.push_back(a.card_name);
+            if (a.kind != Action::Kind::CastFromHand) { boardActNames.push_back(a.card_name.str()); }
         }
         if (planLE != spec.lands_edge) { continue; }
+        // A declared board activation (`act=`) must be an ACTIVATION in this plan, not a hand cast
+        // of a same-named copy (see LineSpec::board_acts).
+        if (!spec.board_acts.empty())
+        {
+            std::map<std::string, int> have;
+            for (const std::string& n : boardActNames) { ++have[n]; }
+            bool ok = true;
+            for (const std::string& n : spec.board_acts) { if (--have[n] < 0) { ok = false; break; } }
+            if (!ok) { continue; }
+        }
+        // ...and the MIRROR: a plain `cast=` for a card the human HOLDS, while a same-named permanent
+        // is on the battlefield, means cast the hand copy. A plan that satisfies that token with the
+        // board copy's activation instead is a different play that merely shares a name (the click
+        // on the hand Augur must not become "activate the Augur in play"). Counted up to the copies
+        // in hand; a name with no copy in hand, or no copy on the board, keeps the legacy match, so
+        // the older test lines that write an activation as `cast=` are unaffected.
+        if (!hand_cast_need.empty())
+        {
+            std::map<std::string, int> cast_n;
+            for (const Action& a : p.actions)
+            { if (a.kind == Action::Kind::CastFromHand) { ++cast_n[a.card_name.str()]; } }
+            bool ok = true;
+            for (const auto& kv : hand_cast_need) { if (cast_n[kv.first] < kv.second) { ok = false; break; } }
+            if (!ok) { continue; }
+        }
         if (sacout_declared)
         {
             std::vector<std::string> sortedSacNames = sacOutNames;
