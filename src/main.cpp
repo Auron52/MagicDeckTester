@@ -4540,6 +4540,9 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
             // rather than by a display name two creatures can share. Omitted when the
             // choice names no board object (an X value, a mode, a count).
             if (sub.num != 0) { os << ", \"num\": " << sub.num; }
+            // The AURA HOST RANKING's pick for this variant's class (MarkSuggestedAuraHosts):
+            // the viewer badges it; the menu order is untouched. Omitted when false.
+            if (sub.suggested) { os << ", \"suggested\": true"; }
             os << " }";
         }
         os << "] }";

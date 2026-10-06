@@ -2143,7 +2143,9 @@ public:
     // count) . It exists because `choice` is a display string: with two Kor Duelists in play the two
     // hosts read alike, so the GUI could not tell "the creature the human dragged onto" from "the
     // other one with the same name" and auto-resolved the drag to whichever came first.
-    struct SubChoice { std::string key, choice, card, kind; int num = 0; };
+    // `suggested` (enchant subs only): this host is the one the AURA HOST RANKING (AuraPlanHostKey) would
+    // pick for this variant's plan class -- the viewer MARKS it, never reorders (USER 2026-10-06).
+    struct SubChoice { std::string key, choice, card, kind; int num = 0; bool suggested = false; };
     struct LineVariant { int plan_index = -1; std::string label;
                          std::vector<std::string> cards;      // card names to show as art
                          std::vector<SubChoice> subs; };      // structured sub-decision dimensions

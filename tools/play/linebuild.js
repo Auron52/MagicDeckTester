@@ -576,6 +576,11 @@
         // caller can auto-resolve a dragged attach target by IDENTITY -- two same-named creatures
         // produce two choices whose display strings differ only by the engine's " #k" suffix.
         if (!seen.some(z => z.choice === c)) { const s = subOf(x, k.key); seen.push({ choice: c, card: s ? s.card : '', num: s ? (s.num || 0) : 0 }); }
+        // `suggested` (enchant only): the engine's Aura host ranking picks this host for at least one
+        // remaining variant's plan class (MarkSuggestedAuraHosts). A MARK, never an order: the
+        // choices keep their first-seen order, which reference replays depend on.
+        const s2 = subOf(x, k.key);
+        if (s2 && s2.suggested) { const z = seen.find(z => z.choice === c); if (z) z.suggested = true; }
       });
       if (seen.length > 1) return { dim: k, choices: seen };
     }

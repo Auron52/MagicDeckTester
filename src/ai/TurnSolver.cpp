@@ -64131,6 +64131,63 @@ static bool BlinksMatch(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want
     return BlinkAssign(want, have, used, 0);
 }
 
+// VIEWER MARK OF THE AURA HOST RANKING'S PICK (USER 2026-10-06: "Marking it is fine"). Human play
+// offers every legal creature-Aura host (the menu is never narrowed and never REORDERED -- reference
+// replays index into it); this marks, per plan CLASS (variants identical but for their enchant subs),
+// the member the autonomous dedup keeps: the best AuraPlanHostKey, ties to the first enumerated (lowest
+// plan index) -- exactly EnumeratePlans' survivor rule. Its creature-Aura enchant subs get `suggested`.
+// Land Auras (Wild Growth) are outside the ranking and are never marked. Viewer-only (CheckLine's sole
+// caller is --validate-line), so play and GT cannot move.
+static void MarkSuggestedAuraHosts(const GameState& state, bool is_pre_combat,
+                                   const std::vector<TurnSolver::Plan>& plans,
+                                   std::vector<TurnSolver::LineVariant>& variants)
+{
+    RevealLogPause pause;   // the key's prepay must not reach the live human choosers
+    auto creature_aura_hosts = [&](int plan_idx) {
+        std::vector<int> hosts;
+        if (plan_idx < 0 || plan_idx >= static_cast<int>(plans.size())) { return hosts; }
+        for (const Action& a : plans[static_cast<std::size_t>(plan_idx)].actions)
+        { if (IsCreatureAuraCast(a) && a.enchant_target > 0) { hosts.push_back(a.enchant_target); } }
+        return hosts;
+    };
+    std::map<std::string, std::vector<std::size_t>> classes;
+    for (std::size_t i = 0; i < variants.size(); ++i)
+    {
+        if (creature_aura_hosts(variants[i].plan_index).empty()) { continue; }
+        std::vector<std::string> ks;
+        for (const TurnSolver::SubChoice& sc : variants[i].subs)
+        { if (sc.kind != "enchant") { ks.push_back(sc.key + "\x1f" + sc.choice); } }
+        std::sort(ks.begin(), ks.end());
+        std::string k;
+        for (const std::string& t : ks) { k += "\x1e" + t; }
+        classes[k].push_back(i);
+    }
+    for (const auto& kv : classes)
+    {
+        const std::vector<std::size_t>& mem = kv.second;
+        if (mem.size() < 2) { continue; }
+        std::size_t best = mem.front();
+        AuraHostKey best_key;
+        bool have = false;
+        for (std::size_t i : mem)
+        {
+            const std::vector<Action>& acts = plans[static_cast<std::size_t>(variants[i].plan_index)].actions;
+            GameState work = AuraPlanHostBase(state, acts);
+            const std::vector<Permanent> base_bf = work.battlefield;
+            const AuraHostKey k = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, acts);
+            const bool better = !have || AuraHostKeyBetter(k, best_key)
+                || (!AuraHostKeyBetter(best_key, k) && variants[i].plan_index < variants[best].plan_index);
+            if (better) { best = i; best_key = k; have = true; }
+        }
+        const std::vector<int> hosts = creature_aura_hosts(variants[best].plan_index);
+        for (TurnSolver::SubChoice& sc : variants[best].subs)
+        {
+            if (sc.kind == "enchant" && sc.num > 0
+                && std::find(hosts.begin(), hosts.end(), sc.num) != hosts.end()) { sc.suggested = true; }
+        }
+    }
+}
+
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_pre_combat,
                                             const LineSpec& spec,
                                             const std::vector<Plan>* menu)
@@ -65337,6 +65394,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     {
         out.verdict = V::Choose;
         out.reason = "this line resolves several ways -- pick the sub-decisions";
+        MarkSuggestedAuraHosts(state, is_pre_combat, plans, out.variants);
         return out;
     }
 
