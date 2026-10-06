@@ -4573,6 +4573,26 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
             { PerformDig(state, a.card_name, a.dig_sacrifice); }
+            // A GO-OFF ROUTE recorded as the continuation. This branch was MISSING, and a missing
+            // branch here is silent: the search's own continuation apply (apply_continuation_plan ->
+            // apply_plan_actions) dispatches ComboRoute provider-wise, so a line whose continuation
+            // is the route scored as a win and realised NOTHING when the executor replayed it --
+            // the frame valued on a line that was never played. ComboRoute is not an
+            // IsTrailingActivation kind either, so it fell through every branch above. Same
+            // provider dispatch and same all-or-nothing contract as the main-plan branch.
+            else if (a.kind == Action::Kind::ComboRoute)
+            {
+                const DecisionProvider& cr_prov = ResolveProvider(state);
+                const int cr = cr_prov.EquipRouteEnabled()
+                             ? EquipRouteApply(state, state.active_player_index)
+                             : EdfComboRouteApply(state, state.active_player_index);
+                if (m_logger)
+                {
+                    m_logger->LogAbility(0, "Combo Off", cr == 1 ? "combo route: win"
+                                                       : cr == 2 ? "loop: banked and deployed"
+                                                                 : "combo route: no-op");
+                }
+            }
             // A continuation's board activation: the rollout applied it AFTER the continuation's
             // casts, so it is dispatched as one trailing pass once the casts are replayed.
             else if (TurnSolver::IsTrailingActivation(a.kind)) { rec_acts.push_back(a); }
