@@ -88,8 +88,12 @@ matcher.
    out, a token only exists once its maker, itself a 2+-power creature, is on the board, so a Paladin
    pairs with that on entry and is never unpaired when a token enters. The residual case is a LATER
    Paladin entering when every 2+-power creature is already paired, where the entry trigger's only
-   unpaired candidates are tokens. Rare, and in a goldfish race pairing with a token (+2 double
-   strike on the Paladin) still beats not pairing. No lever built; revisit only if a game shows it.
+   unpaired candidates are tokens. USER 2026-10-06: "you could have only a 1/1 token unpaired and a
+   paladin enter. In that case it could make sense to search." That is the right shape: pair-now
+   (+2 double strike on the Paladin from this attack) versus wait-for-a-real-partner is a two-way
+   decision the heuristic cannot settle, so it should be a SEARCHED branch, not a provider pick --
+   and only in that case (every legal partner below 2 power), so the enumeration does not double
+   every soulbond cast. DEFERRED, not built: it widens the search and needs the standard A/B.
 2. **Snow seed 13.** The report does not reproduce on the user's line on either binary. The better
    payment (Mountain + Druid) needs the needs-based lever to value the dig's expected find; the
    lever's library-reveal expectation does not yet cover Scrying Sheets / Frost Augur finds. That is
