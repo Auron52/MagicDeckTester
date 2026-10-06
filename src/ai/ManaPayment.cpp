@@ -936,15 +936,75 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // passing it its own self-reference. `produce` below is the unchanged three-argument name every
     // call site already used; only the two RECURSIVE sites inside the body say `self(self, ...)`.
     // Pure mechanics: same body, same order, same result -> byte-identical.
+    // See the line-float hold at the top of produce_impl. Set only for the duration of the one
+    // nested attempt it makes, so the attempt cannot re-enter the hold.
+    bool line_float_bypass = false;
     auto produce_impl = [&](auto& self, Color needed, bool any, bool allow_ramp) -> bool
     {
         // Snow pips skip the floating shortcut: mid-payment floating carries no snow provenance
         // (conservatively non-snow), so an {S} pip must tap a fresh snow source. Fungibility keeps
         // this sound when floating is non-empty -- the snow-produced unit enters the float and any
         // unit is consumed; a valid pip<->unit reassignment always exists.
-        if (!paying_snow)
+        if (!paying_snow && !line_float_bypass)
         { ManaPool probe = floating;
-          if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
+          if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed))
+          {
+              // LINE-FLOAT HOLD (human play only; MTG_PAY_LINE_FLOAT_HOLD=0 restores). A generic pip
+              // took whatever this payment had floating -- typically the SECOND mana of a two-mana
+              // tap (a Karoo's {W}{W}) -- even when every floating unit is a colour the rest of the
+              // HUMAN'S DECLARED LINE still owes and an untapped source of unneeded mana (Sol Ring's
+              // {C}{C}) sat idle. USER 2026-10-06, WhiteKnights seed 5 T2: Plains + Sol Ring +
+              // Accorder Paladin + Dauntless Bodyguard, with Remote Farm in play. The Paladin's {W}
+              // tapped the Farm, its {1} ate the Farm's second {W}, Sol Ring stayed up, and the
+              // Bodyguard's {W} was unpayable -- the line was dropped. Try the tap first; the
+              // floating colour then survives as this payment's leftover (ConsumeFloatingAny takes
+              // the new {C} first) and the next cast spends it. If no tap succeeds the float pays,
+              // exactly as before. g_line_unpaid_cost is zero outside a plan apply, and the whole
+              // hold is gated on HumanPlayActive(), so autonomous play is byte-identical.
+              static const bool s_lfh = EnvOn("MTG_PAY_LINE_FLOAT_HOLD", true);
+              const ManaCost& lu = g_line_unpaid_cost;
+              if (any && s_lfh && HumanPlayActive() && floating.colorless == 0 && floating.wild == 0)
+              {
+                  // Colours the rest of the line still owes AFTER this cast's own pips.
+                  const int later[5] = { lu.white - cost_in.white, lu.blue - cost_in.blue,
+                                         lu.black - cost_in.black, lu.red - cost_in.red,
+                                         lu.green - cost_in.green };
+                  const int fl[5] = { floating.white, floating.blue, floating.black,
+                                      floating.red, floating.green };
+                  bool all_needed = floating.Total() > 0;
+                  for (int c = 0; c < 5 && all_needed; ++c)
+                  { if (fl[c] > 0 && fl[c] > later[c]) { all_needed = false; } }
+                  // An untapped source of mana nobody later in the line needs.
+                  bool spare = false;
+                  if (all_needed)
+                  {
+                      for (const Permanent& q : state.battlefield)
+                      {
+                          if (q.controller_index != active || q.tapped) { continue; }
+                          const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                          if (qd == nullptr) { continue; }
+                          if (!q.card.IsLand() && qd->tmpl != CardTemplate::ManaDork
+                              && !qd->params.mana_rock) { continue; }
+                          if (!q.CanTap()) { continue; }
+                          for (Color c : EffectiveProducesFor(state, active, *qd, &q))
+                          {
+                              const int ci = static_cast<int>(c);
+                              if (c == Color::Colorless || (ci >= 0 && ci < 5 && later[ci] <= 0))
+                              { spare = true; break; }
+                          }
+                          if (spare) { break; }
+                      }
+                  }
+                  if (spare)
+                  {
+                      line_float_bypass = true;
+                      const bool tapped = self(self, needed, any, allow_ramp);
+                      line_float_bypass = false;
+                      if (tapped) { return true; }
+                  }
+              }
+              return true;
+          } }
 
         // Scarcity-first source selection (default ON; MTG_TAP_LEGACY opts OUT to the battlefield-order
         // 4-step path below, a byte-identical A/B baseline): pick the LEAST-flexible qualifying source

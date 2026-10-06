@@ -103,3 +103,25 @@ matcher.
    payment (Mountain + Druid) needs the needs-based lever to value the dig's expected find; the
    lever's library-reveal expectation does not yet cover Scrying Sheets / Frost Augur finds. That is
    a follow-up inside `MTG_NEEDS_TAP_ORDER`, not a default-path defect.
+
+## Later reports, 2026-10-06
+
+| Game | Report | Root cause | Fix |
+|------|--------|------------|-----|
+| Soldiers seed 7, T5 | Sixteen "Rick: chose Vigilance + Lifelink" prompts before Rick was cast | The "as this enters" choosers (Rick's ability pair, Coldsteel Heart's colour) were missing from `RevealLogPause` / `AllPlayHooksNull` / `ComboOffApplyPause`, so every SIMULATED Vial put of Rick in the T5 search asked the human | Paused like every other play hook (`bd5da4d5`). A real put still asks once. |
+| Snow seed 9, T3 | A "Frost Augur X? / this line doesn't do that / X=1" dialog on a plain Augur activation | A board click wrote `cast=Frost Augur`, the same token a cast of the second Augur in HAND writes, so CheckLine matched both plans and the walk asked the human to separate them under the generic `X` label | New `act=<name>` verb (`LineSpec::board_acts`): kept in the ordered cast multiset, but the matched plan must ACTIVATE that source. Mirror: a plain `cast=` for a card both in hand and on the battlefield must be a HAND cast (`MTG_LINE_HAND_CAST_MIRROR=0` disables). The viewer writes `act=` for every plain board activation. |
+| Snow seed 9, T4 | "Why 2 of the same dialog?" (two Marit Lage's Slumber scries) | Correct: Scrying Sheets (snow land) and Abominable Treefolk (snow creature) each trigger "scry 1"; the deck runs eight Snow-Covered Islands, so two in a row on top is ordinary | None |
+| WhiteKnights seed 5, T2 | Plains + Sol Ring + Accorder Paladin + Dauntless Bodyguard was disallowed | In the human's order the Paladin's `{W}` tapped Remote Farm and its `{1}` ate the Farm's second `{W}`; Sol Ring stayed up and the Bodyguard's `{W}` was unpayable | Line-float hold (`MTG_PAY_LINE_FLOAT_HOLD`, human play only): a generic pip that would eat floating mana the rest of the declared line still needs taps a spare source of unneeded mana first |
+
+`test/viewer_validate_check.js` rebuilt every recorded name as a HAND click, which was harmless while
+board activations also wrote `cast=`. It now rebuilds a plain activation as `act=` and a blink as
+`blink=<outlet>@<target>*<count>`, and skips COMBO-OFF plans (committed from their own button, never
+as a queued line). Its baseline dates from 2026-08-08: the three Soldiers references saved
+2026-10-06 (`s3_gi2`, `s4_gi3`, `s5_gi4`) fail it with both new rules OFF, so they were never
+validated; they involve Aether Vial puts and belong with the Vial-order work.
+
+**Open (surfaced to the user): Marit Lage's Slumber's scry is NOT searched.** The searched scry axis
+(`MTG_SCRY_SEARCH`, `docs/design/searched-scry-disposition.md`) covers only a LAND's own ETB scry. A
+TRIGGERED scry (Slumber, on any snow permanent entering) takes the provider's single pick: the generic
+`ScryKeepOnTop` keeps every nonland and bottoms every land once two lands are in play -- the default
+the viewer pre-selects, and a poor rule for a deck with a seven-drop and Scrying Sheets.
