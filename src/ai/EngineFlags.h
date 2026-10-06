@@ -532,6 +532,15 @@ inline bool DorkGrowthEnabled()
     static const bool v = EnvOn("MTG_DORK_GROWTH", true);   // DEFAULT ON; =0 restores the un-modelled gap
     return v;
 }
+// MTG_UNTAP_BURST_GROWTH (DEFAULT ON; =0 reverts): the same-plan scaled-dork growth credit also
+// counts each live untap-burst land (Wirewood Lodge) once per feeder, because the burst re-taps the
+// GROWN dork, and the {X} sizing is widened by that growth (DorkGrowthXPotential). USER 2026-10-06,
+// SelesnyaLifegain s4_gi3 T6: Genesis Wave capped at X=8 on a board that pays X=10.
+inline bool UntapBurstGrowthEnabled()
+{
+    static const bool v = EnvOn("MTG_UNTAP_BURST_GROWTH", true);
+    return v;
+}
 
 // MTG_GARTH_ORDERED=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // Garth One-Eye's tap IS the cast of its conjured copy (WotC ruling, already in the card model:

@@ -327,6 +327,7 @@ add_executable(mtg-test
     test/unit/test_prevent_damage_wish.cpp
     test/unit/test_soldiers_cathar.cpp
     test/unit/test_soldiers_vial_order.cpp
+    test/unit/test_dork_growth_x.cpp
     test/unit/test_bruna.cpp
     test/unit/test_bruna_sweep.cpp
 )

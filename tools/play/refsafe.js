@@ -125,9 +125,20 @@ function repoName(root) {
 }
 
 function backupRoot(root) {
-  return process.env.MDT_REFERENCE_BACKUP_DIR
-    ? path.resolve(process.env.MDT_REFERENCE_BACKUP_DIR)
-    : path.join(os.homedir(), '.mdt-reference-backups', repoName(root));
+  if (process.env.MDT_REFERENCE_BACKUP_DIR) return path.resolve(process.env.MDT_REFERENCE_BACKUP_DIR);
+  // DEVCONTAINER DEFAULT: ~/.claude is the one persistent volume under $HOME (the rest of $HOME is
+  // the overlay root a rebuild wipes). When it is a separate mount, back up there by default so a
+  // plain `node tools/play/server.js` restart is safe without remembering the env var (USER
+  // 2026-10-06 hit the "will NOT survive a container rebuild" warning after a restart that omitted
+  // it). Same folder the devcontainer guidance names, so existing backups stay in one tree.
+  const claudeDir = path.join(os.homedir(), '.claude');
+  try {
+    if (process.platform === 'linux' && fs.existsSync(claudeDir)
+        && fs.statSync(claudeDir).dev !== fs.statSync('/').dev) {
+      return path.join(claudeDir, 'mdt-reference-backups');
+    }
+  } catch (e) {}
+  return path.join(os.homedir(), '.mdt-reference-backups', repoName(root));
 }
 
 // A warning (string) when the backup dir is likely to die with the container, else null. In a

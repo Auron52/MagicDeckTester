@@ -9453,6 +9453,78 @@ static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& o
 // pool ALREADY holds (untapped, tappable now, fuel live) -- the credit is the DELTA they gain, not
 // their whole output, so a source the pool never counted must not be counted here either.
 // live == 0 -> the per-subset path never runs -> every deck without one is byte-identical.
+// SAME-TURN SCALED-DORK GROWTH, per (subtype, colour) group. A live scaled mana dork (Elvish
+// Archdruid / Priest of Titania) taps for the CURRENT count of its subtype, so each matching
+// creature cast before it taps adds one mana per live dork -- and one more per live UNTAP-BURST land
+// (Wirewood Lodge) whose untap subtype is the group's, because the burst re-taps the same dork at
+// the grown count (UntapBurstBestYield reads the live yield). `per_feeder` is that per-cast gain.
+// Shared by the EnumeratePlans subset credit and the {X} sizing below, so an X is offered exactly
+// where the credit can price it. USER 2026-10-06 (SelesnyaLifegain s4_gi3 T6): "I was only able to
+// do X=8 on T6 when I had enough on board for up to X=10" -- Llanowar Elves then Genesis Wave with
+// two Archdruids + Wirewood Lodge: the X range was sized on the un-grown board (8) and the burst's
+// growth was credited nowhere.
+struct DorkGrowthGroup { const std::string* sub; Color col; int live; int burst; int per_feeder() const { return live + burst; } };
+static std::vector<DorkGrowthGroup> ScanDorkGrowthGroups(const GameState& state)
+{
+    std::vector<DorkGrowthGroup> out;
+    if (!DorkGrowthEnabled()) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !IsScaledManaDork(*d)) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }   // summoning-sick: taps no earlier than next turn
+        if (d->params.produces.size() != 1) { continue; }     // the credit is single-colour by construction
+        bool found = false;
+        for (DorkGrowthGroup& g : out)
+        {
+            if (*g.sub == d->params.mana_per_creature_subtype && g.col == d->params.produces[0])
+            { ++g.live; found = true; break; }
+        }
+        if (!found) { out.push_back({ &d->params.mana_per_creature_subtype, d->params.produces[0], 1, 0 }); }
+    }
+    if (out.empty() || !UntapBurstGrowthEnabled()) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.untap_creature_cost.has_value()) { continue; }
+        if (UntapLandBurstNet(state, state.active_player_index, *d) <= 0) { continue; }
+        const std::optional<Color> feed = UntapBurstFeedColor(*d);
+        for (DorkGrowthGroup& g : out)
+        {
+            if (feed.has_value() && *feed == g.col && *g.sub == d->params.untap_creature_subtype)
+            { ++g.burst; break; }
+        }
+    }
+    return out;
+}
+// The most extra mana same-plan feeder casts from hand (excluding hand slot `skip`) can add: the
+// sum over matching hand creatures of (per_feeder - its mana value), positive terms only. An UPPER
+// bound for {X} sizing -- the subset gate decides what is really payable.
+static int DorkGrowthXPotential(const GameState& state, int skip)
+{
+    if (!UntapBurstGrowthEnabled()) { return 0; }
+    const std::vector<DorkGrowthGroup> groups = ScanDorkGrowthGroups(state);
+    if (groups.empty()) { return 0; }
+    const Player& ap = state.ActivePlayer();
+    int potential = 0;
+    for (int k = 0; k < static_cast<int>(ap.hand.size()); ++k)
+    {
+        if (k == skip || ap.hand[k].m_is_staged) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[k]);
+        if (!hd || !hd->card.IsCreature()) { continue; }
+        for (const DorkGrowthGroup& g : groups)
+        {
+            if (!CardHasSubtype(hd->card, *g.sub)) { continue; }
+            const int gain = g.per_feeder() - hd->card.m_mana_cost.ManaValue();
+            if (gain > 0) { potential += gain; }
+            break;
+        }
+    }
+    return potential;
+}
+
 static void ScalingWidenScan(const GameState& state, int& out_domain_mask, int& out_live)
 {
     out_domain_mask = 0;
@@ -20153,7 +20225,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 ManaPool gpool = AvailableManaPool(state);
                 gpool.AddPool(state.floating_mana);                 // the Rolling Earthquake shape
                 int gpips = def.card.m_mana_cost.x_pips; if (gpips < 1) { gpips = 1; }
-                const int gmax = (gpool.Total() - gbase.ManaValue()) / gpips;
+                const int gmax0 = (gpool.Total() - gbase.ManaValue()) / gpips;
+                // ...widened by what same-plan scaled-dork feeders can add (DorkGrowthXPotential;
+                // the subset credit prices it, so an X only one feeder ordering funds is offered and
+                // a subset that cannot fund it is rejected there). 0 for every board without a live
+                // scaled dork -> byte-identical.
+                const int gmax = (gpool.Total() + DorkGrowthXPotential(state, i) - gbase.ManaValue()) / gpips;
                 if (gmax < 0) { continue; }   // cannot pay even the base -> uncastable now
                 // HUMAN PLAY MUST BE OFFERED EVERY LEGAL X, and that is NOT free here:
                 // GenericProvider::XCandidates' generic path returns only {max_affordable} and does
@@ -20168,8 +20245,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 { for (int v = 0; v <= gmax; ++v) { gxs.push_back(v); } }
                 else
                 {
-                    for (int v : ResolveProvider(state).XCandidates(state, def, gmax))
-                    { if (v > 0 && v <= gmax) { gxs.push_back(v); } }
+                    // Both the un-grown max (a plan WITHOUT the feeders keeps its own X) and the
+                    // grown one (deduped; equal when nothing grows).
+                    for (int cap : { gmax0, gmax })
+                    {
+                        if (cap < 0) { continue; }
+                        for (int v : ResolveProvider(state).XCandidates(state, def, cap))
+                        {
+                            if (v > 0 && v <= gmax && std::find(gxs.begin(), gxs.end(), v) == gxs.end())
+                            { gxs.push_back(v); }
+                        }
+                    }
                 }
                 for (int xv : gxs)
                 {
@@ -41402,27 +41488,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // by docs/design/scaling-source-widening.md ("Scope beyond domain_mana"). State-only half here,
     // grouped by (subtype, colour) -- realistically one group. Empty -> the per-subset path never
     // runs -> every deck without a live scaled dork is byte-identical.
-    struct DorkGrowth { const std::string* sub; Color col; int live; };
-    std::vector<DorkGrowth> dork_growth;
-    if (DorkGrowthEnabled())
-    {
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!d || !IsScaledManaDork(*d)) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }   // summoning-sick: taps no earlier than next turn
-            if (d->params.produces.size() != 1) { continue; }     // the credit is single-colour by construction
-            bool found = false;
-            for (DorkGrowth& g : dork_growth)
-            {
-                if (*g.sub == d->params.mana_per_creature_subtype && g.col == d->params.produces[0])
-                { ++g.live; found = true; break; }
-            }
-            if (!found)
-            { dork_growth.push_back({ &d->params.mana_per_creature_subtype, d->params.produces[0], 1 }); }
-        }
-    }
+    const std::vector<DorkGrowthGroup> dork_growth = ScanDorkGrowthGroups(state);
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
@@ -42483,7 +42549,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Medallion precedent: an optimistic hint is sound only where a rollout validates it).
         if (!dork_growth.empty())
         {
-            for (const DorkGrowth& dg : dork_growth)
+            for (const DorkGrowthGroup& dg : dork_growth)
             {
                 static thread_local std::vector<int> s_growth_mvs;
                 s_growth_mvs.clear();
@@ -42507,7 +42573,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
                 if (units <= 0) { continue; }
                 ManaPool grow;
-                grow.Add(dg.col, dg.live * units);
+                grow.Add(dg.col, dg.per_feeder() * units);   // + the Lodge burst re-tapping the grown dork
                 // A scaled dork is a creature but its mana is unrestricted (no creature_mana_only
                 // card scales), so the credit belongs to BOTH pools -- same split as the widen credit.
                 eff.AddPool(grow); eff_nc.AddPool(grow); credited = true;
@@ -43292,7 +43358,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // credit exists to rescue BEFORE consider() ever sees it). Upper bound: every matching creature
     // candidate landing before every live dork taps. 0 for every deck without a live scaled dork.
     int growth_bound = 0;
-    for (const DorkGrowth& dg : dork_growth)
+    for (const DorkGrowthGroup& dg : dork_growth)
     {
         int matches = 0;
         for (const Action& a : cands)
@@ -43300,7 +43366,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (a.kind == Action::Kind::CastFromHand && a.def && a.def->card.IsCreature()
                 && CardHasSubtype(a.def->card, *dg.sub)) { ++matches; }
         }
-        growth_bound += dg.live * matches;
+        growth_bound += dg.per_feeder() * matches;
     }
     // Same-subset HINATA credit the per-subset credit below can grant (the metalcraft lesson,
     // verbatim: "the position has to survive to be priced"). Without this addend the scalar bound
