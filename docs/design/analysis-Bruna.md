@@ -1371,12 +1371,12 @@ Bruna can cast everything: Shusher's {R/G}{R/G} off {G}{G}, Steel's {W/U} off ei
 
 | Card | Tier | C++ / data summary | Deferrals (status) |
 |---|---|---|---|
-| Linvala, Shield of Sea Gate | 1 | 3/3 legendary flier body (vanilla_creature); W/U host (Steel +2/+2). | Flying inert (precedent). **PROVISIONAL:** full-party combat trigger (unreachable: no Rogue/Warrior in the list; and its effect only restrains the passive spawns, which never attack/block/activate); sac -> hexproof/indestructible (hexproof never stops our own spells, nothing destroys; the sac is a strict loss) -- not offered, viewer cannot activate. |
+| Linvala, Shield of Sea Gate | 1 | 3/3 legendary flier body (vanilla_creature); W/U host (Steel +2/+2). | Flying inert (precedent). **SIGNED OFF (USER 2026-10-06; was PROVISIONAL):** full-party combat trigger (unreachable: no Rogue/Warrior in the list; and its effect only restrains the passive spawns, which never attack/block/activate); sac -> hexproof/indestructible (hexproof never stops our own spells, nothing destroys; the sac is a strict loss) -- not offered, viewer cannot activate. |
 | Troyan, Gutsy Explorer | 3 | `mana_dork` {G}{U} bundle + **`mana_only_spell_min_mv 5` / `mana_only_spell_or_x`** (new restriction, see engine); loot `tap_draw_cost {U}` + **`tap_draw_then_discard`** (provider non-cleanup discard pick, `discard` decision). | Disclosed approximation: a unit Troyan over-produces is DROPPED (no big-spell reserve), not floated for a second 5+ spell the same phase. |
-| Detention Sphere | 1 | castable enchantment, no effect. | **PROVISIONAL:** ETB "may exile" always declined -- legal targets are the passive spawns (exiling them is outcome-identical: they never attack/block) and our own permanents (only conceivable upside: exiling our own Greaves to un-shroud its lone host -- dominated by Bruna's gather / Wings' swap / a {0} re-equip); LTB return never fires. Viewer offers no target prompt. |
+| Detention Sphere | 1 | castable enchantment, no effect. | **SIGNED OFF (USER 2026-10-06; was PROVISIONAL):** ETB "may exile" always declined -- legal targets are the passive spawns (exiling them is outcome-identical: they never attack/block) and our own permanents (only conceivable upside: exiling our own Greaves to un-shroud its lone host -- dominated by Bruna's gather / Wings' swap / a {0} re-equip); LTB return never fires. Viewer offers no target prompt. |
 | Steel of the Godhead | 2 | Aura + **`aura_color_bonuses`** (W: +1/+1 lifelink; U: +1/+1 can't-be-blocked) read off the HOST's colour in AuraBonusFor / CreatureHasLifelink (both worlds); gather + host ranking + Wings swap pick it up through AuraBonusFor; gather collapse keeps it fixed on a W+U gatherer. | Can't-be-blocked inert (no blockers; precedent). |
 | Vexing Shusher | 1 | existing card (EDF / Prevent Damage); note extended for Bruna ({G}{G} host, Steel gives it nothing). | existing D1/D2 deferrals (signed off in those decks). |
-| Auroral Procession | 2 | **`tutor_from_graveyard`** -- a tutor whose zone is the GRAVEYARD (the wish precedent): searched `tutor_choice` index axis ranked at resolution, acquisition re-solve (returned card castable same phase -- scenario-proven), human tutor chooser (mandatory: a targeted spell cannot decline), no CR 701.19c shuffle, Recur entry; cast gate `HasGraveyardTutorTarget` (CR 601.2c). | **PROVISIONAL:** instant speed collapsed onto our mains (Worldly Tutor / Pyrohemia precedent; no opponent's-turn window). NOT strictly inert: an end-step cast spends mana left open at the end of our turn. Disclosed edge: the cast gate reads the TURN-START graveyard (a plan that first puts the only target there is not offered the cast). |
+| Auroral Procession | 2 | **`tutor_from_graveyard`** -- a tutor whose zone is the GRAVEYARD (the wish precedent): searched `tutor_choice` index axis ranked at resolution, acquisition re-solve (returned card castable same phase -- scenario-proven), human tutor chooser (mandatory: a targeted spell cannot decline), no CR 701.19c shuffle, Recur entry; cast gate `HasGraveyardTutorTarget` (CR 601.2c). | **SIGNED OFF (USER 2026-10-06; was PROVISIONAL):** instant speed collapsed onto our mains (Worldly Tutor / Pyrohemia precedent; no opponent's-turn window). NOT strictly inert: an end-step cast spends mana left open at the end of our turn. Disclosed edge: the cast gate reads the TURN-START graveyard (a plan that first puts the only target there is not offered the cast). |
 | Reborn Hope x2 | 2 | as Procession + `wish_requires_multicolored` (zone-agnostic conjunct). Can never return itself (on the stack while resolving). | same cast-gate edge. |
 
 Viewer (2c-ter): Troyan's loot = the `tap_draw_cost` main_phase line + `discard` (reuse, `ChooseNonCleanupDiscardIndex`);
@@ -1453,10 +1453,93 @@ measured here (no suite run on this branch) -- the orchestrator's smoke/regressi
    budget; (b) a provider prune of the Wish pool measured against the full-width control (candidates: Detention Sphere,
    a regrowth with an empty graveyard, Steel when Umbra/Almost Perfect are still in the sideboard -- 0 fetches in 500
    games); (c) leave as is. Default taken: (c), full width (no unproven prune).
-2. Sign off the PROVISIONAL deferrals: Linvala's party trigger + sac ability; Detention Sphere's ETB exile (always
+2. ~~Sign off the PROVISIONAL deferrals~~ **SIGNED OFF by the USER 2026-10-06** (no code change): Linvala's party trigger + sac ability; Detention Sphere's ETB exile (always
    declined) + LTB return; Auroral Procession's instant speed (NOT strictly inert -- an end-step tempo edge).
 3. Troyan: the dropped over-production unit (no big-spell float reserve) -- OK as an approximation?
 4. Troyan's loot discard uses the provider's bucket pick (Neheb / Burning-Fist precedent), not a searched axis -- OK?
 5. The regrowths are discard-policy overflow 25 (below every body, above a blank) -- amend?
 6. The `CanTap()` granted-haste gap above -- fix engine-wide (moves any deck pairing Greaves-like haste with a {T}
    ability) or leave?
+
+## Sideboard change + verdicts 2026-10-06
+
+Branch `bruna-sideboard` rebased onto origin `05f64875` (one ledger conflict, both appended sections kept), then two
+engine fixes, then smoke + regression. Overnight NOT run (orchestrator instruction).
+
+**USER sign-off (2026-10-06, relayed):** Linvala's party trigger + sacrifice ability, Detention Sphere's exile, and
+Auroral Procession cast only in our own main phases -- the three PROVISIONAL deferrals above are now **SIGNED OFF**
+(no code change). Open question 6 (the `CanTap()` gap) and question 3 (Troyan's dropped unit) are **resolved by the
+two fixes below**. (Separately queued by the orchestrator, NOT started here: a proven Glittering Wish target
+heuristic.)
+
+### Fix 1 -- haste from ANY source lifts summoning sickness for {T} abilities (CR 302.6 / 702.10), engine-wide
+The {T}-ability gates read `Permanent::CanTap()`, which sees only the PRINTED Haste keyword, so Lightning Greaves (or a
+haste lord, Expedite's temp haste, Tomb Raider's conditional haste) did not let a fresh creature use a {T} ability:
+Troyan + Greaves could not loot the turn it landed. `CanTapNow` (own keyword + temp + conditional + lord + equipment)
+is now THE gate at every remaining site: the PermAbility mode tables in enumeration (`TurnSolver` x3: activation
+collection, `CollectActivationKeys`, the trailing activation pass) and the apply-side `PermAbilitySourceLive`, the
+team-pump / Pod {T} gates, Garth's APPLY (`ApplyGarthActivate` -- its enumerator already used CanTapNow, so a Greaves'd
+fresh Garth was OFFERED and then no-op'd), the damage-sink and draw-sink surplus spenders, firebreathing's {T} pump,
+the granted-mana bodies (`GrantedBodyCanTap` now falls through to CanTapNow after the blanket-haste fast path, and
+respects a control change), the convoke live-dork split, the human-play spare-source check, Mirrorwing's sick-dork
+flag and the mid-game featurizer's usable-dork count. Mana abilities already went through CanTapNow (unchanged).
+Unit test `Haste: Lightning Greaves lets a summoning-sick creature use its {T} abilities` (loot via
+`PermAbilitySourceLive` + enumeration, and the mana) with the no-Greaves arm as the control.
+Decks that can move: any pairing a haste grant with a {T} ability -- **Bruna** (Greaves + Troyan) and **FiveColour**
+(Greaves + Garth One-Eye) by card data; heuristic-only reach (convoke split, featurizer, sick-dork flag) in the
+Greaves/haste-lord decks (Kitty, Goblins, Dragons, Angels, Giants, Mirrorwing). Smoke + regression: none moved.
+
+### Fix 2 -- Troyan's unspent restricted mana FLOATS (inexpressible line)
+A unit Troyan over-produced was DROPPED, so "Troyan's {G}{U} pays part of one 5+/X spell and the rest pays a second
+qualifying spell this phase" could not be played. New `GameState::floating_bigspell_mana` (+ the restriction it
+carries, `floating_bigspell_pp`), Somberwald Sage's creature-only reserve as the model: the payer's `commit_leftover`
+and the batch prepay's provenance step BOOK the surplus there instead of dropping it; a qualifying payment
+(`BigFloatUsableNow`: paying spell MV>=5 or {X}, or an all-qualifying batch) spends it before the general float; it is
+never usable by a small spell or an ability; restored on every failed-payment / hybrid / held-attempt / Prevent-Damage
+snapshot path; emptied at every floating-mana reset (lockstep); a boundary assertion in `AtCleanBoundary`; the pay
+rollback declines while any restricted float exists. Enumeration/affordability: credited to `AvailableManaPool`(+NoAttackers),
+`BuildNonCreaturePool`, the colour-feasibility supply and the payer's fail-fast bound, and **taken back out by
+`BigOnlySubsetPayable`** (BuildBigOnlyCtx credits the float as restricted supply) for the non-qualifying part of a
+subset. Shown as `floating_bigspell_mana` in the claude-play JSON. `sizeof(GameState)` 1016 -> 1072.
+Tests: the old "dropped" test now asserts the unit floats, a small spell and an ability are refused it (reserve
+intact), and a second qualifying spell spends it; a new enumerator test offers Bruna off 4 lands + 2 floated units,
+applies it (reserve drained), and never offers Linvala off the same float. `MTG_BIGFLOAT_STATS=1` counts it: on the
+two Bruna d3 smoke cells it fires in search (booked 147,671 units, spent 6,945).
+
+### Suite (binary `e2f02109`+fixes; results in `logs/durable/bruna_sb_suite_2026-10-06/`)
+* Smoke: 115 PASS, 3 FAIL (all Bruna). Regression: 160 PASS, 5 FAIL (4 Bruna + `selesnya_regression_d3_s3003`).
+  Scenario gate 147/147; ref gate 495 refs, 0 play-drift / 0 board-diverged / 0 enum-gap.
+* **Attribution:** the 9 Bruna cells were re-run on the PRE-FIX `e2f02109` binary (new list, no fixes): **all 9
+  digests byte-identical** to the fixed binary -> every Bruna move is the LIST change (and its card engine), none is
+  the fixes; every non-Bruna deck is byte-identical to GT -> the fixes move nothing in the suite (they fire in search,
+  see the counters; `MTG_HASTE_TAP_STATS` equipment rescues 3,420,749 -> 3,495,470 on the same two cells).
+* **selesnya_regression_d3_s3003:** gi64 digest-only (T5 both). A solo re-run of the SAME binary reproduces GT exactly
+  (digest `1f9b5fe6c4d7df9d`) -- the pooled-run cross-deck flicker already recorded above (2026-10-06c). The accept
+  carries that solo measurement, so selesnya GT is unchanged.
+
+| key | GT (old list) | new | net turns | faster / slower |
+|---|---|---|---|---|
+| bruna_smoke_d0_s1001 | 6.4570 | 6.4570 | 0 | 0 / 0 |
+| bruna_smoke_d3_s1001 | 4.9067 | 4.8600 | -7 | 6 / 1 (gi100 5->6) |
+| bruna_smoke_d5_s1001 | 4.9600 | 4.9200 | -3 | 3 / 0 |
+| bruna2hg_smoke_d3_s1001 | 5.4800 | 5.4200 | -3 | 3 / 0 |
+| bruna_regression_d0_s2002 | 6.4540 | 6.4540 | 0 | 0 / 0 |
+| bruna_regression_d3_s2002 | 5.1733 | 5.1267 | -7 | 6 / 0 |
+| bruna_regression_d3_s3003 | 5.1067 | 5.0800 | -4 | 6 (incl gi4 unwon->T8) / 2 (gi5, gi24 5->6) |
+| bruna_regression_d5_s2002 | 5.0667 | 5.0400 | -2 | 2 / 0 |
+| bruna_regression_d5_s3003 | 5.1733 | 5.1467 | -2 | 4 / 2 (gi5, gi24 5->6) |
+
+Deck net (losses = 9): **bruna -25, bruna2hg -3**; every key <= 0.
+**Slower games** (mulligan first: kept hand AND draws identical old vs new in all three physical games): s1001 gi100
+-> T5 at stage 1 (d5 b100); s3003 gi5 -> T5 at stage 1; s3003 gi24 -> T6 at stage 1, **T5 at stage 2 (d8 b0)**. All
+three = budget churn from the wider Wish axis (4 -> 11 names): e.g. gi24 old T3 Bruna / T4 Wish -> win T5, new spends
+T3 on a Wish line and lands Bruna T4. None is a fix effect (byte-identical pre-fix arm).
+
+**Cost per game** (`batch.log` ms / games, GT run `1b8cd576` -> this run; units are the deterministic measure, ms
+moves with box contention): smoke d5 4.96 s -> 9.75 s (units 1.50x), smoke d3 1.81 -> 6.59 s (units 1.72x), 2HG d3
+2.74 -> 11.70 s (units 1.83x), regression d5 8.6/8.4 -> 12.9/12.5 s (units 1.51x/1.43x), regression d3 4.2/4.8 ->
+4.9/5.2 s (units 1.89x/1.81x); d0 negligible. The fixes add < 0.1% units (pre-fix arm 22,020,302 vs 22,035,393 on smoke
+d3). This is the Wish-axis cost already raised as open question 1 -- it still stands (default (c) kept).
+
+**Accepted** smoke + regression with one-line notes (the prior 2026-10-06c notes' still-binding parts carried);
+`check_gt_logs.py` 668 consistent / 0 stale; GT diff = exactly the 7 moved Bruna keys + the three header lines.

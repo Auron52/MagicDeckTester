@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 17205227  date 2026-10-06
+# Regression ground truth -- commit e2f02109  date 2026-10-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-05): overnight, 2026-10-05: d5f8854f (= combined soldiers-analysis 0303292c + Kitty order Dwalin after the Equipment 45c3c66a, USER ruling) vs the 3de66a1f overnight GT: kitty -511 (d0 +2 greedy churn), kittyv2 -1229 / d0 -5364 vs STALE GT (keep profile 05b035c1 never overnight-accepted) and -343 / d0 -140 with 0 slower games vs an origin d264c556 arm (gi136/gi92 now recover), melira -32, snow -13 / d0 -7, minotaur -6, goblins -3, fivecolour -2, soldiers -2, whiteknights -2, dragons -1, minotaur2hg -1, selesnya -1. All 8 non-kittyv2 searched slower games recover (two-stage: 7 at dW b100, melira s7007 gi116 d3+d5 at d8b0). Carried from the 3de66a1f accepts: antilife +4, antilife2hg +5, dragonstorm2hg +1, mirrorwing +1, slivers2hg +1 churn with d8b0 recovery; snow ov d3 s4004 gi104 T8-only tree never finished at d8b0; fungus_d0 +6 upstream; slivers_d0 +135 deferred d0 runner. See docs/design/combined-gt-2026-10-04.md
-# accepted-with-regressions (smoke, 2026-10-06): smoke, 2026-10-06c: bruna-analysis rebased onto origin 9f3b5b13 (Vial puts sequenced like casts + Genesis Wave X dork growth); only Bruna cells move, fingerprints byte-identical to the 06b run: bruna d0 -89 / d3 -3 / d5 -2; bruna2hg d3 +1 (gi43 5->6, kept hand+draws identical, T5 at stage 1 d5 b100 = budget churn; deck Bruna incl. 2HG net -93); every Vial deck and selesnya PASS vs origin GT (a first full smoke had selesnya d3 gi74 5->6, not reproducible: solo, 2 standalone batches and a full re-run all give origin's T5). Ledger docs/design/analysis-Bruna.md 'Suite verdicts 2026-10-06c'
-# accepted-with-regressions (regression, 2026-10-06): regression, 2026-10-06c: bruna-analysis rebased onto origin 9f3b5b13; only Bruna cells move, byte-identical to 06b: bruna d0 -75, d3/d5 s2002 digest-only, d3/d5 s3003 net 0 (gi35 4->5 recovers at stage 1 d4 b100 T5 / stage 2 d8 b0 T4 = budget churn, +1 better each); every Vial deck and selesnya PASS vs origin GT; ref gate 1 play-drift = pre-existing Mirrorwing v2 claude_s51_gi50 (ATTACK_BODY_TAP_ORDER question with the user). Ledger 'Suite verdicts 2026-10-06c'
+# accepted-with-regressions (smoke, 2026-10-06): smoke, 2026-10-06d: bruna-sideboard (USER list: Linvala, Troyan, Detention Sphere, Steel of the Godhead, Vexing Shusher, Auroral Procession, Reborn Hope x2) + two engine fixes (CR 302.6 haste from ANY source for {T} abilities; Troyan big-spell-only float) on origin 05f64875; only Bruna cells move: bruna d3 -7 (6 faster; gi100 5->6 kept hand+draws identical, T5 at stage 1 d5 b100 = budget churn), d5 -3, d0 0, bruna2hg d3 -3 (deck net -13); all 9 Bruna digests byte-identical on the pre-fix e2f02109 arm = 100% list change, fixes play-inert on suite seeds (they fire in search: bigfloat booked 147671 / spent 6945, equip-haste rescues +74721); every other deck PASS. Carried from 2026-10-06c: bruna2hg gi43 churn verdict superseded by this re-accept; selesnya d3 gi74 pooled-run flicker (not reproducible solo) still open. Ledger docs/design/analysis-Bruna.md 'Sideboard change + verdicts 2026-10-06'
+# accepted-with-regressions (regression, 2026-10-06): regression, 2026-10-06d: same change (bruna-sideboard list + haste-tap + Troyan big-spell float fixes) on origin 05f64875; only Bruna cells move: bruna d3 s2002 -7 (6 faster), d3 s3003 -4 (6 faster incl gi4 unwon->T8; gi5 and gi24 5->6), d5 s2002 -2, d5 s3003 -2 (gi5, gi24 5->6), d0 0 (deck net -15); every slower game has kept hand + draws identical: gi5 T5 at stage 1 d5 b100, gi24 T6 at stage 1 then T5 at stage 2 d8 b0 = budget churn (Wish axis 4->11 names); all Bruna digests byte-identical on the pre-fix e2f02109 arm = 100% list change. selesnya d3 s3003 gi64 digest-only flicker in the pooled run (same score); a solo re-run of the SAME binary reproduces GT exactly, so results.env/.wins carry that solo measurement and selesnya GT is unchanged (the pooled-run cross-deck flicker noted 2026-10-06c, still owner-less). Ref gate 0 play-drift / 0 board-diverged / 0 enum-gap. Carried from 2026-10-06c: Mirrorwing v2 claude_s51_gi50 drift fixed by 590e8ee6. Ledger docs/design/analysis-Bruna.md 'Sideboard change + verdicts 2026-10-06'
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -103,7 +103,7 @@ critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
 melira2hg_smoke_d3_s1001=4.8400/a94be226c6cdc4e5
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=5.0600/dc96452253e4d0cb
-bruna2hg_smoke_d3_s1001=5.4800/fa741ba567fca0ac
+bruna2hg_smoke_d3_s1001=5.4200/8bcea5f69711b993
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.5400/fe8f95f9362334e7
 fluctuator_smoke_d5_s1001=3.5067/7b3eeadf188dfa29
@@ -120,8 +120,8 @@ soldiers_smoke_d0_s1001=4.6000/0611c83ed8bc5a10
 soldiers_smoke_d3_s1001=4.3333/98cf0632c8c00549
 soldiers_smoke_d5_s1001=4.3600/107c876c54356824
 bruna_smoke_d0_s1001=6.4570/efc1c9e3fe9a0a4d
-bruna_smoke_d3_s1001=4.9067/76b12bfcf5c631bf
-bruna_smoke_d5_s1001=4.9600/06e6c19abb5f686b
+bruna_smoke_d3_s1001=4.8600/ba865858ce7c4118
+bruna_smoke_d5_s1001=4.9200/78ef866867eef089
 snow_smoke_d0_s1001=6.5350/c58eb1fa351e8be8
 snow_smoke_d3_s1001=6.0100/ed6d1b777c1fdf8d
 snow_smoke_d5_s1001=6.0200/a28a14b88ab6a2c9
@@ -283,10 +283,10 @@ soldiers_regression_d3_s3003=4.3600/e79a3fe0168d5b3a
 soldiers_regression_d5_s2002=4.3733/0dec85180eea49d8
 soldiers_regression_d5_s3003=4.3867/4bf62b16c476a108
 bruna_regression_d0_s2002=6.4540/0b0d998e0ec8ed19
-bruna_regression_d3_s2002=5.1733/0b0f4bc5ddda0d49
-bruna_regression_d3_s3003=5.1067/35655e22beaf95a3
-bruna_regression_d5_s2002=5.0667/9be0031d3c3a0df6
-bruna_regression_d5_s3003=5.1733/7fec50d0fce6d435
+bruna_regression_d3_s2002=5.1267/9a3de7a363307128
+bruna_regression_d3_s3003=5.0800/131db27030931ab7
+bruna_regression_d5_s2002=5.0400/a3ae7ef973c110d4
+bruna_regression_d5_s3003=5.1467/8e90984e6f745e47
 snow_regression_d0_s2002=6.5150/06b1f4212e16ee37
 snow_regression_d3_s2002=6.0667/995afae6b872999b
 snow_regression_d3_s3003=5.8667/0eea886b48fa4bdf
