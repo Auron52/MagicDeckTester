@@ -2545,6 +2545,122 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // hand string is the slow.log form "Label xN; Label xM; ..." (labels are bucket reps); _R/_PD plus
     // this run's --seed pin the exact rs = f(seed,r,w,pd). Point MTG_EQUIV_CACHE at the capture's cache
     // so discovery is a fast hit. Pure diagnostic -> never runs in a normal gen (unset => skipped).
+    // MTG_KEEP_REPLAY_LIST=<slow.log> -- the pooled form of MTG_KEEP_REPLAY: replays EVERY
+    // SLOW-ROLLOUT line of a slow log (size / mode / r / hand; the logged seed is re-derived and
+    // checked) on one shared work queue across this process's threads, prints one line per rollout
+    // (new ms, logged ms, win turn) and EXITS. One process, one tail -- not one mtg per line. Pure
+    // diagnostic; unset => skipped. Used to measure docs/design/selesnya-keepgen-tail.md.
+    if (const char* lp = std::getenv("MTG_KEEP_REPLAY_LIST"); lp && *lp)
+    {
+        std::map<std::string, int> label_to_b;
+        for (int b = 0; b < K; ++b) { label_to_b[label[b]] = b; }
+        struct RItem { std::string line; int w; int pd; long long r; unsigned long long seed; long long logged_ms; };
+        std::vector<RItem> items;
+        std::ifstream in(lp);
+        std::string ln;
+        while (std::getline(in, ln))
+        {
+            const std::size_t sp = ln.find("SLOW-ROLLOUT ");
+            const std::size_t sz = ln.find(" size");
+            const std::size_t hp = ln.find("hand: ");
+            if (sp == std::string::npos || sz == std::string::npos || hp == std::string::npos) { continue; }
+            RItem it{};
+            it.line = ln.substr(sz + 1);
+            it.logged_ms = std::atoll(ln.c_str() + sp + 13);
+            const int H = std::atoi(ln.c_str() + sz + 5);
+            it.pd = (ln.find(" play ", sz) != std::string::npos && ln.find(" play ", sz) < hp) ? 1 : 0;
+            const std::size_t rq = ln.find(" r=", sz), sq = ln.find(" seed=", sz);
+            if (rq == std::string::npos || sq == std::string::npos) { continue; }
+            it.r = std::atoll(ln.c_str() + rq + 3);
+            it.seed = std::strtoull(ln.c_str() + sq + 6, nullptr, 10);
+            std::vector<int> comp(K, 0); int HH = 0; bool ok = true;
+            std::string spec = ln.substr(hp + 6); std::size_t pos = 0;
+            while (pos < spec.size())
+            {
+                std::size_t semi = spec.find(';', pos);
+                std::string e = spec.substr(pos, semi == std::string::npos ? std::string::npos : semi - pos);
+                pos = (semi == std::string::npos) ? spec.size() : semi + 1;
+                std::size_t a = e.find_first_not_of(" \t"), z = e.find_last_not_of(" \t");
+                if (a == std::string::npos) { continue; }
+                e = e.substr(a, z - a + 1);
+                std::size_t xp = e.rfind(" x");
+                if (xp == std::string::npos) { continue; }
+                const int cnt = std::atoi(e.c_str() + xp + 2);
+                auto f = label_to_b.find(e.substr(0, xp));
+                if (f == label_to_b.end()) { ok = false; break; }
+                comp[f->second] += cnt; HH += cnt;
+            }
+            if (!ok || HH != H || H < min_size || H > HAND) { std::cerr << "[replay-list] skip: " << ln << "\n"; continue; }
+            auto& t = tables[HAND - H];
+            auto f = t.index.find(comp);
+            if (f == t.index.end()) { std::cerr << "[replay-list] comp not found: " << ln << "\n"; continue; }
+            it.w = work_idx[HAND - H][f->second];
+            if (it.w < 0) { continue; }
+            const uint64_t rs = cfg.seed + 21'000'000ULL
+                              + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(it.r) + 1)
+                              + 1000003ULL * static_cast<uint64_t>(it.w) + static_cast<uint64_t>(it.pd);
+            if (rs != it.seed) { std::cerr << "[replay-list] SEED MISMATCH (different --seed?): " << ln << "\n"; continue; }
+            items.push_back(std::move(it));
+        }
+        // MTG_KEEP_REPLAY_SAMPLE=<N>: ALSO append N deterministic pseudo-random size-7 rollouts
+        // (cell, side, r in [0,30)) -- the ORDINARY workload, so an A/B over one list prices the bulk
+        // as well as the logged tail. Same identity function as the gen (run_one), so reproducible.
+        if (const int ns = EnvInt("MTG_KEEP_REPLAY_SAMPLE", 0); ns > 0)
+        {
+            std::vector<int> w7;
+            for (int w = 0; w < static_cast<int>(work.size()); ++w) { if (work[w].H == HAND) { w7.push_back(w); } }
+            std::uint64_t x = 0x243F6A8885A308D3ULL;
+            for (int k = 0; k < ns && !w7.empty(); ++k)
+            {
+                x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+                RItem it{};
+                it.w = w7[static_cast<std::size_t>(x % w7.size())];
+                it.pd = static_cast<int>((x >> 20) & 1ULL);
+                it.r = static_cast<long long>((x >> 24) % 30ULL);
+                it.logged_ms = 0;
+                it.line = "sample" + std::to_string(k) + " w=" + std::to_string(it.w) + " pd="
+                        + std::to_string(it.pd) + " r=" + std::to_string(it.r);
+                items.push_back(std::move(it));
+            }
+        }
+        // Longest-logged first, so the pool's tail is the cheapest work.
+        std::stable_sort(items.begin(), items.end(),
+                         [](const RItem& a, const RItem& b) { return a.logged_ms > b.logged_ms; });
+        const int nth = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
+                                             static_cast<int>(items.size())));
+        std::cerr << "[replay-list] " << items.size() << " rollouts on " << nth << " threads\n" << std::flush;
+        std::atomic<std::size_t> next{0};
+        std::mutex out_mtx;
+        double total_ms = 0; long long total_logged = 0;
+        const auto t_all = std::chrono::steady_clock::now();
+        auto worker = [&]()
+        {
+            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            ai.SetSearchPostCombat(second_main);
+            for (;;)
+            {
+                const std::size_t k = next.fetch_add(1);
+                if (k >= items.size()) { break; }
+                const RItem& it = items[k];
+                const auto t0 = std::chrono::steady_clock::now();
+                const double wt = run_one(ai, it.w, it.pd, it.r);
+                const double ms = std::chrono::duration<double, std::milli>(
+                                      std::chrono::steady_clock::now() - t0).count();
+                std::lock_guard<std::mutex> lk(out_mtx);
+                total_ms += ms; total_logged += it.logged_ms;
+                std::cout << "[replay-list] ms=" << static_cast<long long>(ms) << " logged_ms=" << it.logged_ms
+                          << " win_turn=" << wt << "  " << it.line << "\n" << std::flush;
+            }
+        };
+        std::vector<std::thread> pool;
+        for (int t = 0; t < nth; ++t) { pool.emplace_back(worker); }
+        for (std::thread& th : pool) { th.join(); }
+        std::cerr << "[replay-list] DONE " << items.size() << " rollouts: sum ms=" << static_cast<long long>(total_ms)
+                  << " (logged sum " << total_logged << ")  wall=" << static_cast<long long>(
+                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_all).count())
+                  << "ms\n" << std::flush;
+        return;
+    }
     if (const char* rp = std::getenv("MTG_KEEP_REPLAY"); rp && *rp)
     {
         const long long rr = []{ const char* s = std::getenv("MTG_KEEP_REPLAY_R");
