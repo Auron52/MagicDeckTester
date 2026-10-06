@@ -196,6 +196,44 @@ re-enumerating a wide equipment board at ~2,275 plans per rollout.** With `MTG_D
   lever folds. Do not reach for it here.
 * A damage pre-filter on the route gate is still ruled out (~90% of trials find a kill).
 
+### 4c. THE MECHANISM, exactly: a completed detection collapses the decision; an interrupted one costs 128 seconds
+
+The per-decision census of the WORST decision in the sample (gi=369 turn 3) shows the budget being
+overrun 26x — 471,053 units against an 18,000-unit budget — and the split says why:
+
+| site | units | share |
+|---|---|---|
+| `u_la_cand` | 152,819 | 32.4% |
+| `u_rollout_step` | 148,888 | 31.6% |
+| `u_greedy_fallback` | 146,991 | 31.2% |
+| **`u_equip_route`** | **18,000** | **3.8%** |
+
+`u_equip_route` is **exactly the budget**. The route consumes 100% of the decision's allowance, the
+budget is then exhausted, and everything downstream runs in fallback mode — which still costs, and
+still charges, but can no longer be bounded. Across gi=371's decisions the route takes 95-99% of
+budget on every single one.
+
+**And completing the detection is worth ~300x on the decision.** Same game, same seed, only the
+per-link price changed (`MTG_TURN_CENSUS` + `MTG_DEDUP_CENSUS`, gi=371 turn 3):
+
+| | price 8 (shipped) | price 4 |
+|---|---|---|
+| units | 70,077 (3.9x over budget) | **18,006** (the budget binds) |
+| wall | 128,083 ms | **436 ms** |
+| `space_plans` | 31,144,648 | **10,566** |
+| whole game | 242.6 s, reported SLOW-GAME | **< 30 s, not slow at all** |
+| win turn | 4 | 4 (UNCHANGED) |
+
+So the price is not buying "more detection" in some diffuse sense. At price 8 the route runs out of
+links **mid-detection**, no certificate is produced, the go-off cut does not fire, and the decision
+pays the full 31-million-plan enumeration. At price 4 the same detection **completes** inside the
+same budget, the cut collapses the frame, and the enumeration never happens. A half-finished
+detection is the worst of both worlds: it spends the entire budget and collapses nothing.
+
+That is the sharpest available answer to "is the budget well spent": on this deck the detector is
+the single most profitable thing the budget can buy, because success removes essentially the whole
+decision — and the shipped price was set just high enough to make it fail.
+
 **So the largest remaining non-lossy headroom is wide-board plan enumeration, not the route.** That
 is a "COLLAPSE WASTED SEARCH UNCONDITIONALLY" target needing no user ruling, and it has direct
 precedent (pooling the interchangeable sac outlets took the worst odometer shape 4.61e+03 ->
