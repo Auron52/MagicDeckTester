@@ -1129,3 +1129,58 @@ Open (none blocks anything; defaults taken):
    would have been free). A swap-timing matter of the greedy, not of the host key; left as is.
 2. The viewer menu is not re-ordered to put the ranking's host first (index-stable for reference replays); the
    human still sees every host. Want the ranking's pick marked/first in the viewer? Default: unchanged.
+
+## Suite verdicts 2026-10-06 -- smoke + regression after rebase onto origin `bd5da4d5`
+
+**Rebase.** `bruna-analysis` rebased onto origin `bd5da4d5` (42 commits replayed, no merge). Only conflict:
+the `regression_gt.txt` header of the 2026-10-05 Bruna accept -- kept origin's notes; keys merged cleanly
+(origin moved only selesnya; our commit never touched selesnya), `check_gt_logs.py` 668 consistent / 0 stale.
+Origin's commits since `71d45d8b` are byte-identical on every deck but selesnya (its own accept) -- confirmed:
+selesnya + every other untouched deck PASS. Built with `./build.sh`. Results kept durably in
+`logs/suite_results_2026-10-06/{smoke,regression,accepted}/`. Wall: smoke batch makespan 3m00s, regression
+6m18s (+ the reference sweep). Also fixed `test/explain_game.py` (`8c0d4fbe`): the fungusb comment's
+`(candidate-b)` truncated its DECK_FILE parse, so the audit could explain no deck after fungus.
+
+**Per-deck net vs committed GT (loss = 9).** Every other deck/cell is identical to GT (turns and digests).
+
+| Tier | Deck | net | better | worse | play-changed | cause |
+|---|---|---|---|---|---|---|
+| smoke | bruna | -66 | 54 | 2 (d0) | 110 | host ranking 49a261c6 + Wings swap rollout b4542a3e |
+| smoke | bruna2hg | -2 | 2 | 0 | 7 | same |
+| smoke | auras / auras2hg | -1 / 0 | 1 / 0 | 0 | 25 / 1 | host ranking |
+| smoke | snow | 0 | 0 | 0 | 10 | site-9 fix f0d61eda (digest-only) |
+| smoke | fungusb | -1 | 6 | 5 | 18 | origin's value leaf 1abff9bc |
+| regression | bruna | -59 | 52 | 4 (1 d0) | 134 | host ranking + Wings swap rollout |
+| regression | auras | -24 | 24 | 0 | 85 | host ranking |
+| regression | snow / melira | 0 / 0 | 0 | 0 | 16 / 1 | site-9 fix (digest-only) |
+| regression | fungusb | -8 | 13 | 5 | 50 | origin's value leaf 1abff9bc |
+
+**fungusb.** Our GT was the pre-leaf one (the 71d45d8b rebase kept our side). Against origin's accepted
+`71d45d8b` per-game GT, every fungusb game slower than OUR GT is equal to or better than origin's
+(smoke d3 -2 / d5 -3 vs origin; regression d3 -7 / d5 -5 vs origin) -- except reg d3 s3003 gi61 (below).
+d0 unchanged vs our GT (the leaf does not reach d0). Verdict: origin's value-leaf adoption.
+
+**Every worse game.**
+| Game | GT -> now | Verdict |
+|---|---|---|
+| bruna reg d3 + d5 s3003 gi11 | 4 -> 5 | budget churn: stage 1 (d4 b100) wins T4; hand + draws identical (T3 Wild Growth line not found at b10/b20) |
+| bruna reg d3 s3003 gi134 | 4 -> 5 | budget churn: stage 1 (d4 b100) T5, stage 2 (d8 b0) wins T4. T2 Open the Armory over Glittering Wish -> different shuffle, draws diverge T3 |
+| fungusb reg d3 s3003 gi61 | 5 -> 6 | budget churn: stage 1 (d5 b100) wins T5. Old binary + the leaf also gives T6 at d3b10 (origin's 5 was origin's engine) |
+| fungusb smoke d5 gi3/20/27/36/39; reg d3 s3003 gi86, d5 s2002 gi0/gi21, d5 s3003 gi25 | +1 each | origin's value leaf: each equals origin's accepted per-game GT (smoke gi3 is BETTER: origin loss -> 7). Origin verdicted these churn/persist at its adoption |
+| bruna smoke d0 gi12 (5 -> 6), gi885 (7 -> 8) | d0 | open item 1 of the host-ranking section (gi681): the recast Wings' host ties and the tie-break picks the non-mana creature; next turn Solve's MAIN-phase swap brings Colossification onto that host and its ETB taps the attacker. Old: Colossification went to Birds/Sage and the other creature swung for lethal. Searched d3 b10 wins gi12 T3, gi885 T5. d0 greedy swap timing, not the host key |
+| bruna reg d0 gi748 | 7 -> 8 | host key put Colossification on Somberwald Sage (next-turn model: Sage's creature-only mana cannot pay the 6-mana Aura, so Birds is the mana source); T7 Solve then taps the 20/20 Sage to cast Sage #2 + Prodigious Growth instead of Growth alone and a trampling 27 swing -- the dead greedy attack-tap discount (`docs/design/attack-tap-discount-dead.md`, pre-existing). d3 b10 and d5 b20 win T4 |
+
+**Reference gate (`--strict`):** 82 ok / 366 repaired / 2 play-drift / 1 shuffle-dead / 1 board-diverged /
+0 enum-gap / 6 contract-fail. **Every failure reproduces byte-identically on a fresh `./build.sh` of origin
+`bd5da4d5`** (`viewer_protocol_check.py --strict --only Angels/,Soldiers/,StompySurprise/v1-...s11`, scratch
+worktree `/home/vscode/wt/bruna-originchk`) -- none is this branch:
+* NEW **Angels/claude_s5_gi4 play-drift** (T5 vs recorded T4) -- origin's reference `a0abd4f5`, drifts on origin too.
+* NEW **6x Soldiers CONTRACT-FAIL** (`unknown deck dir 'Soldiers'`: the decklist is `decks/Soldiers/soldiers.cod`,
+  lowercase; the checker derives `Soldiers.cod`) -- origin's references `a0abd4f5`; needs a `_DECK_OVERRIDES` row
+  or a rename by the Soldiers owner. Not replayed at all until then.
+* **StompySurprise v1 s11_gi10 board-diverged** -- origin `d2c12344` (recorded in origin's GT note; owed a USER re-save).
+* **Mirrorwing v2 s51_gi50 play-drift** -- pre-existing (above).
+* Hinata2 s1_gi0 ENUM-GAP is gone (fixed upstream).
+
+**Accepted** smoke + regression (full-tier accepts with one-line notes carrying the binding origin rulings);
+`check_gt_logs.py` 668 consistent / 0 stale. Overnight not run (USER: not until asked); Bruna overnight GT still owed.

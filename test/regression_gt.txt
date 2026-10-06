@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 71d45d8b  date 2026-10-05
+# Regression ground truth -- commit 8c0d4fbe  date 2026-10-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-05): overnight, 2026-10-05: d5f8854f (= combined soldiers-analysis 0303292c + Kitty order Dwalin after the Equipment 45c3c66a, USER ruling) vs the 3de66a1f overnight GT: kitty -511 (d0 +2 greedy churn), kittyv2 -1229 / d0 -5364 vs STALE GT (keep profile 05b035c1 never overnight-accepted) and -343 / d0 -140 with 0 slower games vs an origin d264c556 arm (gi136/gi92 now recover), melira -32, snow -13 / d0 -7, minotaur -6, goblins -3, fivecolour -2, soldiers -2, whiteknights -2, dragons -1, minotaur2hg -1, selesnya -1. All 8 non-kittyv2 searched slower games recover (two-stage: 7 at dW b100, melira s7007 gi116 d3+d5 at d8b0). Carried from the 3de66a1f accepts: antilife +4, antilife2hg +5, dragonstorm2hg +1, mirrorwing +1, slivers2hg +1 churn with d8b0 recovery; snow ov d3 s4004 gi104 T8-only tree never finished at d8b0; fungus_d0 +6 upstream; slivers_d0 +135 deferred d0 runner. See docs/design/combined-gt-2026-10-04.md
-# accepted-with-regressions (smoke, 2026-10-05): selesnya ONLY (viewer batch 2026-10-05, docs/design/viewer-mana-batch-2026-10-05.md): the activation line hold no longer holds a colour source for the activation being paid, and the Wirewood Lodge burst reserve fires only when the burst is needed by the turn's bill. d0 6.2790->6.2760, d3 5.4467->5.4267, d5 5.3467->5.3200; searched 0 slower / 5 faster / 15 digest-only, d0 0 slower / 3 faster / 83 digest-only. Every other cell identical to GT. CARRIED: fungusb ONLY (candidate-b value leaf 1abff9bc ADOPTED, re-measured on the rebased tree 53adc731 = origin c7487fb9 + 4 local commits): d3 5.3067->5.2667, d5 5.2000->5.2500; per-game OUTCOMES identical to the pre-rebase accept c26d4ab1 (only digests moved, with origin's engine); d5 slower gi20/gi27/gi36 are churn (recover at 4x/16x), gi3 6->loss and gi39 6->7 persist (the leaf's -0.00825t t=-3.52 was measured on the large sample). Every other cell identical to GT: the three default-OFF mana levers (MTG_NEEDS_TAP_ORDER / MTG_ATTACK_BODY_TAP_ORDER / MTG_PAY_ROLLBACK) are inert at default. CARRIED: smoke, 2026-10-05: 45c3c66a Kitty order Dwalin after the Equipment (USER ruling 2026-10-05) on 2d5ca753: only kittyv2 moves -- searched 0 (0 slower / 0 faster, 90 digest-only games), d0 -4; every other cell identical to GT. Carried from the 0303292c accept: combined soldiers-analysis on origin d264c556 every deck net <= 0 (kitty -24, kittyv2 -24 / d0 -14, kitty2hg -5, snow -3 / d0 -8, fungusb -2 / d0 -1, melira -1, melira2hg -1, minotaur2hg -1); snow d3 s1001 gi69 recovers at 4x and d8b0; fungusb candidate-b keep profile ADOPTED 2026-10-04. See docs/design/combined-gt-2026-10-04.md
-# accepted-with-regressions (regression, 2026-10-05): selesnya ONLY (viewer batch 2026-10-05, same two fixes): d0 6.2470->6.2390, d3 s2002 5.1800->5.1667, the other three cells digest-only; searched 0 slower / 2 faster / 36 digest-only, d0 0 slower / 8 faster / 89 digest-only. Every other cell identical to GT. Reference gate: 74 ok / 365 repaired / 1 play-drift (Mirrorwing s51_gi50, unchanged) / 1 shuffle-dead / 1 board-diverged (StompySurprise v1 s11_gi10: the Lodge now pays Natural Order's generic pip instead of the Priest, the Priest attacks T4 and the human's own line wins T5 instead of the recorded T6 -- the recorded T6 Lodge-untap follow-up was unpayable even before; owed a USER re-save) / 0 enum-gap. CARRIED: fungusb ONLY (candidate-b value leaf 1abff9bc ADOPTED, re-measured on the rebased tree 53adc731 = origin c7487fb9 + 4 local commits): d3 s2002 5.1900->5.1700, d3 s3003 5.2100 (digest only), d5 s2002 5.1600->5.0800, d5 s3003 5.2400 (digest only); searched 4 slower / 10 faster / 32 digest-only, d0 0; all 4 slower (d3 s3003 gi86, d5 s2002 gi0+gi21, d5 s3003 gi25) are churn, recover at 4x and 16x. Per-game outcomes equal the pre-rebase accept c26d4ab1 except ONE game per cell a turn FASTER under origin's engine fixes. Every other cell identical to GT: the three default-OFF mana levers are inert at default. Reference gate: 74 ok / 366 repaired / 1 play-drift (Mirrorwing v2 s51_gi50, replays under MTG_ATTACK_BODY_TAP_ORDER=1) / 1 shuffle-dead / 0 board-diverged (Snow s4_gi3 FIXED: Sheets hold at turn scope) / 0 enum-gap (Hinata2 s1_gi0 FIXED: checker strips the volatile tail repeatedly). CARRIED: regression, 2026-10-05: 45c3c66a Kitty order Dwalin after the Equipment (USER ruling 2026-10-05: 'Dwalin should be after equipment, but can be before equips') on 2d5ca753: only kittyv2 moves -- searched +1 / d0 -2 (deck net -1), 120 digest-only games. The 1 searched slower game, kittyv2 d3 s2002 gi55 (GT 4 -> 5), does NOT recover at d8b0: its T4 line needs Dwalin cast BEFORE Spidersilk Net so Sigarda's Aid's free attach lands -- ACCEPTED as a consequence of the user's order. Every other cell identical to GT. Reference gate unchanged (same 4 pre-existing failures). Carried from the 0303292c accept: kitty -99, kittyv2 -73 / d0 -17, fungusb -2, melira -1, snow searched +1 / d0 -12 (USER Snow cast order: s3003 gi8 draw divergence, s2002 gi40 truncated-T1 tie; both recover at 4x and d8b0; watcher slot net 0 on 1000 held-out games); Pirates s4_gi3 ok->repaired at same win turn; fungusb candidate-b keep profile ADOPTED 2026-10-04. See docs/design/combined-gt-2026-10-04.md
+# accepted-with-regressions (smoke, 2026-10-06): bruna-analysis rebased on origin bd5da4d5 (site-9 BP-NODE numbering fix f0d61eda, MTG_ROLLOUT_AURA_SWAP default ON b4542a3e, one creature-Aura host ranking 49a261c6): moved bruna -66 (d0 -63 / 51 better 2 worse; d3 -2, d5 -1), bruna2hg -2, auras -1 (d0 digest-only), auras2hg digest-only, snow digest-only (site 9), fungusb -1 vs our pre-leaf GT = origin's candidate-b value leaf 1abff9bc (every slower game equals origin's 71d45d8b accepted per-game GT; vs origin GT d3 -2 d5 -3). Worse: bruna d0 gi12 + gi885 = Solve's main-phase Wings swap brings Colossification onto the Wings host and its ETB taps the attacker (ledger open item 1, d0 greedy; searched d3b10 wins T3/T5). Every other cell identical to GT. CARRIED: selesnya viewer batch (origin d2c12344, all better); 45c3c66a Kitty Dwalin-after-Equipment (USER); fungusb candidate-b leaf + keep profile ADOPTED. See docs/design/analysis-Bruna.md 'Suite verdicts 2026-10-06'
+# accepted-with-regressions (regression, 2026-10-06): bruna-analysis rebased on origin bd5da4d5 (site-9 fix f0d61eda, MTG_ROLLOUT_AURA_SWAP ON b4542a3e, creature-Aura host ranking 49a261c6): moved bruna -59 (d0 -59 / 49 better 1 worse; d3 s2002 -1, d3 s3003 +1, d5 s3003 0), auras -24 (24 better, 0 worse), snow + melira digest-only (site 9), fungusb -8 vs our pre-leaf GT = origin's candidate-b value leaf 1abff9bc (vs origin's 71d45d8b GT d3 -7 d5 -5). Searched worse, two-stage recovery: bruna d3+d5 s3003 gi11 4->5 recover at d4 b100; bruna d3 s3003 gi134 4->5 (Open the Armory shuffle, draws diverge T3) recovers at d8 b0; fungusb d3 s3003 gi61 5->6 recovers at d5 b100; fungusb d3 s3003 gi86, d5 s2002 gi0/gi21, d5 s3003 gi25 equal origin's accepted per-game GT. d0 worse bruna gi748 7->8: host key puts Colossification on Somberwald Sage, Solve then taps the 20/20 for Sage #2 (dead attack-tap discount, docs/design/attack-tap-discount-dead.md; d3b10/d5b20 win T4). Every other cell identical to GT. Reference gate: 82 ok / 366 repaired / 2 play-drift / 1 shuffle-dead / 1 board-diverged / 0 enum-gap / 6 contract-fail -- ALL reproduce byte-identically on an origin bd5da4d5 build: Angels s5_gi4 play-drift + 6 Soldiers CONTRACT-FAIL (decks/Soldiers/soldiers.cod lowercase) = origin's new refs a0abd4f5; StompySurprise v1 s11_gi10 board-diverged = origin d2c12344 (owed USER re-save); Mirrorwing v2 s51_gi50 pre-existing. CARRIED: selesnya viewer batch (origin, all better); kittyv2 d3 s2002 gi55 4->5 accepted as consequence of the USER Dwalin-after-Equipment order; Snow USER cast order; fungusb candidate-b leaf + keep profile ADOPTED. See docs/design/analysis-Bruna.md 'Suite verdicts 2026-10-06'
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -11,8 +11,8 @@ fungus_smoke_d0_s1001=5.6700/ff344faf547e6adf
 fungus_smoke_d3_s1001=5.3733/e73ae9fbf6da0fcd
 fungus_smoke_d5_s1001=5.3733/7133402000f62cf7
 fungusb_smoke_d0_s1001=6.1900/9e0223867c7a1604
-fungusb_smoke_d3_s1001=5.2667/865dc71322134e18
-fungusb_smoke_d5_s1001=5.1500/64f6cf7368dacacd
+fungusb_smoke_d3_s1001=5.2400/6e1c2c467a9b64f5
+fungusb_smoke_d5_s1001=5.1750/e0f9b163996d6ef4
 slivers_smoke_d0_s1001=4.6540/d5cd22baf722a27d
 slivers_smoke_d3_s1001=4.2440/078b64d6cae6dc66
 slivers_smoke_d5_s1001=4.1867/d1f110581417eb3e
@@ -37,9 +37,9 @@ hinata_smoke_d5_s1001=5.8133/4631bf375aa4d94a
 dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
 dragonstorm_smoke_d3_s1001=4.5533/20845bbf0f586889
 dragonstorm_smoke_d5_s1001=4.5200/db5874513c4b01f3
-auras_smoke_d0_s1001=4.3660/6efc1c000fae9de5
-auras_smoke_d3_s1001=4.1300/e5fb7c6fc018afae
-auras_smoke_d5_s1001=4.1200/c1cccd9e310b6d49
+auras_smoke_d0_s1001=4.3660/047b4bef065a6857
+auras_smoke_d3_s1001=4.1267/755056ec15b03a0f
+auras_smoke_d5_s1001=4.1200/300180addad6555e
 goblins_smoke_d0_s1001=4.0680/d613ca2b28813f89
 goblins_smoke_d3_s1001=3.6467/334c884e3d1e2cf7
 goblins_smoke_d5_s1001=3.5867/1f4dcae3d1d95d18
@@ -92,7 +92,7 @@ slivers2hg_smoke_d3_s1001=4.8400/c3801724c2461842
 burn2hg_smoke_d3_s1001=5.8200/4a946825f080a85c
 th2hg_smoke_d3_s1001=4.4600/5d7370fcdbce1701
 dragonstorm2hg_smoke_d3_s1001=4.7800/c22bc71141e5b7b2
-auras2hg_smoke_d3_s1001=4.5200/202d405e5c62800b
+auras2hg_smoke_d3_s1001=4.5200/2343755c3023f3ee
 creature_giving2hg_smoke_d3_s1001=5.0000/04503e7d09c41110
 mirrorwing2hg_smoke_d3_s1001=4.6400/da165105de654317
 stompy2hg_smoke_d3_s1001=4.3200/a47e6abc19857614
@@ -103,7 +103,7 @@ critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
 melira2hg_smoke_d3_s1001=4.8400/a94be226c6cdc4e5
 pirates2hg_smoke_d3_s1001=4.9600/20e757df36d4ddb2
 soldiers2hg_smoke_d3_s1001=5.0400/ecaf4cabd6e34822
-bruna2hg_smoke_d3_s1001=5.5000/68f3379a0c9d9082
+bruna2hg_smoke_d3_s1001=5.4600/2eeeac25c427fcfe
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.5400/fe8f95f9362334e7
 fluctuator_smoke_d5_s1001=3.5067/7b3eeadf188dfa29
@@ -119,12 +119,12 @@ selesnya_smoke_d5_s1001=5.3200/dab0f9c1aca1d701
 soldiers_smoke_d0_s1001=4.5940/2e4f7cb14ad6bfe9
 soldiers_smoke_d3_s1001=4.3333/8e329df1deef75c1
 soldiers_smoke_d5_s1001=4.3600/bda0f35e4caf3f5b
-bruna_smoke_d0_s1001=6.6090/a2b7b06153923caf
-bruna_smoke_d3_s1001=4.9400/5abc09267aaf878d
-bruna_smoke_d5_s1001=5.0000/a6923bd6afbc8f26
+bruna_smoke_d0_s1001=6.5460/da6bb5e66ca4f0b4
+bruna_smoke_d3_s1001=4.9267/efe5f96c3ff0942e
+bruna_smoke_d5_s1001=4.9867/209cb3859854033c
 snow_smoke_d0_s1001=6.5350/c58eb1fa351e8be8
-snow_smoke_d3_s1001=6.0100/0f85cad135bb91aa
-snow_smoke_d5_s1001=6.0200/6a8eaf34de8685ab
+snow_smoke_d3_s1001=6.0100/ed6d1b777c1fdf8d
+snow_smoke_d5_s1001=6.0200/a28a14b88ab6a2c9
 
 # --- regression ---
 fungus_regression_d0_s2002=5.7480/cfadd6c7782212fb
@@ -133,10 +133,10 @@ fungus_regression_d3_s3003=5.4450/f2c07551679e40cb
 fungus_regression_d5_s2002=5.4400/78c9f0687f0c3f9f
 fungus_regression_d5_s3003=5.4400/461889da47697bcd
 fungusb_regression_d0_s2002=6.1860/358c88e8e1470e10
-fungusb_regression_d3_s2002=5.1300/bdbf502592106324
-fungusb_regression_d3_s3003=5.2200/9db1a87d1fa38200
-fungusb_regression_d5_s2002=5.0800/ab0a1c5c2a0ddc40
-fungusb_regression_d5_s3003=5.2200/4f45dbd5e8a1c393
+fungusb_regression_d3_s2002=5.0900/e451ed3e58c95a7e
+fungusb_regression_d3_s3003=5.2200/bc339b814a76d849
+fungusb_regression_d5_s2002=5.0000/6c7386893ea6a6f6
+fungusb_regression_d5_s3003=5.2200/c54b22b7a4ebaaa2
 slivers_regression_d0_s2002=4.6890/229ef50efc8d35e4
 slivers_regression_d3_s2002=4.2250/11cc6ffb09c39326
 slivers_regression_d3_s3003=4.2500/bcab93367004d0cd
@@ -177,11 +177,11 @@ dragonstorm_regression_d3_s2002=4.3533/959e97bdac31da3d
 dragonstorm_regression_d3_s3003=4.5233/77115c9bf80f74cd
 dragonstorm_regression_d5_s2002=4.3160/5dab7536d41a8932
 dragonstorm_regression_d5_s3003=4.5240/4dec2ffa1157e109
-auras_regression_d0_s2002=4.3520/11c53eccf71c7ff2
-auras_regression_d3_s2002=4.0860/693958207b25ff56
-auras_regression_d3_s3003=4.1720/8f497d9002e2f85b
-auras_regression_d5_s2002=4.0760/023d919443fa9355
-auras_regression_d5_s3003=4.1560/fc1b1dd92d72ef95
+auras_regression_d0_s2002=4.3480/e1ea584c45229efc
+auras_regression_d3_s2002=4.0760/95c299c25d183e72
+auras_regression_d3_s3003=4.1520/043137708b723482
+auras_regression_d5_s2002=4.0720/155f56f7ce75cbf8
+auras_regression_d5_s3003=4.1500/59fb920a1ec6c210
 goblins_regression_d0_s2002=4.1030/00ab13d7b1178999
 goblins_regression_d3_s2002=3.8067/ba32c3d6aa32baa7
 goblins_regression_d3_s3003=3.8367/c965565416ae5ec1
@@ -239,7 +239,7 @@ critter_regression_d5_s2002=4.3560/01d9043c0463f35a
 critter_regression_d5_s3003=4.3280/117d26ad43e8ddfb
 melira_regression_d0_s2002=6.3730/66a2945a71214f06
 melira_regression_d3_s2002=4.7733/b5d87d286083961e
-melira_regression_d3_s3003=4.5867/af7bd9621b4cfa28
+melira_regression_d3_s3003=4.5867/29057606c9b474cb
 melira_regression_d5_s2002=4.7750/6477dfa238ef6b98
 melira_regression_d5_s3003=4.6000/a31ad4619817e56f
 angels_regression_d0_s2002=5.2630/5ded75dfd2b78268
@@ -282,16 +282,16 @@ soldiers_regression_d3_s2002=4.3800/6c6f5431a0696d2a
 soldiers_regression_d3_s3003=4.3533/c52eb21e598efb47
 soldiers_regression_d5_s2002=4.3733/48b55db2cfc567b8
 soldiers_regression_d5_s3003=4.3733/b2fd1ccdf21fd486
-bruna_regression_d0_s2002=6.5880/b5d2c72d5c6e2e0a
-bruna_regression_d3_s2002=5.1800/23eabdde8f355451
-bruna_regression_d3_s3003=5.1000/642d8a0c8668d173
-bruna_regression_d5_s2002=5.0667/458587e0aa3ff475
-bruna_regression_d5_s3003=5.1733/956b88483fd88fce
+bruna_regression_d0_s2002=6.5290/e25e68679c6ca3e7
+bruna_regression_d3_s2002=5.1733/19572b51519e2129
+bruna_regression_d3_s3003=5.1067/66547e31432338d9
+bruna_regression_d5_s2002=5.0667/f572320cd0e7817d
+bruna_regression_d5_s3003=5.1733/8d1e9a9184b9d837
 snow_regression_d0_s2002=6.5150/06b1f4212e16ee37
-snow_regression_d3_s2002=6.0667/9da2db41f66821bb
-snow_regression_d3_s3003=5.8667/85217bd7666e73e0
-snow_regression_d5_s2002=5.9667/7264bbc3572f5955
-snow_regression_d5_s3003=5.9333/ea46eeb3c3134a33
+snow_regression_d3_s2002=6.0667/995afae6b872999b
+snow_regression_d3_s3003=5.8667/0eea886b48fa4bdf
+snow_regression_d5_s2002=5.9667/b2ff281c7cddb9ec
+snow_regression_d5_s3003=5.9333/821548570e615d3e
 
 # --- overnight ---
 fungus_overnight_d0_s4004=5.7025/d17948b00554deb9
