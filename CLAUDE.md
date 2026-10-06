@@ -64,6 +64,12 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     3. **Commit AND push a new reference the moment it appears** — or confirm it is already on
        `origin/references-autosave` (the scanner checks exactly that). A local commit alone is
        not enough: a container rebuild takes the unpushed branch with it.
+    3b. **NEVER delete, move or "clean up" a reference file — not even after committing it
+       somewhere else.** Commit references IN THE TREE WHERE THEY ARE (the primary checkout, where
+       the viewer writes them); if you must commit from another tree, COPY the file there and leave
+       the original in place. 2026-10-06: an agent committed the user's freshly saved Bruna /
+       CritterLifegain references from its own tree, pushed them, and the originals vanished from
+       the primary checkout — one of them existed only on the autosave branch until restored.
     4. **Session-close checklist item:** run `python3 scripts/check_references_safe.py`; a
        non-zero exit means a reference is not safe yet — fix it before ending the session.
     5. **What the viewer does by itself** (defence in depth, not a substitute for 1-4): each save
