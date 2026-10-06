@@ -74,6 +74,9 @@ toward spending the Lodge like a land.
   unpayable even on the old binary (its `{G}` failed: no green source left after Turntimber
   Symbiosis), so nothing the human actually got is lost. The gate's own 2026-08-25 comment names
   this reference and this shape as the re-play-only class. It is owed a USER re-save, not a revert.
+  **CORRECTION 2026-10-06:** not owed a re-save — the divergence was the checker's ordinal-keyed
+  pins addressing the wrong frames (see `reference-gate-red-on-origin-tip.md`, 2026-10-06
+  update); with the ordinal remap the recorded line replays (`repaired`, T6).
 
 The driver mirrors one viewer behaviour a reference never records: a main phase whose only option
 is "cast: (nothing)" is answered by the viewer itself, so the driver passes it without consuming a

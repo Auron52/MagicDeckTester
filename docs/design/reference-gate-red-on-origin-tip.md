@@ -1,5 +1,36 @@
 # The reference reproducibility gate is RED on `origin/phase-1-2-deck-analyzer`
 
+## UPDATE 2026-10-06 — sweep at cf7c95aa: 4 non-replaying + 6 never-replayed; 3 checker fixes
+
+Full `--strict` sweep at `cf7c95aa` (472 refs, incl. the new Fungus/Snow/WhiteKnights saves):
+`102 ok, 366 repaired, 2 play-drift, 1 shuffle-dead, 1 board-diverged, 0 contract-fail` — and the six
+Soldiers references were not in it at all. After the fixes below: `103 ok, 368 repaired,
+1 play-drift, 0 shuffle-dead, 0 board-diverged` — only the four targeted references moved.
+
+* **Soldiers ×6 — never replayed (resolver bug).** The list ships as `decks/Soldiers/soldiers.cod`;
+  the user's Windows viewer matches the stem case-insensitively, every Linux resolver
+  (`deck_registry.discover`, this checker, `server.js listDecks/resolveDeck`) did not. All four now
+  match the stem case-insensitively (`test/deck_case_resolution_check.py`). All six replay `ok`.
+* **Angels `s5_gi4` — play-drift, CHECKER.** The T4 `--tap-pref` omitted Sol Ring because it was
+  cast in the same line (pins were restricted to first-frame permanents). A pin outranks every
+  unpinned source, so both Plains paid Youthful Valkyrie and Giada (Angel-only `{W}`) paid the
+  Inquisitor and could not attack: T4 → T5. A permanent cast from the first frame's HAND and tapped
+  by the second is now pinned (a land fetched tapped from the library still is not). `ok`.
+* **StompySurprise v1 `s11_gi10` — board-diverged, CHECKER (not a re-save).** Ordinal-keyed pins
+  used the RECORDING's `main_ordinal`; the recorded T4 frame after Natural Order (which offered an
+  unpayable Worldly Tutor) is now pass-only and takes no ordinal, so every later pin addressed the
+  wrong frame and T6's Turntimber Symbiosis payment ran unpinned (Lodge tapped as a land). The walk
+  now learns recorded → replay ordinals as it aligns frames (`OrdinalMap`) and rewrites
+  `--tap-pref` / `--cast-order` / `--full-enum` keys. `repaired`, T6 = T6.
+* **Mirrorwing v1 `s29_gi28` — "shuffle-dead", CHECKER.** Not a reshuffle: the T4 summary gained a
+  per-copy label (`→ Zada, Hedron Grinder #1`), the exact-summary tier missed, and the
+  order-insensitive (land, casts) tier took `Expedite, Ignoble Hierarch` for the recorded
+  `Ignoble Hierarch, Expedite` — Zada had no second creature, the copy's draw never happened.
+  New ordered copy-label tier + recorded-cast-order narrowing. `repaired`, T5 = T5.
+* **Mirrorwing v2 `s51_gi50` — unchanged**, root-caused below (payment heuristic,
+  `MTG_ATTACK_BODY_TAP_ORDER=1` replays it at T4); awaits the held-out A/B + user sign-off.
+* `--strict` now also FAILS on BOARD-DIVERGED (identical hand ⇒ no reshuffle ⇒ something diverged).
+
 ## UPDATE 2026-10-05 (later) — all three now REPLAY
 
 * **Snow `s4_gi3` — FIXED (engine, human play only).** The cause was narrower than "needs-based

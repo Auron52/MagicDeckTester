@@ -35,7 +35,7 @@ default). What the walk can then still surface, as information:
 
 Usage:  python3 test/viewer_protocol_check.py                 # all references, serial
         python3 test/viewer_protocol_check.py --threads 12    # full sweep in seconds
-        python3 test/viewer_protocol_check.py --strict        # FAIL on play-drift / enum-gap
+        python3 test/viewer_protocol_check.py --strict        # FAIL on play-drift / enum-gap / board-diverged
         python3 test/viewer_protocol_check.py --sample        # one ref per deck (quick sanity)
         MTG_BIN=path python3 test/viewer_protocol_check.py    # against a specific binary
 
@@ -333,7 +333,13 @@ def recorded_tap_prefs(decisions):
                         if isinstance(p.get("idx"), int)
                         and (bool(p.get("tapped")) or not want_tapped)}
             delta = (field(dec, True) - field(prev, True)) & field(prev, False)
-            if delta:
+            # (see the CAST-AND-TAPPED note below: those can carry a pair whose delta is empty)
+            _hand = {h.get("num") for h in (prev.get("me", {}).get("hand") or [])
+                     if isinstance(h.get("num"), int)}
+            _prevn = {p.get("num") for p in prev.get("me", {}).get("battlefield", [])}
+            cast_tapped = {p.get("num") for p in dec.get("me", {}).get("battlefield", [])
+                           if p.get("tapped") and p.get("num") in _hand and p.get("num") not in _prevn}
+            if delta or cast_tapped:
                 # Emit the tapped sources by CARD NUMBER, not by the battlefield index they happened to
                 # occupy in the recording. An index is a position in a vector the replay rebuilds,
                 # so pinning one steers the payer onto whatever now sits in that slot -- on
@@ -345,6 +351,16 @@ def recorded_tap_prefs(decisions):
                 by_idx = {p["idx"]: p.get("num") for p in prev.get("me", {}).get("battlefield", [])
                           if isinstance(p.get("idx"), int)}
                 nums = {by_idx[i] for i in delta if isinstance(by_idx.get(i), int)}
+                # CAST-AND-TAPPED. A source the line itself CAST from hand and then TAPPED is a payment tap too, and
+                # leaving it out is not neutral: a pin outranks every unpinned source, so the pinned
+                # lands pay the generic pips the human paid with the new rock and a later coloured pip
+                # is stranded. Angels/claude_s5_gi4 T4 (Sol Ring, Youthful Valkyrie, Lightstall
+                # Inquisitor off Plains x2 + Seraph Sanctuary): the human paid Youthful's {1} with Sol
+                # Ring; pinned without it, both Plains went to Youthful and the Inquisitor's {W} came
+                # from Giada, which then could not attack -- T4 win replayed as T5. Only cards that
+                # were in the first frame's HAND qualify, so a land FETCHED tapped from the library
+                # (an ETB state, the case the first-frame restriction exists for) still never pins.
+                nums |= cast_tapped
                 if nums:
                     ordinal = prev.get("main_ordinal")
                     if not isinstance(ordinal, int):
@@ -355,14 +371,20 @@ def recorded_tap_prefs(decisions):
     return prefs
 
 
-def side_channel_args(decisions, pin_lines=False):
+def side_channel_args(decisions, pin_lines=False, ordmap=None):
     """Reconstruct the keyed side-channel args a reference used, so a saved reordered/held game replays
     faithfully: --firebreathe "turn:count", --storage-hold "turn:num:val", --cast-order "ord:A|B" (the
     applied cast order recorded on the main-phase entry), --force-attackers "turn:A|B" (the recorded
     combat's attackers -- see recorded_attackers; pins the engine-automatic declaration to the game
     the human actually saw). All keyed (turn / land# / main-ordinal), so passing the full set for
     every prefix is safe -- the engine applies each only when it reaches that turn/ordinal. Empty
-    (a reference recording none of these) => no extra args => identical to before."""
+    (a reference recording none of these) => no extra args => identical to before.
+
+    `ordmap` (the walk's ORDINAL REMAP, see OrdinalMap): every main-ordinal KEY below is a RECORDED
+    ordinal, and the replay numbers its frames afresh -- so a frame the current engine shows without
+    an ordinal (or a recorded one it no longer shows) shifts every later key. Without the remap the
+    pins land on the wrong frame, or on none. None = keys as recorded (the historical behaviour)."""
+    om = ordmap if ordmap is not None else (lambda o: o)
     fb, sh, co, fe = [], [], [], []
     for d in decisions:
         dec = d.get("decision", {})
@@ -372,7 +394,10 @@ def side_channel_args(decisions, pin_lines=False):
         elif t == "storage_hold":
             sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
         if t == "main_phase" and d.get("cast_order"):
-            co.append(f'{dec.get("main_ordinal")}:' + "|".join(d["cast_order"]))
+            _o = dec.get("main_ordinal")
+            _o = om(_o) if isinstance(_o, int) and _o >= 0 else _o
+            if _o is not None:
+                co.append(f'{_o}:' + "|".join(d["cast_order"]))
         # FULL-ENUM: this frame was re-enumerated with the named cards PINNED into the viewer
         # plan-space valve's keep set (the player's "play it anyway" override for a rules-legal line
         # the valve had dropped). It MUST be reconstructed, NAMES AND ALL: `chosen` is a positional
@@ -420,15 +445,23 @@ def side_channel_args(decisions, pin_lines=False):
             for n in names:
                 if n not in seen_n:
                     seen_n.add(n); uniq.append(str(n))
+            o = om(o) if isinstance(o, int) and o >= 0 else None
             if isinstance(o, int) and o >= 0 and uniq:
                 fe.append(f"{o}:" + "|".join(uniq))
         elif t == "main_phase" and d.get("full_enum"):
             o = dec.get("main_ordinal")
+            o = om(o) if isinstance(o, int) and o >= 0 else None
             names = d["full_enum"]
             if isinstance(o, int) and o >= 0 and isinstance(names, list) and names:
                 fe.append(f"{o}:" + "|".join(str(n) for n in names))
     fa = recorded_attackers(decisions)
-    tp = recorded_tap_prefs(decisions)
+    tp = {}
+    for (t_, ph_, o_), v_ in recorded_tap_prefs(decisions).items():
+        if o_ >= 0:
+            o_ = om(o_)
+            if o_ is None:
+                continue          # the frame it paid in no longer carries an ordinal: nothing to pin
+        tp[(t_, ph_, o_)] = sorted(set(tp.get((t_, ph_, o_), [])) | set(v_))
     extra = []
     if fb:
         extra += ["--firebreathe", ",".join(fb)]
@@ -450,6 +483,57 @@ def side_channel_args(decisions, pin_lines=False):
                            + ",".join(str(i) for i in idxs)
                            for (t, ph, o), idxs in sorted(tp.items()))]
     return extra
+
+
+class OrdinalMap:
+    """RECORDED main_ordinal -> the REPLAY's main_ordinal, learned as the walk aligns frames.
+
+    Every ordinal-keyed side channel (--cast-order, --full-enum, --tap-pref) carries the ordinal the
+    RECORDING numbered its frame with, but the engine numbers frames afresh on every replay. When a
+    recorded frame comes back WITHOUT an ordinal (the 2026-09-04 rule: a pass-only frame the engine
+    shows only so the human can look at the board takes none) -- or a frame is inserted or vanishes
+    -- every later key points one frame off and the pins land on the wrong frame or on none.
+    StompySurprise/v1-arborelf-worldspine4/claude_s11_gi10: the recorded T4 frame after Natural Order
+    offered an (unpayable) Worldly Tutor and took ordinal 7; the engine now offers nothing there, so
+    it is pass-only and ordinal-less, the T5/T6 tap pins (8, 11) addressed frames 7/10 by their old
+    numbers, the T6 Turntimber Symbiosis payment ran unpinned, tapped Wirewood Lodge as a plain land
+    and the recorded Lodge activation could no longer be offered (BOARD-DIVERGED).
+
+    Anchoring on CONTENT, as the reference-replay rule requires: a frame's identity is established by
+    the walk's alignment, and the ordinal is just a label to be translated. Each aligned frame's own
+    pick (and the payment its pins steer) is applied only AFTER that frame has been aligned, so the
+    exact mapping is always known in time for the frame it matters to. Unmapped (not yet reached)
+    ordinals are shifted by the latest known offset so they cannot collide with a reached frame."""
+
+    def __init__(self):
+        self.m = {}
+
+    def learn(self, rec, cur):
+        """True when this changes the map (so the side channel must be rebuilt)."""
+        if not isinstance(rec, int) or rec < 0:
+            return False
+        cur = cur if isinstance(cur, int) and cur >= 0 else None
+        if rec in self.m and self.m[rec] == cur:
+            return False
+        before = self(rec)
+        self.m[rec] = cur
+        # Rebuild only when something actually moved: this key, or (via the offset) a later one.
+        return before != cur or any(self.m[k] != k for k in self.m)
+
+    def __call__(self, o):
+        if o in self.m:
+            return self.m[o]
+        off = 0
+        lower = [k for k in self.m if k < o]
+        for k in sorted(lower, reverse=True):
+            if self.m[k] is not None:
+                off = self.m[k] - k
+                # recorded ordinals between k and o that mapped to NOTHING consumed no replay ordinal
+                off -= sum(1 for j in lower if j > k and self.m[j] is None)
+                break
+        else:
+            off = -sum(1 for j in lower if self.m[j] is None)
+        return o + off
 
 
 def force_arg(ref):
@@ -630,6 +714,17 @@ def mdfc_face_intent(kept, ri, land_name):
     return None
 
 
+# Only a TARGET label ("→ Name #N") -- never a legacy "blink #0" spawn reference, which has its own tier.
+_COPY_LABEL = re.compile(r"(→ [^→;#]*?) #\d+(?=,|;|$)")
+
+
+def _strip_copy_labels(summary):
+    """A plan summary with the per-copy target suffix (" #1") removed; None for no summary."""
+    if not isinstance(summary, str):
+        return None
+    return _COPY_LABEL.sub(r"\1", summary)
+
+
 def find_plan(recorded, plans, recorded_index=None, prefer=None, mdfc_face=None):
     """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
     variants distinct), then land+casts (tolerates a summary-format change or a dropped order
@@ -675,8 +770,29 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None, mdfc_face=None)
             if by_face:
                 hits = by_face
     if not hits:
+        # COPY-LABEL TIER (ordered). A trick target's summary label grew a per-copy suffix
+        # ("→ Zada, Hedron Grinder #1") once a second copy of the card can be on the board or in hand
+        # -- a NEW display field, which must not invalidate an OLD recording. Compare summaries with
+        # the suffix stripped BEFORE the order-insensitive (land, casts) tier, because that tier
+        # cannot tell cast-order variants apart: Mirrorwing_Dragon/v1-twinflame-anger/claude_s29_gi28
+        # T4 recorded "Ignoble Hierarch, Expedite → Zada", fell through to (land, casts), and hits[0]
+        # was "Expedite → Zada #1, Ignoble Hierarch" -- Expedite resolved before the Hierarch was on
+        # the battlefield, Zada had no second creature to copy it onto, the copy's draw never
+        # happened and the next turn read as a "shuffle-dead" hand.
+        want_s = _strip_copy_labels(recorded.get("summary"))
+        if want_s:
+            hits = [i for i, p in enumerate(plans) if _strip_copy_labels(p.get("summary")) == want_s]
+    if not hits:
         want = plan_key(recorded)
         hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
+        # ...and when that order-insensitive tier returns several CAST ORDERS, keep the recorded one.
+        # The order is part of the line (it decides what is on the battlefield when each spell
+        # resolves); it is only the summary TEXT that is allowed to have changed.
+        if len(hits) > 1 and recorded.get("casts"):
+            same_order = [i for i in hits
+                          if list(plans[i].get("casts") or []) == list(recorded.get("casts") or [])]
+            if same_order:
+                hits = same_order
     if not hits and TREASURE_PAY_COMPAT:
         # §2a compat tier: the recorded plan's Treasure-sac actions are implicit payment now, so
         # match the plan MINUS them. The sac colour is re-derived by the payment solver, the same
@@ -1114,6 +1230,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     # --firebreathe / --storage-hold / --cast-order the ref used (+ the recorded lines pinned by
     # name on the retry path; see side_channel_args).
     side = side_channel_args(ref["decisions"], pin_lines=pin_lines)
+    ordmap = OrdinalMap()
     force = force_arg(ref)   # reconstruct the recorded opening hand when the reference carries it
     # The reference's own decisions, in the order the positional stream used to address them. Under
     # --force-mulligan the engine resolves keep/bottom internally, so those carry no answer here.
@@ -1318,6 +1435,12 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             continue
 
         rd = kept[ri]["decision"]
+        # Translate the recording's ordinal for this frame into the replay's (see OrdinalMap). The
+        # frame's own pick has not been applied yet, so its pins take effect from the NEXT replay.
+        if rd.get("type") == "main_phase" and ordmap.learn(rd.get("main_ordinal"), dec.get("main_ordinal")):
+            side = side_channel_args(ref["decisions"], pin_lines=pin_lines, ordmap=ordmap)
+            if collect is not None:
+                collect["side"] = side
         # FIRST BOARD DIVERGENCE. The failure this file reports is wherever a recorded plan finally
         # stops matching -- which is a SYMPTOM, often turns after the cause. The line that actually
         # broke the game is the first frame whose board no longer matches the recording, so capture
@@ -1707,7 +1830,14 @@ def main():
     # --strict additionally gates on the categories that indicate the ENGINE moved under a
     # recorded game: play-drift and enum-gap. shuffle-dead and mull-drift are accepted classes
     # the player can't steer, so they never gate.
-    return 1 if (STRICT and (counts["play"] or counts["unresolvable"])) else 0
+    #
+    # BOARD-DIVERGED gates too. It is the class split OUT of shuffle-dead (USER 2026-09-08: "Shuffle
+    # dead doesn't exist as long as we don't touch the shuffle mechanics. If the reference doesn't
+    # work, please fix it") precisely because its hand is identical, i.e. no reshuffle -- the engine
+    # (or this checker) diverged the recorded game upstream. Left non-gating, StompySurprise v1
+    # s11_gi10 sat red from d2c12344 on, documented as "owed a USER re-save"; it was a checker
+    # ordinal-anchoring defect (see OrdinalMap).
+    return 1 if (STRICT and (counts["play"] or counts["unresolvable"] or counts["board-diverged"])) else 0
 
 
 if __name__ == "__main__":
