@@ -1,0 +1,342 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [18] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 27, "name": "Forest" }, { "num": 49, "name": "Remote Farm" }, { "num": 28, "name": "Forest" }, { "num": 12, "name": "Botanical Sanctum" }, { "num": 36, "name": "Lightning Greaves" }, { "num": 37, "name": "Lightning Greaves" }, { "num": 9, "name": "Birds of Paradise" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 11, "name": "Boseiju, Who Endures" }, { "num": 18, "name": "Bruna, Light of Alabaster" }, { "num": 51, "name": "Remote Farm" }, { "num": 44, "name": "Open the Armory" }, { "num": 3, "name": "Avacyn's Pilgrim" }, { "num": 32, "name": "Glittering Wish" }, { "num": 1, "name": "Arcanum Wings" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 11, "name": "Boseiju, Who Endures", "win_optimal": true }, { "num": 18, "name": "Bruna, Light of Alabaster", "win_optimal": true }, { "num": 51, "name": "Remote Farm", "win_optimal": true }, { "num": 44, "name": "Open the Armory", "win_optimal": true }, { "num": 3, "name": "Avacyn's Pilgrim", "win_optimal": true }, { "num": 32, "name": "Glittering Wish", "win_optimal": true }, { "num": 1, "name": "Arcanum Wings", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 18, "name": "Bruna, Light of Alabaster" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Glittering Wish" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 3, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Boseiju, Who Endures", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 51, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Boseiju, Who Endures; cast: Avacyn's Pilgrim", "land": "Boseiju, Who Endures", "casts": ["Avacyn's Pilgrim"], "actions": [{ "card": "Avacyn's Pilgrim" }] },
+    { "index": 1, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Boseiju, Who Endures; cast: (nothing)", "land": "Boseiju, Who Endures", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 51, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 51, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Birds of Paradise" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 9, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 51, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Remote Farm; cast: Birds of Paradise", "land": "Remote Farm", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 1, "summary": "land=none; cast: Birds of Paradise", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Remote Farm; cast: Open the Armory → Mythic Proportions", "land": "Remote Farm", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 9, "summary": "land=Remote Farm; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Remote Farm", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 13, "summary": "land=none; cast: Open the Armory → Mythic Proportions", "land": null, "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 20, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 24, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 6, "num": 51, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 6, "num": 51, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 56, "cast_order": ["*", "Arcanum Wings", "Open the Armory"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Remote Farm" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 6, "num": 51, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Remote Farm; cast: Glittering Wish → Bruna, Light of Alabaster, Open the Armory → Mythic Proportions", "land": "Remote Farm", "casts": ["Glittering Wish", "Open the Armory"], "cast_order_canonical": ["Glittering Wish", "Open the Armory"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 1, "summary": "land=Remote Farm; cast: Open the Armory → Mythic Proportions, Glittering Wish → Bruna, Light of Alabaster", "land": "Remote Farm", "casts": ["Open the Armory", "Glittering Wish"], "cast_order_canonical": ["Open the Armory", "Glittering Wish"], "actions": [{ "card": "Open the Armory", "tutor_target": "Mythic Proportions" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 56, "summary": "land=Remote Farm; cast: Arcanum Wings → Avacyn's Pilgrim, Open the Armory → Mythic Proportions", "land": "Remote Farm", "casts": ["Arcanum Wings", "Open the Armory"], "cast_order_canonical": ["Arcanum Wings", "Open the Armory"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 63, "summary": "land=Remote Farm; cast: Arcanum Wings → Avacyn's Pilgrim, Glittering Wish → Bruna, Light of Alabaster", "land": "Remote Farm", "casts": ["Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 78, "summary": "land=Remote Farm; cast: Glittering Wish → Bruna, Light of Alabaster, Glittering Wish → Bruna, Light of Alabaster", "land": "Remote Farm", "casts": ["Glittering Wish", "Glittering Wish"], "cast_order_canonical": ["Glittering Wish", "Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 88, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Open the Armory → Mythic Proportions", "land": null, "casts": ["Glittering Wish", "Open the Armory"], "cast_order_canonical": ["Glittering Wish", "Open the Armory"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 89, "summary": "land=none; cast: Open the Armory → Mythic Proportions, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Open the Armory", "Glittering Wish"], "cast_order_canonical": ["Open the Armory", "Glittering Wish"], "actions": [{ "card": "Open the Armory", "tutor_target": "Mythic Proportions" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 144, "summary": "land=none; cast: Arcanum Wings → Avacyn's Pilgrim, Open the Armory → Mythic Proportions", "land": null, "casts": ["Arcanum Wings", "Open the Armory"], "cast_order_canonical": ["Arcanum Wings", "Open the Armory"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 151, "summary": "land=none; cast: Arcanum Wings → Avacyn's Pilgrim, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 166, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish", "Glittering Wish"], "cast_order_canonical": ["Glittering Wish", "Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 176, "summary": "land=Remote Farm; cast: Open the Armory → Mythic Proportions", "land": "Remote Farm", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 183, "summary": "land=Remote Farm; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Remote Farm", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 187, "summary": "land=Remote Farm; cast: Arcanum Wings → Avacyn's Pilgrim", "land": "Remote Farm", "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 188, "summary": "land=Remote Farm; cast: Arcanum Wings → Birds of Paradise", "land": "Remote Farm", "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 189, "summary": "land=none; cast: Open the Armory → Mythic Proportions", "land": null, "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Mythic Proportions" }] },
+    { "index": 196, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 200, "summary": "land=none; cast: Arcanum Wings → Avacyn's Pilgrim", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 201, "summary": "land=none; cast: Arcanum Wings → Birds of Paradise", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 202, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 203, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_total": 300,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 10,
+  "type": "tutor_etb",
+  "source": "Open the Armory",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arcanum Wings", "idx": 11, "num": 1, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "tapped": true, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 6, "num": 51, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Mythic Proportions" }, { "index": 1, "name": "Wild Growth" }, { "index": 2, "name": "Eldrazi Conscription" }, { "index": 3, "name": "Colossification" }, { "index": 4, "name": "Lightning Greaves" }, { "index": 5, "name": "Arcanum Wings" }, { "index": 6, "name": "Prodigious Growth" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 3, "source": "Open the Armory (searched)", "cards": [{ "name": "Colossification", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arcanum Wings", "idx": 11, "num": 1, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "tapped": true, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 6, "num": 51, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 21, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arcanum Wings", "idx": 11, "num": 1, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "tapped": true, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Remote Farm", "idx": 6, "num": 51, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 21, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 25, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Eldrazi Conscription" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arcanum Wings", "idx": 11, "num": 1, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "is_land": true, "taps": "G" }, { "name": "Remote Farm", "idx": 6, "num": 51, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 21, "name": "Colossification", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish", "Glittering Wish"], "cast_order_canonical": ["Glittering Wish", "Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 10, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, aura swap: Arcanum Wings ⇄ Eldrazi Conscription", "land": null, "casts": ["Glittering Wish", "Eldrazi Conscription"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Eldrazi Conscription", "src_num": 1, "activate": true, "cost_pips": "U", "verb": "auraswap", "activate_source": "Arcanum Wings" }] },
+    { "index": 14, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, aura swap: Arcanum Wings ⇄ Colossification", "land": null, "casts": ["Glittering Wish", "Colossification"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Colossification", "src_num": 1, "activate": true, "cost_pips": "U", "verb": "auraswap", "activate_source": "Arcanum Wings" }] },
+    { "index": 18, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 22, "summary": "land=none; cast: Colossification → Avacyn's Pilgrim", "land": null, "casts": ["Colossification"], "actions": [{ "card": "Colossification", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 23, "summary": "land=none; cast: Colossification → Birds of Paradise", "land": null, "casts": ["Colossification"], "actions": [{ "card": "Colossification", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 24, "summary": "land=none; cast: aura swap: Arcanum Wings ⇄ Eldrazi Conscription", "land": null, "casts": ["Eldrazi Conscription"], "actions": [{ "card": "Eldrazi Conscription", "src_num": 1, "activate": true, "cost_pips": "U", "verb": "auraswap", "activate_source": "Arcanum Wings" }] },
+    { "index": 25, "summary": "land=none; cast: aura swap: Arcanum Wings ⇄ Colossification", "land": null, "casts": ["Colossification"], "actions": [{ "card": "Colossification", "src_num": 1, "activate": true, "cost_pips": "U", "verb": "auraswap", "activate_source": "Arcanum Wings" }] },
+    { "index": 26, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 78,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "Colossification: taps Avacyn's Pilgrim (its mana ability may still be used this phase)" }, { "turn": 4, "kind": "ability", "text": "Arcanum Wings ⇄ Colossification on Avacyn's Pilgrim (aura swap)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "tapped": true, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Colossification", "idx": 11, "num": 21, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Remote Farm", "idx": 6, "num": 51, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1, "floating_mana": {"W": 1} },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "tapped": true, "is_land": false }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "tapped": true, "is_land": false }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "tapped": true, "is_land": true }, { "name": "Colossification", "idx": 11, "num": 21, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Remote Farm", "idx": 6, "num": 51, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 3, "num": 3, "is_land": false, "taps": "W" }, { "name": "Birds of Paradise", "idx": 7, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Boseiju, Who Endures", "idx": 2, "num": 11, "is_land": true, "taps": "G" }, { "name": "Colossification", "idx": 11, "num": 21, "is_aura": true, "attached_to": 3, "is_land": false }, { "name": "Remote Farm", "idx": 6, "num": 51, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Remote Farm", "idx": 10, "num": 50, "is_land": true, "taps": "W", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 25, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 30, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Arcanum Wings → Avacyn's Pilgrim, Glittering Wish → Bruna, Light of Alabaster, Glittering Wish → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Arcanum Wings", "Glittering Wish", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 2, "summary": "land=Forest; cast: Glittering Wish → Bruna, Light of Alabaster, Arcanum Wings → Avacyn's Pilgrim, Glittering Wish → Indrik Umbra", "land": "Forest", "casts": ["Glittering Wish", "Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Glittering Wish", "Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Glittering Wish", "tutor_target": "Indrik Umbra" }] },
+    { "index": 32, "summary": "land=Forest; cast: Glittering Wish → Bruna, Light of Alabaster, Glittering Wish → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Glittering Wish", "Glittering Wish"], "cast_order_canonical": ["Glittering Wish", "Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 42, "summary": "land=Forest; cast: Arcanum Wings → Avacyn's Pilgrim, Glittering Wish → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 50, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish", "Glittering Wish"], "cast_order_canonical": ["Glittering Wish", "Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 60, "summary": "land=none; cast: Arcanum Wings → Avacyn's Pilgrim, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 68, "summary": "land=Forest; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 72, "summary": "land=Forest; cast: Eldrazi Conscription → Avacyn's Pilgrim", "land": "Forest", "casts": ["Eldrazi Conscription"], "actions": [{ "card": "Eldrazi Conscription", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 73, "summary": "land=Forest; cast: Eldrazi Conscription → Birds of Paradise", "land": "Forest", "casts": ["Eldrazi Conscription"], "actions": [{ "card": "Eldrazi Conscription", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 74, "summary": "land=Forest; cast: Arcanum Wings → Avacyn's Pilgrim", "land": "Forest", "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 75, "summary": "land=Forest; cast: Arcanum Wings → Birds of Paradise", "land": "Forest", "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 76, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 80, "summary": "land=none; cast: Arcanum Wings → Avacyn's Pilgrim", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 81, "summary": "land=none; cast: Arcanum Wings → Birds of Paradise", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 82, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 83, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 164,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (21) — 21 to opponent (18→-3)" }
+  ]
+}
