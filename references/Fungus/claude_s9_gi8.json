@@ -1,0 +1,359 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [48, 54] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 35, "name": "Sporecrown Thallid" }, { "num": 1, "name": "Beastmaster Ascension" }, { "num": 5, "name": "Doubling Season" }, { "num": 47, "name": "Thallid Shell-Dweller" }, { "num": 2, "name": "Beastmaster Ascension" }, { "num": 10, "name": "Forest" }, { "num": 11, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 34, "name": "Simic Growth Chamber" }, { "num": 8, "name": "Doubling Season" }, { "num": 43, "name": "Thallid" }, { "num": 40, "name": "Sporesower Thallid" }, { "num": 42, "name": "Sporesower Thallid" }, { "num": 7, "name": "Doubling Season" }, { "num": 17, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 54, "name": "Tukatongue Thallid" }, { "num": 55, "name": "Utopia Mycon" }, { "num": 16, "name": "Forest" }, { "num": 53, "name": "Tukatongue Thallid" }, { "num": 48, "name": "Thallid Shell-Dweller" }, { "num": 1, "name": "Beastmaster Ascension" }, { "num": 18, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 54, "name": "Tukatongue Thallid", "win_optimal": true }, { "num": 55, "name": "Utopia Mycon", "win_optimal": true }, { "num": 16, "name": "Forest", "win_optimal": true }, { "num": 53, "name": "Tukatongue Thallid", "win_optimal": true }, { "num": 48, "name": "Thallid Shell-Dweller", "win_optimal": true }, { "num": 1, "name": "Beastmaster Ascension", "win_optimal": true }, { "num": 18, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 1, "name": "Beastmaster Ascension" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 54, "name": "Tukatongue Thallid", "win_optimal": true }, { "num": 55, "name": "Utopia Mycon", "win_optimal": true }, { "num": 16, "name": "Forest", "win_optimal": true }, { "num": 53, "name": "Tukatongue Thallid", "win_optimal": true }, { "num": 1, "name": "Beastmaster Ascension", "win_optimal": true }, { "num": 18, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 1, "name": "Beastmaster Ascension" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Tukatongue Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Utopia Mycon", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Tukatongue Thallid", "land": "Forest", "casts": ["Tukatongue Thallid"], "actions": [{ "card": "Tukatongue Thallid" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: Utopia Mycon", "land": "Forest", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Tukatongue Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Tukatongue Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Tukatongue Thallid", "Utopia Mycon"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Utopia Mycon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "is_land": true, "taps": "G" }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Tukatongue Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Utopia Mycon", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Tukatongue Thallid", "land": "Forest", "casts": ["Tukatongue Thallid"], "actions": [{ "card": "Tukatongue Thallid" }] },
+    { "index": 1, "summary": "land=Forest; cast: Tukatongue Thallid, Utopia Mycon", "land": "Forest", "casts": ["Tukatongue Thallid", "Utopia Mycon"], "cast_order_canonical": ["Tukatongue Thallid", "Utopia Mycon"], "actions": [{ "card": "Tukatongue Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 2, "summary": "land=Forest; cast: Utopia Mycon, Tukatongue Thallid", "land": "Forest", "casts": ["Utopia Mycon", "Tukatongue Thallid"], "cast_order_canonical": ["Utopia Mycon", "Tukatongue Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Tukatongue Thallid" }] },
+    { "index": 3, "summary": "land=none; cast: Tukatongue Thallid", "land": null, "casts": ["Tukatongue Thallid"], "actions": [{ "card": "Tukatongue Thallid" }] },
+    { "index": 4, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Forest; cast: Utopia Mycon", "land": "Forest", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] }
+  ],
+  "plans_hidden": 20,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Mycoloth" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 2, "num": 18, "is_land": true, "taps": "G" }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Beastmaster Ascension", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Beastmaster Ascension", "land": "Forest", "casts": ["Beastmaster Ascension"], "actions": [{ "card": "Beastmaster Ascension" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false }, { "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 24, "tapped": true, "is_land": true }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Tukatongue Thallid (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 3 }] }, { "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 24, "tapped": true, "is_land": true }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "tapped": true, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Doubling Season" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 3 }] }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 2, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 24, "is_land": true, "taps": "G" }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 3 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 6, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 1 Saproling (this line makes the Saproling first) for {G}×1", "land": null, "casts": ["Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 1 Saproling (this line makes the Saproling first) for {G}×1", "land": null, "casts": ["Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling (this line makes the Saproling first) for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 5, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling (this line makes the Saproling first) for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "token", "text": "🍄 Utopia Mycon: removes 3 spore counters -> Saproling" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 3 }] }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 2, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 24, "is_land": true, "taps": "G" }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 6, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Tukatongue Thallid (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 6 }] }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 2, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 24, "is_land": true, "taps": "G" }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "tapped": true, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "tapped": true, "is_land": false }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 6, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Thallid" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 6 }] }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 2, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 24, "is_land": true, "taps": "G" }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 3 }] }], "vial_counters": [], "hand": [{ "num": 6, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Mycoloth (devour 4), Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Mycoloth", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Mycoloth" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 1, "summary": "land=none; cast: Mycoloth (devour 3), Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Mycoloth", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Mycoloth" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 2, "summary": "land=none; cast: Mycoloth (devour 2), Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Mycoloth", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Mycoloth" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 3, "summary": "land=none; cast: Mycoloth (devour 1), Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Mycoloth", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Mycoloth" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 4, "summary": "land=none; cast: Mycoloth (devour 0), Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Mycoloth", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Mycoloth" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 5, "summary": "land=none; cast: Thallid, Utopia Mycon: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Thallid, Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Thallid", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 7, "summary": "land=none; cast: Doubling Season, Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Doubling Season", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Doubling Season" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 8, "summary": "land=none; cast: Thallid, Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Thallid", "Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 9, "summary": "land=none; cast: Thallid", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 10, "summary": "land=none; cast: Thallid, Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 11, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 13, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Beastmaster Ascension", "idx": 8, "num": 1, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 6 }] }, { "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 24, "is_land": true, "taps": "G" }, { "name": "Thallid", "idx": 10, "num": 43, "is_land": false }, { "name": "Tukatongue Thallid", "idx": 3, "num": 53, "is_land": false }, { "name": "Utopia Mycon", "idx": 1, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Utopia Mycon", "idx": 4, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 3 }] }], "vial_counters": [], "hand": [{ "num": 6, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 30, "name": "Mycoloth", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon: remove three spore counters: create a Saproling, Utopia Mycon: sac 2 Saprolings (this line makes the Saproling first) for {G}×2", "land": null, "casts": ["Utopia Mycon", "Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 58, "activate": true, "act_label": "remove three spore counters: create a Saproling", "x": 1 }, { "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 2, "float_color": "G" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 55, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Utopia Mycon (5), Tukatongue Thallid (6), Utopia Mycon (5), 1/1 Saproling Token (6) — 22 to opponent (18→-4)" }
+  ]
+}

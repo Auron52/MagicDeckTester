@@ -1,0 +1,486 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 27, "name": "Marit Lage's Slumber" }, { "num": 13, "name": "Coldsteel Heart" }, { "num": 9, "name": "Boreal Druid" }, { "num": 50, "name": "Snow-Covered Island" }, { "num": 22, "name": "Ice-Fang Coatl" }, { "num": 58, "name": "Snow-Covered Mountain" }, { "num": 31, "name": "Rimefeather Owl" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Snow-Covered Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Boreal Druid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Coldsteel Heart", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Forest; cast: Boreal Druid", "land": "Snow-Covered Forest", "casts": ["Boreal Druid"], "actions": [{ "card": "Boreal Druid" }] },
+    { "index": 1, "summary": "land=Snow-Covered Island; cast: (nothing)", "land": "Snow-Covered Island", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Snow-Covered Mountain; cast: (nothing)", "land": "Snow-Covered Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Snow-Covered Forest; cast: (nothing)", "land": "Snow-Covered Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Coldsteel Heart", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Coldsteel Heart", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Snow-Covered Island" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Coldsteel Heart", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Island; cast: Ice-Fang Coatl", "land": "Snow-Covered Island", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 1, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 2, "summary": "land=Snow-Covered Island; cast: Coldsteel Heart", "land": "Snow-Covered Island", "casts": ["Coldsteel Heart"], "actions": [{ "card": "Coldsteel Heart" }] },
+    { "index": 3, "summary": "land=Snow-Covered Mountain; cast: Coldsteel Heart", "land": "Snow-Covered Mountain", "casts": ["Coldsteel Heart"], "actions": [{ "card": "Coldsteel Heart" }] },
+    { "index": 4, "summary": "land=none; cast: Coldsteel Heart", "land": null, "casts": ["Coldsteel Heart"], "actions": [{ "card": "Coldsteel Heart" }] },
+    { "index": 5, "summary": "land=Snow-Covered Island; cast: (nothing)", "land": "Snow-Covered Island", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Snow-Covered Mountain; cast: (nothing)", "land": "Snow-Covered Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 5,
+  "type": "choose_color",
+  "source": "Coldsteel Heart",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 4,
+  "colors": [{ "ordinal": 0, "name": "White" }, { "ordinal": 1, "name": "Blue" }, { "ordinal": 2, "name": "Black" }, { "ordinal": 3, "name": "Red" }, { "ordinal": 4, "name": "Green" }],
+  "note": "reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent for the rest of the game. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "choose_color", "text": "Coldsteel Heart -- chose Green" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Boreal Druid (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Marit Lage's Slumber", "Ice-Fang Coatl"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Snow-Covered Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Island; cast: Ice-Fang Coatl, Marit Lage's Slumber", "land": "Snow-Covered Island", "casts": ["Ice-Fang Coatl", "Marit Lage's Slumber"], "cast_order_canonical": ["Ice-Fang Coatl", "Marit Lage's Slumber"], "actions": [{ "card": "Ice-Fang Coatl" }, { "card": "Marit Lage's Slumber" }] },
+    { "index": 1, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber, Ice-Fang Coatl", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber", "Ice-Fang Coatl"], "cast_order_canonical": ["Marit Lage's Slumber", "Ice-Fang Coatl"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Ice-Fang Coatl" }] },
+    { "index": 2, "summary": "land=Snow-Covered Mountain; cast: Ice-Fang Coatl", "land": "Snow-Covered Mountain", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 3, "summary": "land=Snow-Covered Island; cast: Ice-Fang Coatl", "land": "Snow-Covered Island", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 4, "summary": "land=Snow-Covered Forest; cast: Ice-Fang Coatl", "land": "Snow-Covered Forest", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 5, "summary": "land=none; cast: Ice-Fang Coatl", "land": null, "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 6, "summary": "land=Snow-Covered Mountain; cast: Marit Lage's Slumber", "land": "Snow-Covered Mountain", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 7, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 8, "summary": "land=Snow-Covered Forest; cast: Marit Lage's Slumber", "land": "Snow-Covered Forest", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 9, "summary": "land=none; cast: Marit Lage's Slumber", "land": null, "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 10, "summary": "land=Snow-Covered Mountain; cast: (nothing)", "land": "Snow-Covered Mountain", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Snow-Covered Island; cast: (nothing)", "land": "Snow-Covered Island", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Snow-Covered Forest; cast: (nothing)", "land": "Snow-Covered Forest", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 3,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "floating_mana": {"U": 1, "G": 1} },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Snow-Covered Mountain", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Snow-Covered Mountain"] }, { "index": 1, "label": "Top: Snow-Covered Mountain", "shuffle": false, "top": ["Snow-Covered Mountain"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 3,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Boreal Druid", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Boreal Druid"] }, { "index": 1, "label": "Top: Boreal Druid", "shuffle": false, "top": ["Boreal Druid"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Ice-Fang Coatl" }],
+  "reveals": [{ "turn": 3, "source": "Marit Lage's Slumber", "cards": [{ "name": "Snow-Covered Mountain", "disposition": "to the bottom" }] }, { "turn": 3, "source": "Marit Lage's Slumber", "cards": [{ "name": "Boreal Druid", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 23, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Boreal Druid (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 23, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "cast_order": ["*", "Abominable Treefolk", "Ice-Fang Coatl"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Abominable Treefolk" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "is_land": true, "taps": "U" }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Mountain; cast: Abominable Treefolk, Ice-Fang Coatl", "land": "Snow-Covered Mountain", "casts": ["Abominable Treefolk", "Ice-Fang Coatl"], "cast_order_canonical": ["Abominable Treefolk", "Ice-Fang Coatl"], "actions": [{ "card": "Abominable Treefolk" }, { "card": "Ice-Fang Coatl" }] },
+    { "index": 1, "summary": "land=Snow-Covered Mountain; cast: Ice-Fang Coatl, Abominable Treefolk", "land": "Snow-Covered Mountain", "casts": ["Ice-Fang Coatl", "Abominable Treefolk"], "cast_order_canonical": ["Ice-Fang Coatl", "Abominable Treefolk"], "actions": [{ "card": "Ice-Fang Coatl" }, { "card": "Abominable Treefolk" }] },
+    { "index": 2, "summary": "land=Snow-Covered Forest; cast: Abominable Treefolk, Ice-Fang Coatl", "land": "Snow-Covered Forest", "casts": ["Abominable Treefolk", "Ice-Fang Coatl"], "cast_order_canonical": ["Abominable Treefolk", "Ice-Fang Coatl"], "actions": [{ "card": "Abominable Treefolk" }, { "card": "Ice-Fang Coatl" }] },
+    { "index": 3, "summary": "land=Snow-Covered Forest; cast: Ice-Fang Coatl, Abominable Treefolk", "land": "Snow-Covered Forest", "casts": ["Ice-Fang Coatl", "Abominable Treefolk"], "cast_order_canonical": ["Ice-Fang Coatl", "Abominable Treefolk"], "actions": [{ "card": "Ice-Fang Coatl" }, { "card": "Abominable Treefolk" }] },
+    { "index": 4, "summary": "land=Snow-Covered Mountain; cast: Abominable Treefolk", "land": "Snow-Covered Mountain", "casts": ["Abominable Treefolk"], "actions": [{ "card": "Abominable Treefolk" }] },
+    { "index": 5, "summary": "land=Snow-Covered Forest; cast: Abominable Treefolk", "land": "Snow-Covered Forest", "casts": ["Abominable Treefolk"], "actions": [{ "card": "Abominable Treefolk" }] },
+    { "index": 6, "summary": "land=none; cast: Abominable Treefolk", "land": null, "casts": ["Abominable Treefolk"], "actions": [{ "card": "Abominable Treefolk" }] },
+    { "index": 7, "summary": "land=Snow-Covered Mountain; cast: Ice-Fang Coatl", "land": "Snow-Covered Mountain", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 8, "summary": "land=Snow-Covered Forest; cast: Ice-Fang Coatl", "land": "Snow-Covered Forest", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 9, "summary": "land=none; cast: Ice-Fang Coatl", "land": null, "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 10, "summary": "land=Snow-Covered Mountain; cast: (nothing)", "land": "Snow-Covered Mountain", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Snow-Covered Forest; cast: (nothing)", "land": "Snow-Covered Forest", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 35,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Forest", "idx": 8, "num": 45, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "is_land": true, "taps": "U" }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Scrying Sheets", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Scrying Sheets"] }, { "index": 1, "label": "Top: Scrying Sheets", "shuffle": false, "top": ["Scrying Sheets"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 9, "num": 1, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 8, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 23, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0, "floating_mana": {"U": 1, "G": 1} },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Rimescale Dragon", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Rimescale Dragon"] }, { "index": 1, "label": "Top: Rimescale Dragon", "shuffle": false, "top": ["Rimescale Dragon"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 9, "num": 1, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 10, "num": 23, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 8, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "looked": [{ "name": "Scrying Sheets", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Scrying Sheets"] }, { "index": 1, "label": "Top: Scrying Sheets", "shuffle": false, "top": ["Scrying Sheets"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Scrying Sheets" }],
+  "reveals": [{ "turn": 4, "source": "Marit Lage's Slumber", "cards": [{ "name": "Scrying Sheets", "disposition": "to the bottom" }] }, { "turn": 4, "source": "Marit Lage's Slumber", "cards": [{ "name": "Rimescale Dragon", "disposition": "to the bottom" }] }, { "turn": 4, "source": "Marit Lage's Slumber", "cards": [{ "name": "Scrying Sheets", "disposition": "kept" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 9, "num": 1, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 10, "num": 23, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 8, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Ice-Fang Coatl (1) — 1 to opponent (18→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 9, "num": 1, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 7, "num": 22, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 10, "num": 23, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 6, "num": 27, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 8, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Ice-Fang Coatl" }],
+  "events": [{ "turn": 5, "kind": "tutor", "text": "❄ Marit Lage's Slumber: sacrificed -- Marit Lage awakens (20/20)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "20/20 Avatar Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Abominable Treefolk", "idx": 8, "num": 1, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Ice-Fang Coatl", "idx": 6, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 9, "num": 23, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Forest", "idx": 7, "num": 45, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "is_land": true, "taps": "U" }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Marit Lage's Slumber"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Mountain; cast: Rimefeather Owl", "land": "Snow-Covered Mountain", "casts": ["Rimefeather Owl"], "actions": [{ "card": "Rimefeather Owl" }] },
+    { "index": 1, "summary": "land=Scrying Sheets; cast: Rimefeather Owl", "land": "Scrying Sheets", "casts": ["Rimefeather Owl"], "actions": [{ "card": "Rimefeather Owl" }] },
+    { "index": 2, "summary": "land=Scrying Sheets; cast: Ice-Fang Coatl, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Ice-Fang Coatl", "Scrying Sheets"], "actions": [{ "card": "Ice-Fang Coatl" }, { "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 3, "summary": "land=Snow-Covered Mountain; cast: Ice-Fang Coatl", "land": "Snow-Covered Mountain", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 4, "summary": "land=Scrying Sheets; cast: Ice-Fang Coatl", "land": "Scrying Sheets", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 5, "summary": "land=none; cast: Ice-Fang Coatl", "land": null, "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 6, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 7, "summary": "land=Snow-Covered Mountain; cast: (nothing)", "land": "Snow-Covered Mountain", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Scrying Sheets; cast: (nothing)", "land": "Scrying Sheets", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 35,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Abominable Treefolk" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "20/20 Avatar Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Abominable Treefolk", "idx": 8, "num": 1, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Ice-Fang Coatl", "idx": 6, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 9, "num": 23, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 12, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 11, "num": 37, "is_land": true, "taps": "C" }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 7, "num": 45, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Marit Lage's Slumber"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Abominable Treefolk", "land": null, "casts": ["Abominable Treefolk"], "actions": [{ "card": "Abominable Treefolk" }] },
+    { "index": 1, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "20/20 Avatar Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Abominable Treefolk", "idx": 8, "num": 1, "is_land": false }, { "name": "Abominable Treefolk", "idx": 13, "num": 2, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 6, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 9, "num": 23, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 12, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 11, "num": 37, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 7, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Marit Lage's Slumber"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Boreal Druid (1), Ice-Fang Coatl (1), Abominable Treefolk (12), Ice-Fang Coatl (1) — 15 to opponent (17→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "20/20 Avatar Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Abominable Treefolk", "idx": 8, "num": 1, "tapped": true, "is_land": false }, { "name": "Abominable Treefolk", "idx": 13, "num": 2, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "tapped": true, "is_land": false }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 6, "num": 22, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 9, "num": 23, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 12, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 11, "num": 37, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 7, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Marit Lage's Slumber"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 6, "card": "Frost Augur" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "20/20 Avatar Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Abominable Treefolk", "idx": 8, "num": 1, "is_land": false }, { "name": "Abominable Treefolk", "idx": 13, "num": 2, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Ice-Fang Coatl", "idx": 6, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 9, "num": 23, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 12, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 11, "num": 37, "is_land": true, "taps": "C" }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Forest", "idx": 7, "num": 45, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "is_land": true, "taps": "U" }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 17, "name": "Frost Augur", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Snow-Covered Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Marit Lage's Slumber"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Mountain; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Mountain", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 1, "summary": "land=Snow-Covered Mountain; cast: Frost Augur, Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Mountain", "casts": ["Frost Augur", "Scrying Sheets"], "actions": [{ "card": "Frost Augur" }, { "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Frost Augur, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Frost Augur", "Scrying Sheets"], "actions": [{ "card": "Frost Augur" }, { "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 4, "summary": "land=Snow-Covered Mountain; cast: Rimefeather Owl", "land": "Snow-Covered Mountain", "casts": ["Rimefeather Owl"], "actions": [{ "card": "Rimefeather Owl" }] },
+    { "index": 5, "summary": "land=Snow-Covered Mountain; cast: Frost Augur", "land": "Snow-Covered Mountain", "casts": ["Frost Augur"], "actions": [{ "card": "Frost Augur" }] },
+    { "index": 6, "summary": "land=none; cast: Rimefeather Owl", "land": null, "casts": ["Rimefeather Owl"], "actions": [{ "card": "Rimefeather Owl" }] },
+    { "index": 7, "summary": "land=none; cast: Frost Augur", "land": null, "casts": ["Frost Augur"], "actions": [{ "card": "Frost Augur" }] },
+    { "index": 8, "summary": "land=Snow-Covered Mountain; cast: (nothing)", "land": "Snow-Covered Mountain", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 40,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "20/20 Avatar Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Abominable Treefolk", "idx": 8, "num": 1, "is_land": false }, { "name": "Abominable Treefolk", "idx": 13, "num": 2, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 9, "is_land": false, "taps": "C" }, { "name": "Coldsteel Heart", "idx": 4, "num": 13, "is_land": false, "taps": "WUBRG" }, { "name": "Frost Augur", "idx": 15, "num": 17, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 6, "num": 22, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 9, "num": 23, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 12, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 11, "num": 37, "is_land": true, "taps": "C" }, { "name": "Snow-Covered Forest", "idx": 1, "num": 44, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Forest", "idx": 7, "num": 45, "is_land": true, "taps": "G" }, { "name": "Snow-Covered Island", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 5, "num": 51, "is_land": true, "taps": "U" }, { "name": "Snow-Covered Mountain", "idx": 14, "num": 58, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rimefeather Owl", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Marit Lage's Slumber"], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "tapped": true, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Boreal Druid (1), Ice-Fang Coatl (1), Abominable Treefolk (14), Ice-Fang Coatl (1), 20/20 Avatar Token (20), Ice-Fang Coatl (1), Abominable Treefolk (14) — 52 to opponent (2→-50)" }
+  ]
+}
