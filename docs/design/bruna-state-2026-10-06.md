@@ -102,6 +102,16 @@ Alabaster. Glittering Wish fetches from a multicolored sideboard.
    * Status, counterexamples and diagnosis: `docs/design/glittering-wish-heuristic.md` on that
      branch.
 
+   * **Final state (agent report, 2026-10-06 close).** The branch is `wish-heuristic` @ `99980da3`;
+     no suite has been run on it. The final rule costs 0.74x the full-width search work at d5, 0.62x
+     at d3 and 0.60x in 2HG, which is about level with the pre-sideboard list.
+   * Still to do: re-check the remaining worse games on the final build (every earlier one caught up
+     at a higher budget, or was the search's own allocation inside the candidate set); root-cause
+     d3 gi117, which is new; re-measure the candidate-count distribution.
+   * **USER DECISION.** The early-turn state offers five candidates (Bruna, Almost Perfect, Linvala,
+     Shusher, Troyan), against the user's "1-3 almost always". Every cut of that state that was
+     tested lost turns, so the agent kept all five.
+
 ## Cost: probably over the 3x rule now
 
 Before the sideboard change, Bruna cost 2.63 s/game against a budget of 3.10 s (3x FiveColour). The
