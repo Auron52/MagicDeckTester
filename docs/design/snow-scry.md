@@ -57,4 +57,22 @@ the base arm reproduces the committed GT on every cell.
 | bucket + search | -0.0472 +/- 0.0068 | 142 / 50 | 13 / 6 | 1.094 |
 | outlook + search | -0.0618 +/- 0.0066 | 156 / 30 | 16 / 5 | 1.076 |
 
-Held-out run: see below.
+Held-out run (fresh seeds 8106000/8206000/8306000; d0 2,000 games, d3/b10 600, d5/b20 300 per
+arm; `logs/snow_scry_ab/heldout1`):
+
+| arm | paired delta (turns) | faster / slower | searched cells: delta, faster / slower | units |
+|---|---|---|---|---|
+| outlook | -0.0724 +/- 0.0065 | 187 / 23 | -0.030, 29 / 5 | 1.029 |
+| search (generic heuristic) | -0.0038 +/- 0.0014 | 14 / 3 | -0.012, 14 / 3 | 1.075 |
+| outlook + search | -0.0745 +/- 0.0065 | 193 / 23 | -0.037, 35 / 5 | 1.109 |
+
+Reading: OUTLOOK replicates on held-out seeds (every cell improves, d0 -0.0915). Searching the
+land-drop scry adds about 6 more faster games in 900 searched games on top of OUTLOOK, for ~8% more
+search units. BUCKET was dropped after training (OUTLOOK dominated it on every summary).
+
+## Status
+
+Levers default OFF; adoption (which heuristic, and whether the triggered scry is searched by default)
+is the USER's decision. Note the tension with the no-greedy-in-the-search-window rule: with the
+search lever off, the land-drop scry is a heuristic pick inside the window; with it on, cast-triggered
+scries still are.
