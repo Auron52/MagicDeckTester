@@ -1045,6 +1045,21 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             emit("G", cm.green); emit("C", cm.colorless); emit("wild", cm.wild);
             os << "}";
         }
+        // The BIG-SPELL-ONLY reserve (Troyan, Gutsy Explorer: "spend this mana only to cast spells
+        // with mana value 5 or greater or spells with {X}"), likewise shown separately and only when
+        // non-empty.
+        const ManaPool& bm = s.floating_bigspell_mana;
+        if (bm.Total() > 0)
+        {
+            os << ", \"floating_bigspell_mana\": {";
+            bool first = true;
+            auto emit = [&](const char* sym, int n) {
+                if (n > 0) { if (!first) { os << ", "; } first = false; os << "\"" << sym << "\": " << n; }
+            };
+            emit("W", bm.white); emit("U", bm.blue); emit("B", bm.black); emit("R", bm.red);
+            emit("G", bm.green); emit("C", bm.colorless); emit("wild", bm.wild);
+            os << "}";
+        }
     }
     // Energy counters. Aether Hub's COLOURED modes are energy-gated ("{T}, Pay {E}: Add one mana of
     // any colour") while its "{T}: Add {C}" is free -- so with zero energy a Hub is a colourless

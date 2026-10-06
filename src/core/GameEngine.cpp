@@ -240,6 +240,7 @@ void GameEngine::UntapStep(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     state.floating_creature_mana = ManaPool{};   // ...and the creature-only reserve with it (lockstep)
+    state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;   // big-spell-only reserve (lockstep)
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
@@ -618,7 +619,8 @@ void GameEngine::CombatPhase(GameState& state)
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase. Mirrors TurnSolver::SimulateCombat (lockstep). Off
     // (MTG_NO_FLOAT_LEFTOVER) -> no-op; byte-identical for non-floating decks regardless.
-    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{}; }
+    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
+                                      state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr; }
     // ...and a Colossification ETB tap responded to with the host's mana ability lands now, at the
     // end of the phase (Permanent::etb_tap_pending). Lockstep with TurnSolver::SimulateCombat.
     ApplyPendingEtbTaps(state);

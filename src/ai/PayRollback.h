@@ -121,6 +121,10 @@ inline bool TryRescue(GameState& s, const ManaCost& cost, const char* for_card)
     if (L.untap_effect)     { Declined(s, "an untap effect fired this turn", for_card); return false; }
     if (L.rollbacks >= 1)   { Declined(s, "already rolled back this turn", for_card); return false; }
     if (s.floating_mana.Total() > 0) { Declined(s, "mana floating", for_card); return false; }
+    // The restricted floats are a committed tap's surplus too: re-assigning that tap would leave its
+    // floated units behind (counted twice). Same refusal.
+    if (s.floating_creature_mana.Total() > 0 || s.floating_bigspell_mana.Total() > 0)
+    { Declined(s, "restricted mana floating", for_card); return false; }
     g_tried.fetch_add(1, std::memory_order_relaxed);
     if (g_real_resolution) { g_tried_real.fetch_add(1, std::memory_order_relaxed); }
 

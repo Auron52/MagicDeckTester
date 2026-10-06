@@ -2775,6 +2775,9 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
     AddSacPayFodderToPool(pool, state, state.active_player_index,
                           LiveSacPayOutlet(state, state.active_player_index));
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
+    // The big-spell-only reserve pays a qualifying NONCREATURE spell too (Colossification, Eldrazi
+    // Conscription); BigOnlySubsetPayable takes it back out for the non-qualifying part.
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_bigspell_mana); }
     return pool;
 }
 
@@ -4363,7 +4366,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
     for (const ModeSpec& m : modes)
     {
         if (!m.cost->has_value()) { continue; }
-        if (PermAbilityTaps(m.mode) && (src.tapped || !src.CanTap())) { continue; }
+        if (PermAbilityTaps(m.mode) && (src.tapped || !CanTapNow(src, state.battlefield))) { continue; }
         // Bilbo's "Activate only if you have 111 or more life" (the shared gate).
         if (m.mode == PermAbilityMode::LifeGatedPutCreatures
             && !PermAbilitySourceLive(state, ctrl, src.card.m_number, m.mode)) { continue; }
@@ -9589,6 +9592,16 @@ static BigOnlyCtx BuildBigOnlyCtx(const GameState& state)
         AddSourceToPool(bc.pool, state, *d, PermanentManaYield(state, p, *d), &p);
         bc.live = true;
         bc.pp   = &d->params;
+    }
+    // The FLOATED big-spell-only reserve (a Troyan tap's unspent units, GameState::
+    // floating_bigspell_mana) is the same restricted supply: both flat pools credit it, so the
+    // non-qualifying part of a subset must be payable without it.
+    if (FloatLeftoverManaEnabled() && state.floating_bigspell_mana.Total() > 0
+        && state.floating_bigspell_pp != nullptr)
+    {
+        bc.pool.AddPool(state.floating_bigspell_mana);
+        bc.live = true;
+        if (bc.pp == nullptr) { bc.pp = state.floating_bigspell_pp; }
     }
     return bc;
 }
@@ -15880,7 +15893,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
         if (!modes[i].cost->has_value()) { continue; }
-        if (PermAbilityTaps(modes[i].mode) && (p.tapped || !p.CanTap())) { continue; }
+        if (PermAbilityTaps(modes[i].mode) && (p.tapped || !CanTapNow(p, state.battlefield))) { continue; }
         if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
         { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
     }
@@ -15902,10 +15915,10 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (p.aura_attached_to != 0 && ActAffordable(state, ctrl, p.card, pp.aura_swap_cost, total_cache))
     { out.push_back(ActKey(num, kActAuraSwap)); }
     // A {T}-in-cost team pump (Fortified Beachhead) has no activation on a tapped source.
-    if ((!pp.team_pump_taps_source || (!p.tapped && p.CanTap()))
+    if ((!pp.team_pump_taps_source || (!p.tapped && CanTapNow(p, state.battlefield)))
         && ActAffordable(state, ctrl, p.card, pp.team_pump_cost, total_cache))
     { out.push_back(ActKey(num, kActTeamPump)); }
-    if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && p.CanTap()))
+    if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && CanTapNow(p, state.battlefield)))
         && ActAffordable(state, ctrl, p.card, pp.pod_activation_cost, total_cache))
     { out.push_back(ActKey(num, kActPod)); }
 
@@ -24538,7 +24551,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     if (!m.cost->has_value()) { continue; }
                     const bool taps = PermAbilityTaps(m.mode);
-                    if (taps && (src.tapped || !src.CanTap())) { continue; }
+                    if (taps && (src.tapped || !CanTapNow(src, state.battlefield))) { continue; }
                     // Bilbo: "Activate only if you have 111 or more life" -- the SAME gate the apply
                     // re-checks before paying (PermAbilitySourceLive), so enumeration and apply agree.
                     if (m.mode == Action::AbilityMode::LifeGatedPutCreatures
@@ -34372,9 +34385,13 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     // BIG-SPELL-ONLY PROVENANCE (Troyan): an all-qualifying batch may tap the source, and a unit it
     // over-produced must not survive as GENERAL float (a later non-qualifying cast could spend it).
-    // Drop min(big-only yield this solve tapped, surplus) from the FREE part of the pre-load only --
-    // never a pinned pip or the generic `wild`, which this batch still owes. The per-cast payer's
-    // commit_leftover applies the same rule. Inert unless big_batch == 1 and such a source tapped.
+    // Move min(big-only yield this solve tapped, surplus) from the FREE part of the pre-load only --
+    // never a pinned pip or the generic `wild`, which this batch still owes -- into the BIG-SPELL-ONLY
+    // reserve (GameState::floating_bigspell_mana), where a later qualifying cast this phase can still
+    // spend it (it was DROPPED before 2026-10-06). The per-cast payer's commit_leftover applies the
+    // same rule. Inert unless big_batch == 1 and such a source tapped.
+    ManaPool big_moved;
+    const CardParams* big_pp = nullptr;
     if (big_batch == 1 && s_true_colours)
     {
         int big = 0;
@@ -34387,18 +34404,22 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (bd == nullptr || !BigSpellOnlySource(bd->params)) { continue; }
             const int y = PermanentManaYield(state, bp, *bd);
             big += (y >= 0 ? y : ManaProducedPerTap(*bd));
+            big_pp = &bd->params;
         }
         int drop = std::min(big, std::max(0, produced.Total() - combined.ManaValue()));
         int* col[6] = { &pool.green, &pool.blue, &pool.white, &pool.black, &pool.red, &pool.colorless };
+        int* dst[6] = { &big_moved.green, &big_moved.blue, &big_moved.white, &big_moved.black,
+                        &big_moved.red, &big_moved.colorless };
         const int pin[6] = { combined.green, combined.blue, combined.white, combined.black,
                              combined.red, combined.colorless };
         for (int k = 0; k < 6 && drop > 0; ++k)
         {
             const int t = std::min(drop, std::max(0, *col[k] - pin[k]));
-            *col[k] -= t; drop -= t;
+            *col[k] -= t; *dst[k] += t; drop -= t;
         }
     }
     state.floating_mana = pool;
+    if (big_pp != nullptr && FloatLeftoverManaEnabled()) { AddBigSpellFloat(state, big_moved, *big_pp); }
     // CREATURE-ONLY PROVENANCE (see GameState::floating_creature_mana). An all-creature batch may tap
     // a creature_mana_only source (Somberwald Sage), and its output must not survive the batch as
     // GENERAL float -- a mid-phase draw could then spend it on a noncreature spell. Every cast in an
@@ -40100,7 +40121,8 @@ static void SimulateCombat(GameState& state)
     // floated this main phase so it cannot fund combat or the post-combat main. Mirrors
     // GameEngine::CombatPhase. Off (MTG_NO_FLOAT_LEFTOVER) -> no-op (pool only ever held
     // ritual float, which was already spent this main phase -> byte-identical regardless).
-    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{}; }
+    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
+                                      state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr; }
     ApplyPendingEtbTaps(state);   // Colossification's responded-to ETB tap (lockstep w/ GameEngine::CombatPhase)
     int active  = state.active_player_index;
 
@@ -40425,6 +40447,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.floating_creature_mana   = ManaPool{};   // creature-only reserve too (lockstep w/ UntapStep)
+    state.floating_bigspell_mana   = ManaPool{};   // big-spell-only reserve too (lockstep w/ UntapStep)
+    state.floating_bigspell_pp     = nullptr;
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start

@@ -819,12 +819,24 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
     const ManaPool reserve_pre = state.floating_mana;
     const ManaPool cre_reserve_pre = state.floating_creature_mana;
+    const ManaPool big_reserve_pre = state.floating_bigspell_mana;
     ManaCost cost = cost_in;
     // A CREATURE spell spends the creature-only reserve FIRST (it can pay nothing else, so using it
     // first is never worse); a noncreature payment never touches it. Empty for every deck without a
     // multi-yield creature_mana_only source -> byte-identical.
     if (for_creature && state.floating_creature_mana.Total() > 0)
     { SpendFloatingTowardCost(state.floating_creature_mana, cost); }
+    // Same for the BIG-SPELL-ONLY reserve (Troyan's floated {G}{U}): a qualifying spell (MV 5+ or
+    // {X}) spends it before the general float -- it can pay nothing else. Empty for every deck
+    // without such a source -> byte-identical.
+    if (BigFloatUsableNow(state))
+    {
+        const int before = static_cast<int>(state.floating_bigspell_mana.Total());
+        SpendFloatingTowardCost(state.floating_bigspell_mana, cost);
+        if (BigFloatStats::Enabled())
+        { BigFloatStats::g_spent.fetch_add(static_cast<std::uint64_t>(before - state.floating_bigspell_mana.Total()),
+                                           std::memory_order_relaxed); }
+    }
     SpendFloatingTowardCost(state.floating_mana, cost);
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
@@ -985,7 +997,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                           if (qd == nullptr) { continue; }
                           if (!q.card.IsLand() && qd->tmpl != CardTemplate::ManaDork
                               && !qd->params.mana_rock) { continue; }
-                          if (!q.CanTap()) { continue; }
+                          if (!CanTapNow(q, state.battlefield)) { continue; }
                           for (Color c : EffectiveProducesFor(state, active, *qd, &q))
                           {
                               const int ci = static_cast<int>(c);
@@ -1137,7 +1149,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (def == nullptr || !IsBaselineManaSource(*def))
                 {
                     if (!p.tapped && GrantReaches(mana_grant, p)
-                        && GrantedBodyCanTap(mana_grant, p))
+                        && GrantedBodyCanTap(mana_grant, p, state.battlefield))
                     { def = &GrantedManaFace(mana_grant.color); }
                 }
                 // DO NOT BAIL ON A MISSING DEFINITION HERE. TAPPING needs one (the produces list,
@@ -1951,14 +1963,16 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
       }
       // BIG-SPELL-ONLY PROVENANCE (Troyan, Gutsy Explorer): its {G}{U} may pay only a spell of mana
       // value 5+ (or with {X}). Within THIS payment it was legal, but a unit it over-produced must not
-      // survive as GENERAL float (the laundering class of sweep finding A-i). The engine keeps no
-      // big-spell-only reserve, so such a unit is DROPPED -- min(big-only yield this payment tapped,
-      // leftover), taken from the colours it makes (G/U) first. Conservative: a later 5+ spell this
-      // phase could have spent it (a disclosed approximation, Bruna ledger). Inert unless such a
+      // survive as GENERAL float (the laundering class of sweep finding A-i). It FLOATS in the
+      // big-spell-only reserve (GameState::floating_bigspell_mana) instead -- min(big-only yield this
+      // payment tapped, leftover), taken from the colours it makes (G/U) first -- so a second
+      // qualifying spell this phase can spend it (CR 106.4 / 500.4: mana empties only at step end).
+      // Until 2026-10-06 it was DROPPED, which made that line inexpressible. Inert unless such a
       // source was tapped AND mana was left over.
       if (lo.Total() > 0)
       {
           int big = 0;
+          const CardParams* big_pp = nullptr;
           const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
           for (int bi = 0; bi < nb; ++bi)
           {
@@ -1969,11 +1983,15 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               if (bd == nullptr || !BigSpellOnlySource(bd->params)) { continue; }
               const int y = PermanentManaYield(state, bp, *bd);
               big += (y >= 0 ? y : ManaProducedPerTap(*bd));
+              big_pp = &bd->params;
           }
           big = std::min(big, lo.Total());
+          ManaPool bigp;
           int* order[7] = { &lo.green, &lo.blue, &lo.wild, &lo.white, &lo.black, &lo.red, &lo.colorless };
+          int* dst[7]   = { &bigp.green, &bigp.blue, &bigp.wild, &bigp.white, &bigp.black, &bigp.red, &bigp.colorless };
           for (int k = 0; k < 7 && big > 0; ++k)
-          { const int t = std::min(big, *order[k]); *order[k] -= t; big -= t; }
+          { const int t = std::min(big, *order[k]); *order[k] -= t; *dst[k] += t; big -= t; }
+          if (FloatLeftoverManaEnabled() && big_pp != nullptr) { AddBigSpellFloat(state, bigp, *big_pp); }
       }
       if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
       // NO GENERIC MANA IN A HUMAN-PLAY POOL (see ConcretiseHumanFloat). This is the REQUEST site,
@@ -2082,6 +2100,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         {
             state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
             state.floating_creature_mana = cre_reserve_pre;   // ...which paid the FULL cost_in from it
+            state.floating_bigspell_mana = big_reserve_pre;   // (same: the big-only reserve is untouched)
             commit_leftover(bt2_leftover);
             CommitPaySacSacrifices(state, active);
             return true;
@@ -2101,6 +2120,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     state.floating_creature_mana       = cre_reserve_pre;
+    state.floating_bigspell_mana       = big_reserve_pre;
     if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }
@@ -3358,6 +3378,9 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
     // The creature-only reserve is supply for the CREATURE side of the split (this pool is the total
     // pool; BuildNonCreaturePool never credits it, exactly as it drops creature_mana_only sources).
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_creature_mana); }
+    // The big-spell-only reserve is supply for the QUALIFYING casts of a subset; the enumerator's
+    // BigOnlySubsetPayable takes it back out for everything else (BuildBigOnlyCtx credits it).
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_bigspell_mana); }
     return pool;
 }
 
@@ -3403,6 +3426,7 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
                           /*skip=*/nullptr, /*no_attackers=*/true);
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_creature_mana); }   // see AvailableManaPool
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_bigspell_mana); }   // see AvailableManaPool
     return pool;
 }
 
@@ -3666,6 +3690,15 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             add(1 << 0, fc.white); add(1 << 1, fc.blue);  add(1 << 2, fc.black);
             add(1 << 3, fc.red);   add(1 << 4, fc.green);
             add(0x1F,   fc.wild);  add(0,    fc.colorless);
+        }
+        // The big-spell-only reserve: credited to BOTH sides (a 5+ noncreature spell -- Colossification,
+        // Eldrazi Conscription -- may spend it). Permissive is the safe direction for this gate, which
+        // only ever prunes; BigOnlySubsetPayable owns the exact restriction.
+        {
+            const ManaPool& fb = state.floating_bigspell_mana;
+            add(1 << 0, fb.white); add(1 << 1, fb.blue);  add(1 << 2, fb.black);
+            add(1 << 3, fb.red);   add(1 << 4, fb.green);
+            add(0x1F,   fb.wild);  add(0,    fb.colorless);
         }
     }
     // With no multi-colour source the flat pool holds no `wild` from the board and CanPayFlat is
@@ -4530,8 +4563,11 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             // The creature-only reserve is supply for a creature payment (spent first, see
             // TapForCostSharedOnce), never for anything else.
             const int creature_float = for_creature ? static_cast<int>(state.floating_creature_mana.Total()) : 0;
+            // The big-spell-only reserve likewise, for a payment that may spend it (permissive on an
+            // unset identity: this is a BOUND).
+            const int big_float = BigFloatMayBeUsable(state) ? static_cast<int>(state.floating_bigspell_mana.Total()) : 0;
             if (!PaymentManaCovers(state, for_creature,
-                                   cost_in.ManaValue() - state.floating_mana.Total() - creature_float))
+                                   cost_in.ManaValue() - state.floating_mana.Total() - creature_float - big_float))
             {
                 if (tapstats::Enabled())
                 { (pb ? tapstats::g_bound_prune : tapstats::g_bound_probe)
@@ -4559,6 +4595,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap = state.floating_mana;
         const ManaPool               fcm_snap = state.floating_creature_mana;
+        const ManaPool               fbm_snap = state.floating_bigspell_mana;
         const ManaPool               av_snap = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -4573,6 +4610,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.hybrid"); }
             state.floating_mana                = fm_snap;
             state.floating_creature_mana       = fcm_snap;
+            state.floating_bigspell_mana       = fbm_snap;
             if (available) { *available = av_snap; }
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
@@ -4626,6 +4664,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap  = state.floating_mana;
         const ManaPool               fcm_snap = state.floating_creature_mana;
+        const ManaPool               fbm_snap = state.floating_bigspell_mana;
         const ManaPool               av_snap  = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -4640,6 +4679,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         { VerifyPaySnapRestore(state.battlefield, bf_snap_full, tag); }
         state.floating_mana                = fm_snap;
         state.floating_creature_mana       = fcm_snap;
+        state.floating_bigspell_mana       = fbm_snap;
         if (available) { *available = av_snap; }
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;

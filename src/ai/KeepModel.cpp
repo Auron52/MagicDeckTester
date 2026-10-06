@@ -439,7 +439,7 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
             if (p.card.IsLand()) { ++our_lands; }
             // Mana source: an untapped land, a usable dork, or a rock we control.
             const bool is_land = p.card.IsLand();
-            const bool is_dork = def && def->tmpl == CardTemplate::ManaDork && p.CanTap();
+            const bool is_dork = def && def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield);
             const bool is_rock = def && def->params.mana_rock;
             if (!p.tapped && (is_land || is_dork || is_rock))
             {

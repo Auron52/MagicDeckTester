@@ -307,6 +307,19 @@ struct GameState
     // test), never to BuildNonCreaturePool. Reset at exactly the floating_mana reset sites (lockstep);
     // like floating_mana, never folded into BuildSimKey (empty at every cross-phase boundary).
     ManaPool                 floating_creature_mana;
+    // BIG-SPELL-ONLY reserve: unspent mana produced by a big-spell-only source (Troyan, Gutsy
+    // Explorer: "Spend this mana only to cast spells with mana value 5 or greater or spells with {X}
+    // in their mana costs"). Before 2026-10-06 such a unit was DROPPED when a payment over-produced
+    // it, so the legal line "Troyan's {G}{U} pays part of one big spell, the rest pays a second big
+    // spell this phase" was inexpressible. A QUALIFYING spell payment drains this first
+    // (BigFloatUsableNow); nothing else ever sees it (activations, small spells). Credited to the
+    // enumerator's flat pools and subtracted again by BigOnlySubsetPayable for the non-qualifying
+    // part of a subset, exactly like the source itself. floating_bigspell_pp is the restriction it
+    // carries (the source's CardParams -- one shape exists, Troyan's). Reset at exactly the
+    // floating_mana / floating_creature_mana reset sites (lockstep); like them, never folded into
+    // BuildSimKey (empty at every cross-phase boundary -- asserted in Dominance's AtCleanBoundary).
+    ManaPool                 floating_bigspell_mana;
+    const struct CardParams* floating_bigspell_pp = nullptr;
     // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
     // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,
     // TurnSolver::apply_one, and the off-suspend CastOffSuspend -- a Lotus Bloom arrival IS a cast),

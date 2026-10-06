@@ -561,13 +561,14 @@ struct PayAttemptSnap
 {
     std::vector<Permanent> bf;
     std::vector<Card>      gy;
-    ManaPool fm, av;
+    ManaPool fm, fcm, fbm, av;   // general, creature-only and big-spell-only floats
     int  life_a = 0, life_o = 0, energy = 0;
     bool oll = false;
     void Take(const GameState& s, const ManaPool* available)
     {
         const int a = s.active_player_index;
         bf = s.battlefield; gy = s.players[a].graveyard; fm = s.floating_mana;
+        fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana;
         if (available) { av = *available; }
         life_a = s.players[a].life; life_o = s.players[1 - a].life;
         energy = s.players[a].energy_counters; oll = s.opponent_lost_life_this_turn;
@@ -576,6 +577,7 @@ struct PayAttemptSnap
     {
         const int a = s.active_player_index;
         s.battlefield = bf; s.players[a].graveyard = gy; s.floating_mana = fm;
+        s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm;
         if (available) { *available = av; }
         s.players[a].life = life_a; s.players[1 - a].life = life_o;
         s.players[a].energy_counters = energy; s.opponent_lost_life_this_turn = oll;

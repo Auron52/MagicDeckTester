@@ -13407,7 +13407,7 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if ((d && d->card.IsLand()) || is_dork(p.card))
         {
             ++board_sources;
-            if (is_dork(p.card) && p.entered_this_turn) { board_sick_dork = true; }
+            if (is_dork(p.card) && !CanTapNow(p, s.battlefield)) { board_sick_dork = true; }
             if (produces(p.card, Color::Red))   { ++board_red; }
             if (produces(p.card, Color::Green)) { ++board_green; }
         }

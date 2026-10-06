@@ -2172,6 +2172,8 @@ inline thread_local bool g_searched_play = false;
 // convoke section below (eligibility: untapped creature, sick-dork asymmetry, live-dork
 // dominance exclusion; ordering: free bodies before would-attack, ascending power).
 inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int);
+struct HasteSources;
+inline bool CanTapNow(const Permanent&, const std::vector<Permanent>&, const HasteSources*);   // defined below
 struct ConvokeClasses
 {
     std::vector<int> free_green, free_other;   // m_numbers, cheapest-first
@@ -2186,7 +2188,7 @@ inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
     {
         if (p.controller_index != controller || !p.card.IsCreature() || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && p.CanTap();
+        const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield, nullptr);
         if (live_dork) { continue; }
         const int  pw   = p.EffectivePower();
         const bool atk  = CanAttackFull(p, s.battlefield, controller) && pw > 0;
@@ -8744,7 +8746,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         if (p.controller_index != controller || p.card.m_number != garth_id) { continue; }
         const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
         if (!pd || !pd->params.garth_copy_ability) { continue; }
-        if (p.tapped || !p.CanTap()) { return; }                       // stranded: no-op
+        if (p.tapped || !CanTapNow(p, state.battlefield)) { return; }  // stranded: no-op (haste from ANY source lifts sickness, CR 302.6 -- the enumerator's gate)
         if (p.garth_chosen_mask & (1u << bit)) { return; }             // name already chosen
         garth = &p;
         break;
@@ -14358,7 +14360,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
             // copy has no activation left, and its own mana -- which the leftover pool counts while
             // it is untapped -- cannot pay for its own activation: require one generic more.
             const bool taps_src = d->params.team_pump_taps_source;
-            if (taps_src && (src.tapped || !src.CanTap())) { continue; }
+            if (taps_src && (src.tapped || !CanTapNow(src, state.battlefield))) { continue; }
             ManaCost c = d->params.team_pump_cost.value();
             if (taps_src) { c.generic += 1; }
             if (!pool.CanPay(c)) { continue; }
@@ -18422,7 +18424,7 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
     std::vector<int> sink_ids;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index != controller || p.tapped || !p.CanTap()) { continue; }
+        if (p.controller_index != controller || p.tapped || !CanTapNow(p, state.battlefield)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
         { sink_ids.push_back(p.card.m_number); }
@@ -18924,7 +18926,7 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
     std::vector<int> ids;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index != controller || p.tapped || !p.CanTap()) { continue; }
+        if (p.controller_index != controller || p.tapped || !CanTapNow(p, state.battlefield)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && (d->params.tap_draw_cost.has_value() || d->params.tap_investigate_cost.has_value()))
         { ids.push_back(p.card.m_number); }
@@ -19458,7 +19460,7 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         // an untappable source would have stopped a just-wished Essence Depleter from draining on
         // the turn it lands, and stopped an ATTACKING one from draining at all.
         if (!PermAbilityTaps(mode)) { return true; }
-        return !p.tapped && p.CanTap();
+        return !p.tapped && CanTapNow(p, state.battlefield);
     }
     return false;
 }
@@ -22286,13 +22288,19 @@ inline bool GrantReaches(const ManaGrant& g, const Permanent& p)
 }
 
 // Can a granted body use its {T} right now? CR 302.6 -- the ability is a {T} ability, so a body
-// that entered this turn needs haste. Reads the grant's pre-resolved blanket_haste instead of
-// calling CanTapNow, which would re-walk the battlefield per source.
-inline bool GrantedBodyCanTap(const ManaGrant& g, const Permanent& p)
+// that entered (or changed control) this turn needs haste, from ANY source. The grant's pre-resolved
+// blanket_haste answers the hot case (Concordant Crossroads: every fresh token is sick) without a
+// battlefield walk; anything else -- a subtype lord, Lightning Greaves, Expedite's temp haste,
+// Tomb Raider's conditional haste -- falls through to CanTapNow, THE predicate. Before 2026-10-06
+// this stopped at blanket_haste + the printed keyword, so a Greaves'd fresh Saproling could not tap
+// for the granted mana while CanTapNow said it could.
+inline bool GrantedBodyCanTap(const ManaGrant& g, const Permanent& p,
+                              const std::vector<Permanent>& battlefield)
 {
     if (p.tapped) { return false; }
-    if (!p.entered_this_turn) { return true; }
-    return g.blanket_haste || p.card.HasKeyword(Keyword::Haste);
+    if (p.CanTap()) { return true; }   // not sick (incl. control change), or printed haste
+    if (g.blanket_haste) { return true; }
+    return CanTapNow(p, battlefield);
 }
 
 // Does this definition ALREADY answer "yes" to the tap-for-mana question on its own? Used only to
@@ -22333,7 +22341,7 @@ inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& 
     const CardDefinition* d = p.def_absent ? nullptr
                                            : CardDatabase::Instance().LookupCached(p.card);
     if (d != nullptr && IsBaselineManaSource(*d)) { return d; }
-    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p)) { return &GrantedManaFace(g.color); }
+    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p, state.battlefield)) { return &GrantedManaFace(g.color); }
     return d;
 }
 
@@ -25036,6 +25044,55 @@ inline bool BigSpellManaUsable(const CardParams& pp, int site)
     const Card* c = PayingSpellCard();
     if (c == nullptr) { return site == 2 || site == 4; }
     return SpellQualifiesForBigMana(*c, pp);
+}
+
+// MTG_BIGFLOAT_STATS (off by default = zero cost): how many big-spell-only units were BOOKED into the
+// reserve (a Troyan surplus that used to be dropped) and how many a later qualifying payment SPENT.
+// One line at exit. Exists so "the suite did not move" can be told apart from "the path never ran".
+namespace BigFloatStats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_BIGFLOAT_STATS"); return v; }
+    inline std::atomic<std::uint64_t> g_booked{0};
+    inline std::atomic<std::uint64_t> g_spent{0};
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "\n=== BIGFLOAT STATS: booked=%llu spent=%llu ===\n",
+                         (unsigned long long)g_booked.load(), (unsigned long long)g_spent.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+// THE BIG-SPELL-ONLY FLOAT (GameState::floating_bigspell_mana). May the payment in progress spend
+// it? Same identity rule as the source itself (BigSpellManaUsable at the real-payment site): a batch
+// prepay answers by its batch verdict, otherwise the paying spell must qualify, and an UNSET identity
+// is an activated ability -- refused. Empty reserve -> false without touching any thread_local, so
+// every deck without Troyan is byte-identical.
+inline bool BigFloatUsableNow(const GameState& state)
+{
+    if (state.floating_bigspell_mana.Total() <= 0 || state.floating_bigspell_pp == nullptr)
+    { return false; }
+    return BigSpellManaUsable(*state.floating_bigspell_pp, /*site=*/1);
+}
+// The BOUND form (feasibility probes, flat pools): permissive on an unset identity, exactly like the
+// source's sites 2/4 -- a bound must never under-count.
+inline bool BigFloatMayBeUsable(const GameState& state)
+{
+    if (state.floating_bigspell_mana.Total() <= 0 || state.floating_bigspell_pp == nullptr)
+    { return false; }
+    return BigSpellManaUsable(*state.floating_bigspell_pp, /*site=*/4);
+}
+// Book `units` of big-spell-only mana into the reserve (the payer's commit_leftover and the batch
+// prepay's provenance step). Keeps the restriction of the source that made it.
+inline void AddBigSpellFloat(GameState& state, const ManaPool& units, const CardParams& pp)
+{
+    if (units.Total() <= 0) { return; }
+    if (BigFloatStats::Enabled())
+    { BigFloatStats::g_booked.fetch_add(static_cast<std::uint64_t>(units.Total()), std::memory_order_relaxed); }
+    state.floating_bigspell_mana.AddPool(units);
+    state.floating_bigspell_pp = &pp;
 }
 
 // The one predicate every payment site asks of a restricted source: "creature-only, and (if it also
@@ -28933,10 +28990,10 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                                                : CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr)
         {
-            if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
+            if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
             d = &GrantedManaFace(grant.color);
         }
-        else if (!IsBaselineManaSource(*d) && GrantReaches(grant, p) && GrantedBodyCanTap(grant, p))
+        else if (!IsBaselineManaSource(*d) && GrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
         {
             // THE GRANT'S SECOND POPULATION (see ManaDefOf): a Fungus WITH a definition but no mana
             // ability of its own (Psychotrope / Vitaspore Thallid; the Badger itself is a Badger

@@ -281,8 +281,9 @@ struct CardParams
     // never a mana ability's feed. Unlike creature_mana_only this does not ride `for_creature` (the
     // test is the spell's MV, creature or not: Colossification qualifies, Linvala does not), so it is
     // read off the paying spell's identity (PayingSpellCard / the batch-prepay scope) inside
-    // RestrictedManaUsable. A unit it produces beyond the paid spell's need is DROPPED, never booked
-    // as general float (the laundering class of Bruna sweep finding A-i). 0 = unrestricted
+    // RestrictedManaUsable. A unit it produces beyond the paid spell's need floats in the BIG-SPELL-ONLY
+    // reserve (GameState::floating_bigspell_mana, spendable only by a later qualifying spell this phase),
+    // never as general float (the laundering class of Bruna sweep finding A-i). 0 = unrestricted
     // (byte-identical for every other source).
     int  mana_only_spell_min_mv = 0;
     bool mana_only_spell_or_x   = false;

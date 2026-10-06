@@ -357,7 +357,11 @@ static_assert(sizeof(Player) == 200,
 // gained `etb_tap_pending` (Colossification's responded-to ETB tap) in existing padding (size
 // unchanged) -- a mid-turn deferral cleared by the beginning of combat and the untap step, folded
 // beside skip_next_untap in the sim keys and asserted absent at the boundary below.
-static_assert(sizeof(GameState) == 1016,
+// +56 bytes (2026-10-06, Bruna sideboard): `floating_bigspell_mana` (a ManaPool, Troyan's
+// big-spell-only float) + `floating_bigspell_pp` (the restriction it carries). Classification: the
+// creature-only float's class exactly -- MID-TURN state, emptied at every phase/turn reset, a
+// BOUNDARY ASSERTION in AtCleanBoundary. The pointer is meaningful only while the pool is non-empty.
+static_assert(sizeof(GameState) == 1072,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -557,6 +561,7 @@ inline bool AtCleanBoundary(const GameState& s)
     if (!s.stack.empty())                     { return false; }
     if (s.floating_mana.Total() > 0)          { return false; }
     if (s.floating_creature_mana.Total() > 0) { return false; }   // creature-only float: same class
+    if (s.floating_bigspell_mana.Total() > 0) { return false; }   // big-spell-only float (Troyan): same class
     // NOTE the line that is NOT here: `spells_cast_this_turn != 0`. It was an assertion at first
     // and cost dragonstorm 26.5% of its siblings, because CastOffSuspend counts a Lotus Bloom
     // arriving at THIS upkeep as a cast (CR 702.62e) -- so storm is legitimately 1 at a perfectly

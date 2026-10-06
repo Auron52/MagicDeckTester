@@ -241,15 +241,34 @@ TEST_CASE("Bruna sideboard: Troyan's {G}{U} pays only a spell of mana value 5+ (
     }
 }
 
-TEST_CASE("Bruna sideboard: a unit Troyan over-produces is dropped, never general float")
+TEST_CASE("Bruna sideboard: a unit Troyan over-produces floats as BIG-SPELL-ONLY mana, never general float")
 {
     ManaCost one; one.generic = 1;
     {
         BoardSb b;
         b.Put("Troyan, Gutsy Explorer");
-        SpellSubtypePayScope scope(&DefSb("Bruna, Light of Alabaster").card);
-        REQUIRE(TapForCostShared(b.s, one, /*for_creature=*/true, nullptr, true));
+        {
+            SpellSubtypePayScope scope(&DefSb("Bruna, Light of Alabaster").card);
+            REQUIRE(TapForCostShared(b.s, one, /*for_creature=*/true, nullptr, true));
+        }
         CHECK(b.s.floating_mana.Total() == 0);
+        // 2026-10-06: the surplus unit is no longer DROPPED -- it floats, restricted (control: the
+        // pre-fix tree held 0 here, which made a second big spell this phase unpayable).
+        CHECK(b.s.floating_bigspell_mana.Total() == 1);
+        {
+            // A small spell may not spend it: the payment fails and the reserve is returned intact.
+            SpellSubtypePayScope scope(&DefSb("Linvala, Shield of Sea Gate").card);   // MV 3
+            CHECK_FALSE(TapForCostShared(b.s, one, /*for_creature=*/true, nullptr, true));
+            CHECK(b.s.floating_bigspell_mana.Total() == 1);
+        }
+        CHECK_FALSE(TapForCostShared(b.s, one, /*for_creature=*/false, nullptr, true));   // an ability
+        CHECK(b.s.floating_bigspell_mana.Total() == 1);
+        {
+            // A second QUALIFYING spell this phase spends it (MV 7 noncreature Aura).
+            SpellSubtypePayScope scope(&DefSb("Colossification").card);
+            CHECK(TapForCostShared(b.s, one, /*for_creature=*/false, nullptr, true));
+            CHECK(b.s.floating_bigspell_mana.Total() == 0);
+        }
     }
     {
         BoardSb b;   // CONTROL shape: an unrestricted {G}{U} bundle keeps its surplus
@@ -331,6 +350,88 @@ TEST_CASE("Bruna sideboard: Troyan's loot draws, then discards -- and cannot pay
             { if (a.ability_mode == Action::AbilityMode::TapDraw) { loot = true; } }
         }
         CHECK(loot);
+    }
+}
+
+// ---- Troyan's floated big-spell-only mana in the ENUMERATOR (2026-10-06) -------------------------
+// A phase that already holds Troyan's floated {G}{U} (a surplus from an earlier qualifying cast):
+// the enumerator must count it for a qualifying spell, and never for a small one.
+TEST_CASE("Bruna sideboard: the enumerator counts floated big-spell-only mana for a 5+ spell only")
+{
+    {
+        BoardSb b;
+        b.s.players[0].lands_played_this_turn = 1;
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Island");
+        b.Put("Forest");
+        b.s.floating_bigspell_mana.green = 1;
+        b.s.floating_bigspell_mana.blue  = 1;
+        b.s.floating_bigspell_pp = &DefSb("Troyan, Gutsy Explorer").params;
+        b.Hand("Bruna, Light of Alabaster");   // {3}{W}{W}{U}: four lands + the two floated units
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true);
+        const TurnSolver::Plan* bruna = nullptr;
+        for (const TurnSolver::Plan& p : plans)
+        { if (PlanCastsSb(p, "Bruna, Light of Alabaster")) { bruna = &p; break; } }
+        // CONTROL: before the fix nothing could hold this float, and the plan was never offered.
+        REQUIRE_MESSAGE(bruna != nullptr, "Bruna (6) not offered off 4 lands + 2 floated big-spell mana");
+        GameState after = b.s;
+        TurnSolver::ApplyPlan(after, *bruna, /*is_pre_combat=*/true);
+        CHECK(CountOnBfSb(after, "Bruna, Light of Alabaster") == 1);
+        CHECK(after.floating_bigspell_mana.Total() == 0);
+    }
+    {
+        BoardSb b;   // the same float can NOT fund a small spell
+        b.s.players[0].lands_played_this_turn = 1;
+        b.Put("Plains");
+        b.Put("Island");
+        b.s.floating_bigspell_mana.green = 1;
+        b.s.floating_bigspell_mana.blue  = 1;
+        b.s.floating_bigspell_pp = &DefSb("Troyan, Gutsy Explorer").params;
+        b.Hand("Linvala, Shield of Sea Gate");   // {1}{W}{U}: two lands + ONE more -- only the float
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true))
+        { CHECK_FALSE_MESSAGE(PlanCastsSb(p, "Linvala, Shield of Sea Gate"), "Linvala offered off floated big-spell mana"); }
+    }
+}
+
+// ---- HASTE FROM ANY SOURCE LIFTS SUMMONING SICKNESS FOR {T} ABILITIES (CR 302.6 / 702.10) ----------
+// Lightning Greaves on a Troyan that entered this turn: both of its {T} abilities -- the loot (a
+// PermAbility mode) and the mana -- are legal. Before 2026-10-06 the PermAbility gates (enumeration,
+// the apply-side PermAbilitySourceLive, the d0 table) read Permanent::CanTap(), which sees only the
+// PRINTED keyword, so the Greaves'd loot was inexpressible. The no-Greaves arm is the control.
+static bool PlansLoot(const GameState& s)
+{
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        for (const Action& a : p.actions)
+        { if (a.ability_mode == Action::AbilityMode::TapDraw) { return true; } }
+    }
+    return false;
+}
+TEST_CASE("Haste: Lightning Greaves lets a summoning-sick creature use its {T} abilities")
+{
+    for (const bool greaves : { false, true })
+    {
+        CAPTURE(greaves);
+        BoardSb b;
+        b.s.players[0].lands_played_this_turn = 1;
+        const int troyan = b.Put("Troyan, Gutsy Explorer", /*sick=*/true);
+        b.Put("Island");
+        if (greaves)
+        {
+            const int g = b.Put("Lightning Greaves");
+            for (Permanent& p : b.s.battlefield) { if (p.card.m_number == g) { p.equipped_to = troyan; } }
+        }
+        b.Hand("Forest");
+        CHECK(PermAbilitySourceLive(b.s, 0, troyan, PermAbilityMode::TapDraw) == greaves);
+        CHECK(PlansLoot(b.s) == greaves);
+        {
+            ManaCost gu; gu.green = 1; gu.blue = 1;
+            GameState s2 = b.s;
+            for (Permanent& p : s2.battlefield) { if (p.card.m_name.str() == "Island") { p.tapped = true; } }
+            SpellSubtypePayScope scope(&DefSb("Bruna, Light of Alabaster").card);
+            CHECK(TapForCostShared(s2, gu, /*for_creature=*/true, nullptr, true) == greaves);
+        }
     }
 }
 

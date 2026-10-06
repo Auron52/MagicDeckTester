@@ -2585,7 +2585,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                     : CardDatabase::Instance().LookupCached(p.card);
             if (!d)
             {
-                if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
+                if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
                 if (granted_taken >= granted_cap) { continue; }
                 ++granted_taken;
                 s_src_cands_buf.push_back({ i, &GrantedManaFace(grant.color) });
@@ -4174,7 +4174,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             // differently collapse to the same key and the cache returns another board's answer.
             // No new hash TERM is needed: the granted bodies simply enter the hashed sequence,
             // carrying the synthetic face's stable pointer below.
-            if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
+            if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
             d = &GrantedManaFace(grant.color);
         }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
