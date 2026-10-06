@@ -102,6 +102,20 @@ Reading: OUTLOOK replicates on held-out seeds (every cell improves, d0 -0.0915).
 land-drop scry adds about 6 more faster games in 900 searched games on top of OUTLOOK, for ~8% more
 search units. BUCKET was dropped after training (OUTLOOK dominated it on every summary).
 
+Held-out run with the USER rule (same seeds, refined rule: cantrips count as draw sources;
+accelerants need a threat in hand or play AND a mana sink; `logs/snow_scry_ab/heldout3_user`):
+
+| arm | paired delta | faster / slower | searched cells: delta, faster / slower | units |
+|---|---|---|---|---|
+| outlook | -0.0724 | 187 / 23 | -0.030, 29 / 5 | 1.029 |
+| USER rule | -0.0738 | 216 / 48 | -0.036, 37 / 9 | 1.022 |
+| USER rule + land-drop search (pruned) | -0.0738 | 217 / 49 | -0.036, 38 / 10 | 1.072 |
+| outlook + land-drop search | -0.0745 | 193 / 23 | -0.037, 35 / 5 | 1.109 |
+
+The USER rule matches OUTLOOK overall and leads on the searched cells, but moves more games both ways
+(48 slower vs 23, mostly d0). With its firm calls pruning, the land-drop search has almost nothing
+left to branch on and buys nothing (+1/-1 game) for 5% more units.
+
 ## Status
 
 Levers default OFF; adoption (which heuristic, and whether the triggered scry is searched by default)
