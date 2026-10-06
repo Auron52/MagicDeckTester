@@ -2354,7 +2354,10 @@ public:
     // Base rule, lexicographic: never bounce another Karoo (replaying it just triggers another
     // bounce), prefer an already-TAPPED land (spent this turn -> no mana lost), prefer one that
     // re-enters UNTAPPED. That is a well-reasoned rule; it is provider-owned for ownership, not
-    // because it looks wrong.
+    // because it looks wrong. Under MTG_BOUNCE_UNTAPPED_FIRST (KarooTapInResponseOn) the returned
+    // land is tapped for mana in response when it can be (KarooBounceFloatable), so an untapped
+    // floatable land joins the tapped ones in the no-loss tier and the land that RE-ENTERS UNTAPPED
+    // wins (USER 2026-10-06: bounce the Orchard, not the Monastery that re-enters tapped).
     virtual std::vector<int> BounceLandCandidates(
         const GameState& s, int controller, int self_index,
         const std::vector<int>& legal) const;

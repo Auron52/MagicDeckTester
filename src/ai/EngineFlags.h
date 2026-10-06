@@ -128,6 +128,28 @@ inline bool SolveCombatSwapOn()
     return heurarm::Flag(heurarm::SOLVE_COMBAT_SWAP, env_on);
 }
 
+// MTG_BOUNCE_UNTAPPED_FIRST -- DEFAULT OFF until measured (USER 2026-10-06). ONE lever, two halves
+// that are only sound TOGETHER, so they are measured jointly:
+//   (1) TAP IN RESPONSE: a Karoo's "return a land you control to its owner's hand" is a triggered
+//       ability (CR 603.2), so before it resolves the controller holds priority and may activate the
+//       returned land's mana ability (CR 605.3a); the mana stays in the pool until the step/phase ends
+//       (CR 106.4). BounceKarooLand models it: an UNTAPPED, side-effect-free returned land is tapped
+//       into state.floating_mana first (KarooBounceFloatable / FloatKarooBouncedLand, SpellEffects.h).
+//   (2) THE USER'S ORDER: with (1), returning an untapped land costs nothing this turn, so
+//       DecisionProvider::BounceLandCandidates prefers a land that RE-ENTERS UNTAPPED over an
+//       already-tapped one that re-enters tapped. USER: "Generally the Orchard is better to bounce
+//       because the monastery will come into play tapped again."
+// (2) alone was measured first and REGRESSED (Hinata d0 s2002 gi522, 7 -> 8: a mid-turn Karoo returned
+// an untapped land whose mana Hinata still needed); USER 2026-10-06: "I recommend modelling tapping the
+// land in response." Read by BounceKarooLand (the ONE land-drop ETB shared by executor, rollout and
+// enumeration probe) and by the provider -- one reader so the two halves can never disagree. heurarm
+// slot so a pooled batch carries both arms.
+inline bool KarooTapInResponseOn()
+{
+    static const bool env_on = EnvOn("MTG_BOUNCE_UNTAPPED_FIRST");
+    return heurarm::Flag(heurarm::BOUNCE_UNTAPPED_FIRST, env_on);
+}
+
 // MTG_NEEDS_TAP_ORDER -- DEFAULT OFF until measured. Needs-based mana-source choice: see the
 // ComputeNeedsDemandSupply header in ManaPayment.cpp. Read inside the shared payment, so executor
 // and rollout see one value; heurarm slot so a pooled batch can carry both arms.

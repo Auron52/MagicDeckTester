@@ -2952,6 +2952,14 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     }
     d.Note(std::string("reply an option index -- the ") + noun + " to "
            + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick."
+           // Karoo tap-in-response (MTG_BOUNCE_UNTAPPED_FIRST): say what happens to an untapped
+           // land, so the human knows returning it does not cost this phase's mana. Lever off ->
+           // the note is byte-identical.
+           + ((!sacrifice && noun == "land" && KarooTapInResponseOn())
+              ? " An UNTAPPED land you return is first tapped for mana in response (it floats until"
+                " the phase ends), unless tapping it has a cost or side effect (pain, energy, a"
+                " depletion counter) or its mana is spend-restricted."
+              : "")
            + (allow_decline
               ? " This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to"
                 " DECLINE and keep the creature."

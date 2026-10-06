@@ -17954,6 +17954,58 @@ inline void RitualUntapSources(GameState& state, int count)
     }
 }
 
+// ONE REAL TAP of a mana source into the turn-scoped float (state.floating_mana), with the colour
+// rule every REAL float shares. The caller has already tapped the permanent; this only books its
+// output. Shared by the ritual TAP-AHEAD (RitualTapAheadIntoFloat, below) and the Karoo
+// TAP-IN-RESPONSE (FloatKarooBouncedLand) so the two can never commit colours differently.
+// `perm` selects per-PERMANENT colour resolution (EffectiveProducesFor); the tap-ahead passes
+// nullptr, i.e. the definition's colours, exactly as it always has (byte-identical).
+//
+// EffectiveProduces' thread_local buffer is consumed immediately, before the next call.
+// constrain_partial_choice: this float is REAL spendable mana, so a choice-limited source commits to
+// a colour here rather than floating wild (see AddRefloatContribution). The committed colour is
+// NEED-AWARE: the hand's remaining coloured-pip demand picks it (a first-listed commit measured 4
+// extra d0 losses incl. one unwon -- the greedy committed {U} off a Signet when the hand's casts
+// wanted {R}). Ties keep list order. A FULL-rainbow source (Forbidden Orchard) stays WILD: there the
+// controller genuinely chooses any colour, and wild cannot pay a {C} pip the source could not make
+// either. A lumpy multi-colour source (a Karoo's one-of-each) gives one of each colour.
+inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefinition& d,
+                                    const Permanent* perm)
+{
+    const int amt = ManaProducedPerTap(d);
+    const std::vector<Color>& prod = (perm != nullptr)
+                                   ? EffectiveProducesFor(state, active, d, perm)
+                                   : EffectiveProduces(state, active, d, false);
+    if (amt == 1 && prod.size() > 1 && prod.size() < 5)
+    {
+        Color best = prod[0]; int best_need = -1;
+        for (Color c : prod)
+        {
+            int need = 0;
+            for (const Card& hc : state.players[active].hand)
+            {
+                const ManaCost& mc = hc.m_mana_cost;
+                switch (c)
+                {
+                    case Color::White: need += mc.white; break;
+                    case Color::Blue:  need += mc.blue;  break;
+                    case Color::Black: need += mc.black; break;
+                    case Color::Red:   need += mc.red;   break;
+                    case Color::Green: need += mc.green; break;
+                    default: break;
+                }
+            }
+            if (need > best_need) { best_need = need; best = c; }
+        }
+        state.floating_mana.Add(best, 1);
+    }
+    else
+    {
+        AddRefloatContribution(state.floating_mana, amt, prod,
+                               /*constrain_partial_choice=*/true);
+    }
+}
+
 // MTG_SPASM_UNTAP_LITERAL phase 3 -- TAP-AHEAD (docs/design/reality-spasm-phase2.md §8). Called
 // immediately BEFORE an untap ritual's payment: tap every untapped, side-effect-free mana source
 // into the turn-scoped float, because the ritual's resolution is about to untap up to X tapped
@@ -18007,42 +18059,7 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
         { continue; }
         p.tapped = true;
         ++tapped_n;
-        // EffectiveProduces' thread_local buffer is consumed immediately, before the next call.
-        // constrain_partial_choice: this float is REAL spendable mana, so a choice-limited
-        // source commits to a colour here rather than floating wild (see the helper's comment).
-        // The committed colour is NEED-AWARE: the hand's remaining coloured-pip demand picks it
-        // (a first-listed commit measured 4 extra d0 losses incl. one unwon -- the greedy
-        // committed {U} off a Signet when the hand's casts wanted {R}). Ties keep list order.
-        const int amt = ManaProducedPerTap(*d);
-        const std::vector<Color>& prod = EffectiveProduces(state, active, *d, false);
-        if (amt == 1 && prod.size() > 1 && prod.size() < 5)
-        {
-            Color best = prod[0]; int best_need = -1;
-            for (Color c : prod)
-            {
-                int need = 0;
-                for (const Card& hc : state.players[active].hand)
-                {
-                    const ManaCost& mc = hc.m_mana_cost;
-                    switch (c)
-                    {
-                        case Color::White: need += mc.white; break;
-                        case Color::Blue:  need += mc.blue;  break;
-                        case Color::Black: need += mc.black; break;
-                        case Color::Red:   need += mc.red;   break;
-                        case Color::Green: need += mc.green; break;
-                        default: break;
-                    }
-                }
-                if (need > best_need) { best_need = need; best = c; }
-            }
-            state.floating_mana.Add(best, 1);
-        }
-        else
-        {
-            AddRefloatContribution(state.floating_mana, amt, prod,
-                                   /*constrain_partial_choice=*/true);
-        }
+        FloatSourceTapCommitted(state, active, *d, nullptr);
     }
 }
 
@@ -27444,6 +27461,84 @@ inline void PerformUpkeepReorder(GameState& state)
 
 // ResolveExpressiveIteration -- body in SpellEffects.cpp (see the header note above).
 void ResolveExpressiveIteration(GameState& state);
+
+// KAROO TAP-IN-RESPONSE (MTG_BOUNCE_UNTAPPED_FIRST, KarooTapInResponseOn in EngineFlags.h).
+// "When this land enters, return a land you control to its owner's hand" is a TRIGGERED ability
+// (CR 603.2): it goes on the stack, and before it resolves its controller gets priority and may
+// activate mana abilities (CR 605.3a) -- including the mana ability of the land about to be returned.
+// That mana sits in the pool until the step/phase ends (CR 106.4), so a returned UNTAPPED land loses
+// nothing this phase. The choice of which land is returned is made on RESOLUTION (no target), but
+// since tapping any OTHER land in response changes nothing, "tap the land you will return" is the
+// whole of the manoeuvre.
+//
+// Which returned lands are tapped: a land whose mana ability is FREE and UNRESTRICTED -- the same
+// class the ritual tap-ahead floats. Every land with a side effect or a spend restriction is left
+// alone, so the float is never mana the rules would not give for nothing:
+//   * pain / life on tap (painlands, City of Brass, Ancient Tomb, Horizon Canopy), opponent lifegain
+//     (Grove), energy per coloured tap (Aether Hub), graveyard-exile fuel;
+//   * conversion sources (filters need a FEED), pay-sac sources, storage bursts, domain / scaled
+//     yields (board-dependent amounts);
+//   * spend-restricted mana (creature-only, big-spell-only, colour-for-creatures-only) -- the float
+//     is UNRESTRICTED, so booking restricted mana there would launder it;
+//   * a depletion land (tapping can empty it, and its sacrifice trigger would resolve FIRST and take
+//     the land the bounce was going to return), an animated land that cannot tap this turn, and any
+//     land on a damage-event board (Manabarbs: a land tap is a damage event).
+// Forbidden Orchard IS floatable: its Spirit is already modelled as one per turn in play (the tap is
+// assumed every turn), so this tap adds no second Spirit. A land Aura's extra mana rides the tap
+// (Wild Growth triggers on the tap, CR 605.1b), booked exactly as every real tap books it.
+inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, const CardDefinition& d)
+{
+    if (p.tapped || !p.card.IsLand()) { return false; }
+    if (state.dmg_events_armed)       { return false; }
+    const CardParams& q = d.params;
+    if (IsManaConversionSource(q) || IsPaySacSource(d) || IsScaledManaLand(d)
+        || q.storage_land || q.domain_mana || q.gy_land_exile_mana
+        || q.tap_self_damage > 0 || q.tap_self_damage_any_mode || q.tap_opponent_lifegain > 0
+        || q.energy_per_colored_tap > 0
+        || q.colored_creature_only || q.creature_mana_only
+        || q.mana_only_spell_min_mv > 0 || q.mana_only_spell_or_x
+        || q.enters_tapped_with_depletion > 0)
+    { return false; }
+    for (const Counter& c : p.counters)
+    { if (c.type == Counter::Type::Depletion) { return false; } }
+    if (p.card.IsCreature() && !CanTapNow(p, state.battlefield)) { return false; }
+    return !EffectiveProducesFor(state, p.controller_index, d, &p).empty();
+}
+
+// Tap the land at battlefield index `idx` for mana into the float, if the lever is on and it is
+// floatable. Called by BounceKarooLand on its final pick (heuristic OR the human's) immediately
+// before the land leaves -- the ONE land-drop ETB shared by the executor, the rollout and the
+// enumeration probe, so the two worlds realise the same float by construction. Returns true iff it
+// tapped. The rollout and the enumerator need no separate credit: the float is real GameState, and
+// every later pool in the phase already reads state.floating_mana (AvailableManaPool et al.), exactly
+// as it reads a ritual's.
+inline bool FloatKarooBouncedLand(GameState& state, int controller, int idx)
+{
+    if (!KarooTapInResponseOn()) { return false; }
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return false; }
+    Permanent& p = state.battlefield[idx];
+    if (p.controller_index != controller) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || !KarooBounceFloatable(state, p, *d)) { return false; }
+    p.tapped = true;
+    const ManaPool before = state.floating_mana;
+    FloatSourceTapCommitted(state, controller, *d, &p);
+    if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
+    if (g_play_event_sink)   // nulled by RevealLogPause for search/rollout -> real play only
+    {
+        const ManaPool& a = state.floating_mana;
+        std::string got;
+        auto put = [&](int n, const char* sym) { for (int i = 0; i < n; ++i) { got += sym; } };
+        put(a.white - before.white, "{W}"); put(a.blue - before.blue, "{U}");
+        put(a.black - before.black, "{B}"); put(a.red - before.red, "{R}");
+        put(a.green - before.green, "{G}"); put(a.colorless - before.colorless, "{C}");
+        put(a.wild - before.wild, "{any}");
+        EmitPlayEvent(state.turn_number, "ability",
+                      p.card.m_name.str() + " -- tapped for " + got
+                      + " in response to the bounce (floating until the phase ends)");
+    }
+    return true;
+}
 
 // BounceKarooLand -- body in SpellEffects.cpp (see the header note above).
 void BounceKarooLand(GameState& state, int controller, int self_index);

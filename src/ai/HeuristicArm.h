@@ -322,7 +322,7 @@ enum Slot : int
     SCRY_SEARCH_TRIGGERED,    // MTG_SCRY_SEARCH_TRIGGERED  the searched land-ETB scry axis also reaches a scry the land drop TRIGGERS (Marit Lage's Slumber). USER 2026-10-06: "Scry should be optionally searched". Measurement lever
     SNOW_SCRY_USER,           // MTG_SNOW_SCRY_USER         the USER's Snow scry rule (2026-10-06), firm calls PRUNE the searched scry (SnowProvider::ScryVerdict). Default ON since 2026-10-06 (ADOPTED); =0 restores the generic rule
     SNOW_SCRY_ACCEL_COUNT,    // MTG_SNOW_SCRY_ACCEL_COUNT  USER rule: an accelerant is kept whenever a snow-count payoff is in play (Slumber, a Treefolk) -- it grows the count even when its mana buys nothing -- instead of only with a mana sink. USER 2026-10-06: "let's try both and choose the best option". Default ON since 2026-10-06 (ADOPTED, won the pick)
-    BOUNCE_UNTAPPED_FIRST,    // MTG_BOUNCE_UNTAPPED_FIRST  a Karoo returns a land that RE-ENTERS UNTAPPED ahead of an already-tapped one (tapped becomes the tie-break). USER 2026-10-06: "Generally the Orchard is better to bounce because the monastery will come into play tapped again." Measurement lever
+    BOUNCE_UNTAPPED_FIRST,    // MTG_BOUNCE_UNTAPPED_FIRST  Karoo TAP-IN-RESPONSE + the USER's bounce order, jointly (KarooTapInResponseOn, EngineFlags.h): an untapped side-effect-free land a Karoo returns is first tapped for mana into the float (CR 605.3a / 106.4), and with that loss gone the provider returns a land that RE-ENTERS UNTAPPED ahead of a tapped one that re-enters tapped. USER 2026-10-06: "Generally the Orchard is better to bounce because the monastery will come into play tapped again." / "I recommend modelling tapping the land in response." Measurement lever, default OFF
     COUNT
 };
 

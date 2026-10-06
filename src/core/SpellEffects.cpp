@@ -1853,6 +1853,9 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     //   (2) prefer a land that is already TAPPED (spent this turn) so returning it costs no
     //       mana this turn -- the play-at-end timing (ApplyPlanDirect / AIEngine defer the
     //       Karoo until after the main casts) means the lands we needed are already tapped;
+    //       under MTG_BOUNCE_UNTAPPED_FIRST an untapped land is tapped for mana IN RESPONSE
+    //       (FloatKarooBouncedLand, below), so a floatable untapped land is no-loss as well and
+    //       (3) decides -- the USER's "bounce the Orchard, not the Monastery";
     //   (3) among those, prefer a land that ENTERS UNTAPPED when replayed (a basic / untapped
     //       dual) over one that enters tapped (a tapland / another Karoo), so the forced
     //       replay gives mana immediately rather than wasting next turn's tempo.
@@ -1905,6 +1908,11 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
         if (chosen >= 0 && chosen < static_cast<int>(legal.size())) { pick = legal[chosen]; }
     }
     if (pick < 0 || pick >= static_cast<int>(state.battlefield.size())) { return; }  // defensive
+    // TAP IN RESPONSE (MTG_BOUNCE_UNTAPPED_FIRST, default OFF): before the trigger resolves, an
+    // untapped free-tapping land being returned is tapped for mana into the float (CR 605.3a /
+    // 106.4) -- see KarooBounceFloatable. On the FINAL pick, so the human's choice gets it too. Before
+    // the attachment sweep below, so a land Aura's extra mana rides the tap. Off -> no-op.
+    FloatKarooBouncedLand(state, controller, pick);
     Card c = state.battlefield[pick].card;
     // ATTACHMENTS FALL OFF THE BOUNCED LAND (CR 704.5m / 301.5c) -- the same loop every other
     // "permanent leaves the battlefield" site runs (combat death, the legend-rule sweep, the
