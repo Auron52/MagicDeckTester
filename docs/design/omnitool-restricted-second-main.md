@@ -198,12 +198,127 @@ Both are cheap and neither needs this feature implemented.
    the ceiling on **kitty specifically is unmeasured**, and kitty is the branchiest deck in the
    suite — do not assume Selesnya's 2.15x transfers.
 
-Also needed once built: a **dig-target re-ranking** in `EtbDigCandidates` to prefer Ancient Den when
-the land drop is unused. Without it the dig can take an Equipment over the land in exactly the spot
-where case 2 is the valuable one.
+## THE DIG-TARGET HEURISTIC (user, 2026-10-07)
+
+**Today the Omnitool's dig has NO ranking at all.** The base rule is one line
+(`DecisionProviders.cpp:966`):
+
+```cpp
+std::vector<int> DecisionProvider::EtbDigCandidates(..., const std::vector<int>& legal) const
+{
+    return legal;
+}
+```
+
+`legal` is in **look order, which is library order, i.e. shuffle order** — the base rule's own
+comment says it "cannot rank them ... which is precisely why this decision is handed to the search".
+But this fire site is not a searched axis (disclosed PARTIAL in the Omnitool's `cards.json` note), so
+**the dig currently takes an effectively RANDOM artifact from the top six.** A ranker here is not a
+tie-break refinement; it replaces a coin flip.
+
+### How often the choice is live
+
+Main deck (60 cards) holds **37 artifacts**, of which **20 are {0}-cost Equipment** (4 each Cathar's
+Shield, Accorder's Shield, Bone Saw, Kite Shield, Spidersilk Net), 4 Colossus Hammer, 3 Golem-Skin
+Gauntlets, 4 Ancient Den. Over six cards looked at:
+
+| Top six contains | P |
+|---|---|
+| no artifact at all | 0.2% |
+| ≥1 Colossus Hammer | **35.1%** |
+| ≥1 hard hitter (Hammer or Gauntlets) | **54.1%** |
+| ≥1 Ancient Den | 35.1% |
+
+So a hard hitter is on offer in **over half** of all digs, while **54% of artifacts in the deck are
+{0} shields** — exactly the pool a shuffle-order rule keeps taking instead.
+
+### The rule
+
+Context: the dig fires only when the Omnitool is attached to a **declared attacker**, so the user's
+qualifier *"if omnitool is already equipped"* is **true at every firing** and its 1–2 hard-hitter cap
+is therefore unconditional in practice.
+
+Predicates:
+
+- `free_equip_now` — Puresteel Paladin on the battlefield **and** ≥3 artifacts
+  (`metalcraft_equip_zero_artifacts: 3`), **or** Sigarda's Aid on the battlefield.
+- `free_equip_soon` — either in hand and deployable next turn.
+- `draw_engine` — **Sram, Senior Edificer** (draws on Equipment **cast**) or **Puresteel Paladin**
+  (draws on Equipment **ETB**) on the battlefield.
+- `hard_in_hand` — Colossus Hammer + Golem-Skin Gauntlets (+ Omnitool) already in hand.
+- `land_light` — the user's *"really low on land in hand and on the battlefield"*.
+
+Ranking, best first:
+
+1. **Ancient Den** when `land_light` — and per the user, *widen the searched axis* here instead of
+   hard-picking (see below).
+2. **Colossus Hammer** when `(free_equip_now || free_equip_soon) && hard_in_hand < 2`.
+3. **Golem-Skin Gauntlets** when `hard_in_hand < 2`. Equip is **{2}**, payable without a free
+   equipper, so it is *not* gated on one.
+4. **{0} Equipment** when `draw_engine` — cast for free, draw a card.
+5. Everything else by power delta on the **actual host**.
+6. **The blank class, ranked LAST** (see the correction below).
+
+### Correction: the "free equipment" branch needs a draw engine, or it is the WORST pick
+
+The user's *"otherwise free equipment would be the best to draw more cards"* holds **only while Sram
+or Puresteel is on the battlefield.** With neither out, a {0} Equipment draws nothing and is a +0/+2
+or +0/+3 shield on a creature that is already attacking — a near-blank. It is then the **worst**
+available target, not the best. This matters more than a corner case would, because {0} shields are
+54% of the deck's artifacts, so this is the *majority* branch by volume.
+
+Symmetrically, and as the user already noted, **Colossus Hammer with no free equipper anywhere is
+also a blank** — {1} to cast and {8} to equip means it is never equipped. So the bottom of the
+ranking is two conditional classes: *Hammer without an equipper* and *{0} shields without a draw
+engine*.
+
+With none of Paladin / Sram / Sigarda's Aid available, the genuinely best targets are the
+payable-equip bonuses: Golem-Skin Gauntlets (equip {2}, scales per Equipment on the host),
+Deconstruction Hammer ({1}), Skateboard ({1}, haste), Shadowspear ({2}), Dragonfire Blade ({4}).
+
+### Ancient Den's condition is BROADER than second-main case 2
+
+Case 2 of the second main requires the land drop to be **unused this turn**. The dig's Ancient Den
+condition does not: if we are low on land in hand, the Den is valuable as **next** turn's land drop
+even when this turn's is already spent. Rank it on `land_light`; gate the second main on the unused
+drop. Two different predicates — do not collapse them.
+
+### "Should probably be searched in that case" is SAFE BY CONSTRUCTION
+
+The user's instinct maps onto the existing `EtbDigSearchWidth` / `MTG_ETBDIG_AXIS` machinery: raise
+the searched width when `land_light`, so the Den-vs-Equipment call is branched rather than ranked.
+This **only ever widens** the axis relative to today's effective width of 1, so it cannot make any
+line unfindable — it is monotone in admitted options, which is the invariant the budget rule cares
+about. It also sidesteps the disclosed greedy in this fire site rather than deepening it.
+
+### IMPLEMENTATION TRAP: do not reuse the flat-power scorer
+
+`DecisionProvider::AttackDigPutCandidates` (Armored Skyhunter's put pick,
+`DecisionProviders.cpp:978`) ranks candidates on **flat `equip_power_bonus` only**. That scorer is
+**blind to scalers**: Golem-Skin Gauntlets (`equip_scale_power_per_equipment: 1`, flat 0) and the
+Adaptive Omnitool (`equip_scale_power_per_artifact: 1`, flat 0) both score **0 — tied with the blank
+{0} shields and ranked below them only by index.** This is the same scaler-blindness that the
+Omnitool build had to carve out of four other sites (`PaidPowerlessEquipWithheld`, the equip-route
+`PayloadScore`, its `ChainTerms` waste term, and `EquipAttachDeltaFor`); `AttackDigPutCandidates` is
+a **fifth site with the same defect and it was not carved out**.
+
+**Scope: LATENT, not live on the shipped 60.** Armored Skyhunter is **sideboard**, so nothing in the
+shipped list reaches that scorer. It is live for any arm that plays the Skyhunter, and it is a
+standing trap for the next scaler.
+
+So score the dig with **`EquipAttachDeltaFor` against the real host**, which was already fixed for
+scalers during the Omnitool build — reusing the fix rather than repeating the bug. (Note its
+documented conservatism: for a card still in hand it under-counts the artifact term by one, in the
+safe direction and never down to 0.)
 
 ## Open
 
 - **The user's ruling on whether to build this at all.** Until then the Omnitool ships with no second
   main, and every Omnitool screening arm is a **lower bound** on the card.
 - Parked behind round 5 (user, 2026-10-07: *"For now we'll wait on Round 5."*).
+- **The dig ranker is independently adoptable and probably worth more than the second main.** It
+  needs no second main, no new param and no gate — it replaces a shuffle-order pick in a decision
+  that is live on >50% of digs. Worth measuring as its own screening arm, ahead of the second main.
+- **`AttackDigPutCandidates`'s scaler blindness** (latent, sideboard-only, described above). Fixing
+  it is a ranking-quality change, not a rules fix, so it wants a measurement on an arm that actually
+  plays Armored Skyhunter.
