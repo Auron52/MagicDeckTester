@@ -35115,7 +35115,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     int opp_idx = 1 - state.active_player_index;
     // BREAKPOINT SITE 9 input: the permanents this plan STARTS from (empty when the class is off).
     // Lockstep twin: AIEngine::TakeTurn captures the same set at its entry.
-    const std::vector<uint64_t> pre_plan_keys = TurnSolver::SnapshotActivatableAbilities(state);
+    //
+    // Taken only when one of its FOUR readers (the PostEntryActivationPending calls at site 9,
+    // further down this function) can fire for this apply -- a superset of their guards, each of
+    // which is a plan field, a parameter, a static flag or a nesting counter that no code in this
+    // frame changes. Every reader is AND-ed with its own guard, so when the superset is false no
+    // reader runs and the vector is never looked at: skipping the snapshot is dead-code
+    // elimination. The common case it removes is a BASE plan applied inside a rollout (no capture,
+    // no choice, g_rollout_nest > 0), which is most applies -- 2.7% of a SelesnyaLifegain keep-gen
+    // rollout's instructions went to snapshots nobody read (docs/design/selesnya-keepgen-bulk-cost.md).
+    // The readers' human-play guard is deliberately NOT part of the superset (it is not needed for
+    // soundness, and HumanPlayActive is not obviously frame-constant).
+    const bool site9_keys_read = plan.bp_choice >= 0 || bp_capture != nullptr
+                              || w0collapse::NobpSite9Watch()
+                              || (!plan.bp_all && g_bp_enum_depth == 0 && g_rollout_nest == 0);
+    const std::vector<uint64_t> pre_plan_keys = site9_keys_read
+        ? TurnSolver::SnapshotActivatableAbilities(state) : std::vector<uint64_t>{};
 
     // MTG_BP_CANON_AUDIT ONLY -- ASK THE FAN-OUT'S QUESTION AT THE FAN-OUT'S STATE.
     //
