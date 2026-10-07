@@ -316,36 +316,182 @@ safe direction and never down to 0.)
 User, 2026-10-07: *"if we have no draw we might look for a mix of castability + equippability and
 damage. Gauntlets would still be great to keep there."*
 
-That unifies the whole ranking. Score each candidate as **realisable power delta per mana actually
-available**:
+That unifies the ranking, but the obvious scorer is **missing a term**, and the omission is
+load-bearing enough that it inverts a conclusion recorded earlier in this document.
+
+### `EquipAttachDeltaFor` alone is NOT enough: it deliberately omits the cast
+
+The helper (`SpellEffects.h:2996`) prices an **attach**. Reading it:
+
+```cpp
+++k;  s_pw += d->params.equip_scale_power_per_equipment;        // per Equipment already on host
+...
+int pw = incoming.equip_power_bonus + s_pw
+       + incoming.equip_scale_power_per_equipment * (k + 1);
+```
+
+So it **does** credit an incoming Equipment for raising an existing Golem-Skin Gauntlets on the same
+host (the `s_pw` term) — that is the deck's engine and it is modelled. But the Adaptive Omnitool's
+per-artifact term fires **only when the INCOMING card carries the scaler**, and the comment says why:
+
+> "an artifact scaler ALREADY on this host gains nothing from an **attach**, because attaching does
+> not change how many artifacts you control"
+
+That is correct *for an attach*, and it means the helper cannot see the thing that actually matters
+here: **casting any artifact raises `CountControlledArtifacts`, so the Omnitool's host gains +1/+1 —
+without equipping anything.** The benefit is on the cast side, which `EquipAttachDeltaFor` does not
+model. A scorer built on that helper alone misses the Omnitool synergy entirely.
+
+Corrected scorer:
 
 ```
-score(card) = EquipAttachDeltaFor(real_host, card)        // scaler-correct; damage
-            / max(1, cast_cost + effective_equip_cost)    // castability + equippability
+score(card) = EquipAttachDeltaFor(real_host, card)          // attach: own bonus + Gauntlets gain
+            + cast_side_artifact_term(card)                 // MISSING TERM: +1/+1 per artifact-
+                                                            // scaler host, if the card is an artifact
+            + draw_term                                     // +1 card if Sram/Puresteel out
 ```
 
-where `effective_equip_cost` is **0** under Puresteel metalcraft or Sigarda's Aid-on-ETB, and the
-printed cost otherwise. Add the draw term (`+1 card` when Sram or Puresteel is out and the cast cost
-is {0}) and the hard-hitter cap (`hard_in_hand < 2`) on top.
+ranked on **absolute realisable delta given mana we would otherwise not spend**, *not* on delta per
+mana — see the Bone Saw arithmetic below for why the rate form picks wrong.
 
-**This reproduces the user's entire rule without special-casing**, which is the argument for building
-it as a scorer rather than a cascade:
+### CORRECTION: in the Omnitool arm, NOTHING the dig returns is a blank
 
-| card | cast | equip | delta | scores |
-|---|---|---|---|---|
-| Colossus Hammer, free equipper | {1} | **0** | +10/+10 | **tops everything** |
-| Colossus Hammer, no equipper | {1} | {8} | never realised | **~0, bottom** |
-| **Golem-Skin Gauntlets** | {1} | {2} | scales per Equipment on host (**≥1 at the dig**) | **strong unconditionally** |
-| {0} shield, draw engine out | {0} | {2}–{3} | +0/+2 … +0/+3, **+1 card** | good |
-| {0} shield, no draw engine | {0} | {2}–{3} | +0/+2 … +0/+3 | weak |
-| Deconstruction Hammer | {W} | {1} | +1/+1 | mid |
-| Skateboard | {1} | {1} | +1/+1, haste | mid |
+Two claims made earlier in this document are **wrong in the only arm where this dig exists**, and the
+cast-side term is why:
 
-The user's read on the Gauntlets is exactly right and worth stating as the reason: it is the only
-hard hitter whose value depends on **nothing external** — cast {1}, equip {2}, and its scaler reads
-Equipment already attached to the host, which at the dig is **at least the Omnitool itself**. So it
-is the best pick in the no-enabler branch *and* a top-2 pick in the enabler branch. That makes it the
-ranking's safe default and the right tie-break target.
+- *"a {0} Equipment draws nothing and is a near-blank ... the WORST target"* — **no.** Casting it for
+  {0} is **+1/+1 on the attacking creature, free**, draw engine or not.
+- *"Colossus Hammer with no equipper is also a blank"* — **too strong.** Cast {1} is still +1/+1. A
+  poor rate, not zero. It belongs at the bottom for being a *bad rate*, not for being worthless.
+
+Ancient Den is an artifact land, so even playing it is +1/+1 on top of being a land.
+
+**So the ranking is not a good/blank classification at all — it is purely a rate-and-magnitude
+ordering.** The Omnitool's own scaler puts a floor under every artifact in the deck. The user's
+"mix of castability + equippability and damage" framing was the right shape and the classification
+was the error.
+
+### Bone Saw is the best of the {0} class and should not be lumped with it
+
+User, 2026-10-07: *"Bone Saw is not amazing, but not terrible either even with no draw or
+free-equip. It only costs 1 to equip, so it can help with Gauntlets and Omnitool."*
+
+Exactly right, and it is the case that exposed the missing term. Bone Saw is `{0}` cast,
+`equip_cost_generic: 1`, `equip_power_bonus: 1` — **power, not toughness**, and the cheapest equip in
+the deck. With the Omnitool on the attacker (always true at the dig), `g` = Gauntlets on that host:
+
+| dug card | cast | equip | attach Δ | cast-side Δ | total for the mana |
+|---|---|---|---|---|---|
+| **Bone Saw**, g=0 | {0} | {1} | +1/+0 | +1/+1 | **+2/+1 for 1 mana** |
+| **Bone Saw**, g=1 | {0} | {1} | +2/+0 | +1/+1 | **+3/+1 for 1 mana** |
+| Spidersilk Net, g=1 | {0} | {2} | +1/+2 | +1/+1 | +2/+3 for 2 mana |
+| Gauntlets (first), k=1 | {1} | {2} | +2/+0 | +1/+1 | +3/+1 for 3 mana |
+| Gauntlets (2nd), k=2, g=1 | {1} | {2} | +4/+0 | +1/+1 | +5/+1 for 3 mana |
+| Colossus Hammer, no equipper | {1} | — | unreachable | +1/+1 | +1/+1 for 1 mana |
+
+Note the toughness shields are not dead weight either once a Gauntlets is on the host — each attach
+feeds `s_pw` for +1 power apiece. That is the deck's engine, and it is why 20 {0} Equipment is a
+sensible count rather than filler.
+
+### With a draw engine, Bone Saw wins the {0} class — and the draw term must NOT be the tie-break
+
+User: *"And with draw out, Bone Saw is quite strong, beating the other 0-mana equipment."* Correct,
+and the mechanism is worth stating because it constrains the implementation.
+
+Both draw engines trigger on **any** Equipment — Sram on the **cast**, Puresteel on the **ETB** — so
+every {0} Equipment earns exactly the same `+1 card`. **The draw term is a constant across the whole
+{0} class.** It raises the class as a block; it cannot order it. Bone Saw therefore wins the class on
+its own merits, which are the two that survive in a goldfish:
+
+- **power, not toughness** (+1/+0 vs +0/+2 … +0/+3) — toughness is near-inert against a passive
+  opponent, and
+- **equip {1}** against the shields' {2}–{3}.
+
+Fully counted, Bone Saw with a draw engine and one Gauntlets on the host is **+3/+1 and a card for 1
+mana** (cast {0}: +1 card, +1/+1 from the Omnitool's artifact count; equip {1}: +1 own, +1 Gauntlets).
+With both Sram and Puresteel out it is two cards.
+
+**The implementation constraint:** a naive scorer that simply adds `+draw` to every {0} candidate
+leaves the entire class **tied** — at which point the tie-break falls back to candidate order, which
+is library order, which is **the original shuffle-order bug**. The within-class ordering must come
+from the power/equip-cost terms, and the final tie-break must be deterministic and meaningful (lowest
+effective equip cost, then lowest card number), never positional.
+
+### …but EFFECTIVELY EQUIPPABLE hard hitters still outrank it, and the reason is SCARCITY, not rate
+
+User: *"So it's a pretty good option. But beaten out by hard hitters in that situation. (hard hitters
+that we can effectively equip)"* — and that parenthetical is the load-bearing part, because it closes
+the loop with the free-equipper rule above. **"Hard hitter" is not a card list, it is a card plus a
+board state.** In the no-enabler branch a Colossus Hammer is *not* a hard hitter at all (it is
++1/+1 for {1}, the cast-side term only), so it does **not** beat Bone Saw there. The ordering is
+therefore state-dependent in both directions:
+
+| board | ordering |
+|---|---|
+| free equipper (Puresteel metalcraft, or Sigarda's Aid) | **Hammer** > Gauntlets > Bone Saw > toughness shields |
+| no free equipper | **Gauntlets** > Bone Saw > toughness shields > **Hammer** |
+
+The Gauntlets sit above Bone Saw in *both* rows because equip {2} is always payable — they are the
+only hard hitter that is unconditionally "effectively equippable". Agreed on the ranking itself —
+and worth being careful about *why*, because the rate form of the scorer gets this backwards: Bone
+Saw is 2–3 power per mana against the Gauntlets' ~1–1.7, so **ranking on delta-per-mana would
+promote Bone Saw over the Gauntlets.** Three reasons it should not:
+
+1. **The dig takes ONE card, and mana is usually not the binding constraint.** With 16 lands against
+   a curve of {0}s and {1}s, spare mana is common; cards are scarcer. So the right metric is the best
+   **absolute** improvement this one card can buy, not its efficiency.
+2. **The Gauntlets compound and Bone Saw does not.** Gauntlets' bonus rises with *every* future
+   Equipment attached to that host, in a deck holding 20 more of them. Bone Saw is a static +1.
+3. **Bone Saw's class is the one we will draw anyway.** 20 of the deck's 37 artifacts are {0}
+   Equipment; Golem-Skin Gauntlets is a **3-of** and Colossus Hammer a **4-of**. Digging for the
+   abundant class wastes the dig's selectivity. This is the same instinct as the user's original
+   `hard_in_hand < 2` cap, pointed the other way.
+
+Reason 3 is the sharpest and generalises past this card: **the dig should prefer the scarce class**,
+because its whole value is selection. A scorer that is purely board-state-driven will miss that, so
+the ranker wants a scarcity (copies-remaining) weight alongside the delta.
+
+### Net placement: Bone Saw DOMINATES the {0} class — which makes it a prune, not a preference
+
+User: *"So it always beats the other 0-mana cards. It only loses to heavy hitters. Pretty much,
+anyway."* That is a stronger claim than a ranking preference, and on the shipped 60 it holds as
+**sound dominance**. Checking every axis a {0} Equipment can differ on:
+
+| axis | Bone Saw vs the other {0} Equipment |
+|---|---|
+| cast cost | **equal** ({0}) |
+| cast-side Omnitool / metalcraft artifact count | **equal** (+1 artifact) |
+| draw trigger (Sram on cast, Puresteel on ETB) | **equal** (+1 card; fires on any Equipment) |
+| Gauntlets `s_pw` when attached | **equal** (+1 power per Gauntlets) |
+| Kor Duelist / Balan equipment-count thresholds | **equal** (any Equipment counts) |
+| own bonus | **BETTER** — +1/+0 **power**; the others are +0/+2 … +0/+3 toughness |
+| equip cost | **BETTER** — {1} vs {2}–{3} |
+| vigilance (Cathar's / Accorder's Shield) | **inert** — nothing blocks or attacks back |
+| toughness | **inert** — nothing on the shipped 60 deals damage to our creatures or gates on toughness |
+
+Equal on every shared axis, strictly better on the two that are live. So this is **dominance, not a
+heuristic**, and per CLAUDE.md's collapse rule that difference is exactly what licenses a free
+collapse: whenever a Bone Saw is among the legal candidates, the other {0} Equipment can be **pruned
+from the candidate list entirely** rather than merely ranked below it. That removes 3–4 candidates
+from a typical dig, which also shrinks the searched axis if one is ever enabled here.
+
+Bone Saw is also the best **case 1** target for the second main, for the same reason: {0} cast plus
+equip {1} is deployable post-combat on one mana, where the {2}–{3} shields frequently are not.
+
+**The "pretty much" is the two inertness rows, and they are the same caveat as case 1's identity
+fold:** toughness and vigilance are inert *because the opponent is passive*. Under a real opponent
+(phase 2) both become live and the dominance degrades to a preference. Gate it on the goldfish
+assumption and say so at the call site — do not let a later opponent model silently inherit a prune
+that was only ever valid against a goldfish.
+
+Against everything else, Bone Saw is a **floor, not a ceiling**: it loses only to an effectively
+equippable hard hitter, per the two-row table above.
+
+The user's read on the Gauntlets also stands, and is worth stating as the reason: it is the only hard
+hitter whose value depends on **nothing external** — cast {1}, equip {2} is always payable, and its
+scaler reads Equipment already attached to the host, which at the dig is **at least the Omnitool
+itself**. Best pick in the no-enabler branch, top-2 in the enabler branch, so it is the ranking's
+safe default and the right tie-break target.
 
 ## ROOT CAUSE: why the default was shuffle order, and why it survived
 
