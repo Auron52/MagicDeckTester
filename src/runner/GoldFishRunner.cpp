@@ -1231,6 +1231,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Brightcap Badger's unconditional end-step trigger -- gates the hoisted lifegain
         // early-out in PerformEndStepLifegainTokens (see GameState::deck_has_unconditional_endstep_tokens).
         bool uncond_endstep = false;
+        // The land-Aura walkers (see GameState::deck_has_land_aura): the same `is_land_aura` test.
+        bool land_aura = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1256,6 +1258,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.doubles_counters) { counter_doubler = true; }
                 if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
                 if (d->params.soulbond)                    { soulbond = true; }
+                if (d->params.is_land_aura)                { land_aura = true; }
                 if (d->params.endstep_tokens_unconditional && d->params.endstep_lifegain_tokens > 0)
                 { uncond_endstep = true; }
             }
@@ -1275,6 +1278,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // levers below exist because their families were measured as a group; this one is a single
         // provable fold and an extra MTG_* flag would only move the binary's flag registry.
         state.deck_has_soulbond          = garth || soulbond;
+        // Same reasoning, and likewise no lever: a clear bit PROVES every land-Aura walk returns
+        // nothing (each one tests is_land_aura on what it finds), so this is dead-code elimination.
+        state.deck_has_land_aura         = garth || land_aura;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

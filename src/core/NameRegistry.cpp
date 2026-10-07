@@ -16,12 +16,6 @@ namespace
     std::unordered_set<std::string> g_names;
 }
 
-const std::string& InternedName::EmptyStr()
-{
-    static const std::string empty;
-    return empty;
-}
-
 const std::string* InternedName::Intern(const std::string& s)
 {
     if (s.empty()) { return &EmptyStr(); }

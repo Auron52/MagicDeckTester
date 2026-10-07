@@ -365,6 +365,9 @@ static_assert(sizeof(Player) == 200,
 // human-play deferred Arcanum Wings swap (TurnSolver::DeferHumanAuraSwapToCombat). Same class and
 // lifetime as scripted_combat_aura_swap -- FUTURE-DETERMINING, folded value-gated in Build(); -1 in
 // every autonomous game, so every key is unchanged there.
+// +bool (2026-10-06, SelesnyaLifegain keep-gen bulk cost; no size change -- existing padding):
+// `deck_has_land_aura`. Classification: DECK CONSTANT, stamped once in StampDeckTraits and never
+// written again; it only skips land-Aura walks that provably find nothing -- nothing to fold.
 static_assert(sizeof(GameState) == 1072,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
