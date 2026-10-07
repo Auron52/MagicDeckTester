@@ -589,17 +589,95 @@ desync `engine-heuristics-to-providers.md` warns about for `LandEntersUntapped`:
 > "enumeration prices a plan's mana off that same function. If the two disagreed, the planned mana
 > and the realised mana would diverge."
 
-So the recommendation sharpens. **Enable the searched dig axis for this fire site** — the same fix
-that was worth −0.0599 on 7/7 seeds at the ETB-dig site — and let the search price the lines. The
-provider heuristic's job then shrinks to something it can actually do soundly: **order the candidates
-so the axis's width-3 cut lands on the right three.** Everything in this section — the dominance
-prune, the scarcity weight, the hard-hitter cap, the free-equipper check — is *ordering*, which is
-precisely what CLAUDE.md permits a provider to do, and none of it then needs to agree with the mana
-enumerator.
-
-That also resolves the open question in this document's earlier sections more cleanly than a hand
-ranker would: the user's own instinct for Ancient Den (*"should probably be searched in that case"*)
+So the recommendation sharpens: **the search prices the lines, not a hand-written evaluator in the
+provider.** The user's own instinct for Ancient Den (*"should probably be searched in that case"*)
 turns out to be the right answer for the **whole** decision, not just the land case.
+
+### USER RULING on the shape: searched BY DEFAULT, PRUNED by heuristics — not width-cut
+
+User, 2026-10-07: *"I don't think we should fully search this or rather it should be searched by
+default, but we should prune it with heuristics."*
+
+This supersedes an earlier draft of this section, which proposed that the provider merely **order**
+candidates and let the axis's **width-3 positional cut** take the top three. The user's shape is
+better on both halves, and the difference is not cosmetic:
+
+| | positional width cut (rejected) | heuristic prune (adopted) |
+|---|---|---|
+| what decides | **rank position** — "why 3?" is arbitrary | **a reason per candidate** (dominated / unplayable / abundant) |
+| failure mode | a mis-ordering silently drops a good candidate at rank 4 | a candidate is dropped only by a stated rule, which is reviewable and measurable |
+| what the search sees | an arbitrary prefix | everything that survived for a reason |
+| default | axis opt-in per site | **axis ON by default at this site** |
+
+So: **prune for reasons, then search everything that survives**, with the axis on by default. This is
+exactly the "searched-with-heuristics" shape CLAUDE.md insists on: the provider may *restrict or
+order*, and the search branches over what is admitted.
+
+**The rationale, and it is the collapse rule's own:** *"Because too many cases are obviously
+unnecessary."* Branching over a candidate the deck would never take is wasted search, and
+CLAUDE.md's collapse rule says to remove wasted search unconditionally — judged on work removed and
+soundness, never on whether wall-clock fell.
+
+**The sizing target, from the user:** *"If we need to search 2 options occasionally this is fine. But
+I wouldn't fully search it."* So the goal is **1 candidate usually, 2 occasionally, never the full
+legal set.** That is much tighter than "cover whatever survives" and it gives the prune a concrete
+bar to hit: the heuristic must confidently discard the obvious, leaving the search only for the
+genuinely ambiguous.
+
+**When is 2 justified? Keep the Pareto front.** Drop everything dominated (tier 1 below), then among
+the survivors admit more than one only when they are genuinely *incomparable* on the deck's live
+axes. In practice that is a short list of real pairs:
+
+| the ambiguous pair | why neither dominates |
+|---|---|
+| Colossus Hammer vs Gauntlets, free equipper out | +10/+10 now against a bonus that compounds with every future attach |
+| Ancient Den vs a hard hitter, land-light | a land drop against damage — different resources (the user's case 2) |
+| Gauntlets vs Bone Saw, mana tight | 3 mana for +3/+1 against 1 mana for +2/+1 |
+
+Everything else resolves to one candidate: which {0} shield (dominance), a Hammer with no equipper
+(dominance), a third hard hitter (the cap).
+
+**This also defuses the original deferral rationale.** The Omnitool's `cards.json` note deferred the
+searched axis because *"a searched axis here would multiply combat branching by the number of legal
+artifacts (typically 2-5)"*. That figure assumed the **full** legal set on **every** dig. Pruned to
+1–2 and only occasionally 2, the multiplier is ~1.0 most turns and ~2.0 on the ambiguous ones —
+which is a different cost class from the 2–5x-always the deferral was priced against. The note's
+deferral should be revisited on those terms rather than carried forward.
+
+### Tier the prunes by soundness — they are not all the same kind
+
+The collapse rule's own distinction applies (sound dominance / identity fold → collapse freely,
+default ON; projection / heuristic narrowing → earn it, default OFF until measured). The prunes
+specced in this document split cleanly:
+
+**Tier 1 — sound dominance. Unconditional, default ON, nothing to measure.**
+
+- **Bone Saw dominates the other {0} Equipment** (the axis table above): equal on every shared axis,
+  strictly better on power and equip cost.
+- **Bone Saw also dominates a Colossus Hammer with no free equipper.** Both reduce to their cast-side
+  +1/+1, but the Hammer costs {1} to Bone Saw's {0} *and* its equip is unreachable, while Bone Saw's
+  {1} equip adds more. So that Hammer is strictly worse — which means the free-equipper check is not
+  merely a ranking preference, it feeds a *sound* prune.
+- Both carry the **goldfish condition** (toughness and vigilance inert against a passive opponent) and
+  must be disclosed at the call site so a later opponent model cannot inherit them silently.
+
+**Tier 2 — heuristic narrowing. Default OFF until measured.**
+
+- **The scarcity weight** (prefer the class with fewer copies left). Genuinely lossy: "we will draw
+  one anyway" is not "this one is worse".
+- **The `hard_in_hand < 2` cap.** A third hard hitter is worth *less*, not nothing.
+
+Keeping these two tiers apart is what stops a measured, reviewable narrowing from being smuggled in
+behind a free one.
+
+### What "axis on by default here" actually costs to build
+
+Worth stating plainly because it is not a flag flip. The existing axis is driven by a **pin carried
+in a main-phase plan** (`TurnSolver.h:995`), and this dig fires **in combat**, deliberately wrapped in
+`ScriptedEtbDig no_inherited_pin(-1)` so it cannot consume a main-phase plan's pin. Enabling it here
+therefore needs a **combat-phase dig pin**: a field on the plan that declares attackers, branched
+over the pruned candidate set, threaded into `FireAttackEquipDigHand`. Bounded, but real work —
+and `AttackDigPutCandidates` (Armored Skyhunter) would want the same treatment.
 
 The user's read on the Gauntlets also stands, and is worth stating as the reason: it is the only hard
 hitter whose value depends on **nothing external** — cast {1}, equip {2} is always payable, and its
