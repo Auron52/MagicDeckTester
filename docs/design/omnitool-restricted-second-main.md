@@ -487,6 +487,36 @@ that was only ever valid against a goldfish.
 Against everything else, Bone Saw is a **floor, not a ceiling**: it loses only to an effectively
 equippable hard hitter, per the two-row table above.
 
+### USER RULING: take Bone Saw UNCONDITIONALLY, accepting one named corner
+
+User, 2026-10-07: *"I suppose in a situation where we had only that equipment in hand and nothing
+else to cast a +2/+2 equipment would be very very marginally better, but I think we can take the bone
+saw there. (unconditionally)"*
+
+**This is the user's decision, recorded with its exact cost so it stays revisitable.** The corner is
+**Dragonfire Blade** — the deck's only +2/+2, a 1-of, `{1}` cast with `equip_cost_generic: 4` and
+`equip_cost_less_per_target_color: 1` (so {3} against a mono-white host). Note it is **not** in the
+{0} class, so the dominance above is untouched; this is about the broader "only loses to hard
+hitters" claim.
+
+What the corner costs, fully counted:
+
+| | cast | equip | attach Δ | cast-side Δ | mana |
+|---|---|---|---|---|---|
+| Bone Saw | {0} | {1} | +1/+0 | +1/+1 | **1** |
+| Dragonfire Blade | {1} | {3} | +2/+2 | +1/+1 | **4** |
+
+Both gain the same +1/+1 from the Omnitool's artifact count, and the toughness is inert, so the true
+difference is **one point of power on one attack** — bought for 3 extra mana. The Blade wins only
+when that mana is genuinely free, which requires *all* of: 4+ untapped mana, nothing else in hand to
+cast **or equip**, and the dig's choice actually being between those two cards.
+
+That premise is close to self-defeating in this deck: with 20 {0} Equipment in 60 cards, a hand with
+nothing else castable is rare, and the dig has just added a card to it. So the ruling buys an
+unconditional rule and gives up **≤1 power, on one attack, in a rare state** — and avoids a
+conditional branch that would otherwise need its own measurement to justify. Reasonable, and it is
+the user's call either way.
+
 The user's read on the Gauntlets also stands, and is worth stating as the reason: it is the only hard
 hitter whose value depends on **nothing external** — cast {1}, equip {2} is always payable, and its
 scaler reads Equipment already attached to the host, which at the dig is **at least the Omnitool
