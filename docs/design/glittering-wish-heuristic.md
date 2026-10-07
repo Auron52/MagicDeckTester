@@ -151,7 +151,10 @@ proof against a full-width control:
   * Colossification and Arcanum Wings, each only when we don't already have one.
   * Wild Growth, only when we need mana or acceleration (share the Troyan acceleration test).
   * Lightning Greaves, with its condition derived from the games (e.g. no Greaves already, and an
-    attacker needs haste).
+    attacker needs haste). USER: "The greaves condition we need to be a bit careful with, because it can
+    be a setup turn for Bruna to land." So the haste need is FORWARD-looking: Greaves fetched now so
+    that Bruna (or another creature) cast next turn attacks at once and gathers. The condition must not
+    require a creature that is already on the battlefield.
 * Eldrazi Conscription is OUT. Mythic Proportions and Prodigious Growth are not on the user's list
   either, so they are out too. Measure what each exclusion costs and REPORT it; the user decides.
 * Then narrow further heuristically. The user: "you rarely have need of all of them".
