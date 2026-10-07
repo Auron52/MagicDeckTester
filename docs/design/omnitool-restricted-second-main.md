@@ -517,6 +517,90 @@ unconditional rule and gives up **≤1 power, on one attack, in a rare state** �
 conditional branch that would otherwise need its own measurement to justify. Reasonable, and it is
 the user's call either way.
 
+## Skateboard: the card that proves the scorer must price LINES, not cards
+
+User, 2026-10-07, across four messages: *"we should price Skateboard slightly differently if we have
+a creature to haste the next turn"* / *"the cost of the creature should be included in that line"* /
+*"(and it cannot be a duplicate Sram)"* / *"Essentially it can do either option. Play the creature
+with haste if we have nothing else to do or just equip to our existing attacker."*
+
+Skateboard is `{1}` cast, `equip_cost_generic: 1`, `equip_power_bonus: 1`, `equip_grants_haste: true`.
+
+### It is never dead, because it has two lines
+
+```
+score(Skateboard) = cast_side_omnitool            // +1/+1, always (it is an artifact)
+                  + max( equip_existing_attacker, // FLOOR: +1/+0 own, +1 per Gauntlets on that host
+                         haste_a_new_body )        // UPSIDE: gated, and much more expensive
+```
+
+The floor is always available and cheap ({1} cast + {1} equip), which is why the haste term is
+*upside* rather than the card's reason for existing. **The scorer therefore needs a `max()` over
+realisable lines, not one value per card.**
+
+### The haste line, priced in full
+
+Per the user, the creature's own cost belongs **inside** the line:
+
+| | mana |
+|---|---|
+| cast the creature | {1}{W} or {W}{W} = **2** |
+| cast Skateboard | **1** |
+| equip | **1** (0 under Puresteel metalcraft) |
+| **total** | **4** (3 under metalcraft) |
+
+Benefit: a **3/2** (2/2 body + Skateboard's +1/+0) attacking **one turn earlier**.
+
+Two things that narrow it further:
+
+1. **Haste is worth nothing to a creature already on the battlefield** — it sheds summoning sickness
+   at our next untap for free. So the gate is strictly *"a creature we will **cast** next turn"*, not
+   "a creature we have".
+2. **The 3 damage only pays if it crosses the lethal line.** Otherwise the line's entire value is
+   zero, because the deck's clock is set by its one big equipped attacker, not by a 3/2. And at 4
+   mana on a 16-land deck, the line competes directly with equipping that main attacker.
+
+### "It cannot be a duplicate Sram" — verified, and it is uniquely a Sram problem
+
+The gate is *a **new** attacking body*, which a duplicate legend does not provide: casting the second
+copy triggers the legend rule, one goes to the graveyard, and the board ends with the same single
+body. Checked against the deck:
+
+| creature | copies | legendary? | duplicate adds a body? |
+|---|---|---|---|
+| **Sram, Senior Edificer** | **4** | **yes** (`supertypes: ['Legendary']`) | **NO — the live case** |
+| Puresteel Paladin | 4 | no | yes |
+| Cid, Freeflier Pilot | 1 | yes | n/a (1-of) |
+| Dwalin, Weaponmaster | 1 | yes | n/a (1-of) |
+
+So the user's instinct is exactly scoped: of the deck's 10 creatures, **Sram is the only legend with
+multiple copies**, so "duplicate legend in hand" is a Sram-and-only-Sram condition. (`LegendKeepIndex`
+keeps the oldest, which is the right choice here — the older copy is not summoning sick — though the
+status table notes that pick is unbranched.)
+
+### The architectural consequence: hand the lines to the SEARCH, not to the provider
+
+Taken together, the scorer this conversation has converged on is: *enumerate the lines a candidate
+enables, price each one against actually-available mana including every card in the line, take the
+max.* **That is a search.** Re-implementing it inside `EtbDigCandidates` would mean building a
+mana-aware line evaluator in a provider hook — duplicating the enumerator and risking exactly the
+desync `engine-heuristics-to-providers.md` warns about for `LandEntersUntapped`:
+
+> "enumeration prices a plan's mana off that same function. If the two disagreed, the planned mana
+> and the realised mana would diverge."
+
+So the recommendation sharpens. **Enable the searched dig axis for this fire site** — the same fix
+that was worth −0.0599 on 7/7 seeds at the ETB-dig site — and let the search price the lines. The
+provider heuristic's job then shrinks to something it can actually do soundly: **order the candidates
+so the axis's width-3 cut lands on the right three.** Everything in this section — the dominance
+prune, the scarcity weight, the hard-hitter cap, the free-equipper check — is *ordering*, which is
+precisely what CLAUDE.md permits a provider to do, and none of it then needs to agree with the mana
+enumerator.
+
+That also resolves the open question in this document's earlier sections more cleanly than a hand
+ranker would: the user's own instinct for Ancient Den (*"should probably be searched in that case"*)
+turns out to be the right answer for the **whole** decision, not just the land case.
+
 The user's read on the Gauntlets also stands, and is worth stating as the reason: it is the only hard
 hitter whose value depends on **nothing external** — cast {1}, equip {2} is always payable, and its
 scaler reads Equipment already attached to the host, which at the dig is **at least the Omnitool
