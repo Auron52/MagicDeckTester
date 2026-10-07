@@ -2010,6 +2010,33 @@ static bool HoldForCombatAuraSwap(const GameState& s, const Permanent& p)
         GameState t = cs;
         if (TapForCostDirect(t, cost, /*for_creature=*/false))
         {
+            // WORTH IT? Holding these creatures home costs their combat damage; the swap adds the
+            // incoming Aura's power to the attacking host. Hold only when the host's gain exceeds the
+            // held creatures' power -- a Birds wearing Colossification is not "a 0-power mana source"
+            // (Bruna d0 s4004 gi360: the hold kept a 40-power Birds home to pay a swap onto a 1/1).
+            int held_power = 0;
+            for (const auto& e : dorks) { held_power += std::max(0, e.first); if (&e == &d) { break; } }
+            int gain = 0;
+            {
+                GameState g = s;
+                int pick = -1;
+                const std::vector<Card>& hand = g.players[static_cast<std::size_t>(me)].hand;
+                if (s.scripted_combat_aura_swap_in >= 0)
+                {
+                    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+                    { if (hand[static_cast<std::size_t>(i)].m_number == s.scripted_combat_aura_swap_in) { pick = i; break; } }
+                }
+                if (pick < 0) { pick = AuraSwapPick(g, me, wnum, /*host_attacking=*/true); }
+                const Permanent* hb = nullptr;
+                for (const Permanent& q : s.battlefield) { if (q.card.m_number == host) { hb = &q; break; } }
+                const int before = hb ? std::max(0, CombatPowerOf(*hb, s)) : 0;
+                if (pick >= 0 && ApplyAuraSwap(g, me, wnum, pick, /*respond_window=*/false))
+                {
+                    for (const Permanent& q : g.battlefield)
+                    { if (q.card.m_number == host) { gain = std::max(0, CombatPowerOf(q, g)) - before; break; } }
+                }
+            }
+            if (held_power >= gain) { return false; }
             // Payable once this many are home: hold p iff it is among them.
             for (const auto& e : dorks)
             {
