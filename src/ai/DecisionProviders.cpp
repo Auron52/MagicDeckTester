@@ -23097,9 +23097,43 @@ inline int NodeUnits()
     // ladder (b20 d5 / b200 d8): 1 -> 0/14 T3 T3; 4 -> 0/14 T3 T3; 8 -> 0/14 T3 T3; 16 -> 1/14
     // (s5_gi4 T4 at b20) T3. 8 is the largest price that keeps the references, so a b20 decision is
     // at most ~2,250 links (~7 s) and a b3 decision ~340 (~1 s) instead of 18,000 / 2,700.
+    //
+    // >>> LOWERED 8 -> 2 ON 2026-10-07, ADOPTED BY THE USER. The paragraph above priced this lever
+    // as a WALL BOUND and set it at the ceiling the references tolerate. That reasoning is sound but
+    // it never asked which side of the ceiling plays BETTER, and the answer is monotone in the
+    // opposite direction from the intuition. 3,000 paired games each, shipped d5/b20, seed 960000
+    // (logs/kittyv2_swaps/levers/{base,nu1,nu2,nu4,nu12,nu32}.*):
+    //     price  avg win turn  net game-turns  wall     slow games  tail
+    //       1      3.9003          -48         0.817x       20      3,777 s
+    //       2      3.9017          -44         0.847x       21      4,215 s
+    //       4      3.9083          -24         0.856x       21      4,451 s
+    //       8      3.9163            --        1.000x       31      5,618 s   <- the old default
+    //      12      3.9207          +13         1.117x
+    //      32      3.9380          +65         1.349x
+    // Cheaper AND better on both axes, monotonically. THE MECHANISM, measured per decision with
+    // MTG_TURN_CENSUS: the route is a lethal DETECTOR whose success fires the go-off cut, collapsing
+    // the frame to ONE plan. At price 8 it runs out of links MID-detection, so it produces no
+    // certificate, the cut does not fire, and the decision pays the FULL enumeration -- the worst
+    // case available. gi=371 turn 3, price 8 -> 4: 70,077 -> 18,006 units, 128,083 ms -> 436 ms,
+    // 31,144,648 -> 10,566 plans, and the WIN TURN IS UNCHANGED at 4. On gi=369 turn 3 u_equip_route
+    // is EXACTLY the 18,000 budget: the route eats 100% of the allowance and 453,053 further units
+    // run in fallback. So price 8 was not buying safety, it was buying half-finished detections.
+    // ADOPTION BAR PASSED, both halves: the union of every game ANY arm made slower (36 games)
+    // re-run at --depth 8 --budget-ms 0 is 36/36 IDENTICAL to base at prices 1, 2 and 4 -- which is
+    // simultaneously the recovery bar and the empirical proof of the price's inertness at unlimited
+    // (ChargeDecisionUnits returns on budget == nullptr, so at an unlimited root it is never read).
+    // 2 rather than 1 deliberately: the GENERATION shapes above are measured only at 1 and 8, and 1
+    // is the value proven catastrophic there, so 2 keeps a 4x margin on the old bound while taking
+    // essentially all of the available win. The references were re-checked at 2.
+    //
+    // !! BEFORE THE NEXT value-leaf OR mulligan GENERATION ON THIS DECK, RE-MEASURE THE WALL. The
+    // bound this constant exists to enforce is relaxed 4x: a b20 decision is now at most ~9,000
+    // links and a b3 decision ~1,350. The screening/goldfish shape is measured clean (above), and
+    // the deck's keep table and value leaf are already BUILT, so nothing pending needs generation --
+    // but a future regeneration must not inherit this number unchecked.
     static const int v = []() -> int {
         const char* e = std::getenv("MTG_EQUIP_ROUTE_NODE_UNITS");
-        const int n = (e && *e) ? std::atoi(e) : 8;
+        const int n = (e && *e) ? std::atoi(e) : 2;
         return n > 0 ? n : 1;
     }();
     return v;
