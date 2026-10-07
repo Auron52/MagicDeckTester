@@ -166,3 +166,47 @@ env -C <tree> MTG_KEEP_REPLAY_LIST=<slow.log> MTG_DECISION_WORK_X=1000 [MTG_TAP_
   build/Release/mtg-analyze decks/SelesnyaLifegain/SelesnyaLifegain.cod \
   --cards-json src/cards/data/cards.json --gen-mulligan fast > out.txt
 ```
+
+## 8. Follow-up (2026-10-07): the Lodge was still credited off RESERVED Priests
+
+After §4 the tail was gone, but a single-threaded `MTG_TAP_BIG_DUMP=2000` pass over the same slow log
+plus 300 ordinary rollouts still found **1,029 top-level solves over 2,000 DFS nodes** (worst 52,489).
+Every one was UNPAYABLE and every one had the same shape: Wirewood Lodge untapped, and **every**
+Priest of Titania / Elvish Archdruid in the prepay's reserve mask (the "keep the mana creatures home"
+rungs of `BatchPrepayMainCasts`). Together they were **54% of all backtracker nodes** in the sample.
+
+Cause: the three relaxations (`TapFlowInfeasible`, the colour gate's `SourceColorCapLive`, and the
+total-mana B&B gate through `SourceMaxNetLive` / `UntappedManaUpperBound`) price the Lodge with the
+PLANNER form of `UntapBurstBestYield`, which counts any untapped, tappable Elf as a burst target. The
+DFS never taps a reserved source, and its burst branch needs the target TAPPED at that node, so a
+reserved Elf that is still untapped can never be burst. E.g. the 52,489-node solve: `{12}{W}{W}{W}{W}{W}{W}`
+(18 mana) against 16 mana of unreserved lands and 1-mana Elves plus the Lodge's own `{C}` = 17. The
+bound read the Lodge as 10 (a reserved Priest's 11, minus the feed), so 26 >= 18 and the DFS had to
+prove it by enumeration.
+
+Fix (`MTG_TAP_BURST_RESERVE_EXACT`, DEFAULT ON, `=0` reverts on one binary): `UntapBurstBestYield`
+takes the payment's `reserved_mask` and skips an UNTAPPED reserved target (a TAPPED reserved Elf still
+counts: the burst reverses a tap that already happened). Only the backtracker passes a mask, on both
+sides of its running total (the top-level `UntappedManaUpperBound` sum and the per-tap
+`source_max_net` subtraction, so the two stay one bound); every other caller passes 0 and is
+unchanged. Only one card has `untap_creature_cost` (Wirewood Lodge) and only SelesnyaLifegain plays
+it, so no other deck can reach the changed lines. Sound by the §4 argument: the new bound is exactly
+the set of targets the DFS's own burst branch can ever see in that payment.
+
+Measured, same binary, both arms concurrently on 6 cores each (366 slow + 1,000 ordinary rollouts):
+
+| | `=0` | default |
+|---|---|---|
+| play digest at gen settings | `5cb8f5f626c943ad` | `5cb8f5f626c943ad` |
+| win turn, per rollout | | identical 1,366 / 1,366 |
+| backtracker nodes | 14,867,461 | **4,200,011** (3.5x fewer) |
+| nodes per UNPAYABLE solve | 17.3 | **1.2** |
+| nodes per payable solve | 11.8 | 8.6 |
+| wall, slow list / ordinary sample | 248 s / 430 s | 230 s / 427 s (1.08x / 1.01x) |
+
+So determining that a cost is unpayable now takes about one node, and the backtracker is no longer
+where the keep-gen's time goes: the wall barely moves because what remains is the search itself
+(the bulk work item, `selesnya-keepgen-bulk-cost.md`). Kept regardless, as a sound collapse (CLAUDE.md:
+wasted work is wasted work). Unit test: `payment: Wirewood Lodge cannot burst off a reserved,
+untapped Priest` (held Priest -> 4 is the board, 5 is not; tapped + reserved Priest still bursts),
+passing on both arms; unit suite 477/477.

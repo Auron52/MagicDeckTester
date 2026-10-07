@@ -2183,7 +2183,9 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         // and the burst reverses that tap during the real payment.
         if (def->params.untap_creature_cost.has_value())
         {
-            const int unet = UntapLandBurstNet(state, active, *def);
+            // `reserved_mask`: an untapped Elf this payment may not tap is no burst target (the DFS
+            // never taps it, so its burst branch never sees it tapped) -- TapBurstReserveExactEnabled.
+            const int unet = UntapLandBurstNet(state, active, *def, reserved_mask);
             if (unet > 0)
             {
                 std::uint8_t ub = static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
@@ -2637,8 +2639,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // overloads under-count -- each of those under-counts was a losslessness violation that pruned a
     // payable line. The body now lives in SpellEffects.h as SourceMaxNetLive, shared with the
     // payment-entry fail-fast (UntappedManaUpperBound) so the two bounds cannot drift apart.
+    // `reserved_mask` is invariant down the recursion, so this per-tap subtraction and the top-level
+    // UntappedManaUpperBound sum read the SAME bound (an untap burst never credits a reserved,
+    // untapped target on either side -- TapBurstReserveExactEnabled). Mixing the two forms would
+    // subtract more than was summed and under-count what remains: an unsound prune.
     auto source_max_net = [&](const Permanent& pp, const CardDefinition& dd) -> int
-    { return SourceMaxNetLive(state, pp, dd); };
+    { return SourceMaxNetLive(state, pp, dd, nullptr, reserved_mask); };
 
     // Failure-state memo. The backtracker explores tap ORDERINGS, and many orderings converge on the
     // same (tapped-source set, floating pool) state -- once such a state is proven to admit no legal
@@ -3052,7 +3058,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         {
             const Permanent& pc = state.battlefield[cands[cq].first];
             std::uint8_t m = 0; int a = 0;
-            SourceColorCapLive(state, pc, *cands[cq].second, m, a);
+            SourceColorCapLive(state, pc, *cands[cq].second, m, a, reserved_mask);
             s_colcap_src_buf[cq] = { m, a };
             // Already tapped or reserved -> contributes nothing to what is still extractable. Every
             // OTHER per-source filter the loop applies (RestrictedManaUsable, storage charge,
