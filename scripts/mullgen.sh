@@ -596,8 +596,12 @@ PREFLIGHT
     # play, and the gap between the two is exactly what a keep table is supposed to close. It is now
     # a board-and-hand projection that earns its place in PLAY (TurnSolver.cpp, FadeKLandmarks), so
     # generation inherits it from the engine default like every other play rule.
-    MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}" \
+    #
+    # The env PREFIX below must sit on the SAME command as the generator. 0ec772c9 put the log line
+    # between them, so the prefix applied to `[` and the generator ran with NO work ceiling -- a
+    # different rollout config from every journal banked at X=1000 (resume refused -> a fresh start).
     [ "$GEN_BIN" != "$BIN" ] && log "generation binary: $GEN_BIN (PGO+LTO, src tree $(cat build/PGO/SRC_TREE))"
+    MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}" \
     "$GEN_BIN" "$DECK" --cards-json src/cards/data/cards.json --gen-mulligan "$RECIPE" \
       >> "$OUT/gen.log" 2>&1 || { log "GENERATION FAILED -- see $OUT/gen.log"; exit 1; }
     [ -e "$PROF" ] || { log "gen produced no profile (below the R>=10 floor?) -- see $OUT/gen.log"; exit 1; }
