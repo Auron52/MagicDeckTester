@@ -1500,9 +1500,32 @@ public:
     // a diagnosis cycle on 2026-08-25 (hold gi=1325 refused to reproduce until the repro was
     // rebuilt as a one-job manifest). Unset, EnvOn is false, so this is behaviour-identical to the
     // literal -- it only restores the env route the comment above already advertises.
+    //
+    // >>> ADOPTED ON 2026-10-07 BY THE USER, and the empirical picture is BETTER than the "too small
+    // to surface" reading above, which was measured in UNITS. Units are the wrong instrument here:
+    // SearchBudget is denominated in them and the deepening gate reinvests anything freed, so they
+    // stay pinned near the allowance by construction (the paragraph above says exactly this). Wall
+    // time is not pinned, because the prune removes EXPENSIVE units and the reinvestment buys cheap
+    // ones. Measured in ms over 3,000 paired games POOLED INTO ONE BATCH so both arms share the same
+    // contention (d5/b20, seed 960000, logs/kittyv2_swaps/levers/condemn.*):
+    //   * WALL 0.949x (-5.1%). The off arm reproduced base's digest 98c00c1ec6d7a8a9 exactly, which
+    //     is a free determinism control on the pooling itself.
+    //   * QUALITY a wash at this sample: 2,996 identical, 1 better, 1 worse, net +1 game-turn --
+    //     consistent with the 0/0 over 10,000 paired games recorded above.
+    //   * THE ONE LOSS IS ROOT-CAUSED, per the user's instruction not to treat a loss as automatically
+    //     disqualifying. gi=1554 goes 6->8, but it is a knife-edge game that ALSO flips under seven
+    //     other work-removing levers (route price 1/2/4, TOPMAIN, and both stacks), and at
+    //     --depth 8 --budget-ms 0 condemnation on/off are BYTE-IDENTICAL (both win turn 6, digest
+    //     58422dfc82a78d9e, 22,084 vs 22,119 units). Same digest, not merely the same turn: the
+    //     filter removed no capability in that game. So the mechanism is budget-allocation
+    //     sensitivity in one fragile game, NOT the condemnation order -- no order fix is indicated.
+    // Note this lever is GATE-SHAPED (a filter consulted at every budget), so unlike a per-link price
+    // it gets no free inertness argument from the completeness rule in CLAUDE.md and had to earn it:
+    // the d5/budget_ms=0 prune (250 cheaper : 3 dearer : 1,247 identical) plus the recovery above is
+    // that proof. All six correctness fixes it depends on are default ON.
     bool CondemnsConsideredAtBreakpoint() const override
     {
-        static const bool env = EnvOn("MTG_KE_CONDEMN");
+        static const bool env = EnvOn("MTG_KE_CONDEMN", true);
         return heurarm::Flag(heurarm::KE_CONDEMN, env);
     }
     // Tutor breadth: score EVERY distinct Equipment, not the generic 6.
