@@ -563,9 +563,8 @@ TEST_CASE("Glittering Wish rule: a narrowed set; the full-width control arm offe
     WishFullWidthArm off(false);
     const std::vector<std::string> c = WishCands(b);
     CHECK(c.size() >= 1);
-    CHECK(c.size() <= 4);
-    for (const std::string& n : { "Linvala, Shield of Sea Gate", "Detention Sphere", "Vexing Shusher",
-                                  "Auroral Procession", "Reborn Hope", "Indrik Umbra" })
+    CHECK(c.size() <= 6);
+    for (const std::string& n : { "Detention Sphere", "Auroral Procession", "Reborn Hope", "Indrik Umbra" })
     { CHECK_MESSAGE(!Has(c, n), "excluded name offered: ", n); }
     // CONTROL: the full-width arm is GenericProvider's list verbatim (sideboard order, 11 names).
     WishFullWidthArm on(true);
@@ -630,9 +629,10 @@ TEST_CASE("Glittering Wish rule: a cheap Aura is NEVER the sole Aura pick, and o
         CHECK_FALSE(Has(c, "Unflinching Courage"));
         CHECK_FALSE(Has(c, "Steel of the Godhead"));
     }
-    // Cheat path -- Arcanum Wings on the battlefield.
+    // Cheat path -- Arcanum Wings on the battlefield (with a blue source for the {2}{U} swap).
     {
         BoardSb b = EarlyWishBoard();
+        b.Put("Island");
         int mother = 0;
         for (const Permanent& q : b.s.battlefield)
         { if (q.card.m_name.str() == "Mother of Runes") { mother = q.card.m_number; } }
@@ -712,10 +712,27 @@ TEST_CASE("Glittering Wish rule: cheap BODIES (Vexing Shusher + Linvala) only wh
         b.Put("Avacyn's Pilgrim");
         CHECK(Has(WishCands(b), "Vexing Shusher"));
     }
-    // A non-dork creature on the battlefield (Mother of Runes): no body.
+    // A non-dork creature on the battlefield (Mother of Runes) and a cheat path (Bruna out): no body.
     {
         BoardSb b = EarlyWishBoard();
+        b.Put("Bruna, Light of Alabaster");
         CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+    }
+    // ...or Mother with mana NOT short (six sources next turn, so Bruna and Almost Perfect are both in
+    // reach): no body.
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Put("Forest");
+        b.Put("Plains");
+        b.Put("Island");
+        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+    }
+    // Mother out but NO cheat path and mana SHORT of the payloads (s4004 gi58 / d3 gi904): bodies too --
+    // the Auras cannot arrive soon, the damage has to come from bodies.
+    {
+        BoardSb b = EarlyWishBoard();
+        CHECK(Has(WishCands(b), "Vexing Shusher"));
+        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
     }
     // Shusher already fetched: Linvala is both the cheapest and the hardest-hitting body (one name).
     {
@@ -723,5 +740,157 @@ TEST_CASE("Glittering Wish rule: cheap BODIES (Vexing Shusher + Linvala) only wh
         for (const std::string& n : kNewSideboard) { if (n != "Vexing Shusher") { b.Side(n); } }
         b.Put("Forest");
         CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: a REGROWTH only when it restores a cheat path (Arcanum Wings in the graveyard)")
+{
+    WishFullWidthArm off(false);
+    // s5005 gi342 shape (held-out, 2026-10-06): Wings discarded at cleanup, Colossifications + Mother of
+    // Runes in hand, nothing out. The control won a turn sooner by Wish -> Auroral Procession -> Wings ->
+    // swap. Procession (any card) is offered; Reborn Hope (multicolored only) cannot return mono-blue Wings.
+    auto shape = []()
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Azorius Chancery");
+        b.Hand("Colossification");
+        b.Hand("Mother of Runes");
+        b.Grave("Arcanum Wings");
+        return b;
+    };
+    {
+        BoardSb b = shape();
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Auroral Procession"));
+        CHECK_FALSE(Has(c, "Reborn Hope"));
+        CHECK(c.back() == "Auroral Procession");      // last: never the base-plan / rollout pick
+    }
+    // No payload Aura in hand: nothing to swap in -> no regrowth.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Hand("Mother of Runes");
+        b.Grave("Arcanum Wings");
+        CHECK_FALSE(Has(WishCands(b), "Auroral Procession"));
+    }
+    // A cheat path already exists (Bruna on the battlefield): no regrowth.
+    {
+        BoardSb b = shape();
+        b.Put("Bruna, Light of Alabaster");
+        CHECK_FALSE(Has(WishCands(b), "Auroral Procession"));
+    }
+    // No swap Aura in the graveyard (a payload Aura there instead): no regrowth.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Hand("Colossification");
+        b.Grave("Eldrazi Conscription");
+        CHECK_FALSE(Has(WishCands(b), "Auroral Procession"));
+        CHECK_FALSE(Has(WishCands(b), "Reborn Hope"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: a cheat path needs its COLOURS (Arcanum Wings with no blue source is not one)")
+{
+    WishFullWidthArm off(false);
+    // s4004 d3 gi904 shape (held-out, 2026-10-06): Wings + Colossification in hand, Mother of Runes out,
+    // five mana next turn but NO blue source -- Wings can be neither cast nor swapped, so there is no
+    // cheat path and the cheap second Aura (Unflinching Courage) the control won with is offered.
+    auto shape = [](const char* third_land)
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put(third_land);
+        b.Put("Mother of Runes");
+        b.Hand("Forest");
+        b.Hand("Arcanum Wings");
+        b.Hand("Colossification");
+        return b;
+    };
+    {
+        BoardSb b = shape("Plains");
+        CHECK(Has(WishCands(b), "Unflinching Courage"));
+    }
+    // One blue source: Wings is castable and swappable next turn -> a cheat path -> no cheap Aura.
+    {
+        BoardSb b = shape("Island");
+        CHECK_FALSE(Has(WishCands(b), "Unflinching Courage"));
+    }
+    // Wings already on the battlefield with no blue source cannot swap: still no cheat path.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Plains");
+        const int mother = b.Put("Mother of Runes");
+        b.Put("Arcanum Wings", false, mother);
+        b.Hand("Colossification");
+        CHECK(Has(WishCands(b), "Unflinching Courage"));
+        b.Put("Island");
+        CHECK_FALSE(Has(WishCands(b), "Unflinching Courage"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: a mana dork WEARING an Aura is a carrier (the cheap Aura is offered)")
+{
+    WishFullWidthArm off(false);
+    // s7007 d3 gi933 shape (held-out, 2026-10-06): Mythic Proportions on Avacyn's Pilgrim, Wings in hand
+    // with no blue source. The control's kill was Wish -> Unflinching Courage for the last 2 points.
+    BoardSb b;
+    for (const std::string& n : kNewSideboard) { b.Side(n); }
+    b.Put("Forest");
+    b.Put("Forest");
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    b.Put("Mythic Proportions", false, pilgrim);
+    b.Hand("Arcanum Wings");
+    const std::vector<std::string> c = WishCands(b);
+    CHECK(Has(c, "Unflinching Courage"));   // (bodies are offered too here: no cheat path, mana short)
+    // The bare dork (no Aura) is still not a carrier: bodies are offered, the cheap Aura is not.
+    BoardSb d;
+    for (const std::string& n : kNewSideboard) { d.Side(n); }
+    d.Put("Forest");
+    d.Put("Forest");
+    d.Put("Avacyn's Pilgrim");
+    d.Hand("Arcanum Wings");
+    const std::vector<std::string> e = WishCands(d);
+    CHECK(Has(e, "Vexing Shusher"));
+    CHECK_FALSE(Has(e, "Unflinching Courage"));
+}
+
+TEST_CASE("Glittering Wish rule: LETHAL NOW -- the cheap Aura that closes this turn's gap is offered despite a cheat path")
+{
+    WishFullWidthArm off(false);
+    // s7007 d3 gi933 shape: Mythic Proportions on Avacyn's Pilgrim (9 power, ready), Wings in hand with
+    // blue mana for cast + swap (a cheat path). Opponent at 10: Unflinching Courage's +2 is the kill now.
+    auto shape = [](int opp_life)
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Seaside Citadel");
+        b.Put("Seaside Citadel");
+        b.Put("Azorius Chancery");
+        b.Put("Forest");
+        const int pilgrim = b.Put("Avacyn's Pilgrim");
+        b.Put("Mythic Proportions", false, pilgrim);
+        b.Hand("Arcanum Wings");
+        b.s.players[1].life = opp_life;
+        return b;
+    };
+    {
+        BoardSb b = shape(10);
+        REQUIRE(b.Power(b.s.battlefield[4].card.m_number) == 9);
+        CHECK(Has(WishCands(b), "Unflinching Courage"));
+    }
+    // Opponent at 15: the cheap Aura does not close it -> the cheat path stands, only the primary.
+    {
+        BoardSb b = shape(15);
+        CHECK_FALSE(Has(WishCands(b), "Unflinching Courage"));
     }
 }

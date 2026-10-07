@@ -16036,14 +16036,19 @@ const char* BrunaProvider::CastOrderTierName(int rank) const
 //     NEVER the sole Aura pick -- at most ONE, as a searched SECOND Aura beside a primary, only when
 //     there is NO CHEAT-INTO-PLAY PATH (then a 6-mana Aura may be uncastable for turns), and only
 //     when a BODY (below) is already on the battlefield to wear it:
-//       * a gatherer (Bruna) on our battlefield, or in hand and castable by next turn;
-//       * an Aura-swap Aura (Arcanum Wings) on our battlefield, or in hand with a creature to carry
-//         it and next turn's mana covering cast + swap.
-//     With a cheat path only the primary is offered.
+//       * a gatherer (Bruna) on our battlefield, or in hand and castable by next turn -- mana AND the
+//         colours of her cost;
+//       * an Aura-swap Aura (Arcanum Wings) on our battlefield with blue for the swap, or in hand with
+//         a creature to carry it and next turn's mana (and blue) covering cast + swap.
+//     With a cheat path only the primary is offered -- EXCEPT for LETHAL NOW: when this turn's ready
+//     attackers (Aura- and haste-aware) fall short of the opponent's life by no more than the cheap
+//     Aura adds, it is offered anyway (a cheat path pays off next turn at the earliest).
 //   BODIES (creatures that are not mana dorks -- Vexing Shusher {R/G}{R/G} 2/2, Linvala {1}{W}{U} 3/3)
-//     when we have NO body to carry the Auras -- no non-dork creature on our battlefield and none of
-//     mana value <= 3 in hand (a dork taps for mana, it does not carry; Bruna in hand is six mana
-//     away): the CHEAPEST body and the HARDEST-HITTING body of mana value <= 3 (one name when they
+//     when we have NO body to carry the Auras -- no non-dork creature on our battlefield (a creature
+//     already WEARING one of our Auras counts, dork or not) and none of mana value <= 3 in hand (a bare
+//     dork taps for mana, it does not carry; Bruna in hand is six mana away) -- OR when there is no
+//     cheat path and mana is SHORT (below): the payloads cannot arrive soon, so damage must come from
+//     bodies. The CHEAPEST body and the HARDEST-HITTING body of mana value <= 3 (one name when they
 //     coincide). ADDED BY THE PROOF, not the spec: round 1 excluded them, and 9 of the 14 games the
 //     full-width control won sooner fetched Vexing Shusher (7) or Linvala (2) onto an empty /
 //     dork-only board with Colossification / Mythic Proportions / Arcanum Wings in hand. Shusher
@@ -16055,10 +16060,16 @@ const char* BrunaProvider::CastOrderTierName(int rank) const
 //     drop if a land is in hand) is below the most expensive card we mean to cast at 5+ mana value:
 //     the nonland hand's max (creatures may also draw on creature-only mana, e.g. Somberwald Sage)
 //     and the 6-drop this wish could fetch instead (Bruna / the primary Aura).
-//   EVERYTHING ELSE (Detention Sphere, Auroral Procession, Reborn Hope, a non-top Aura) is excluded.
+//   REGROWTH (tutor_from_graveyard: Auroral Procession / Reborn Hope) only when it RESTORES A CHEAT
+//     PATH: it can target an Aura-swap Aura (Arcanum Wings) in our graveyard (its own filter -- Reborn
+//     Hope's multicolored conjunct cannot reach mono-blue Wings), there is no cheat path otherwise (as
+//     above), and a payload Aura is in hand to swap in. ADDED BY THE PROOF (2026-10-06, held-out
+//     s5005 gi342, unrecovered at d8 b0): Wings pitched at cleanup, three Colossifications in hand --
+//     the control's Wish -> Procession -> Wings -> swap won a turn sooner.
+//   EVERYTHING ELSE (Detention Sphere, any other regrowth, a non-top Aura) is excluded.
 //     Order (the base plan / rollout / d0 pick is the front): Bruna, primary Aura, hardest-hitting
-//     body, cheapest body, Troyan, cheap Aura. An EMPTY set (every role filled or gone) falls back to
-//     the full list.
+//     body, cheapest body, Troyan, cheap Aura, regrowth. An EMPTY set (every role filled or gone)
+//     falls back to the full list.
 //
 // SIZE: usually 1-3 names, but the early T2/T3 wish with no body, no cheat path and short mana
 // offers FIVE (Bruna | Almost Perfect | Linvala | Vexing Shusher | Troyan). Every cut of that state
@@ -16084,6 +16095,46 @@ bool BrunaProvider::TutorMarksSuggested(const CardParams& pp) const
     return IsMulticolorWish(pp);
 }
 
+// A PAYLOAD Aura: a power grant, a base setter or a colour grant -- not Arcanum Wings' swap, not a land Aura.
+static bool IsWishPayloadAura(const CardParams& p)
+{
+    return p.is_aura && !p.is_land_aura && !p.aura_swap_cost.has_value()
+        && (p.aura_power_bonus > 0 || p.aura_set_base_power >= 0 || !p.aura_color_bonuses.empty());
+}
+
+// Colour bits of the mana a source can make (W U B R G = bits 0..4).
+static unsigned WishColourBits(const std::vector<Color>& cs)
+{
+    unsigned b = 0;
+    for (Color c : cs)
+    {
+        switch (c)
+        {
+            case Color::White: b |= 1u << 0; break;
+            case Color::Blue:  b |= 1u << 1; break;
+            case Color::Black: b |= 1u << 2; break;
+            case Color::Red:   b |= 1u << 3; break;
+            case Color::Green: b |= 1u << 4; break;
+            default: break;
+        }
+    }
+    return b;
+}
+
+// Every coloured pip of `c` has a source of its colour in `have` (pip COUNTS are left to the mana-value
+// test beside it). A hybrid cost reads as payable (optimistic: either half may be the one we have).
+static bool WishColoursOk(const ManaCost& c, unsigned have)
+{
+    if (c.hybrid_count > 0) { return true; }
+    unsigned need = 0;
+    if (c.white > 0) { need |= 1u << 0; }
+    if (c.blue  > 0) { need |= 1u << 1; }
+    if (c.black > 0) { need |= 1u << 2; }
+    if (c.red   > 0) { need |= 1u << 3; }
+    if (c.green > 0) { need |= 1u << 4; }
+    return (need & ~have) == 0;
+}
+
 // The rule above over `legal` (GenericProvider's list: every fetchable name, sideboard order).
 static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
                                                     const std::vector<std::string>& legal)
@@ -16095,7 +16146,14 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     int supply_any = 0, supply_cre = 0;
     bool land_in_hand = false, gatherer_bf = false, swap_bf = false, creature_bf = false;
     bool body_bf = false, cheap_body_hand = false;   // a non-mana-dork creature: on board / MV<=3 in hand
+    bool payload_hand = false;                       // a payload Aura in hand (something to swap in)
     int gatherer_hand_mv = -1, swap_hand_mv = -1;   // -1 = none in hand (swap: cast + swap cost)
+    // COLOURS next turn (2026-10-06, held-out s4004 d3 gi904): Arcanum Wings in hand was read as a cheat
+    // path on a board with NO BLUE source, so the cheap Aura the control won with was never offered.
+    // col_any = unrestricted sources (+ a land in hand); col_cre = creature-only / big-spell-only mana.
+    unsigned col_any = 0, col_cre = 0;
+    const CardDefinition* gatherer_hand_d = nullptr; const CardDefinition* swap_hand_d = nullptr;
+    const CardDefinition* swap_bf_d = nullptr;
     int need_nc = 0, need_c = 0;                     // max mana value: noncreature / creature hand cards
     std::vector<std::string> owned;                  // names in our hand or on our battlefield
     struct Host { int base; const Card* card; };
@@ -16108,7 +16166,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         owned.push_back(q.card.m_name.str());
         const CardParams& p = d->params;
         if (p.attack_gather_auras && q.card.IsCreature()) { gatherer_bf = true; }
-        if (p.aura_swap_cost.has_value())                 { swap_bf = true; }
+        if (p.aura_swap_cost.has_value())                 { swap_bf = true; swap_bf_d = d; }
         const bool src = d->card.IsLand() || (p.mana_rock && !d->card.IsCreature())
                       || (q.card.IsCreature() && d->tmpl == CardTemplate::ManaDork);
         if (src)
@@ -16116,7 +16174,10 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
             int y = PermanentManaYield(s, q, *d);
             if (y <= 0) { y = ManaProducedPerTap(*d); }
             if (y > 0) { (p.creature_mana_only ? supply_cre : supply_any) += y; }
+            ((p.creature_mana_only || p.mana_only_spell_min_mv > 0) ? col_cre : col_any) |= WishColourBits(p.produces);
         }
+        if (p.is_land_aura)   // Wild Growth: its extra mana (an empty list = any colour)
+        { col_any |= p.land_aura_produces.empty() ? 0x1fu : WishColourBits(p.land_aura_produces); }
         if (q.card.IsCreature())
         {
             creature_bf = true;
@@ -16131,6 +16192,10 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
                 const CardDefinition* ad = db.LookupCached(a.card);
                 if (ad && ad->params.is_aura && ad->params.aura_set_base_power >= 0)
                 { base = ad->params.aura_set_base_power; }
+                // A creature already WEARING one of our Auras is a carrier, mana dork or not (2026-10-06,
+                // held-out s7007 d3 gi933: Mythic Proportions on Avacyn's Pilgrim read as "no body", so the
+                // cheap Aura that was the last 2 points of the control's kill was never offered).
+                if (ad && ad->params.is_aura && !ad->params.is_land_aura) { body_bf = true; }
             }
             hosts.push_back({ base, &q.card });
         }
@@ -16140,7 +16205,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         const CardDefinition* d = db.LookupCached(c);
         if (d == nullptr) { continue; }
         owned.push_back(c.m_name.str());
-        if (d->card.IsLand()) { land_in_hand = true; continue; }
+        if (d->card.IsLand()) { land_in_hand = true; col_any |= WishColourBits(d->params.produces); continue; }
         const int mv = d->card.m_mana_cost.ManaValue();
         const CardParams& p = d->params;
         if (d->card.IsCreature())
@@ -16148,10 +16213,11 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
             need_c = std::max(need_c, mv);
             hosts.push_back({ d->card.m_power.value_or(0), &d->card });
             if (d->tmpl != CardTemplate::ManaDork && mv <= 3) { cheap_body_hand = true; }
-            if (p.attack_gather_auras) { gatherer_hand_mv = mv; }
+            if (p.attack_gather_auras) { gatherer_hand_mv = mv; gatherer_hand_d = d; }
         }
         else { need_nc = std::max(need_nc, mv); }
-        if (p.aura_swap_cost.has_value()) { swap_hand_mv = mv + p.aura_swap_cost->ManaValue(); }
+        if (p.aura_swap_cost.has_value()) { swap_hand_mv = mv + p.aura_swap_cost->ManaValue(); swap_hand_d = d; }
+        if (IsWishPayloadAura(p)) { payload_hand = true; }
     }
     if (land_in_hand) { ++supply_any; }
     auto is_owned = [&](const std::string& n)
@@ -16175,6 +16241,22 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         return best;
     };
 
+    // A REGROWTH that can return an Aura-swap Aura (Arcanum Wings) from our graveyard: the target filter is
+    // HasGraveyardTutorTarget's (type, colour, TutorNumericFilterOk -- Reborn Hope's multicolored conjunct).
+    auto regrows_swap = [&](const CardParams& rp)
+    {
+        for (const Card& gc : ap.graveyard)
+        {
+            const CardDefinition* gd = db.LookupCached(gc);
+            if (gd == nullptr || !gd->params.aura_swap_cost.has_value()) { continue; }
+            const Card& card = ZoneCard(gc);
+            bool type_ok = rp.tutor_types.empty();
+            for (const std::string& t : rp.tutor_types) { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+            if (type_ok && CardHasColorNamed(card, rp.tutor_color) && TutorNumericFilterOk(card, rp)) { return true; }
+        }
+        return false;
+    };
+
     // ---- classify the legal names --------------------------------------------------------------------
     const std::string* bruna = nullptr;   const CardDefinition* bruna_d = nullptr;
     const std::string* troyan = nullptr;
@@ -16182,6 +16264,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     const std::string* cheap = nullptr;   int cheap_pw = 0;
     const std::string* body = nullptr;    int body_mv = 0, body_pw = 0;     // cheapest body
     const std::string* big_body = nullptr; int big_mv = 0, big_pw = 0;      // hardest-hitting body, MV<=3
+    const std::string* regrowth = nullptr;                                  // returns a swap Aura
     for (const std::string& n : legal)
     {
         const CardDefinition* d = db.Lookup(n);
@@ -16207,10 +16290,12 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
             { big_body = &n; big_mv = mv; big_pw = pw; }
             continue;
         }
-        const bool payload = p.is_aura && !p.is_land_aura && !p.aura_swap_cost.has_value()
-                          && (p.aura_power_bonus > 0 || p.aura_set_base_power >= 0
-                              || !p.aura_color_bonuses.empty());
-        if (!payload) { continue; }
+        if (p.tutor_from_graveyard)
+        {
+            if (regrowth == nullptr && regrows_swap(p)) { regrowth = &n; }
+            continue;
+        }
+        if (!IsWishPayloadAura(p)) { continue; }
         const int pw = aura_power(*d);
         if (d->card.m_mana_cost.ManaValue() <= 3)
         { if (pw > 0 && (cheap == nullptr || pw > cheap_pw)) { cheap = &n; cheap_pw = pw; } }
@@ -16218,9 +16303,12 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     }
 
     const bool cheat = gatherer_bf
-        || (gatherer_hand_mv >= 0 && supply_any + supply_cre >= gatherer_hand_mv)
-        || swap_bf
-        || (swap_hand_mv >= 0 && creature_bf && supply_any >= swap_hand_mv);
+        || (gatherer_hand_mv >= 0 && supply_any + supply_cre >= gatherer_hand_mv
+            && WishColoursOk(gatherer_hand_d->card.m_mana_cost, col_any | col_cre))
+        || (swap_bf && WishColoursOk(*swap_bf_d->params.aura_swap_cost, col_any))
+        || (swap_hand_mv >= 0 && creature_bf && supply_any >= swap_hand_mv
+            && WishColoursOk(swap_hand_d->card.m_mana_cost, col_any)
+            && WishColoursOk(*swap_hand_d->params.aura_swap_cost, col_any));
     if (primary_d != nullptr) { need_nc = std::max(need_nc, primary_d->card.m_mana_cost.ManaValue()); }
     if (bruna_d != nullptr)   { need_c  = std::max(need_c,  bruna_d->card.m_mana_cost.ManaValue()); }
     const bool short_mana = (need_nc >= 5 && supply_any < need_nc)
@@ -16229,11 +16317,32 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     std::vector<std::string> out;
     if (bruna != nullptr)                                   { out.push_back(*bruna); }
     if (primary != nullptr)                                 { out.push_back(*primary); }
-    const bool need_body = !body_bf && !cheap_body_hand;
+    // A body when nothing can carry the Auras, OR when no cheat path exists and mana is short of the
+    // payloads -- the Auras cannot arrive soon, so the damage must come from bodies (2026-10-06, held-out
+    // s4004 gi58 / d3 gi904: Mother of Runes out, payloads out of reach; the control's extra hasty
+    // body under Lightning Greaves won a turn sooner, unrecovered at d8 b0 without it).
+    const bool need_body = (!body_bf && !cheap_body_hand) || (!cheat && short_mana);
     if (need_body && big_body != nullptr && big_body != body) { out.push_back(*big_body); }
     if (body != nullptr && need_body)                       { out.push_back(*body); }
     if (troyan != nullptr && short_mana)                    { out.push_back(*troyan); }
-    if (cheap != nullptr && primary != nullptr && !cheat && body_bf) { out.push_back(*cheap); }
+    // LETHAL NOW (2026-10-06, held-out s7007 d3 gi933): a cheat path delivers the primary NEXT turn at the
+    // earliest; when this turn's ready attackers fall short of the opponent's life by no more than the
+    // cheap Aura adds, the cheap Aura is the kill THIS turn, so it is offered despite the cheat path.
+    // Ready power is Aura-aware (CombatPowerOf; ReadyAttackPower reads bare EffectivePower) and haste-aware
+    // (CanAttackFull: Lightning Greaves); 0 once combat is behind us (ReadyAttackPower's phase guard).
+    const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+    int ready = 0;
+    if (s.phase != Phase::PostCombatMain && s.phase != Phase::Combat && s.phase != Phase::Ending)
+    {
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index == me && CanAttackFull(q, s.battlefield, me))
+            { ready += std::max(0, CombatPowerOf(q, s)); }
+        }
+    }
+    const bool cheap_closes = cheap != nullptr && ready > 0 && ready < opp_life && ready + cheap_pw >= opp_life;
+    if (cheap != nullptr && primary != nullptr && (!cheat || cheap_closes) && body_bf) { out.push_back(*cheap); }
+    if (regrowth != nullptr && !cheat && payload_hand)      { out.push_back(*regrowth); }
     if (TRACE_ON("wishcands"))
     {
         std::string l;
