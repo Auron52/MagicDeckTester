@@ -16323,9 +16323,17 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // best setter counts. Timing is NOT modelled (a host cast next turn may need haste to swing then) --
     // the test answers "is another Aura the missing piece?", and when it says no the wish fetches what
     // is missing instead: Bruna, the body, Troyan for mana.
-    std::vector<const CardDefinition*> hand_auras, gy_auras;
+    // hand_auras: every payload Aura in hand (a gatherer takes them all); cast_auras: the ones that add
+    // damage when CAST on a host -- not a host-tapping Aura (Colossification taps the creature it enters
+    // on, so it swings a turn later; 2026-10-07, held-out s7007 d5 gi109 / gi432 / gi472: "Colossification
+    // on Birds of Paradise is lethal" dropped Bruna, whose attack trigger puts it on mid-attack).
+    std::vector<const CardDefinition*> hand_auras, gy_auras, cast_auras;
     for (const Card& c : ap.hand)
-    { const CardDefinition* d = db.LookupCached(c); if (d && IsWishPayloadAura(d->params)) { hand_auras.push_back(d); } }
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d && IsWishPayloadAura(d->params))
+        { hand_auras.push_back(d); if (!d->params.aura_etb_tap_host) { cast_auras.push_back(d); } }
+    }
     for (const Card& c : ap.graveyard)
     { const CardDefinition* d = db.LookupCached(c); if (d && IsWishPayloadAura(d->params)) { gy_auras.push_back(d); } }
     const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
@@ -16349,7 +16357,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // The best power the hand's Auras add to a non-gatherer host within `budget` mana (subset search).
     auto best_cast_gain = [&](int budget, int base, const Card* card)
     {
-        const int k = std::min<int>(static_cast<int>(hand_auras.size()), 10);
+        const int k = std::min<int>(static_cast<int>(cast_auras.size()), 10);
         int best = 0;
         for (int m = 1; m < (1 << k); ++m)
         {
@@ -16357,9 +16365,9 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
             for (int i = 0; i < k && ok; ++i)
             {
                 if (!(m & (1 << i))) { continue; }
-                mv += hand_auras[static_cast<std::size_t>(i)]->card.m_mana_cost.ManaValue();
-                ok = mv <= budget && WishColoursOk(hand_auras[static_cast<std::size_t>(i)]->card.m_mana_cost, col_any);
-                sub.push_back(hand_auras[static_cast<std::size_t>(i)]);
+                mv += cast_auras[static_cast<std::size_t>(i)]->card.m_mana_cost.ManaValue();
+                ok = mv <= budget && WishColoursOk(cast_auras[static_cast<std::size_t>(i)]->card.m_mana_cost, col_any);
+                sub.push_back(cast_auras[static_cast<std::size_t>(i)]);
             }
             if (ok) { best = std::max(best, gain_of(sub, base, card)); }
         }

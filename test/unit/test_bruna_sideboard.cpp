@@ -994,3 +994,21 @@ TEST_CASE("Glittering Wish rule: LETHAL NOW -- the cheap Aura that closes this t
         CHECK_FALSE(Has(WishCands(b), "Unflinching Courage"));
     }
 }
+
+TEST_CASE("Glittering Wish rule: a host-tapping Aura CAST on a host is not lethal next turn (Colossification taps it)")
+{
+    WishFullWidthArm off(false);
+    // s7007 d5 gi109 shape (held-out, 2026-10-07): Birds of Paradise out, Colossification + Conscription in
+    // hand, seven mana next turn. Colossification cast on Birds is +20 -- but it taps Birds as it enters, so
+    // that swing is a turn later. Bruna (her attack trigger puts both on mid-attack) must stay offered.
+    BoardSb b;
+    for (const std::string& n : kNewSideboard) { b.Side(n); }
+    for (const char* l : { "Forest", "Forest", "Plains", "Island" }) { b.Put(l); }
+    b.Put("Sol Ring");
+    b.Put("Birds of Paradise");
+    b.Hand("Seaside Citadel");
+    b.Hand("Colossification");
+    b.Hand("Eldrazi Conscription");
+    const std::vector<std::string> c = WishCands(b);
+    CHECK(Has(c, "Bruna, Light of Alabaster"));
+}
