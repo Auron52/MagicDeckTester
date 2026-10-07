@@ -739,14 +739,53 @@ judged on work removed and soundness, never on whether wall-clock moved. The eng
 carries the concept: `M2FixModeFor` mode 2 is described as a *kill-scan* plus a gated re-solve, so a
 kill-scan is an established primitive here rather than a new one.
 
-Two conditions on soundness, both of which matter:
+### USER RULING on how the kill is detected: INSPECT, do not search
 
-1. **The kill-scan must be conservative.** It may only claim a kill it can *prove* against mana we
-   can actually produce and equips we can actually pay (the `effectively equippable` qualifier again).
-   A false positive would stop the search early on a line that does not exist — the one way this
-   collapse could cost quality rather than save work.
-2. **Ties are free.** If two candidates both kill next turn they are *equal* on the objective, so
-   taking the first or cheapest is a legitimate tie-break, not a greedy pick among unequals.
+User, 2026-10-07: *"We don't need to search, though, to figure it out. Just look at the hand and
+board. That is how I want it done because it needs to be fast enough."*
+
+So the kill test is a **closed-form arithmetic scan over hand + battlefield**, not an enumeration:
+
+```
+for each surviving candidate X:                      # 1-4 of them, after the tier-1 prunes
+    mana_next   = untapped lands next turn + (1 if a land is in hand)
+    power_next  = base power of the host(s) that can attack
+                + Σ bonuses of equips we can CAST and PAY FOR out of mana_next
+                  (equip cost 0 under metalcraft / Sigarda's Aid)
+                + the Omnitool's artifact-count term
+    if power_next >= opponent.life:  take X, stop
+fall through to the pruned ranking
+```
+
+One pass over a ~7-card hand and a ~10-permanent battlefield, per candidate. The "dying this turn"
+row is cheaper still — pending combat damage against life, which the engine already computes exactly
+(`PendingAttackDamage`, noted exact on this card because a card entering hand adds no power to a
+declared attacker).
+
+This is the right call on cost, and it is why the whole feature can be cheap: the scan handles the
+two common fast rows, and the searched axis (1–2 branches) runs **only** in the no-kill-found row.
+
+### …and the ruling's soundness rests ENTIRELY on the scan under-claiming
+
+This is the one place the design can go wrong, so it is worth stating sharply. Taking X and stopping
+is a **non-searched pick**. That is legitimate *only* as a dominance collapse — X attains the
+objective's bound, so nothing can beat it — which is the sanctioned category (CLAUDE.md's
+`MTG_FUNGUS_DEVOUR_LETHAL` precedent: "a proven kill makes `k = own` dominant").
+
+**If the scan over-claims, that justification evaporates and it becomes a greedy heuristic pick
+wearing a dominance proof's clothing** — precisely the defect the no-greedy rule exists to catch. So:
+
+1. **The arithmetic must be a LOWER BOUND on next turn's damage.** Count only mana we are sure of,
+   only equips we can definitely pay, and nothing speculative (no future draws, no second dig). An
+   optimistic scan is a correctness bug, not a tuning choice.
+2. **Under-claiming is harmless.** A scan that misses a real kill just falls through to the ranker and
+   loses a little work — never quality. That asymmetry is what makes "conservative" the obviously
+   right default rather than a trade-off.
+3. **It is cheaply testable, and it should be tested.** Behind a diagnostic flag, assert that whenever
+   the scan claims a kill, the line actually kills next turn. Any violation is a real bug in the
+   bound. This is the invariant that earns the collapse, and it costs one counter.
+4. **Ties are free.** Two candidates that both kill next turn are *equal* on the objective, so
+   first-or-cheapest is a legitimate tie-break, not a greedy pick among unequals.
 
 ### Where this leaves the rest of the design
 
