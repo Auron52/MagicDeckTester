@@ -4553,6 +4553,26 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 }
 } // namespace
 
+// PER-GAME CLEAR (MTG_MANA_CACHE_PER_GAME, DEFAULT ON; =0 restores the cross-game cache from ONE
+// binary). Called at the top of GoldFishRunner::SetupGame, the start of every game a thread plays
+// (batch, goldfish, keep-gen rollout, analyzer, single game). The cache is a pure memo: with a
+// complete key a hit is exactly what recomputing would give, and it is already wiped wholesale at
+// 500k entries at arbitrary points, so correct play can never depend on its contents -- clearing is
+// byte-identical by that argument and costs only the hits a game would have taken from an EARLIER
+// game on the same thread. What it buys is the guarantee the key alone could not give: a game's
+// play cannot depend on which games ran before it on its worker. That is the exact class of the
+// 2026-10 SelesnyaLifegain pooled-only flicker (the key missed a scaled dork's live yield; 6 of the
+// 21 overnight games it moved took their stale answer from ANOTHER game). It does not cover a key
+// gap WITHIN one game -- the other 15 -- which is why the key fix (525dbf43) still matters; if this
+// clear is ever NOT byte-identical, a key gap is exposed and the difference is the repro.
+// Defined OUTSIDE the anonymous namespace that owns g_mana_cache (external linkage: SpellEffects.h).
+void ResetManaPaymentCacheForNewGame()
+{
+    static const bool s_on = EnvOn("MTG_MANA_CACHE_PER_GAME", true);
+    if (!s_on || g_mana_cache.empty()) { return; }
+    g_mana_cache.clear();
+}
+
 // Public entry: thin wrapper over the worker. Identical behaviour; under MTG_TAP_STATS it records the
 // payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
 // worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag

@@ -29360,6 +29360,11 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
     return mask;
 }
 
+// Clear this thread's payable-mana cache (g_mana_cache) at the start of a game, so a game's play cannot
+// depend on the games its worker thread played before it. Body + rationale in SpellEffects.cpp;
+// MTG_MANA_CACHE_PER_GAME=0 disables. Called from GoldFishRunner::SetupGame.
+void ResetManaPaymentCacheForNewGame();
+
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
 // `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources
 // {battlefield index, cached def}, enumerated ONCE at the top-level call and reused by every recursion

@@ -1404,6 +1404,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 
 GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
 {
+    // A new game starts with no payment answers carried over from the thread's previous games
+    // (MTG_MANA_CACHE_PER_GAME, default ON -- see ResetManaPaymentCacheForNewGame).
+    ResetManaPaymentCacheForNewGame();
     GameState state;
 
     // Starting life: per-job override -> MTG_START_LIFE -> 20 (see core/GameSetup.h). BOTH
