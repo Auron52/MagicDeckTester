@@ -1,0 +1,26 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "battlefield": [
+    { "name": "Mother of Runes", "controller": 0, "tapped": false },
+    { "name": "Arcanum Wings", "controller": 0, "tapped": false, "equips": "Mother of Runes" },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false },
+    { "name": "Seaside Citadel", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossification"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "human_lines": ["auraswap=Colossification"],
+  "expect_human_summary_contains": "Colossification (in combat, after attacks)",
+  "expect_history_contains": ["deferred to COMBAT", "applied in combat after attackers were declared"],
+  "expect_win_turn": 5,
+  "comment": "HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: 'it should be automatically applied in the attack phase rather than the 1st main'). The board of bruna_wings_combat_swap_colossification.json, played through the HUMAN path (AIEngine's external chooser, as the viewer and --claude-play commit): the human commits the MAIN-PHASE line auraswap=Colossification. Mother of Runes can attack and three Seaside Citadels pay the {2}{U} without her, so the swap is deferred to the combat window and applied there automatically after attackers are declared: Mother attacks, Colossification's ETB tap costs nothing (CR 506.4), 1 + 20 = 21 = the opponent's life. Controls: bruna_human_wings_swap_legacy_main.json (the pre-rule timing, --legacy-main-swap's env twin, must NOT win) and bruna_human_wings_swap_unpayable_in_combat.json (the swap only the attacking host could pay stays in main)."
+}

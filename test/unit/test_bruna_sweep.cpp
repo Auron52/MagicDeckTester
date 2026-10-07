@@ -6,9 +6,11 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/Combat.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/GameLogger.h"
 #include "core/GameSetup.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -869,4 +871,149 @@ TEST_CASE("Greedy Aura-swap timing: a swap only a mana-creature host can pay sta
     b.Hand("Colossification");
     SolveSwapArm on(true);
     CHECK(SolveTakesSwap(b.s));
+}
+
+// ---- HUMAN-PLAY AURA-SWAP TIMING (HumanCombatSwapOn, USER 2026-10-06) ------------------------------
+// "My recommendation for the viewer is that it should be automatically applied in the attack phase
+// rather than the 1st main." A human who commits `auraswap=Colossification` in main 1 onto a creature
+// that could attack gets the swap in the COMBAT window instead (same rule + affordability as the
+// greedy's MTG_SOLVE_COMBAT_SWAP), with the Aura they named and without being asked again.
+namespace
+{
+TurnSolver::Plan HumanSwapPlan(const std::string& aura_in)
+{
+    TurnSolver::Plan p;
+    Action a;
+    a.kind          = Action::Kind::AuraSwap;
+    a.card_name     = aura_in;
+    a.hand_index    = -1;                                      // human: the NAMED hand Aura
+    a.cost          = *DefBs("Arcanum Wings").params.aura_swap_cost;
+    a.sac_source_id = 70;
+    p.actions.push_back(a);
+    return p;
+}
+
+struct LegacySwapScope
+{
+    bool prev;
+    explicit LegacySwapScope(bool legacy) : prev(g_play_legacy_main_swap) { g_play_legacy_main_swap = legacy; }
+    ~LegacySwapScope() { g_play_legacy_main_swap = prev; }
+};
+
+int BfIndex(const GameState& s, int num)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { return i; } }
+    return -1;
+}
+}   // namespace
+
+TEST_CASE("Human swap timing: a named Colossification swap onto a would-be attacker comes in after attackers, unasked")
+{
+    BoardBs b = WingsOnMother(/*mother_sick=*/false);
+    const int mother = b.s.battlefield.front().card.m_number;
+    const int colo   = b.s.players[0].hand.back().m_number;
+    TurnSolver::Plan plan = HumanSwapPlan("Colossification");
+    REQUIRE(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == 0);
+    {   // control: the pre-rule replay arm (--legacy-main-swap) keeps the main-phase swap
+        LegacySwapScope legacy(true);
+        CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == -1);
+    }
+    std::string label;
+    REQUIRE(TurnSolver::DeferHumanAuraSwapToCombat(b.s, plan, &label));
+    CHECK(plan.actions.empty());                                     // nothing left for main 1
+    CHECK(b.s.scripted_combat_aura_swap == 70);
+    CHECK(b.s.scripted_combat_aura_swap_in == colo);
+    CHECK(label.find("Colossification") != std::string::npos);
+    // Main 1 ends: still payable in combat, so the deferral stands.
+    TurnSolver::SettleHumanDeferredSwap(b.s);
+    CHECK(b.s.scripted_combat_aura_swap_in == colo);
+    // Combat: Mother attacks; the window applies the NAMED Aura -- the human is not asked again.
+    int asked = 0;
+    DigChooser fail = [&](const GameState&, int, const std::string&, const std::vector<Card>&,
+                          const std::vector<int>&, int) { ++asked; return -1; };
+    DigChooser* prev = g_play_dig_chooser;
+    g_play_dig_chooser = &fail;
+    std::vector<int> atk = { BfIndex(b.s, mother) };
+    ApplyCombatAuraSwap(b.s, 0, atk);
+    g_play_dig_chooser = prev;
+    CHECK(asked == 0);
+    int colo_host = 0;
+    for (const Permanent& p : b.s.battlefield) { if (p.card.m_number == colo) { colo_host = p.aura_attached_to; } }
+    CHECK(colo_host == mother);
+    CHECK(DefBs("Colossification").params.aura_power_bonus == 20);   // the +20 that swings this combat
+    REQUIRE(atk.size() == 1);
+    CHECK(b.s.battlefield[static_cast<std::size_t>(atk[0])].card.m_number == mother);   // atk_idx repaired
+    CHECK(b.s.scripted_combat_aura_swap == -1);
+    CHECK(b.s.scripted_combat_aura_swap_in == -1);
+}
+
+TEST_CASE("Human swap timing: a swap only the mana-creature host can pay stays in the main phase")
+{
+    BoardBs b;
+    const int birds = b.Put("Birds of Paradise");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = birds;
+    b.s.battlefield.push_back(w);
+    b.Put("Azorius Chancery");   // {W}{U}: one short of {2}{U} without the attacking Birds
+    b.Hand("Colossification");
+    TurnSolver::Plan plan = HumanSwapPlan("Colossification");
+    CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == -1);
+    CHECK_FALSE(TurnSolver::DeferHumanAuraSwapToCombat(b.s, plan));
+    CHECK(plan.actions.size() == 1);
+}
+
+TEST_CASE("Human swap timing: an Aura without the ETB tap, or a host that cannot attack, keeps the main swap")
+{
+    {
+        BoardBs b = WingsOnMother(/*mother_sick=*/false);
+        b.Hand("Eldrazi Conscription");
+        CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, HumanSwapPlan("Eldrazi Conscription")) == -1);
+        CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, HumanSwapPlan("Colossification")) == 0);
+    }
+    {
+        BoardBs b = WingsOnMother(/*mother_sick=*/true);
+        CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, HumanSwapPlan("Colossification")) == -1);
+    }
+}
+
+TEST_CASE("Human swap timing: mana spent later in main 1 moves the deferred swap back into the main phase")
+{
+    // Wings on Avacyn's Pilgrim; Chancery {W}{U} + Forest pay the {2}{U} without the attacking
+    // Pilgrim, so the swap is deferred. A LATER line in the same main phase taps the Forest: the
+    // combat window can no longer pay, but the main phase still can (Chancery + the Pilgrim itself)
+    // -- so the swap happens there after all, as it would have before the rule.
+    BoardBs b;
+    const int birds = b.Put("Avacyn's Pilgrim");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = birds;
+    b.s.battlefield.push_back(w);
+    b.Put("Azorius Chancery");
+    b.Put("Forest");
+    const int colo = b.Hand("Colossification");
+    TurnSolver::Plan plan = HumanSwapPlan("Colossification");
+    REQUIRE(TurnSolver::DeferHumanAuraSwapToCombat(b.s, plan));
+    for (Permanent& p : b.s.battlefield) { if (p.card.m_name.str() == "Forest") { p.tapped = true; } }
+    TurnSolver::SettleHumanDeferredSwap(b.s);
+    CHECK(b.s.scripted_combat_aura_swap_in == -1);
+    int colo_host = 0;
+    for (const Permanent& p : b.s.battlefield) { if (p.card.m_number == colo) { colo_host = p.aura_attached_to; } }
+    CHECK(colo_host == birds);   // swapped in the main phase
+}
+
+TEST_CASE("Human swap timing: a deferred swap nobody can pay any more is dropped, not left to fail in combat")
+{
+    BoardBs b = WingsOnMother(/*mother_sick=*/false);
+    const int colo = b.s.players[0].hand.back().m_number;
+    TurnSolver::Plan plan = HumanSwapPlan("Colossification");
+    REQUIRE(TurnSolver::DeferHumanAuraSwapToCombat(b.s, plan));
+    // A later line tapped the Forest: Chancery alone is {W}{U}, and Mother is not a mana source.
+    for (Permanent& p : b.s.battlefield) { if (p.card.m_name.str() == "Forest") { p.tapped = true; } }
+    TurnSolver::SettleHumanDeferredSwap(b.s);
+    CHECK(b.s.scripted_combat_aura_swap_in == -1);   // dropped, not left to fail in combat
+    bool in_hand = false;
+    for (const Card& c : b.s.players[0].hand) { if (c.m_number == colo) { in_hand = true; } }
+    CHECK(in_hand);
 }

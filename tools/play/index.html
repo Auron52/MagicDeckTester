@@ -1362,8 +1362,11 @@ function activatableSources(){
       const actKey = (a.act_label || '') + (a.sacout ? '|sac'+(a.sac_count||1) : '');
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload+'|'+actKey
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
+      // An Aura swap the engine will apply IN COMBAT (human-play swap timing, `in_combat` on the
+      // action) -- OR'd over the plans, since the swap-only line is the one that carries it.
+      const inCombat = !!a.in_combat || !!((opts[src]||{})[key] || {}).inCombat;
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
-                                         repeatable:!!a.repeatable,
+                                         repeatable:!!a.repeatable, inCombat,
                                          // What the picker SHOWS for this ability. Without it two
                                          // abilities of one permanent render as the same bare card
                                          // name even once they stop deduping.
@@ -1662,6 +1665,7 @@ function queueActivation(src, opt){
   flashHint(sac
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
+    : (opt.verb==='auraswap' && opt.inCombat) ? `${src}: aura swap — ${opt.name} comes in AUTOMATICALLY IN COMBAT, after attackers are declared (its "tap enchanted creature" then costs no attack), and ${src} returns to your hand. Commit the line; the swap shows in the history when it resolves. (It falls back to the main phase if the rest of your line leaves too little mana to pay it in combat.)`
     : opt.verb==='auraswap' ? `${src}: aura swap — ${opt.name} comes in from your hand, ${src} returns to your hand. Commit the phase to resolve it. (To swap AFTER attackers are declared instead, skip this: you are asked in combat.)`
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
@@ -3985,7 +3989,7 @@ function activationPickerHtml(pick){
   const label = o => o.fuseClue           ? `Investigate & crack — make a Clue and sacrifice it to draw`
                    : o.makesClue          ? `Investigate — make a Clue (crack it later)`
                    : o.verb==='sfput'     ? `Put ${o.name} onto the battlefield`
-                   : o.verb==='auraswap'  ? `Aura swap — bring in ${o.name} (${pick.src} returns to hand)`
+                   : o.verb==='auraswap'  ? `Aura swap — bring in ${o.name} (${pick.src} returns to hand)${o.inCombat ? ' — in combat, after attacks' : ''}`
                    : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
                    : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'

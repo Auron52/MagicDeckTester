@@ -761,6 +761,12 @@ struct GameState
     // Bruna's included, has resolved), -1 = no combat swap. Which hand Aura it brings in is the
     // provider's damage-max pick at that moment (USER ruling 2026-10-05). Same pin lifetime as above.
     int                      scripted_combat_aura_swap = -1;
+    // ...and the Aura it brings in, when that is FIXED rather than the damage-max pick: the CARD
+    // NUMBER of a hand Aura, -1 = the damage-max pick at the window (every autonomous pin). Set only
+    // by human play's deferred main-phase swap (TurnSolver::DeferHumanAuraSwapToCombat): the human
+    // named the Aura when they committed the line, so the combat window applies THAT Aura without
+    // re-asking. Same lifetime as the pin above; consumed with it.
+    int                      scripted_combat_aura_swap_in = -1;
     // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked
     // CleanupDiscardCandidates this turn's FIRST cleanup shed takes. Same state-pin shape as
     // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan but

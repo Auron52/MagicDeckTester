@@ -1543,3 +1543,7 @@ d3). This is the Wish-axis cost already raised as open question 1 -- it still st
 
 **Accepted** smoke + regression with one-line notes (the prior 2026-10-06c notes' still-binding parts carried);
 `check_gt_logs.py` 668 consistent / 0 stale; GT diff = exactly the 7 moved Bruna keys + the three header lines.
+
+## Human-play Wings swap timing (2026-10-06) -- LANDED 2026-10-07 (human play only)
+
+See `docs/design/viewer-combat-swap-status.md` for what landed, its verification and measurements.

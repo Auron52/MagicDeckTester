@@ -1599,7 +1599,12 @@ int AuraSwapPick(const GameState& state, int controller, int wings_number, bool 
 void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk_idx)
 {
     const int pin = state.scripted_combat_aura_swap;
+    // The FIXED Aura of a human-play deferred main-phase swap (TurnSolver::DeferHumanAuraSwapToCombat):
+    // the human named it when committing the line, so it comes in here without being asked again.
+    // -1 (every autonomous pin) = the damage-max pick, exactly as before.
+    const int pin_in = state.scripted_combat_aura_swap_in;
     state.scripted_combat_aura_swap = -1;   // consumed whether or not it fires
+    state.scripted_combat_aura_swap_in = -1;
     const bool human = g_play_dig_chooser != nullptr;
     if (pin < 0 && !human) { return; }
     // Which swap permanents to consider: the pinned one, or (human) every one we control.
@@ -1628,7 +1633,26 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
                 && state.battlefield[static_cast<std::size_t>(ai)].card.m_number == host) { host_attacking = true; }
         }
         int pick = -1;
-        if (!human)
+        // The human's deferred swap: the named Aura, if it is still in hand and can still enchant
+        // the host (a Bruna gather may have put it onto Bruna first). Not found -> the ordinary
+        // window below (the human is asked; an autonomous pin takes the damage-max pick).
+        bool fixed_pick = false;
+        if (pin_in >= 0 && pin >= 0 && wnum == pin % kAuraSwapRankStride)
+        {
+            const Permanent* hp = nullptr;
+            for (const Permanent& p : state.battlefield) { if (p.card.m_number == host) { hp = &p; break; } }
+            const std::vector<Card>& hand = state.players[controller].hand;
+            for (int i = 0; hp && i < static_cast<int>(hand.size()); ++i)
+            {
+                const Card& hc = hand[static_cast<std::size_t>(i)];
+                if (hc.m_number != pin_in || hc.m_is_staged) { continue; }
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(hc);
+                if (cd && cd->params.is_aura && AuraCouldEnchant(state, cd->params, *hp)) { pick = i; fixed_pick = true; }
+                break;
+            }
+        }
+        if (fixed_pick) { }
+        else if (!human)
         {
             const int rank = pin / kAuraSwapRankStride;
             if (rank == 0) { pick = AuraSwapPick(state, controller, wnum, host_attacking); }
@@ -1694,6 +1718,19 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         }
         // Pay {2}{U} from what is untapped now (the plan left it up). A swap that cannot be paid
         // does not happen -- the variant then scores like declining it.
+        // MEASUREMENT (MTG_TRACE=swapatkpay): report a combat swap that an ATTACKING creature's mana
+        // paid. CR 508.1f taps attackers as they are declared, but this engine taps them only at
+        // combat damage, so such a payment is illegal -- see docs/design/attackers-tapped-at-
+        // declaration.md (the fix is parked there with its measured suite cost).
+        std::vector<char> atk_untapped;
+        if (TRACE_ON("swapatkpay"))
+        {
+            for (int ai : atk_idx)
+            {
+                atk_untapped.push_back(ai >= 0 && ai < static_cast<int>(state.battlefield.size())
+                                       && !state.battlefield[static_cast<std::size_t>(ai)].tapped);
+            }
+        }
         if (!TapForCostDirect(state, *wd->params.aura_swap_cost, /*for_creature=*/false))
         {
             TRACE("swapdefer", "T%d combat swap UNPAID (pin %d, real=%d)", state.turn_number, pin,
@@ -1701,13 +1738,38 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
             continue;
         }
         TRACE("swapdefer", "T%d combat swap paid (pin %d, real=%d)", state.turn_number, pin, g_real_resolution ? 1 : 0);
+        if (!atk_untapped.empty())
+        {
+            std::string payers;
+            for (std::size_t k = 0; k < atk_idx.size() && k < atk_untapped.size(); ++k)
+            {
+                const int ai = atk_idx[k];
+                if (atk_untapped[k] && ai >= 0 && ai < static_cast<int>(state.battlefield.size())
+                    && state.battlefield[static_cast<std::size_t>(ai)].tapped)
+                { payers += state.battlefield[static_cast<std::size_t>(ai)].card.m_name.str() + ","; }
+            }
+            if (!payers.empty())
+            {
+                TRACE("swapatkpay", "seed=%llu T%d real=%d ATTACKER PAID the combat swap: %s",
+                      static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                      g_real_resolution ? 1 : 0, payers.c_str());
+            }
+        }
         std::vector<int> atk_nums;
         for (int ai : atk_idx)
         {
             atk_nums.push_back((ai >= 0 && ai < static_cast<int>(state.battlefield.size()))
                                ? state.battlefield[static_cast<std::size_t>(ai)].card.m_number : -1);
         }
+        const std::string in_name = state.players[controller].hand[static_cast<std::size_t>(pick)].m_name.str();
         ApplyAuraSwap(state, controller, wnum, pick, /*respond_window=*/false);
+        if (fixed_pick && g_real_resolution)
+        {
+            EmitPlayEvent(state.turn_number, "aura_swap",
+                          wd->card.m_name.str() + " \xE2\x87\x84 " + in_name
+                              + ": your main-phase aura swap, applied in combat after attackers were declared"
+                              + (host_attacking ? " (the host is attacking -- its ETB tap costs no damage)" : ""));
+        }
         // REPAIR atk_idx: the swap erased the Wings permanent (the fb-paysac index-shift class).
         std::vector<int> fixed;
         for (int num : atk_nums)

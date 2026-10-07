@@ -361,6 +361,10 @@ static_assert(sizeof(Player) == 200,
 // big-spell-only float) + `floating_bigspell_pp` (the restriction it carries). Classification: the
 // creature-only float's class exactly -- MID-TURN state, emptied at every phase/turn reset, a
 // BOUNDARY ASSERTION in AtCleanBoundary. The pointer is meaningful only while the pool is non-empty.
+// +0 bytes (2026-10-06, existing padding): `scripted_combat_aura_swap_in`, the FIXED Aura of a
+// human-play deferred Arcanum Wings swap (TurnSolver::DeferHumanAuraSwapToCombat). Same class and
+// lifetime as scripted_combat_aura_swap -- FUTURE-DETERMINING, folded value-gated in Build(); -1 in
+// every autonomous game, so every key is unchanged there.
 static_assert(sizeof(GameState) == 1072,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -665,6 +669,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xB2C0ull + static_cast<std::uint64_t>(s.scripted_bruna_gather)); }
     if (s.scripted_combat_aura_swap >= 0)
     { fold(0xA5A0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap)); }
+    if (s.scripted_combat_aura_swap_in >= 0)   // human-play deferred swap's fixed Aura (value-gated)
+    { fold(0xA5B0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap_in)); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.
