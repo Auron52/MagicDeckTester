@@ -665,7 +665,100 @@ specced in this document split cleanly:
 
 - **The scarcity weight** (prefer the class with fewer copies left). Genuinely lossy: "we will draw
   one anyway" is not "this one is worse".
-- **The `hard_in_hand < 2` cap.** A third hard hitter is worth *less*, not nothing.
+
+### The hard-hitter cap is TIER 1, and the right gate is LETHALITY not a card count
+
+An earlier draft put the `hard_in_hand < 2` cap in tier 2 on the grounds that "a third hard hitter is
+worth *less*, not nothing." The user: *"To be fair, a third hammer is actually worth nothing because
+the other two are sufficient to kill."* That is exact, and it is checkable:
+
+| board | power | vs 20 life |
+|---|---|---|
+| 2/2 + one Colossus Hammer | **12** | kills in **two** attacks (24) |
+| 2/2 + **two** Colossus Hammers | **22** | **kills in ONE attack** |
+| 2/2 + three Colossus Hammers | 32 | **no better — still one attack** |
+
+(`Player.h:26`: `int life = 20`.) So the third Hammer's damage contribution is **exactly zero**, not
+merely diminished — which makes the prune sound rather than heuristic. Its only residual value is as
+a generic artifact (+1/+1 to the Omnitool host, +1 to metalcraft), and in *that* role it is already
+**dominated by Bone Saw**, which does the same for {0} instead of {1}. Dominated on both counts, so
+it prunes in tier 1.
+
+**But the count form of the cap was wrong, and this is the real correction.** A third *Gauntlets* is
+not worth nothing, because Gauntlets compound — each one both scales on, and adds to, the host's
+Equipment count. With the Omnitool plus *n* Gauntlets attached, the Gauntlets contribute `n × (n+1)`:
+
+| n Gauntlets | their power |
+|---|---|
+| 1 | +2 |
+| 2 | +6 |
+| 3 | **+12** |
+
+So the third Gauntlets is worth +6 power. Capping "hard hitters" at 2 by **count** would wrongly
+discard it. **The sound gate is lethality, not a count:** damage beyond lethal is worth zero,
+whatever card supplies it.
+
+Stated properly: *is next turn's projected attack already lethal with what we can actually deploy?*
+If yes, every further damage card is worth zero and the dig should prefer a land, a draw, or nothing.
+If no, more damage is still live. Note two conditions that compose into this from earlier sections:
+
+- **"Next turn's"**, not this turn's. This turn's attackers are already declared when the dig fires,
+  and if *this* attack is lethal we are in case 0 and the dig is moot anyway.
+- **"Can actually deploy"** — two Hammers in hand are only lethal if we can equip them ({8} each
+  without metalcraft). So the cap's own premise depends on the free-equipper check, which is the
+  user's *"hard hitters that we can effectively equip"* qualifier doing work a second time.
+
+## THE GOVERNING RULE: the objective is BOUNDED, so a proven kill ends the decision
+
+User, 2026-10-07: *"If we find a line that kills next turn we don't need to worry beyond that. (or if
+they are already going to die this turn)"*
+
+This subsumes everything above and is stronger than a ranking rule — it is a **search termination**
+argument, and it is sound rather than heuristic.
+
+The dig fires during **this turn's** combat, after attackers are declared. So if this attack is not
+lethal, **the earliest reachable win is next turn.** The goldfish's objective is the win turn. A line
+that wins next turn therefore *attains the bound* — nothing can beat it and no magnitude comparison
+can improve on it. Hence:
+
+| state | what the dig decision costs |
+|---|---|
+| they die **this** turn | **nothing — do not branch at all.** Second main skipped (case 0), dig choice irrelevant |
+| some candidate yields a line that kills **next** turn | **take it and stop.** It attains the bound; no other candidate can do better |
+| no lethal line next turn | fall through to the pruned ranking specced above |
+
+So the ranker is a **fallback**, not the main path. The expensive part only runs when no kill exists,
+and the common fast cases are a cheap scan. That also tightens the sizing target from the ruling
+above: the already-dead case branches **0** ways, the proven-kill case **1**, and only the
+no-kill-found case reaches "1 usually, 2 occasionally".
+
+**There is direct precedent in this repo for adopting exactly this shape unconditionally.** CLAUDE.md
+cites `MTG_FUNGUS_DEVOUR_LETHAL` as the canonical *sound dominance* collapse — "a proven kill makes
+`k = own` dominant" — and notes it is **ON despite measuring only 0.2%**, because a collapse is
+judged on work removed and soundness, never on whether wall-clock moved. The engine also already
+carries the concept: `M2FixModeFor` mode 2 is described as a *kill-scan* plus a gated re-solve, so a
+kill-scan is an established primitive here rather than a new one.
+
+Two conditions on soundness, both of which matter:
+
+1. **The kill-scan must be conservative.** It may only claim a kill it can *prove* against mana we
+   can actually produce and equips we can actually pay (the `effectively equippable` qualifier again).
+   A false positive would stop the search early on a line that does not exist — the one way this
+   collapse could cost quality rather than save work.
+2. **Ties are free.** If two candidates both kill next turn they are *equal* on the objective, so
+   taking the first or cheapest is a legitimate tie-break, not a greedy pick among unequals.
+
+### Where this leaves the rest of the design
+
+Everything earlier in this document is now subordinate to the bound:
+
+- **Second main, case 0** is this rule's row 1.
+- **The hard-hitter cap** is this rule's row 2 — and it explains *why* the third Hammer is worth
+  exactly zero rather than merely less: two Hammers already attain the bound.
+- **The dig's ranking, dominance prunes and scarcity weight** are all row 3 only.
+
+All of it is goldfish-conditional in the same way: it assumes nothing removes our board and nothing
+gains life. Both hold against a passive opponent; both must be re-derived for phase 2.
 
 Keeping these two tiers apart is what stops a measured, reviewable narrowing from being smuggled in
 behind a free one.
