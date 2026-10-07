@@ -16441,9 +16441,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // BODY (Linvala): nothing can carry the Auras (no non-dork creature or Aura-wearer on our battlefield,
     // none of mana value <= 3 in hand), and Bruna cannot come down next turn instead. USER 2026-10-07:
     // "if I have the choice to cast bruna or Linvala next turn then we should definitely cast Bruna."
-    static const bool s_linv_wings = EnvOn("MTG_WISH_LINV_WINGS");   // TEMP MEASUREMENT ARM, not for commit
-    const bool need_body = !body_bf && !cheap_body_hand && !bruna_next
-        && (!heurarm::Flag(heurarm::WISH_LINV_WINGS, s_linv_wings) || swap_hand_d != nullptr);
+    const bool need_body = !body_bf && !cheap_body_hand && !bruna_next;
     if (body != nullptr && need_body)                       { out.push_back(*body); }
     if (troyan != nullptr && short_mana)                    { out.push_back(*troyan); }
     // LETHAL NOW (2026-10-06, held-out s7007 d3 gi933): a cheat path delivers the primary NEXT turn at the
@@ -16461,7 +16459,9 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         }
     }
     const bool cheap_closes = cheap != nullptr && ready > 0 && ready < opp_life && ready + cheap_pw >= opp_life;
-    if (cheap != nullptr && body_bf && (cheap_closes || (primary_offered && !cheat))) { out.push_back(*cheap); }
+    // ...worn by ANY creature of ours, a mana dork included (2026-10-07, train s2002 d3 gi76: Unflinching
+    // Courage on Avacyn's Pilgrim with Wings + Greaves in hand was the control's turn-sooner line).
+    if (cheap != nullptr && creature_bf && (cheap_closes || (primary_offered && !cheat))) { out.push_back(*cheap); }
     if (regrowth != nullptr && !cheat && payload_hand)      { out.push_back(*regrowth); }
     // NOTHING MISSING (every role filled or skipped): the wish's fetch cannot matter, so ONE name -- the
     // primary Aura (else the first legal name) -- rather than the whole pool.
@@ -16493,8 +16493,7 @@ BrunaProvider::TutorCandidates(const GameState& s, int controller, const CardPar
         for (const Permanent& q : s.battlefield)
         { if (q.controller_index == controller && !q.card.IsLand()) { bf += q.card.m_name.str() + ","; } }
         for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand) { hand += c.m_name.str() + ","; }
-        const char arm = BrunaWishFullWidth() ? 'C'
-                       : heurarm::Flag(heurarm::WISH_LINV_WINGS, EnvOn("MTG_WISH_LINV_WINGS")) ? 'W' : 'R';   // TEMP arm tag
+        const char arm = BrunaWishFullWidth() ? 'C' : 'R';   // which arm printed it (pooled proof batches)
         TRACE("wishproof", "T%d arm=%c n=%zu legal=%zu rule={%s} bf=[%s] hand=[%s]", s.turn_number, arm, h.size(),
               legal.size(), l.c_str(), bf.c_str(), hand.c_str());
     }

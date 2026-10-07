@@ -938,7 +938,7 @@ TEST_CASE("Glittering Wish rule: a cheat path needs its COLOURS (Arcanum Wings w
     }
 }
 
-TEST_CASE("Glittering Wish rule: a mana dork WEARING an Aura is a carrier (the cheap Aura is offered)")
+TEST_CASE("Glittering Wish rule: a mana dork wearing an Aura is a BODY; any creature can wear the cheap Aura")
 {
     WishFullWidthArm off(false);
     // s7007 d3 gi933 shape (held-out, 2026-10-06): Mythic Proportions on Avacyn's Pilgrim, Wings in hand
@@ -952,7 +952,8 @@ TEST_CASE("Glittering Wish rule: a mana dork WEARING an Aura is a carrier (the c
     b.Hand("Arcanum Wings");
     const std::vector<std::string> c = WishCands(b);
     CHECK(Has(c, "Unflinching Courage"));   // (bodies are offered too here: no cheat path, mana short)
-    // The bare dork (no Aura) is still not a carrier: bodies are offered, the cheap Aura is not.
+    // The bare dork (no Aura) is not a BODY (Linvala is offered), but it can WEAR the cheap Aura (train
+    // s2002 d3 gi76: Unflinching Courage on Avacyn's Pilgrim was the control's turn-sooner line).
     BoardSb d;
     for (const std::string& n : kNewSideboard) { d.Side(n); }
     d.Put("Forest");
@@ -961,7 +962,7 @@ TEST_CASE("Glittering Wish rule: a mana dork WEARING an Aura is a carrier (the c
     d.Hand("Arcanum Wings");
     const std::vector<std::string> e = WishCands(d);
     CHECK(Has(e, "Linvala, Shield of Sea Gate"));
-    CHECK_FALSE(Has(e, "Unflinching Courage"));
+    CHECK(Has(e, "Unflinching Courage"));
 }
 
 TEST_CASE("Glittering Wish rule: LETHAL NOW -- the cheap Aura that closes this turn's gap is offered despite a cheat path")
