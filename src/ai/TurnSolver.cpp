@@ -53176,11 +53176,25 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 // pre-combat decisions. A post-combat (second) main is played only when
 // second_main is set (greedy, via Solve) — see AIEngine::TakeTurn for why it is
 // otherwise skipped. Returns the win turn, or max_turns+1 if not won in time.
-// MTG_TT_NOWIN_CACHE: DEFAULT OFF pending measurement. The LEAF table (TranspositionTable, written by
+// MTG_TT_NOWIN_CACHE: DEFAULT OFF. The LEAF table (TranspositionTable, written by
 // SimulateToEnd) has the same asymmetry FSLineCache had before 2026-08-05 -- it stores only WINS, so a
 // position whose rollouts never find a win caches nothing and every leaf re-rolls from scratch.
 // Measured on treasure_hunt seed 9010 gi 1: 138,346 lookups, 0 stores, 100% no-win.
 // See docs/design/th-d5-five-hour-game.md.
+//
+// MEASURED ON kittyv2 2026-10-07 AND IT IS A NULL THERE -- do not re-propose it for this deck without
+// a different mechanism. It looked like the best remaining LOSSLESS lever (it is bound-qualified and
+// stored only when nothing below was truncated, so a stored entry is an exact fact), and the
+// instrumented profile on gi=369 advertised a large gap: TT lookups 113,582 / hits 4,275 (3.76%),
+// nowin stored 0, nowin NOT stored 50,173. It does not pay: 3,000 games at d5/b20 came back 1.0335x
+// on the 29 matched slow games (base 4,415 s -> 4,563 s), and the six heaviest games individually
+// read 1.015 / 1.007 / 0.997 / 1.001 -- i.e. flat to marginally worse.
+// WHY, so the next reader does not repeat it: the leaf table is consulted at only 19% of this deck's
+// search nodes (113,582 lookups against 601,250 nodes), while the cost lives in the ENUMERATION --
+// 1,131,337 EnumeratePlans calls producing 131,390,242 plans (116 per call) and 928,458
+// ApplyPlanDirect calls. A leaf-rollout memo cannot reach that. The open lossless target on this deck
+// is per-NODE cost, not memoisation: 827,433 GameState deep copies, 1.38 per node against stompy's
+// 0.13, ~0.89 copies per apply.
 inline bool TTNoWinCacheOn()
 {
     static const bool v = EnvOn("MTG_TT_NOWIN_CACHE");
