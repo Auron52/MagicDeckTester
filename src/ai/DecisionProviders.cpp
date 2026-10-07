@@ -16018,63 +16018,52 @@ const char* BrunaProvider::CastOrderTierName(int rank) const
 // ---- BrunaProvider::TutorCandidates -- the GLITTERING WISH candidate rule ------------------------
 //
 // USER spec (2026-10-06): "narrow the 11 to 1-3 candidates almost always; the SEARCH chooses among
-// them." Glittering Wish reaches eleven multicolored sideboard names; the full-width axis cost 1.52x
-// ms at d5 b20 (ledger "Sideboard change", open question 1) while most of the pool never wins a game.
-// The rule (roles read from PARAMS, never names):
+// them." Refined by the USER 2026-10-07: "I would leave out Vexing Shusher. Others should be skippable
+// based on the current conditions." / "Troyan is basically good if you need acceleration and not worth
+// it otherwise. An aura may not be necessary if we have good ones (and enough for lethal) in hand." /
+// "if I have the choice to cast bruna or Linvala next turn then we should definitely cast Bruna."
+// Every role is CONDITIONAL and drops out when the state makes it pointless (roles read from PARAMS):
 //
-//   BRUNA (attack_gather_auras): a candidate unless a card of that NAME is already in our hand or on
-//     our battlefield (a second copy is a dead legend). The deck's most-fetched card and the enabler
-//     for the 6-mana Auras, but SLOW -- so the faster lines below stay in the set beside her.
-//   PRIMARY AURA: the payload Aura (a power grant, a base setter or a colour grant; not Arcanum Wings'
-//     swap, not a land Aura) with the HIGHEST RESULTING POWER in context, among the non-cheap ones:
-//     for each host -- our creatures on the battlefield and the creature cards in hand -- the power
-//     the Aura adds there (Almost Perfect: 9 minus the host's current base; a flat grant: its bonus;
-//     Steel: +1 per host colour it keys on), maximised over hosts. Almost Perfect >= Indrik Umbra on
-//     every host this list has (all base power <= 5), so Umbra is the pick only once Almost Perfect is
-//     gone. Ties keep the sideboard order.
-//   CHEAP AURA (mana value <= 3: Unflinching Courage, Steel of the Godhead): weak in a goldfish, so
-//     NEVER the sole Aura pick -- at most ONE, as a searched SECOND Aura beside a primary, only when
-//     there is NO CHEAT-INTO-PLAY PATH (then a 6-mana Aura may be uncastable for turns), and only
-//     when a BODY (below) is already on the battlefield to wear it:
-//       * a gatherer (Bruna) on our battlefield, or in hand and castable by next turn -- mana AND the
-//         colours of her cost;
-//       * an Aura-swap Aura (Arcanum Wings) on our battlefield with blue for the swap, or in hand with
-//         a creature to carry it and next turn's mana (and blue) covering cast + swap.
-//     With a cheat path only the primary is offered -- EXCEPT for LETHAL NOW: when this turn's ready
-//     attackers (Aura- and haste-aware) fall short of the opponent's life by no more than the cheap
-//     Aura adds, it is offered anyway (a cheat path pays off next turn at the earliest).
-//   BODIES (creatures that are not mana dorks -- Vexing Shusher {R/G}{R/G} 2/2, Linvala {1}{W}{U} 3/3)
-//     when we have NO body to carry the Auras -- no non-dork creature on our battlefield (a creature
-//     already WEARING one of our Auras counts, dork or not) and none of mana value <= 3 in hand (a bare
-//     dork taps for mana, it does not carry; Bruna in hand is six mana away) -- OR when there is no
-//     cheat path and mana is SHORT (below): the payloads cannot arrive soon, so damage must come from
-//     bodies. The CHEAPEST body and the HARDEST-HITTING body of mana value <= 3 (one name when they
-//     coincide). ADDED BY THE PROOF, not the spec: round 1 excluded them, and 9 of the 14 games the
-//     full-width control won sooner fetched Vexing Shusher (7) or Linvala (2) onto an empty /
-//     dork-only board with Colossification / Mythic Proportions / Arcanum Wings in hand. Shusher
-//     alone then failed the held-out seeds (s11.5M gi264 / gi371: Linvala's third point of damage
-//     is the kill, unrecovered even at d8 b0), Linvala alone lost Shusher's turn-3 body + Wings lines
-//     -- so both are offered.
-//   TROYAN (mana_only_spell_min_mv: big-spell mana): a candidate when MANA IS SHORT -- next turn's
-//     supply (every land / rock / unrestricted dork on our battlefield at its yield, +1 for a land
-//     drop if a land is in hand) is below the most expensive card we mean to cast at 5+ mana value:
-//     the nonland hand's max (creatures may also draw on creature-only mana, e.g. Somberwald Sage)
-//     and the 6-drop this wish could fetch instead (Bruna / the primary Aura).
-//   REGROWTH (tutor_from_graveyard: Auroral Procession / Reborn Hope) only when it RESTORES A CHEAT
-//     PATH: it can target an Aura-swap Aura (Arcanum Wings) in our graveyard (its own filter -- Reborn
-//     Hope's multicolored conjunct cannot reach mono-blue Wings), there is no cheat path otherwise (as
-//     above), and a payload Aura is in hand to swap in. ADDED BY THE PROOF (2026-10-06, held-out
-//     s5005 gi342, unrecovered at d8 b0): Wings pitched at cleanup, three Colossifications in hand --
-//     the control's Wish -> Procession -> Wings -> swap won a turn sooner.
-//   EVERYTHING ELSE (Detention Sphere, any other regrowth, a non-top Aura) is excluded.
-//     Order (the base plan / rollout / d0 pick is the front): Bruna, primary Aura, hardest-hitting
-//     body, cheapest body, Troyan, cheap Aura, regrowth. An EMPTY set (every role filled or gone)
-//     falls back to the full list.
+//   BRUNA (attack_gather_auras): unless a copy is in our hand / on our battlefield (a second copy is a
+//     dead legend), and unless lethal is already deliverable on a creature we have (ENOUGH FOR LETHAL
+//     below, on-board hosts) -- then she is not what is missing.
+//   PRIMARY AURA: the payload Aura (power grant / base setter / colour grant; not Wings' swap, not a land
+//     Aura) of mana value > 3 with the HIGHEST RESULTING POWER over our hosts (creatures on the
+//     battlefield + creature cards in hand; Almost Perfect adds 9 minus the host's base). SKIPPED when the
+//     hand already holds ENOUGH FOR LETHAL: some host H -- a creature on our battlefield (CombatPowerOf:
+//     its Auras/Equipment counted), a creature card in hand castable next turn, or Bruna / Linvala if this
+//     wish could fetch them and they are castable next turn -- reaches the opponent's life (20, or 2HG's
+//     shared 30) with the power of our other creatures plus what H can RECEIVE: every payload Aura in hand
+//     AND graveyard if H is a gatherer (her attack trigger, no mana), else the best subset of the hand's
+//     payload Auras whose mana values fit next turn's unrestricted supply (less H's own cost) and whose
+//     colours we make. Timing (haste for a fresh host) is not modelled.
+//   BODY (Linvala -- the hardest-hitting non-dork creature of mana value <= 3; Vexing Shusher is OUT,
+//     USER 2026-10-07): only when nothing can carry the Auras -- no non-dork creature and no Aura-wearer on
+//     our battlefield, none of mana value <= 3 in hand -- AND Bruna cannot come down next turn (in hand or
+//     fetchable, next turn's mana covering her {3}{W}{W}{U} with creature-only and big-spell-only mana
+//     counted, colours included).
+//   TROYAN (mana_only_spell_min_mv: big-spell mana): only when MANA IS SHORT for something we actually
+//     mean to CAST -- next turn's supply (lands / rocks / unrestricted dorks at their yield, +1 for a land
+//     drop) is below the largest 5+ cost among the hand's creatures (Bruna, paid with creature-only mana
+//     too), the hand's noncreature spells (a payload Aura only when no gatherer is on our battlefield --
+//     she puts it on for free -- and a host exists), Bruna if fetchable, and the primary when offered.
+//   CHEAP AURA (mana value <= 3: Unflinching Courage, Steel of the Godhead): at most ONE, as a searched
+//     SECOND Aura beside an offered primary, only with NO CHEAT-INTO-PLAY PATH and a body to wear it (a
+//     non-dork creature or an Aura-wearer on our battlefield). Cheat paths: a gatherer on our battlefield,
+//     or in hand and castable next turn (mana AND colours); Arcanum Wings on our battlefield with blue for
+//     the swap, or in hand with a creature to carry it and next turn's mana (and blue) for cast + swap.
+//     EXCEPTION, LETHAL NOW: offered (even without a primary) when this turn's ready attackers
+//     (Aura- and haste-aware) fall short of the opponent's life by no more than it adds.
+//   REGROWTH (Auroral Procession / Reborn Hope): only when it RESTORES A CHEAT PATH -- it can target an
+//     Aura-swap Aura in our graveyard (its own filter: Reborn Hope's multicolored conjunct cannot reach
+//     mono-blue Wings), there is no cheat path otherwise, and a payload Aura is in hand to swap in.
+//   EVERYTHING ELSE (Detention Sphere, Vexing Shusher, any other regrowth, a non-top Aura) is excluded.
+//     Order (the base plan / rollout / d0 pick is the front): Bruna, primary Aura, Linvala, Troyan, cheap
+//     Aura, regrowth. NOTHING MISSING (an empty set): ONE name -- the primary as the default, else the
+//     first legal name -- since the fetch cannot matter; never the whole pool.
 //
-// SIZE: usually 1-3 names, but the early T2/T3 wish with no body, no cheat path and short mana
-// offers FIVE (Bruna | Almost Perfect | Linvala | Vexing Shusher | Troyan). Every cut of that state
-// was MEASURED WORSE against the same full-width control (ledger "Glittering Wish heuristic
-// 2026-10-06": dropping Troyan, either body, or Almost Perfect each lost turns).
+// Every addition beyond the USER's spec was forced by a held-out game the full-width control won sooner
+// and the rule did not recover even at d8 b0 (docs/design/glittering-wish-heuristic.md has each game).
 //
 // Executor, rollout, d0 and search all read this one hook (PerformTutor / the tutor axis / Solve),
 // so they agree by construction. MTG_WISH_FULL_WIDTH=1 (heurarm WISH_FULL_WIDTH) = the full-width
@@ -16262,8 +16251,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     const std::string* troyan = nullptr;
     const std::string* primary = nullptr; const CardDefinition* primary_d = nullptr; int primary_pw = 0;
     const std::string* cheap = nullptr;   int cheap_pw = 0;
-    const std::string* body = nullptr;    int body_mv = 0, body_pw = 0;     // cheapest body
-    const std::string* big_body = nullptr; int big_mv = 0, big_pw = 0;      // hardest-hitting body, MV<=3
+    const std::string* body = nullptr;    const CardDefinition* body_d = nullptr; int body_mv = 0, body_pw = 0;
     const std::string* regrowth = nullptr;                                  // returns a swap Aura
     for (const std::string& n : legal)
     {
@@ -16283,11 +16271,11 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         }
         if (d->card.IsCreature() && d->tmpl != CardTemplate::ManaDork)
         {
+            // BODY: the HARDEST-HITTING creature of mana value <= 3 (Linvala). USER 2026-10-07: "I would
+            // leave out Vexing Shusher" -- the cheapest-body role is gone.
             const int mv = d->card.m_mana_cost.ManaValue(), pw = d->card.m_power.value_or(0);
-            if (!legend_dup && (body == nullptr || mv < body_mv || (mv == body_mv && pw > body_pw)))
-            { body = &n; body_mv = mv; body_pw = pw; }
-            if (!legend_dup && mv <= 3 && (big_body == nullptr || pw > big_pw || (pw == big_pw && mv < big_mv)))
-            { big_body = &n; big_mv = mv; big_pw = pw; }
+            if (!legend_dup && mv <= 3 && (body == nullptr || pw > body_pw || (pw == body_pw && mv < body_mv)))
+            { body = &n; body_d = d; body_mv = mv; body_pw = pw; }
             continue;
         }
         if (p.tutor_from_graveyard)
@@ -16309,28 +16297,152 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         || (swap_hand_mv >= 0 && creature_bf && supply_any >= swap_hand_mv
             && WishColoursOk(swap_hand_d->card.m_mana_cost, col_any)
             && WishColoursOk(*swap_hand_d->params.aura_swap_cost, col_any));
-    if (primary_d != nullptr) { need_nc = std::max(need_nc, primary_d->card.m_mana_cost.ManaValue()); }
-    if (bruna_d != nullptr)   { need_c  = std::max(need_c,  bruna_d->card.m_mana_cost.ManaValue()); }
-    const bool short_mana = (need_nc >= 5 && supply_any < need_nc)
-                         || (need_c  >= 5 && supply_any + supply_cre < need_c);
 
+    // BRUNA NEXT TURN: in hand, or fetchable by this wish, with next turn's mana -- every source that can
+    // really pay her {3}{W}{W}{U}: unrestricted, creature-only (Somberwald Sage) and big-spell-only
+    // (Troyan: mana value 6 >= 5) -- and her colours.
+    auto castable_next = [&](const CardDefinition* d)
+    {
+        return d != nullptr && supply_any + supply_cre >= d->card.m_mana_cost.ManaValue()
+            && WishColoursOk(d->card.m_mana_cost, col_any | col_cre);
+    };
+    const bool bruna_next = castable_next(gatherer_hand_d) || castable_next(bruna_d);
+
+    // ---- ENOUGH FOR LETHAL (USER 2026-10-07: "An aura may not be necessary if we have good ones (and
+    // enough for lethal) in hand") ----------------------------------------------------------------------
+    // There is a host H such that H's power with the payload Auras it can RECEIVE, plus the power of our
+    // other creatures on the battlefield, reaches the opponent's life (players[opp].life: 20, or 2HG's
+    // shared 30). Hosts: every creature on our battlefield (power = CombatPowerOf: its Auras and Equipment
+    // already counted), every creature card in hand castable next turn, and Bruna / the body if THIS WISH
+    // could fetch them and they are castable next turn. What H receives:
+    //   * a GATHERER (Bruna): every payload Aura in our hand AND graveyard (her attack trigger; no mana);
+    //   * anything else: the best subset of the hand's payload Auras whose mana values fit next turn's
+    //     unrestricted supply (less H's own cost when H comes from the hand / the wish) and whose colours
+    //     we can make.
+    // A base setter (Almost Perfect) adds (its base - H's base); flat and colour grants add up; only the
+    // best setter counts. Timing is NOT modelled (a host cast next turn may need haste to swing then) --
+    // the test answers "is another Aura the missing piece?", and when it says no the wish fetches what
+    // is missing instead: Bruna, the body, Troyan for mana.
+    std::vector<const CardDefinition*> hand_auras, gy_auras;
+    for (const Card& c : ap.hand)
+    { const CardDefinition* d = db.LookupCached(c); if (d && IsWishPayloadAura(d->params)) { hand_auras.push_back(d); } }
+    for (const Card& c : ap.graveyard)
+    { const CardDefinition* d = db.LookupCached(c); if (d && IsWishPayloadAura(d->params)) { gy_auras.push_back(d); } }
+    const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+    int board_power = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == me && q.card.IsCreature()) { board_power += std::max(0, CombatPowerOf(q, s)); } }
+    // The power `auras` add on a host of base `base` / card `card` (a setter replaces the base: best one).
+    auto gain_of = [&](const std::vector<const CardDefinition*>& auras, int base, const Card* card)
+    {
+        int flat = 0, setter = std::numeric_limits<int>::min();
+        for (const CardDefinition* a : auras)
+        {
+            const CardParams& p = a->params;
+            flat += p.aura_power_bonus;
+            for (const CardParams::AuraColorBonus& cb : p.aura_color_bonuses)
+            { if (card != nullptr && card->HasColor(cb.color)) { flat += cb.power; } }
+            if (p.aura_set_base_power >= 0) { setter = std::max(setter, p.aura_set_base_power); }
+        }
+        return flat + (setter > base ? setter - base : 0);
+    };
+    // The best power the hand's Auras add to a non-gatherer host within `budget` mana (subset search).
+    auto best_cast_gain = [&](int budget, int base, const Card* card)
+    {
+        const int k = std::min<int>(static_cast<int>(hand_auras.size()), 10);
+        int best = 0;
+        for (int m = 1; m < (1 << k); ++m)
+        {
+            int mv = 0; bool ok = true; std::vector<const CardDefinition*> sub;
+            for (int i = 0; i < k && ok; ++i)
+            {
+                if (!(m & (1 << i))) { continue; }
+                mv += hand_auras[static_cast<std::size_t>(i)]->card.m_mana_cost.ManaValue();
+                ok = mv <= budget && WishColoursOk(hand_auras[static_cast<std::size_t>(i)]->card.m_mana_cost, col_any);
+                sub.push_back(hand_auras[static_cast<std::size_t>(i)]);
+            }
+            if (ok) { best = std::max(best, gain_of(sub, base, card)); }
+        }
+        return best;
+    };
+    std::vector<const CardDefinition*> all_auras = hand_auras;
+    all_auras.insert(all_auras.end(), gy_auras.begin(), gy_auras.end());
+    bool lethal_on_board = false, lethal_reach = false;
+    if (!hand_auras.empty() || (gatherer_bf && !gy_auras.empty()))
+    {
+        for (const Permanent& q : s.battlefield)   // available hosts
+        {
+            if (q.controller_index != me || !q.card.IsCreature() || q.def_absent) { continue; }
+            const CardDefinition* d = db.LookupCached(q.card);
+            if (d == nullptr) { continue; }
+            int base = q.card.m_power.value_or(0) + DynamicBasePower(*d, s, me);
+            if (q.is_animated) { base += d->params.animate_power; }
+            const int gain = d->params.attack_gather_auras ? gain_of(all_auras, base, &q.card)
+                                                           : best_cast_gain(supply_any, base, &q.card);
+            if (board_power + gain >= opp_life) { lethal_on_board = true; break; }
+        }
+        // reachable hosts: creature cards in hand, and Bruna / the body through this wish
+        std::vector<const CardDefinition*> reach;
+        for (const Card& c : ap.hand)
+        { const CardDefinition* d = db.LookupCached(c); if (d && d->card.IsCreature()) { reach.push_back(d); } }
+        if (bruna_d != nullptr) { reach.push_back(bruna_d); }
+        if (body_d != nullptr)  { reach.push_back(body_d); }
+        for (const CardDefinition* d : reach)
+        {
+            if (lethal_on_board || lethal_reach) { break; }
+            const int mv = d->card.m_mana_cost.ManaValue();
+            const bool gatherer = d->params.attack_gather_auras;
+            if (!(gatherer ? castable_next(d) : (supply_any + supply_cre >= mv && WishColoursOk(d->card.m_mana_cost, col_any | col_cre))))
+            { continue; }
+            const int base = d->card.m_power.value_or(0);
+            const int gain = gatherer ? gain_of(all_auras, base, &d->card)
+                                      : best_cast_gain(supply_any - mv, base, &d->card);
+            if (board_power + base + gain >= opp_life) { lethal_reach = true; }
+        }
+    }
+    const bool hand_lethal = lethal_on_board || lethal_reach;
+
+    // ---- MANA SHORT (Troyan) -- USER 2026-10-07: "Troyan is basically good if you need acceleration and
+    // not worth it otherwise." The 5+ mana value spells we actually mean to CAST: the hand's creatures
+    // (Bruna), the hand's noncreature spells -- a payload Aura only when no gatherer is on our battlefield
+    // (Bruna's attack trigger puts it on free) and a host exists (a creature on our battlefield or in
+    // hand) -- and what this wish would otherwise fetch: Bruna, and the primary Aura when it is offered.
+    // Short = next turn's supply (land drop included) is below the largest such cost.
+    const bool host_exists = creature_bf || cheap_body_hand || gatherer_hand_mv >= 0 || need_c > 0;
+    int need_n = 0, need_cr = need_c;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d == nullptr || d->card.IsLand() || d->card.IsCreature()) { continue; }
+        if (d->params.is_aura && (gatherer_bf || !host_exists)) { continue; }
+        need_n = std::max(need_n, d->card.m_mana_cost.ManaValue());
+    }
+    const bool primary_offered = primary != nullptr && !hand_lethal;
+    if (primary_offered && !gatherer_bf && host_exists)
+    { need_n = std::max(need_n, primary_d->card.m_mana_cost.ManaValue()); }
+    if (bruna_d != nullptr) { need_cr = std::max(need_cr, bruna_d->card.m_mana_cost.ManaValue()); }
+    const bool short_mana = (need_n >= 5 && supply_any < need_n)
+                         || (need_cr >= 5 && supply_any + supply_cre < need_cr);
+    need_nc = need_n;
+
+    // ---- the set ---------------------------------------------------------------------------------------
     std::vector<std::string> out;
-    if (bruna != nullptr)                                   { out.push_back(*bruna); }
-    if (primary != nullptr)                                 { out.push_back(*primary); }
-    // A body when nothing can carry the Auras, OR when no cheat path exists and mana is short of the
-    // payloads -- the Auras cannot arrive soon, so the damage must come from bodies (2026-10-06, held-out
-    // s4004 gi58 / d3 gi904: Mother of Runes out, payloads out of reach; the control's extra hasty
-    // body under Lightning Greaves won a turn sooner, unrecovered at d8 b0 without it).
-    const bool need_body = (!body_bf && !cheap_body_hand) || (!cheat && short_mana);
-    if (need_body && big_body != nullptr && big_body != body) { out.push_back(*big_body); }
+    // BRUNA: not when lethal is already deliverable on a creature we have -- she is not what is missing.
+    if (bruna != nullptr && !lethal_on_board)               { out.push_back(*bruna); }
+    if (primary_offered)                                    { out.push_back(*primary); }
+    // BODY (Linvala): nothing can carry the Auras (no non-dork creature or Aura-wearer on our battlefield,
+    // none of mana value <= 3 in hand), and Bruna cannot come down next turn instead. USER 2026-10-07:
+    // "if I have the choice to cast bruna or Linvala next turn then we should definitely cast Bruna."
+    static const bool s_linv_wings = EnvOn("MTG_WISH_LINV_WINGS");   // TEMP MEASUREMENT ARM, not for commit
+    const bool need_body = !body_bf && !cheap_body_hand && !bruna_next
+        && (!heurarm::Flag(heurarm::WISH_LINV_WINGS, s_linv_wings) || swap_hand_d != nullptr);
     if (body != nullptr && need_body)                       { out.push_back(*body); }
     if (troyan != nullptr && short_mana)                    { out.push_back(*troyan); }
     // LETHAL NOW (2026-10-06, held-out s7007 d3 gi933): a cheat path delivers the primary NEXT turn at the
     // earliest; when this turn's ready attackers fall short of the opponent's life by no more than the
-    // cheap Aura adds, the cheap Aura is the kill THIS turn, so it is offered despite the cheat path.
-    // Ready power is Aura-aware (CombatPowerOf; ReadyAttackPower reads bare EffectivePower) and haste-aware
-    // (CanAttackFull: Lightning Greaves); 0 once combat is behind us (ReadyAttackPower's phase guard).
-    const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+    // cheap Aura adds, the cheap Aura is the kill THIS turn, so it is offered despite the cheat path (and
+    // without a primary beside it). Ready power is Aura-aware (CombatPowerOf; ReadyAttackPower reads bare
+    // EffectivePower) and haste-aware (CanAttackFull: Lightning Greaves); 0 once combat is behind us.
     int ready = 0;
     if (s.phase != Phase::PostCombatMain && s.phase != Phase::Combat && s.phase != Phase::Ending)
     {
@@ -16341,15 +16453,19 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         }
     }
     const bool cheap_closes = cheap != nullptr && ready > 0 && ready < opp_life && ready + cheap_pw >= opp_life;
-    if (cheap != nullptr && primary != nullptr && (!cheat || cheap_closes) && body_bf) { out.push_back(*cheap); }
+    if (cheap != nullptr && body_bf && (cheap_closes || (primary_offered && !cheat))) { out.push_back(*cheap); }
     if (regrowth != nullptr && !cheat && payload_hand)      { out.push_back(*regrowth); }
+    // NOTHING MISSING (every role filled or skipped): the wish's fetch cannot matter, so ONE name -- the
+    // primary Aura (else the first legal name) -- rather than the whole pool.
+    if (out.empty() && primary != nullptr) { out.push_back(*primary); }
+    if (out.empty() && !legal.empty())     { out.push_back(legal.front()); }
     if (TRACE_ON("wishcands"))
     {
         std::string l;
         for (const std::string& n : out) { l += (l.empty() ? "" : " | ") + n; }
-        TRACE("wishcands", "T%d n=%zu supply=%d+%d need=%d/%d cheat=%d short=%d body=%d :: %s", s.turn_number,
-              out.size(), supply_any, supply_cre, need_nc, need_c, cheat ? 1 : 0, short_mana ? 1 : 0,
-              need_body ? 1 : 0, l.c_str());
+        TRACE("wishcands", "T%d n=%zu supply=%d+%d need=%d/%d cheat=%d short=%d body=%d lethal=%d/%d :: %s", s.turn_number,
+              out.size(), supply_any, supply_cre, need_nc, need_cr, cheat ? 1 : 0, short_mana ? 1 : 0,
+              need_body ? 1 : 0, lethal_on_board ? 1 : 0, lethal_reach ? 1 : 0, l.c_str());
     }
     return out;
 }
@@ -16369,8 +16485,10 @@ BrunaProvider::TutorCandidates(const GameState& s, int controller, const CardPar
         for (const Permanent& q : s.battlefield)
         { if (q.controller_index == controller && !q.card.IsLand()) { bf += q.card.m_name.str() + ","; } }
         for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand) { hand += c.m_name.str() + ","; }
-        TRACE("wishproof", "T%d legal=%zu rule={%s} bf=[%s] hand=[%s]", s.turn_number, legal.size(), l.c_str(),
-              bf.c_str(), hand.c_str());
+        const char arm = BrunaWishFullWidth() ? 'C'
+                       : heurarm::Flag(heurarm::WISH_LINV_WINGS, EnvOn("MTG_WISH_LINV_WINGS")) ? 'W' : 'R';   // TEMP arm tag
+        TRACE("wishproof", "T%d arm=%c n=%zu legal=%zu rule={%s} bf=[%s] hand=[%s]", s.turn_number, arm, h.size(),
+              legal.size(), l.c_str(), bf.c_str(), hand.c_str());
     }
     if (!IsMulticolorWish(pp) || legal.size() <= 1
         || DecisionUnpruned(UnprunedGate::Tutor) || BrunaWishFullWidth()) { return legal; }

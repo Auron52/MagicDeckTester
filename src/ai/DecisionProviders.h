@@ -469,12 +469,13 @@ public:
     // ranking -- so any cap below the pool would be a shuffle-order prune, not a heuristic. 32 covers
     // every distinct name this list can put in any of the three zones: still "every legal name".
     int TutorSearchWidth() const override { return 32; }
-    // GLITTERING WISH CANDIDATE RULE (USER spec 2026-10-06, docs/design/analysis-Bruna.md "Glittering
-    // Wish heuristic 2026-10-06"): the wish's 11-name pool narrows to 1-6 candidates (the early five-way
-    // state is common -- census in docs/design/glittering-wish-heuristic.md) and the SEARCH
-    // chooses among them -- Bruna (none in hand / on the battlefield), the highest-power Aura in
-    // context, the cheapest / hardest-hitting cheap bodies when nothing can carry the Auras, Troyan when mana is short, a cheap
-    // second Aura only without a cheat-into-play path, and a regrowth only when it returns Arcanum Wings to restore one.
+    // GLITTERING WISH CANDIDATE RULE (USER spec 2026-10-06 + USER refinements 2026-10-07;
+    // docs/design/glittering-wish-heuristic.md): the wish's 11-name pool narrows to a few CONDITIONAL roles
+    // and the SEARCH chooses among them -- Bruna (none owned; not when lethal is already deliverable on a
+    // creature we have), the highest-power Aura (not when the hand already holds enough for lethal),
+    // Linvala (nothing can carry the Auras and Bruna cannot come down next turn; Vexing Shusher is OUT),
+    // Troyan (only when mana is short for something we mean to cast), a cheap second Aura (no cheat path,
+    // or lethal now), a regrowth that restores the Arcanum Wings cheat path. Nothing missing -> ONE name.
     // Every other tutor (Open the Armory, the regrowths) is GenericProvider's list unchanged.
     // MTG_WISH_FULL_WIDTH=1 (heurarm WISH_FULL_WIDTH) is the full-width PROOF CONTROL; MTG_UNPRUNED and
     // human play keep every legal name (the human chooser MARKS this set, TutorMarksSuggested).

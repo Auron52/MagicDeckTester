@@ -688,11 +688,12 @@ TEST_CASE("Glittering Wish rule: other tutors keep GenericProvider's list (Open 
     CHECK(BrunaSb().TutorMarksSuggested(DefSb("Glittering Wish").params));
 }
 
-TEST_CASE("Glittering Wish rule: cheap BODIES (Vexing Shusher + Linvala) only when no non-dork creature can carry the Auras")
+TEST_CASE("Glittering Wish rule: the BODY is Linvala only, when nothing can carry the Auras and Bruna cannot come down next turn")
 {
     WishFullWidthArm off(false);
-    // No creature at all, Colossification in hand: the bodies join (Shusher {R/G}{R/G} 2/2, the cheapest;
-    // Linvala {1}{W}{U} 3/3, the hardest-hitting) -- and the cheap Aura does NOT (nothing to wear it).
+    // USER 2026-10-07: "I would leave out Vexing Shusher" -- never offered.
+    // No creature at all, Colossification in hand, two lands (Bruna is six mana away): Linvala joins --
+    // and the cheap Aura does NOT (nothing to wear it).
     {
         BoardSb b;
         for (const std::string& n : kNewSideboard) { b.Side(n); }
@@ -700,46 +701,145 @@ TEST_CASE("Glittering Wish rule: cheap BODIES (Vexing Shusher + Linvala) only wh
         b.Put("Forest");
         b.Hand("Colossification");
         const std::vector<std::string> c = WishCands(b);
-        CHECK(Has(c, "Vexing Shusher"));                 // the cheapest body
-        CHECK(Has(c, "Linvala, Shield of Sea Gate"));    // the hardest-hitting body of mana value <= 3
+        CHECK(Has(c, "Linvala, Shield of Sea Gate"));
+        CHECK_FALSE(Has(c, "Vexing Shusher"));
         CHECK_FALSE(Has(c, "Unflinching Courage"));
     }
-    // Only mana dorks out (they tap for mana, they do not carry): still a body.
+    // Only mana dorks out (they tap for mana, they do not carry): still Linvala.
     {
         BoardSb b;
         for (const std::string& n : kNewSideboard) { b.Side(n); }
         b.Put("Forest");
         b.Put("Avacyn's Pilgrim");
-        CHECK(Has(WishCands(b), "Vexing Shusher"));
+        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
     }
-    // A non-dork creature on the battlefield (Mother of Runes) and a cheat path (Bruna out): no body.
+    // A non-dork creature on the battlefield (Mother of Runes): no body.
+    {
+        BoardSb b = EarlyWishBoard();
+        CHECK_FALSE(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+    }
+    // USER 2026-10-07: "if I have the choice to cast bruna or Linvala next turn then we should definitely
+    // cast Bruna." Five lands out + a land drop = six mana with W and U next turn: Bruna (fetchable by this
+    // wish) can come down -> no Linvala.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Island");
+        b.Put("Forest");
+        b.Put("Forest");
+        b.Hand("Forest");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Bruna, Light of Alabaster"));
+        CHECK_FALSE(Has(c, "Linvala, Shield of Sea Gate"));
+    }
+    // ...the same with Bruna IN HAND (not fetchable: a copy is owned) -> no Linvala either.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Island");
+        b.Put("Forest");
+        b.Put("Forest");
+        b.Hand("Forest");
+        b.Hand("Bruna, Light of Alabaster");
+        CHECK_FALSE(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+    }
+    // Bruna NOT castable next turn (no blue source): no body, no Bruna in time -> Linvala offered.
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Forest");
+        b.Put("Forest");
+        b.Hand("Forest");
+        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: TROYAN only for real acceleration")
+{
+    WishFullWidthArm off(false);
+    // Two lands, Mythic Proportions in hand on Mother of Runes: a 7-drop with three mana next turn -> Troyan.
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Hand("Mythic Proportions");
+        CHECK(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+    // Bruna on the battlefield gathers the Auras for free, and nothing else in hand costs 5+ -> no Troyan.
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Hand("Mythic Proportions");
+        b.Put("Bruna, Light of Alabaster");
+        CHECK_FALSE(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+    // Plenty of mana (seven sources next turn) -> no Troyan.
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Hand("Mythic Proportions");
+        for (const char* l : { "Forest", "Forest", "Plains", "Island" }) { b.Put(l); }
+        CHECK_FALSE(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+}
+
+TEST_CASE("Glittering Wish rule: ENOUGH FOR LETHAL in hand -> no sideboard Aura; short of lethal -> the Aura is offered")
+{
+    WishFullWidthArm off(false);
+    // Bruna on the battlefield (5 power) with Colossification (+20) in hand: her attack trigger gathers it
+    // for free -> 25 >= 20. Another Aura is not the missing piece: no primary, no cheap Aura.
     {
         BoardSb b = EarlyWishBoard();
         b.Put("Bruna, Light of Alabaster");
-        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+        b.Hand("Colossification");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK_FALSE(Has(c, "Unflinching Courage"));
+        CHECK_FALSE(Has(c, "Troyan, Gutsy Explorer"));
+        CHECK_FALSE(Has(c, "Linvala, Shield of Sea Gate"));
+        // Nothing is missing (Bruna out, a body out, no mana need): the fetch cannot matter, so ONE name --
+        // the primary as the default -- never the whole pool.
+        REQUIRE(c.size() == 1);
+        CHECK(c.front() == "Almost Perfect");
     }
-    // ...or Mother with mana NOT short (six sources next turn, so Bruna and Almost Perfect are both in
-    // reach): no body.
+    // Same board, only Unflinching Courage in hand: 1 (Mother) + 5 + 2 = 8 < 20 -> the primary is offered.
     {
         BoardSb b = EarlyWishBoard();
-        b.Put("Forest");
-        b.Put("Plains");
-        b.Put("Island");
-        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+        b.Put("Bruna, Light of Alabaster");
+        b.Hand("Unflinching Courage");
+        CHECK(Has(WishCands(b), "Almost Perfect"));
     }
-    // Mother out but NO cheat path and mana SHORT of the payloads (s4004 gi58 / d3 gi904): bodies too --
-    // the Auras cannot arrive soon, the damage has to come from bodies.
+    // Mother of Runes out, Eldrazi Conscription (+10) in hand, but only three mana next turn: it cannot be
+    // cast on Mother, and Bruna cannot come down next turn -> NOT lethal -> the primary is offered.
     {
         BoardSb b = EarlyWishBoard();
-        CHECK(Has(WishCands(b), "Vexing Shusher"));
-        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+        b.Hand("Eldrazi Conscription");
+        CHECK(Has(WishCands(b), "Almost Perfect"));
     }
-    // Shusher already fetched: Linvala is both the cheapest and the hardest-hitting body (one name).
+    // 2HG: the opponents share 30. Bruna + Colossification = 25 + Mother 1 = 26 < 30 -> the primary stays.
+    {
+        BoardSb b = EarlyWishBoard();
+        b.Put("Bruna, Light of Alabaster");
+        b.Hand("Colossification");
+        b.s.players[1].life = 30;
+        CHECK(Has(WishCands(b), "Almost Perfect"));
+    }
+    // A reachable host: Bruna fetchable and castable next turn (six mana, W+U), Colossification + Conscription
+    // in hand -> 5 + 30 >= 20 on her -> no sideboard Aura; Bruna is what is missing.
     {
         BoardSb b;
-        for (const std::string& n : kNewSideboard) { if (n != "Vexing Shusher") { b.Side(n); } }
-        b.Put("Forest");
-        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        for (const char* l : { "Plains", "Plains", "Island", "Forest", "Forest" }) { b.Put(l); }
+        b.Hand("Forest");
+        b.Hand("Colossification");
+        b.Hand("Eldrazi Conscription");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Bruna, Light of Alabaster"));
+        CHECK_FALSE(Has(c, "Almost Perfect"));
     }
 }
 
@@ -860,7 +960,7 @@ TEST_CASE("Glittering Wish rule: a mana dork WEARING an Aura is a carrier (the c
     d.Put("Avacyn's Pilgrim");
     d.Hand("Arcanum Wings");
     const std::vector<std::string> e = WishCands(d);
-    CHECK(Has(e, "Vexing Shusher"));
+    CHECK(Has(e, "Linvala, Shield of Sea Gate"));
     CHECK_FALSE(Has(e, "Unflinching Courage"));
 }
 
