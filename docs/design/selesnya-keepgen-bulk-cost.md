@@ -71,7 +71,9 @@ Byte-identity evidence for every row: the 40-rollout callgrind digest `59f1c8097
 (5,896.27/rollout) unchanged; the 4000-rollout bench digest `515488e3a5fe2933` unchanged; the
 2000-rollout replay-sample win-turn digest unchanged; smoke 117/118 (the one move,
 `selesnya_smoke_d3_s1001` gi74 5->6, is base commit `d379968d`'s documented mana-cache fix and is
-produced identically by the base binary).
+produced identically by the base binary); **regression tier at `d80c66bd`: 165/165 PASS byte-identical,
+"no searched-depth slowdowns or play changes"; viewer references 506: 0 play-drift / 0 board-diverged /
+0 enum-gap / 0 mull-drift** (20 threads).
 
 | commit | change | instructions (40 rollouts) |
 |---|---|---|
