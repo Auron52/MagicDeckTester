@@ -1092,3 +1092,57 @@ TEST_CASE("CR 508.1f: an attacking mana creature cannot pay the in-combat Aura s
     for (const Permanent& p : c.s.battlefield) { if (p.card.m_number == colo2) { host2 = p.aura_attached_to; } }
     CHECK(host2 == p2);
 }
+
+// The attack hold keeps mana home only for a swap that can HAPPEN: with no hand Aura to bring in, the
+// window does nothing, so nothing is held (Bruna d0 s4004 gi360 T7: empty hand, a 40-power Birds held).
+TEST_CASE("Attack hold: no hand Aura to swap in -- nothing is held")
+{
+    BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = pilgrim;
+    b.s.battlefield.push_back(w);
+    b.Put("Birds of Paradise");
+    b.Put("Boseiju, Who Endures");
+    b.Put("Plains");
+    GameState pinned = b.s;
+    pinned.scripted_combat_aura_swap = 70;
+    CHECK(DeclareAttackerIndices(pinned).size() == 2);   // empty hand: Birds swings
+    b.Hand("Colossification");
+    GameState with_aura = b.s;
+    with_aura.scripted_combat_aura_swap = 70;
+    CHECK(DeclareAttackerIndices(with_aura).size() == 1); // an Aura to swap in: Birds held for its {U}
+}
+
+// The hold keeps the CHEAPEST set of mana creatures that pays the swap, not every creature released on
+// the way: two Forests pay the generic, the Birds (2 power under Unflinching Courage) is the only {U};
+// the 1-power Pilgrim is not needed and swings.
+TEST_CASE("Attack hold: the cheapest sufficient set -- an unneeded Pilgrim still attacks")
+{
+    BoardBs b;
+    const int mother = b.Put("Mother of Runes");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = mother;
+    b.s.battlefield.push_back(w);
+    const int birds = b.Put("Birds of Paradise");
+    Permanent uc;
+    uc.card = CardBs("Unflinching Courage", 71); uc.controller_index = 0; uc.owner_index = 0;
+    uc.aura_attached_to = birds;
+    b.s.battlefield.push_back(uc);
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    b.Put("Forest");
+    b.Put("Forest");
+    b.Hand("Colossification");
+    b.s.scripted_combat_aura_swap = 70;
+    bool birds_attacks = false, pilgrim_attacks = false, mother_attacks = false;
+    for (int i : DeclareAttackerIndices(b.s))
+    {
+        const int num = b.s.battlefield[static_cast<std::size_t>(i)].card.m_number;
+        birds_attacks |= num == birds; pilgrim_attacks |= num == pilgrim; mother_attacks |= num == mother;
+    }
+    CHECK(mother_attacks);
+    CHECK(pilgrim_attacks);
+    CHECK_FALSE(birds_attacks);
+}

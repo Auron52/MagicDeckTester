@@ -1965,9 +1965,10 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
 // and a declared attacker is tapped (CR 508.1f) so its mana is gone. The goldfish attack default
 // sends everything, including a 0-power Birds of Paradise whose {U} is the only blue left for the
 // {2}{U} -- so the swap that would put +20 on the attacking host went unpaid. Hold exactly the mana
-// creatures the swap needs: tap the host and every other would-be attacker, then release the mana
-// creatures (lowest combat power first) until the {2}{U} is payable; a creature in that released set
-// stays home. Nothing is held if the swap is payable anyway or cannot be paid even holding every one.
+// creatures the swap needs: tap the host and every other would-be attacker, then hold the set of mana
+// creatures that makes the {2}{U} payable at the least combat power; a creature in that set stays
+// home. Nothing is held if there is no hand Aura to swap in, if the swap is payable anyway, or if it
+// cannot be paid even holding every one.
 // Attack-declaration heuristic (the permitted greedy class), shared by both combat worlds.
 static bool HoldForCombatAuraSwap(const GameState& s, const Permanent& p)
 {
@@ -1987,6 +1988,25 @@ static bool HoldForCombatAuraSwap(const GameState& s, const Permanent& p)
     if (wd == nullptr || !wd->params.aura_swap_cost.has_value()) { return false; }
     const int host = wp->aura_attached_to;
     if (p.card.m_number == host) { return false; }   // the host is the one that must swing
+    // NOTHING TO SWAP IN, NOTHING TO PAY FOR. The swap brings an Aura card from hand onto the host;
+    // with no hand Aura that could enchant it, the window does nothing and holding mana for it only
+    // throws away attackers. The rollout / d0 pin (MaybePinRolloutAuraSwap) pins whenever a Wings is
+    // attached, hand or no hand, so this was live: Bruna d0 s4004 gi360 T7 (empty hand) kept home a
+    // Birds of Paradise wearing Colossification + Eldrazi Conscription + Mythic Proportions -- 1
+    // damage instead of 40 -- and every one of the 7 d0 games the hold made slower is this shape.
+    {
+        const Permanent* hp = nullptr;
+        for (const Permanent& q : s.battlefield) { if (q.card.m_number == host) { hp = &q; break; } }
+        if (hp == nullptr) { return false; }
+        bool any_aura = false;
+        for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (cd && cd->params.is_aura && AuraCouldEnchant(s, cd->params, *hp)) { any_aura = true; break; }
+        }
+        if (!any_aura) { return false; }
+    }
     GameState cs = s;
     std::vector<std::pair<int, int>> dorks;   // (combat power, battlefield index) of releasable sources
     for (int i = 0; i < static_cast<int>(cs.battlefield.size()); ++i)
@@ -1997,28 +2017,42 @@ static bool HoldForCombatAuraSwap(const GameState& s, const Permanent& p)
         if (!is_host && !CanAttackFull(q, s.battlefield, me)) { continue; }
         if (CreatureHasVigilance(q, s)) { continue; }
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-        if (!is_host && qd && qd->tmpl == CardTemplate::ManaDork) { dorks.push_back({ CombatPowerOf(q, s), i }); }
+        if (!is_host && qd && qd->tmpl == CardTemplate::ManaDork) { dorks.push_back({ std::max(0, CombatPowerOf(q, s)), i }); }
         q.tapped = true;
     }
     RevealLogPause quiet;
     const ManaCost& cost = *wd->params.aura_swap_cost;
     { GameState t = cs; if (TapForCostDirect(t, cost, /*for_creature=*/false)) { return false; } }
-    std::sort(dorks.begin(), dorks.end());
-    for (const auto& d : dorks)
+    // THE CHEAPEST SUFFICIENT SET, not a prefix. Every source that is not attacking (lands, rocks,
+    // summoning-sick creatures) is already untapped in `cs` and pays first; of the would-be attackers,
+    // hold the set of mana creatures that makes the {2}{U} payable at the LEAST combat power (then the
+    // fewest creatures, then battlefield order). The earlier "release lowest power first until payable"
+    // kept every lower-power creature it had released on the way, needed or not: with Forest + Thicket
+    // untapped and a 20-power Birds as the only {U}, it held a 1-power Pilgrim too. Exhaustive over the
+    // releasable mana creatures (a handful on any real board; capped for safety).
+    const int n = std::min<int>(static_cast<int>(dorks.size()), 10);
+    std::vector<std::tuple<int, int, unsigned>> masks;   // (held power, held count, mask)
+    for (unsigned m = 1; m < (1u << n); ++m)
     {
-        cs.battlefield[static_cast<std::size_t>(d.second)].tapped = false;
+        int pw = 0, cnt = 0;
+        for (int k = 0; k < n; ++k) { if (m & (1u << k)) { pw += dorks[static_cast<std::size_t>(k)].first; ++cnt; } }
+        masks.emplace_back(pw, cnt, m);
+    }
+    std::sort(masks.begin(), masks.end());
+    for (const auto& [pw, cnt, m] : masks)
+    {
         GameState t = cs;
-        if (TapForCostDirect(t, cost, /*for_creature=*/false))
+        for (int k = 0; k < n; ++k)
+        { if (m & (1u << k)) { t.battlefield[static_cast<std::size_t>(dorks[static_cast<std::size_t>(k)].second)].tapped = false; } }
+        if (!TapForCostDirect(t, cost, /*for_creature=*/false)) { continue; }
+        for (int k = 0; k < n; ++k)
         {
-            // Payable once this many are home: hold p iff it is among them.
-            for (const auto& e : dorks)
-            {
-                if (cs.battlefield[static_cast<std::size_t>(e.second)].card.m_number == p.card.m_number)
-                { return true; }
-                if (&e == &d) { break; }
-            }
-            return false;
+            if ((m & (1u << k))
+                && cs.battlefield[static_cast<std::size_t>(dorks[static_cast<std::size_t>(k)].second)].card.m_number
+                       == p.card.m_number)
+            { return true; }
         }
+        return false;
     }
     return false;   // holding every one still cannot pay: attack normally
 }

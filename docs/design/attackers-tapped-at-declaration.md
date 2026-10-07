@@ -44,12 +44,24 @@ Every other suite deck is byte-identical (smoke 114/114, regression and overnigh
 known batch run-to-run nondeterminism, each moved game reproducing GT-equal on both binaries in
 isolation).
 
-**Known weakness of the hold (open, proposal to the user):** it is blind to what the held creature
-would have hit for. Bruna d0 s4004 gi360: a Birds of Paradise wearing Colossification + Eldrazi
-Conscription + Mythic Proportions was held home to pay a swap onto a 1/1 Mother of Runes -- 1 damage
-instead of 40. All 7 hold-caused d0 slowdowns are this shape. Proposed amendment (branch
-`cr508-hold-gain`): hold only when the swap's power gain on the host exceeds the held creatures'
-combat power. On the d0 rows it recovers those 7 plus 2 more and makes nothing worse.
+**Hold allocation fixed (2026-10-07, USER-approved as a mana-allocation fix, no new rule).** The 7 d0
+games the hold made slower were not "the swap costs a big attacker": in every one there was NO Aura in
+hand to swap in (empty hand, or only a wished Bruna). The rollout / d0 pin (`MaybePinRolloutAuraSwap`)
+pins whenever a Wings is attached, and the hold then kept mana creatures home for a swap that could not
+happen -- s4004 gi360 T7 held a Birds wearing Colossification + Eldrazi Conscription + Mythic
+Proportions: 1 damage instead of 40. The hold now (1) holds nothing when no hand Aura could enchant the
+host, and (2) holds the cheapest sufficient set of mana creatures (least combat power) instead of every
+creature released lowest-power-first on the way -- non-attacking sources (lands, rocks, sick creatures)
+already paid first. Units "Attack hold: ...". Measured: smoke 114/114 byte-identical; Bruna d0 rows
+(10,000 games) 8 better / 0 worse vs the landed hold; searched rows (smoke + regression d3/d5, 725
+games, and overnight d5 s4004/5005/6006, 1500 games) 0 better / 0 worse, one same-turn play change.
+Where the swap genuinely needs the big attacker's mana the SEARCH already drops it: the in-tree pin is
+a variant beside the unpinned plan, and the shared declaration (`DeclareAttackerIndices` ->
+`AttackWith` -> the hold) makes the pinned line score the damage it really does (scenario: 20-power
+Birds the only {U}, opp at 21 -- d3 attacks for the kill, d0 swaps and deals 9). Only the d0 greedy and
+the beyond-horizon rollout take that swap; turning the rollout swap off entirely
+(`MTG_ROLLOUT_AURA_SWAP=0`) measures worse on the searched rows (4 better / 11 worse, +7 turns), so it is
+not distorting the search's evaluation.
 
 ## Deferred: the rest of the combat window
 

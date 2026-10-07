@@ -1602,9 +1602,10 @@ pre-fix binary (`56ea019a`) vs the fix, same manifest, `logs/cr508_bruna_ab/`. L
   each returns to the old turn with `MTG_COMBAT_SWAP_ATTACK_HOLD=0`. Mechanism (s4004 gi360, T7): the
   d0 greedy pins a swap onto a 1/1 Mother of Runes; the hold keeps home the mana creatures that pay
   it -- including a Birds wearing Colossification + Eldrazi Conscription + Mythic Proportions. One
-  damage instead of forty. **Proposed amendment, NOT adopted (user's call):** hold only when the
-  swap's power gain on the host exceeds the held creatures' combat power (branch `cr508-hold-gain`).
-  On all 10,000 d0 games of these rows it recovers those 7 plus 2 more (s10010 gi898 unwon -> T8,
-  s4004 gi1836 T7 -> T6) and changes nothing else.
+  damage instead of forty. ROOT CAUSE (2026-10-07): in all 7 there was NO hand Aura to swap in -- the
+  hold kept mana for a swap that could not happen. FIXED in the hold's allocation (no Aura -> hold
+  nothing; hold the cheapest sufficient set, not a lowest-power-first prefix): d0 rows 8 better /
+  0 worse; searched rows 0 / 0 (see `attackers-tapped-at-declaration.md`). The user rejected the
+  power-gain rule that was first proposed for this (branch `cr508-hold-gain`, kept as a local record).
 * 9 faster games: 5 were old T5 wins through an illegal payment that now win T4 legally (the hold keeps
   the {U} source home); the other 4 are search churn.
