@@ -311,6 +311,122 @@ scalers during the Omnitool build — reusing the fix rather than repeating the 
 documented conservatism: for a card still in hand it under-counts the artifact term by one, in the
 safe direction and never down to 0.)
 
+### The no-draw-engine case is ONE SCORER, not a second decision tree
+
+User, 2026-10-07: *"if we have no draw we might look for a mix of castability + equippability and
+damage. Gauntlets would still be great to keep there."*
+
+That unifies the whole ranking. Score each candidate as **realisable power delta per mana actually
+available**:
+
+```
+score(card) = EquipAttachDeltaFor(real_host, card)        // scaler-correct; damage
+            / max(1, cast_cost + effective_equip_cost)    // castability + equippability
+```
+
+where `effective_equip_cost` is **0** under Puresteel metalcraft or Sigarda's Aid-on-ETB, and the
+printed cost otherwise. Add the draw term (`+1 card` when Sram or Puresteel is out and the cast cost
+is {0}) and the hard-hitter cap (`hard_in_hand < 2`) on top.
+
+**This reproduces the user's entire rule without special-casing**, which is the argument for building
+it as a scorer rather than a cascade:
+
+| card | cast | equip | delta | scores |
+|---|---|---|---|---|
+| Colossus Hammer, free equipper | {1} | **0** | +10/+10 | **tops everything** |
+| Colossus Hammer, no equipper | {1} | {8} | never realised | **~0, bottom** |
+| **Golem-Skin Gauntlets** | {1} | {2} | scales per Equipment on host (**≥1 at the dig**) | **strong unconditionally** |
+| {0} shield, draw engine out | {0} | {2}–{3} | +0/+2 … +0/+3, **+1 card** | good |
+| {0} shield, no draw engine | {0} | {2}–{3} | +0/+2 … +0/+3 | weak |
+| Deconstruction Hammer | {W} | {1} | +1/+1 | mid |
+| Skateboard | {1} | {1} | +1/+1, haste | mid |
+
+The user's read on the Gauntlets is exactly right and worth stating as the reason: it is the only
+hard hitter whose value depends on **nothing external** — cast {1}, equip {2}, and its scaler reads
+Equipment already attached to the host, which at the dig is **at least the Omnitool itself**. So it
+is the best pick in the no-enabler branch *and* a top-2 pick in the enabler branch. That makes it the
+ranking's safe default and the right tie-break target.
+
+## ROOT CAUSE: why the default was shuffle order, and why it survived
+
+The user: *"Why did we have shuffle-order originally? That seems super bad and I would like to cut
+those kinds of issues off at the pass."* It is super bad, and the repo had already measured how bad —
+the history is worth stating precisely, because the failure is not the one it looks like.
+
+**It was never chosen as a ranking.** Pre-hook, `PerformEtbDig` took the first legal match inline.
+When the decision was extracted to a provider hook (`45eff8a6 refactor(providers): port the Goblin
+Lackey put + ETB dig picks to provider hooks`) the default was kept **byte-identical on purpose**, so
+that the refactor moved no numbers. That is correct refactor practice. The hook's own docstring
+(`DecisionProvider.h:2284`) is explicit and unflattering about what it left behind:
+
+> "The base implementation is the historical rule: the FIRST legal match in look order. **That rule
+> is poor and is retained only for byte-identity** — look order is library order, i.e. shuffle order,
+> so which Knight you take is effectively random among the matches. It is the same defect as 'first
+> land in hand order' in the cleanup-discard rule: **a ranking that is really insertion order.**
+> Providers should override."
+
+**And the site WAS then fixed, properly, with a measurement.** From
+`docs/design/engine-heuristics-to-providers.md`'s status table:
+
+> | ETB dig pick | yes (`EtbDigCandidates`) | first-match-in-shuffle-order, **94% of digs have a choice** | **yes — `910a234`, 7/7 seeds, −0.0599** |
+
+The resolution was not a better ranking — it was **handing the decision to the search** (the ETB-dig
+axis, `EtbDigSearchWidth` default 3, the Knights-measured knee). Worth **−0.0599 avg win turn on
+7/7 seeds**, which for scale is larger than the best deckbuilding change found in two full rounds of
+the kitty swap screen (`g4_cid`, −0.0366).
+
+**So why does the Omnitool get the bad behaviour?** Because the fix was attached to a **call site**,
+not to the **hook**. `FireAttackEquipDigHand` is a *new fire site* for the same ranking hook, firing
+in combat, and it is deliberately **not** on the searched axis — it is wrapped in
+`ScriptedEtbDig no_inherited_pin(-1)` precisely so a main-phase plan's dig pin cannot be consumed
+there. It therefore inherited the known-poor default **without inheriting the fix**, and the same is
+true of `AttackDigPutCandidates` (Armored Skyhunter), the other combat-phase dig.
+
+**That is the generalisable defect: a new call site for an existing mechanic silently regresses to
+the mechanic's pre-fix default.**
+
+### Cutting it off at the pass
+
+**Disclosure has already been tried here and it did not work.** The Omnitool's `cards.json` note
+*does* state the gap ("which artifact the dig takes is provider-ranked and human-choosable but NOT a
+searched axis"), and the hook docstring *does* say "providers should override", and the status table
+*does* list the arbitrary rules. None of that caused anyone to act. This is the exact pattern
+CLAUDE.md already records for suite membership — `verify_deck.py` disclosed "deck is NOT a
+regression case" as a note nobody had to act on, it was duly skipped, and the remedy was converting
+it into a **hard gate** (exit 3). The same remedy applies.
+
+Recommended, cheapest first:
+
+1. **Instrument, don't infer (do this first).** Have each known-poor base default call a shared
+   inert helper — `NotePoorDefault("EtbDigCandidates", n_legal)` — that counts only when the audit
+   flag is on, and only when `n_legal > 1` (a forced pick is not a decision) **and** no searched-axis
+   pin covered it. Then run the suite once with the flag on: **any shipped deck with a nonzero
+   count is a flag.** This is empirical rather than static, so it needs no reachability analysis and
+   cannot be fooled by a card param it does not know about. It would have caught the Omnitool on its
+   first game, and the Knights 94% case years earlier.
+2. **Then gate it.** Once the counter is clean, assert it stays clean: a deck whose play resolves a
+   poor default on an unforced, unsearched decision fails the audit rather than printing a note.
+3. **Fix the hook, not the site.** Where a mechanic's decision has a searched axis, new fire sites
+   for that mechanic should default *into* the axis and opt out explicitly, rather than defaulting
+   out of it. That inverts the direction a mistake falls.
+
+### The standing list this applies to
+
+The status table already names the other decisions sitting at arbitrary defaults with no branching —
+these are the rest of the user's "those kinds of issues", available without any new analysis:
+
+| rule | current default | branched |
+|---|---|---|
+| **retrace discard** | first land in **hand order — arbitrary** | no |
+| **legend-rule keep** | keeps **oldest**; CR 704.5j makes it a real choice | no |
+| **cleanup discard** | provider-owned, but **two standing objections** | no |
+| Shard Volley sac-land | tapped-first sound; **fallback arbitrary** | no |
+| Goblin Lackey put | ranked, **axis not yet emitted** | partial |
+
+Note the cleanup-discard row is the same item already open on kitty v2 (its buckets still name v1
+cards, so Sram, Cid and Dwalin are unbucketed and shed before surplus Equipment) — and the dig
+hook's own docstring names cleanup-discard as the sibling defect. Same class, same remedy.
+
 ## Open
 
 - **The user's ruling on whether to build this at all.** Until then the Omnitool ships with no second
@@ -322,3 +438,7 @@ safe direction and never down to 0.)
 - **`AttackDigPutCandidates`'s scaler blindness** (latent, sideboard-only, described above). Fixing
   it is a ranking-quality change, not a rules fix, so it wants a measurement on an arm that actually
   plays Armored Skyhunter.
+- **The poor-default audit** (counter → gate → default-into-the-axis), and the standing list of other
+  arbitrary rules it would surface. This is a repo-wide change, not a kitty one; it is listed here
+  only because the Omnitool is the instance that exposed it. **User-owned: whether to build it, and
+  in what order against the deck work.**
