@@ -715,6 +715,15 @@ inline void Record(const GameState& state)
 // would delete ~a third of genuinely distinct lines -- a LOSSY PRUNE, refused by the standing
 // no-lossy-truncation bar no matter how a suite happens to score. Arm MTG_DEDUP_CENSUS and read
 // `copy_FALSE` before re-litigating this.
+// MTG_RESCUE_TOTAL_GATE's env default, read ONCE. Both enumerators (SolveUncached, EnumeratePlans)
+// used to call EnvOn() -- a getenv() walk of the whole environment -- on EVERY enumeration: ~0.5% of a
+// Selesnya keep-gen rollout (perf, 2026-10-06; docs/design/selesnya-keepgen-bulk-cost.md). The per-job
+// heurarm override is still applied per call, so a manifest arm behaves exactly as before.
+static bool RescueTotalGateEnv()
+{
+    static const bool v = EnvOn("MTG_RESCUE_TOTAL_GATE");
+    return v;
+}
 static bool CostReframeEnabled();   // defined below; the legacy carrier of this same skip
 static bool CandDedupOn()
 {
@@ -31096,8 +31105,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // here, once per enumeration: it is a board/hand fact, and the per-subset test it guards runs
     // billions of times.
     const bool conv_total_preserving = any_filter && ConversionTotalPreserving(state);
-    const bool rescue_total_gate     = heurarm::Flag(heurarm::RESCUE_TOTAL_GATE,
-                                                     EnvOn("MTG_RESCUE_TOTAL_GATE"));
+    const bool rescue_total_gate     = heurarm::Flag(heurarm::RESCUE_TOTAL_GATE, RescueTotalGateEnv());
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -42173,8 +42181,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                          || PendingFilterInHand(state);
     // ...and the total-preserving twin of Solve's hoist (see ConversionTotalPreserving).
     const bool conv_total_preserving = any_filter && ConversionTotalPreserving(state);
-    const bool rescue_total_gate     = heurarm::Flag(heurarm::RESCUE_TOTAL_GATE,
-                                                     EnvOn("MTG_RESCUE_TOTAL_GATE"));
+    const bool rescue_total_gate     = heurarm::Flag(heurarm::RESCUE_TOTAL_GATE, RescueTotalGateEnv());
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;

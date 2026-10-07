@@ -16934,6 +16934,7 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
 inline int LandAuraBonus(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
+    if (!state.deck_has_land_aura) { return 0; }   // no land Aura in this game (StampDeckTraits)
     int bonus = 0;
     for (const Permanent& a : state.battlefield)
     {
@@ -16967,6 +16968,7 @@ inline std::vector<const Permanent*> AnyColorLandAuras(const GameState& state, c
 {
     std::vector<const Permanent*> out;
     if (!land.card.IsLand()) { return out; }
+    if (!state.deck_has_land_aura) { return out; }   // no land Aura in this game (StampDeckTraits)
     for (const Permanent& a : state.battlefield)
     {
         if (a.aura_attached_to != land.card.m_number) { continue; }
@@ -16993,6 +16995,7 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
                               const std::vector<int>* chosen = nullptr)
 {
     if (!land.card.IsLand()) { return; }
+    if (!state.deck_has_land_aura) { return; }   // no land Aura in this game (StampDeckTraits)
     std::size_t next_choice = 0;
     for (const Permanent& a : state.battlefield)
     {
@@ -17035,6 +17038,7 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
 inline int LandAuraColorMask(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
+    if (!state.deck_has_land_aura) { return 0; }   // no land Aura in this game (StampDeckTraits)
     int mask = 0;
     for (const Permanent& a : state.battlefield)
     {

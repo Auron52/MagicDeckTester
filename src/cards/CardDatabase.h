@@ -3619,6 +3619,18 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.own_creature_enters_opp_life_loss > 0;   // Forerunner of the Coalition (2026-09-26)
 }
 
+// Codegen hints for CardDatabase::LookupCached (the hottest call in the search; see its comment).
+#if defined(_MSC_VER)
+#define MTG_DB_ALWAYS_INLINE __forceinline
+#define MTG_DB_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define MTG_DB_ALWAYS_INLINE inline __attribute__((always_inline))
+#define MTG_DB_NOINLINE __attribute__((noinline))
+#else
+#define MTG_DB_ALWAYS_INLINE inline
+#define MTG_DB_NOINLINE
+#endif
+
 // Singleton registry of all known card definitions.
 // Populated from:
 //   - JSON files in src/cards/data/   (Tiers 1 & 2)
@@ -3690,12 +3702,23 @@ public:
     // ThreadSanitizer reports it. std::atomic_ref makes it well-defined while leaving Card
     // trivially copyable (std::atomic would not); relaxed ordering suffices because the pointee is
     // immutable and published before any thread starts. See Card::m_def.
-    const CardDefinition* LookupCached(const Card& c) const
+    //
+    // FORCE-INLINED FAST PATH (2026-10-06, docs/design/selesnya-keepgen-bulk-cost.md). GCC emitted this
+    // as an out-of-line `.constprop` clone, so each of the ~2.8M calls per Selesnya keep-gen rollout
+    // paid a call/return around a load and two compares: 5.2% of all instructions (callgrind). The
+    // cold first-touch fill is split into LookupCachedFill so the inlined body stays two compares.
+    // Same result on every path -- purely a codegen change.
+    MTG_DB_ALWAYS_INLINE const CardDefinition* LookupCached(const Card& c) const
     {
         std::atomic_ref<const CardDefinition*> slot(c.m_def);
         const CardDefinition* cached = slot.load(std::memory_order_relaxed);
         if (cached == NotInDb()) { return nullptr; }    // cached miss (token / unknown card)
         if (cached)              { return cached; }     // cached hit
+        return LookupCachedFill(c);
+    }
+    MTG_DB_NOINLINE const CardDefinition* LookupCachedFill(const Card& c) const
+    {
+        std::atomic_ref<const CardDefinition*> slot(c.m_def);
         const CardDefinition* d = LookupInterned(c.m_name);
         slot.store(d ? d : NotInDb(), std::memory_order_relaxed);
         return d;

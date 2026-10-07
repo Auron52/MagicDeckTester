@@ -45,11 +45,21 @@ public:
     // Returns the canonical, stable address of `s` in the registry (thread-safe). Empty maps to
     // a fixed canonical empty so a default-constructed name and an assigned "" share a pointer.
     static const std::string* Intern(const std::string& s);
-    static const std::string& EmptyStr();
+    // INLINE, and backed by a constant-initialised object (2026-10-06). It used to be an out-of-line
+    // call to a function-local static in NameRegistry.cpp, paid by EVERY default-constructed
+    // InternedName -- Action alone has three, and the search default-constructs Actions per scored
+    // subset: 0.6% of a Selesnya keep-gen rollout's instructions went to this one getter
+    // (callgrind; docs/design/selesnya-keepgen-bulk-cost.md). `constinit` makes the object
+    // static-init-order-safe by construction (no dynamic initialiser can run late), which is the
+    // property the function-local static used to provide. Canonical-pointer identity is unchanged:
+    // Intern("") still returns &EmptyStr().
+    static const std::string& EmptyStr() noexcept { return s_empty; }
 
 private:
+    static constinit const std::string s_empty;
     const std::string* m_str;
 };
+inline constinit const std::string InternedName::s_empty{};
 
 // Comparisons against std::string / const char* (templated std::string::operator== ignores the
 // implicit conversion during deduction, so these are spelled out). All are plain string compares
