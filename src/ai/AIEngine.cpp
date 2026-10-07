@@ -5050,6 +5050,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         std::vector<int> _act_hold = TurnSolver::ActivationTapReserveUnion(state, trailing_acts);
         if (!_act_hold.empty()) { _act_reserve.emplace(std::move(_act_hold)); }
     }
+    // KILI'S STORIED WAIVER -- resolved ONCE per trailing pass, before any equip is paid, because
+    // StoriedWaivedEquipId reads `equip_activated_this_turn` and the first equip below flips it.
+    // Computed from the SAME list in the SAME position in both worlds, so the executor and the
+    // rollout cannot disagree about which equip is free. 0 = no waiver applies.
+    const int _storied_waived = TurnSolver::StoriedWaivedEquipId(state, trailing_acts);
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -5783,9 +5788,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (equip_payable
                 && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCost(state,
-                              EquipActionCostNow(state, state.active_player_index,
-                                                 a.sac_source_id, a.cost,
-                                                 a.sac_victim_id),
+                              StoriedWaivedCost(state, state.active_player_index,
+                                                a.sac_source_id, a.cost, a.sac_victim_id,
+                                                _storied_waived),
                               avail, /*for_creature=*/false))
             {
                 // Under MTG_EQUIP_LOG_TRUTH, decide BEFORE the apply whether it will attach, so the
@@ -5794,6 +5799,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     !EquipLogTruthEnabled()
                     || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
                 ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
+                // Lockstep twin of the rollout: the turn's first equip is spent, whichever it was.
+                state.players[state.active_player_index].equip_activated_this_turn = true;
                 if (m_logger && will_attach)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                        "equip -> " + bf_name(a.sac_victim_id)); }

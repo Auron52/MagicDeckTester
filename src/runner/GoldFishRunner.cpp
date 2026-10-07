@@ -1227,7 +1227,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // The soulbond presence scan in FireEtbWatchers (see GameState::deck_has_soulbond): its own
         // loop is the presence test, so with no soulbond card it never breaks early and pays a full
         // board walk per creature entering.
-        bool soulbond = false;
+        bool soulbond = false, storied = false;
         // Brightcap Badger's unconditional end-step trigger -- gates the hoisted lifegain
         // early-out in PerformEndStepLifegainTokens (see GameState::deck_has_unconditional_endstep_tokens).
         bool uncond_endstep = false;
@@ -1259,6 +1259,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
+                if (d->params.storied_permanents > 0)      { storied = true; }
                 if (d->params.endstep_tokens_unconditional && d->params.endstep_lifegain_tokens > 0)
                 { uncond_endstep = true; }
             }
@@ -1266,6 +1267,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         scan(deck.mainboard);
         scan(deck.sideboard);
         state.deck_has_ascend            = garth || ascend;
+        state.deck_has_storied           = garth || storied;
         state.deck_has_devotion_creature = garth || devotion;
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;

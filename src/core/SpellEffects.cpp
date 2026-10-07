@@ -1933,6 +1933,71 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 }
 
 
+// Adaptive Omnitool's attack trigger: "Whenever equipped creature attacks, look at the top six
+// cards of your library. You may reveal an artifact card from among them and put it into your hand.
+// Put the rest on the bottom of your library in a random order."
+//
+// THE SHAPE DIFFERS FROM FireAttackDigAttach ABOVE IN EXACTLY ONE WAY, and it is the only new work:
+// the param lives on the EQUIPMENT and fires when its HOST attacks, where Armored Skyhunter's lives
+// on the attacker itself. So this reads attack_dig_hand_count off each Equipment whose
+// `equipped_to` names a declared attacker, NOT off the attacker's own definition -- getting that
+// backwards is the easy bug here and would silently never fire. Two attackers each carrying one
+// Omnitool trigger twice; order is attacker order then attached-equipment battlefield order, the
+// already-approved deterministic trigger-order collapse.
+//
+// The PAYLOAD is PerformLookTakeDig, unchanged -- the same shared body Acclaimed Contender's etb_dig
+// and Recruitment Officer's activated_dig use, which already does the type filter, the provider
+// ranking, the human chooser with -1 as the printed "may", EnterHand and the rest-to-bottom. So
+// clause 2 is a new FIRE SITE, not new dig machinery, and it inherits the viewer wiring for free.
+//
+// Fired from BOTH worlds (GameEngine's combat and the rollout's SimulateCombat), beside
+// FireAttackDigAttach, because a trigger fired in one world only is the [fd-diverge] defect class.
+// NO projection addend is needed, and the reason is the mirror image of Dwalin's: a card entering
+// HAND adds no power to any declared attacker, so PendingAttackDamage is already exact. (Dwalin's
+// hone counters DO change this combat's damage, which is why they needed CountAttackHonePump.)
+void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx)
+{
+    if (atk_idx.empty()) { return; }
+    // SNAPSHOT the (host, equipment) pairs before resolving any of them -- the FireAttackDigAttach
+    // precedent. Each dig mutates the library and the hand, and a dug card entering hand can fire
+    // further watchers, so the battlefield must not be walked lazily underneath the resolution.
+    std::vector<int> equip_nums;
+    for (int idx : atk_idx)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& host = state.battlefield[idx];
+        if (host.controller_index != controller) { continue; }
+        for (const Permanent& e : state.battlefield)
+        {
+            if (e.equipped_to != host.card.m_number || e.controller_index != controller) { continue; }
+            if (e.def_absent) { continue; }
+            const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+            if (ed && ed->params.attack_dig_hand_count > 0) { equip_nums.push_back(e.card.m_number); }
+        }
+    }
+    if (equip_nums.empty()) { return; }
+
+    // The searched dig pin belongs to the plan being applied in a MAIN PHASE. This fires in combat,
+    // outside any plan apply, so an inherited pin must not be consumed here -- it would both steal
+    // the pin from the dig it was sized for and desync the memo key from the play. -1 = no pin.
+    ScriptedEtbDig no_inherited_pin(-1);
+
+    for (int en : equip_nums)
+    {
+        const CardDefinition* ed = nullptr;
+        std::string src_name;
+        for (const Permanent& e : state.battlefield)
+        {
+            if (e.controller_index == controller && e.card.m_number == en)
+            { ed = CardDatabase::Instance().LookupCached(e.card); src_name = e.card.m_name.str(); break; }
+        }
+        if (ed == nullptr) { continue; }   // the equipment left the battlefield mid-resolution
+        PerformLookTakeDig(state, controller, ed->params.attack_dig_hand_count,
+                           ed->params.attack_dig_hand_types, /*max_mv=*/-1,
+                           src_name + " (attack dig)");
+    }
+}
+
 // Expressive Iteration {U}{R}: "Look at the top three cards of your library. Put one into your hand,
 // put one on the bottom of your library, and exile one. You may play the exiled card this turn."
 // Model: look at the top 3, rank by ScryKeepOnTop (wanted first); the most-wanted goes to HAND

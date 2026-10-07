@@ -807,6 +807,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // never dominate one another. Folded only when TRUE -> byte-identical for every non-ascend
         // deck, which is the same guard the gated folds below use.
         if (p.has_city_blessing) { fold(0xCB1Eull); }
+        // STORIED. Same classification as has_city_blessing above: future-determining and
+        // MONOTONE (the designation is never lost), so it folds the same way. The per-turn equip
+        // flag beside it is NOT monotone and is folded for the ordinary reason -- it changes what
+        // the rest of the turn can pay for.
+        if (p.has_enduring_story)        { fold(0x5709Aull); }
+        if (p.equip_activated_this_turn) { fold(0xE9A1Full); }
         // Emblem anthem count (Gideon, Ally of Zendikar -4). Same classification as the city's
         // blessing directly above, for the same reasons: a monotone designation held for the rest of
         // the game, future-determining (every creature we ever play is bigger), and NOT droppable
@@ -1027,6 +1033,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // even trigger. Not an axis -- "unused" is better, but it is only better in combination with
         // a gain still to come this turn, so no direction survives on its own.
         if (p.lifegain_counters_used_this_turn) { mfold(0x9A8A6ull); }
+        if (p.storied_draw_used_this_turn)      { mfold(0x57091ull); }
         if (wired)
         {
             mfold(0xA77Aull);

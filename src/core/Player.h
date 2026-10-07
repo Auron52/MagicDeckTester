@@ -62,6 +62,21 @@ struct Player
     // into the state keys only when true, so it is false forever -- and byte-identical -- for every
     // deck with no ascend card.
     bool has_city_blessing         = false;
+    // AN ENDURING STORY (STORIED -- Kili the Resourceful). The exact structural twin of
+    // has_city_blessing above and for the same reason: "if you control three or more artifacts,
+    // legendaries, and/or Sagas, you have an enduring story FOR THE REST OF THE GAME" is a player
+    // DESIGNATION, so it is never reset at untap and never lost when the board shrinks (Scryfall:
+    // the designation is on the player and cannot be removed by any effect). Raised only by
+    // RefreshStoriedLatch, run wherever the permanent count can RISE, so a momentary peak counts.
+    // THE COUNT IS ONE POOL, NOT THREE: a permanent that is both an artifact and legendary counts
+    // ONCE (so this deck's 2 Shadowspear are 2, not 4). Folded into the state keys only when true,
+    // so it is false forever -- and byte-identical -- for every deck with no storied card.
+    bool has_enduring_story        = false;
+    // "...the first equip ability you activate each turn". PLAYER-scoped and per-TURN, which is why
+    // it lives here rather than on the storied permanent: an equip activated BEFORE Kili ever landed
+    // still consumes that turn's first, so tracking it on the permanent would wrongly leave the
+    // waiver live. Reset at BOTH untap sites (executor and rollout) or the two worlds diverge.
+    bool equip_activated_this_turn = false;
     // EMBLEMS granting "Creatures you control get +1/+1" (CR 114; Gideon, Ally of Zendikar -4).
     // Held as a COUNT of stacked emblems rather than a bool: two Gideons each ultimating give
     // +2/+2, and CR 114.3 makes an emblem a permanent-for-the-rest-of-the-game object with no

@@ -262,8 +262,10 @@ void GameEngine::UntapStep(GameState& state)
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
+    ap.equip_activated_this_turn = false;         // Kili's waiver is per TURN (same lockstep)
     RefreshDevotionCreatures(state);    // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ rollout)
     RefreshCityBlessing(state);         // ascend backstop for any non-cascade board change (lockstep w/ rollout)
+    RefreshStoriedLatch(state);         // storied backstop, same contract (lockstep w/ rollout)
     // Rimescale Dragon's static ("Creatures with ice counters on them don't untap during their
     // controllers' untap steps"). Two cheap gates before any lookup: only consulted when some
     // permanent actually has an ice counter AND a source with the param is out -- every other
@@ -305,6 +307,7 @@ void GameEngine::UntapStep(GameState& state)
             p.storage_hold_this_turn = false;  // #6: the tap-vs-charge hold is a per-turn human choice
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
+            p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
     }
@@ -755,6 +758,13 @@ void GameEngine::CombatPhase(GameState& state)
     // the damage loop reads power, so a put-and-attached Colossus Hammer swings this combat.
     // Mirrors TurnSolver::SimulateCombat (lockstep). Param-gated inert for every other deck.
     FireAttackDigAttach(state, state.active_player_index, atk_idx);
+
+    // Adaptive Omnitool's attack dig-to-HAND. Same two-world lockstep contract, immediately after
+    // its dig-and-attach sibling so the trigger order is one place in both worlds. Ordering against
+    // the Skyhunter put is unobservable here (this one only moves a card to hand, which cannot
+    // change what the put may legally attach to), but keeping them adjacent is what makes that
+    // checkable. Param-gated inert for every other deck.
+    FireAttackEquipDigHand(state, state.active_player_index, atk_idx);
 
     // Surtland Flinger's attack-trigger fling: sacrifice another creature, deal its power (doubled
     // for a Giant) to the opponent's face. AFTER the pumps so the victim's power is read buffed,

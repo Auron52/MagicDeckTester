@@ -3006,6 +3006,11 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
     return {pw, tb};
 }
 
+// Defined further down beside the equip machinery; forward-declared because EquipBonusFor below
+// needs it for Adaptive Omnitool's per-artifact scaler and is defined first. One definition, so
+// the metalcraft threshold and the Omnitool's bonus can never disagree about what an artifact is.
+inline int CountControlledArtifacts(const GameState& state, int controller);
+
 // Equipment analogue of AuraBonusFor: total {power, toughness} granted to `creature` by every
 // attached Equipment (Permanent::equipped_to == its card number, same controller). Kept in
 // lockstep with AuraBonusFor's call sites -- Combat.cpp's real damage, TurnSolver's two attack
@@ -3025,7 +3030,7 @@ inline std::pair<int,int> EquipBonusFor(const Permanent& creature, const GameSta
     // CountEquipmentAttachedTo from inside `consider`: doing so would be O(n^2) with an extra
     // LookupCached per pair, at one of the hottest helpers in the engine, on a deck that can hold
     // ~30 Equipment. Hone counters are per-PERMANENT state, so they add straight into pw.
-    int pw = 0, tb = 0, k = 0, s_pw = 0, s_tb = 0;
+    int pw = 0, tb = 0, k = 0, s_pw = 0, s_tb = 0, a_pw = 0, a_tb = 0;
     auto consider = [&](const Permanent& e)
     {
         if (e.equipped_to != num || e.controller_index != ctrl) { return; }
@@ -3038,11 +3043,26 @@ inline std::pair<int,int> EquipBonusFor(const Permanent& creature, const GameSta
         pw += e.hone_counters;          // intrinsic to the counter, not to its source
         s_pw += d->params.equip_scale_power_per_equipment;
         s_tb += d->params.equip_scale_tough_per_equipment;
+        a_pw += d->params.equip_scale_power_per_artifact;
+        a_tb += d->params.equip_scale_tough_per_artifact;
     };
     if (attached_idx) { for (int i : *attached_idx) { consider(state.battlefield[i]); } }
     else              { for (const Permanent& e : state.battlefield) { consider(e); } }
     pw += s_pw * k;
     tb += s_tb * k;
+    // Adaptive Omnitool's denominator is "artifacts YOU CONTROL", not Equipment attached to this
+    // host, so it needs its own count and its own multiply. The grouping is what keeps the one-pass
+    // sum EXACT: sum_i(s_i) * k == sum_i(s_i * k) holds per DENOMINATOR, not across denominators,
+    // so each accumulator pair is multiplied by its own count once. The walk is gated on an
+    // artifact scaler actually being attached, which is false for every card shipped before the
+    // Omnitool -- so this is byte-identical and does no extra work, which matters because this
+    // helper is hot enough to have the attached_idx prefilter built for it.
+    if (a_pw != 0 || a_tb != 0)
+    {
+        const int arts = CountControlledArtifacts(state, ctrl);
+        pw += a_pw * arts;
+        tb += a_tb * arts;
+    }
     return {pw, tb};
 }
 
@@ -3073,10 +3093,31 @@ inline std::pair<int,int> EquipAttachDeltaFor(const GameState& state, int contro
         s_pw += d->params.equip_scale_power_per_equipment;
         s_tb += d->params.equip_scale_tough_per_equipment;
     }
-    const int pw = incoming.equip_power_bonus + s_pw
-                 + incoming.equip_scale_power_per_equipment * (k + 1);
-    const int tb = incoming.equip_tough_bonus + s_tb
-                 + incoming.equip_scale_tough_per_equipment * (k + 1);
+    int pw = incoming.equip_power_bonus + s_pw
+           + incoming.equip_scale_power_per_equipment * (k + 1);
+    int tb = incoming.equip_tough_bonus + s_tb
+           + incoming.equip_scale_tough_per_equipment * (k + 1);
+    // Adaptive Omnitool's per-ARTIFACT scaler. Two things differ from the per-equipment term above
+    // and both are load-bearing. (1) Only the INCOMING card's scaler contributes: an artifact
+    // scaler ALREADY on this host gains nothing from an attach, because attaching does not change
+    // how many artifacts you control -- so there is deliberately no `s_pw`-style accumulation here.
+    // (2) The count is NOT multiplied by (k + 1): the Omnitool is an artifact whether it is
+    // attached or not, so it is already inside the count. Without this term the Omnitool's delta is
+    // 0 (its flat bonus and its per-equipment scaler are both 0), the `rd > 0` gate drops the equip
+    // action, and it would be castable but never equippable in the pruned search while human play
+    // equipped it fine -- the exact shipped bug this function was extracted to fix for the Gauntlets.
+    // Gated on the incoming card, so this never walks the battlefield for any other Equipment.
+    if (incoming.equip_scale_power_per_artifact != 0 || incoming.equip_scale_tough_per_artifact != 0)
+    {
+        // CONSERVATIVE BY ONE for a prospective equipment still in HAND (the cast-and-equip pair):
+        // casting it would raise the artifact count by one, and this helper takes only a CardParams
+        // so it cannot tell hand from battlefield. Under-pricing by 1 of ~4-10 is safe -- it is the
+        // direction every other projection here errs in, and crucially it does not drive the delta
+        // to 0, which is the only value the emission gate treats as "no reason to equip".
+        const int arts = CountControlledArtifacts(state, controller);
+        pw += incoming.equip_scale_power_per_artifact * arts;
+        tb += incoming.equip_scale_tough_per_artifact * arts;
+    }
     return {pw, tb};
 }
 
@@ -3636,6 +3677,16 @@ int AuraSwapPick(const GameState& state, int controller, int wings_number, bool 
 constexpr int kAuraSwapRankStride = 1 << 20;
 void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk_idx);
 
+// FireAttackEquipDigHand -- body in SpellEffects.cpp. Adaptive Omnitool's attack trigger ("look at
+// the top six... you may reveal an ARTIFACT card from among them and put it into your HAND; rest on
+// the bottom"). The sibling of FireAttackDigAttach above, fired from the same two lockstep sites,
+// and differing in exactly one structural way: the param lives on the EQUIPMENT and fires when its
+// HOST attacks, rather than on the attacker itself. The payload is the shared PerformLookTakeDig,
+// so the type filter, the provider ranking, the human dig chooser (with -1 as the printed "may")
+// and the rest-to-bottom all come for free. Needs no attack-damage projection addend: a card
+// entering hand adds no power to a declared attacker.
+void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx);
+
 // ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
 // control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on
 // `balan_id` through the shared ApplyEquip -- Grafted Wargear's re-host sacrifice fires exactly
@@ -4079,7 +4130,12 @@ inline std::pair<int,int> ComputeLordBonus(
             {
                 if (other.controller_index != controller_index) { continue; }
                 if (self != nullptr && &other == self) { continue; }   // "OTHER", by address
-                bool m = other.AnimatedAllTypes();                            // animated land = all types
+                // An animated land is a creature with all CREATURE types (CR 205.3b), so it counts
+                // as a Giant for Borderland Behemoth but is NOT an Equipment for Adelbert Steiner --
+                // Equipment is an ARTIFACT subtype. The param gate is the card's own declaration;
+                // false (every pre-existing card) keeps this byte-identical.
+                bool m = !sdef->params.static_self_pump_subtype_is_noncreature
+                      && other.AnimatedAllTypes();
                 if (!m)
                 {
                     for (const std::string& cs : other.card.m_subtypes)
@@ -6222,6 +6278,56 @@ inline void RefreshCityBlessing(GameState& state)
     }
 }
 
+// AN ENDURING STORY (STORIED -- Kili the Resourceful): "If you control three or more artifacts,
+// legendaries, and/or Sagas, you have an enduring story for the rest of the game."
+//
+// Structurally the same state trigger as RefreshCityBlessing above, and deliberately written to
+// mirror it line for line: monotone (this can only ever RAISE the flag), called wherever the
+// permanent count can rise, with both turn-start resyncs as the backstop, and presence-gated on the
+// decklist so it is provably a no-op for every other deck. Checking on the RISE is again the
+// faithful reading -- a third qualifying permanent that enters and immediately leaves still grants
+// the story.
+//
+// THE COUNT IS ONE POOL, NOT THREE. "artifacts, legendaries, and/or Sagas" counts each qualifying
+// permanent ONCE however many of the three it is, which is why this is a single `if (a || b || c)`
+// and not three counters: on KittyEquipment the 2 Shadowspear are legendary artifacts and contribute
+// 2, not 4. Lands and tokens are permanents and count (the 4 Ancient Den are artifacts).
+//
+// The STORIED permanent must be on the battlefield when the third qualifier arrives -- the same
+// `has_ascend && owned >= N` conjunction as the blessing, and for the same printed reason.
+inline bool CardHasSubtype(const Card& c, std::string_view sub);   // defined below, with the
+                                                                   // Dragonstorm helpers
+inline void RefreshStoriedLatch(GameState& state)
+{
+    if (!state.deck_has_storied) { return; }
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        Player& pl = state.players[pi];
+        if (pl.has_enduring_story) { continue; }   // monotone: nothing below can lower it
+        bool has_storied = false;
+        int  threshold   = 0;
+        int  qualifying  = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != pi) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.storied_permanents > 0)
+            {
+                has_storied = true;
+                if (threshold == 0 || d->params.storied_permanents < threshold)
+                { threshold = d->params.storied_permanents; }
+            }
+            // ONE pool: artifact OR legendary OR Saga, counted once.
+            if (p.card.HasType(CardType::Artifact)
+                || p.card.HasSupertype(Supertype::Legendary)
+                || CardHasSubtype(p.card, "Saga"))
+            { ++qualifying; }
+        }
+        if (has_storied && threshold > 0 && qualifying >= threshold)
+        { pl.has_enduring_story = true; }
+    }
+}
+
 // ---- Ocelot Pride: "at the beginning of your end step, if you gained life this turn ..." --------
 // Called from BOTH end-of-turn sites in lockstep (GameEngine::EndStep and the rollout's
 // SimulateEndAndStartNextTurn) -- an fd-diverge otherwise, since the tokens it makes are real board
@@ -6556,6 +6662,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     // below for the same reason devotion is: the designation is part of the board the entering
     // permanent's own triggers see. Param-gated -> byte-identical for every non-ascend deck.
     RefreshCityBlessing(state);
+    RefreshStoriedLatch(state);   // storied: same state-trigger contract, same cascade site
     // Snow-enter scry watcher (param-gated; one supertype bit-test for every other deck).
     FireSnowEnterWatchers(state, entered_index);
     // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the
@@ -6870,6 +6977,68 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
                     // "...you may pair it with THAT creature" -- the entrant, and nothing else.
                     try_pair(i, entered_index);
                 }
+            }
+        }
+    }
+    // Kili the Resourceful: "Whenever another Dwarf or Equipment you control enters, draw a card.
+    // This ability triggers only once each turn."
+    //
+    // ONE printed trigger with TWO subtype conditions, so ONE param read at ONE site -- and that
+    // site is here, beside Puresteel's draw below but deliberately OUTSIDE its `is_equipment` gate,
+    // because Equipment is an ARTIFACT subtype while Dwarf is a CREATURE subtype and this universal
+    // cascade sees both. So it fires for a CAST entrant and one PUT onto the battlefield alike
+    // (CR 603.6a), exactly as Puresteel does.
+    //
+    // Differences from Puresteel worth stating, because they are what make this card weaker rather
+    // than another copy of it: the draw is MANDATORY (no "may", so nothing is auto-resolved and
+    // there is no viewer decision), and it is CAPPED at once per turn PER PERMANENT -- a used copy
+    // no longer TRIGGERS, rather than triggering and resolving to nothing. The empty-library guard
+    // SKIPS rather than modelling CR 104.3c, which is the pre-existing 6a disclosure Puresteel and
+    // Sram already carry; a capped +1/turn raises its reachability marginally and does not change
+    // its class.
+    //
+    // Param-gated scan -> byte-identical for every deck without the param.
+    {
+        const Permanent& entrant = state.battlefield[entered_index];
+        const int nctrl2 = entrant.controller_index;
+        const int ent_num = entrant.card.m_number;
+        // SNAPSHOT which watchers fire before resolving any of them: a draw entering hand can run
+        // hand-entry watchers, and the set that triggered must not be re-derived mid-resolution.
+        std::vector<int> fire_idx;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& w = state.battlefield[i];
+            if (w.controller_index != nctrl2 || w.def_absent) { continue; }
+            if (w.card.m_number == ent_num) { continue; }          // "ANOTHER" -- never itself
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (!wd || wd->params.draw_on_other_subtype_enter.empty()) { continue; }
+            if (wd->params.draw_on_other_subtype_enter_once_each_turn
+                && w.storied_draw_used_this_turn) { continue; }    // already triggered this turn
+            bool match = false;
+            for (const std::string& want : wd->params.draw_on_other_subtype_enter)
+            {
+                if (CardHasSubtype(entrant.card, want)) { match = true; break; }
+            }
+            if (match) { fire_idx.push_back(i); }
+        }
+        for (int i : fire_idx)
+        {
+            if (i >= static_cast<int>(state.battlefield.size())) { continue; }
+            Permanent& w = state.battlefield[i];
+            const CardDefinition* wd = w.def_absent
+                ? nullptr : CardDatabase::Instance().LookupCached(w.card);
+            if (wd == nullptr) { continue; }
+            if (wd->params.draw_on_other_subtype_enter_once_each_turn)
+            { w.storied_draw_used_this_turn = true; }
+            Player& kp = state.players[nctrl2];
+            if (kp.library.empty()) { continue; }
+            const std::size_t before = kp.hand.size();
+            DrawIntoHand(state, nctrl2, 1, HandEntryReason::Draw);
+            kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
+            if (g_play_draw_sink)
+            {
+                for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
             }
         }
     }
@@ -9668,6 +9837,27 @@ inline ManaCost EquipActionCostNow(const GameState& state, int controller, int e
         }
     }
     return baked;
+}
+
+// EquipActionCostNow with Kili the Resourceful's STORIED waiver applied. A thin wrapper rather than
+// a change to EquipActionCostNow itself, and that separation is deliberate: EquipActionCostNow is a
+// pure function of state read PER CANDIDATE at enumeration, where no equip has been activated yet,
+// so folding a once-per-turn waiver into it would price EVERY candidate at {0} and under-state a
+// plan's mana by the sum of all but one -- optimism in the one direction a plan's mana term must
+// never take. The waiver is therefore a PER-PLAN assignment: `waived_equip_id` is resolved once per
+// trailing pass by TurnSolver::StoriedWaivedEquipId (the plan's most expensive equip -- a dominance
+// fold, see that function), from the same list in the same position in both worlds.
+//
+// waived_equip_id == 0 (every deck without the card, and every turn after the waiver is spent)
+// returns EquipActionCostNow unchanged, so this is byte-identical by construction.
+inline ManaCost StoriedWaivedCost(const GameState& state, int controller, int equip_id,
+                                  const ManaCost& baked, int host_id, int waived_equip_id)
+{
+    if (waived_equip_id != 0 && equip_id == waived_equip_id)
+    {
+        return ManaCost{};   // the alternative cost IS {0} (CR 118.8), not a reduction
+    }
+    return EquipActionCostNow(state, controller, equip_id, baked, host_id);
 }
 
 // A host's power as the O-Naginata attach gate sees it: base + lords + auras + ALREADY-attached
