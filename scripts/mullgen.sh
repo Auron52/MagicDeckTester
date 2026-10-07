@@ -80,6 +80,24 @@ KEY=$(printf '%s' "${DECKDIR#decks/}" | tr -c 'A-Za-z0-9._-' '_')
 OUT=logs/${KEY}_mullgen; mkdir -p "$OUT"
 REPORT=$OUT/VALIDATION.txt
 BIN=build/Release/mtg-analyze
+# MTG_GEN_PGO=1 (opt-in): generate with the PGO+LTO binary from `./build.sh pgo decks/<Deck>`
+# (build/PGO/) -- ~1.3x faster per rollout on SelesnyaLifegain, results byte-identical to Release
+# (same rollout digest, same play digest; docs/design/selesnya-keepgen-bulk-cost.md). The binary
+# is used ONLY if its SRC_TREE stamp equals the checked-out `HEAD:src` and src/ is clean, so a
+# stale PGO build can never generate on an engine other than this one. Validation (the A/Bs and
+# the suite) still runs build/Release -- only the generation step switches.
+GEN_BIN=$BIN
+if [ "${MTG_GEN_PGO:-0}" != 0 ]; then
+  GEN_BIN=build/PGO/mtg-analyze
+  [ -x "$GEN_BIN" ] || { echo "MTG_GEN_PGO=1 but $GEN_BIN is missing -- run ./build.sh pgo $DECKDIR"; exit 1; }
+  pgo_tree=$(cat build/PGO/SRC_TREE 2>/dev/null || true)
+  head_tree=$(git rev-parse HEAD:src)
+  if [ "$pgo_tree" != "$head_tree" ] || [ -n "$(git status --porcelain --untracked-files=no -- src)" ]; then
+    echo "MTG_GEN_PGO=1 but build/PGO is STALE (built from src tree ${pgo_tree:-?}, HEAD:src is $head_tree"
+    echo "  or src/ is dirty) -- rebuild it: ./build.sh pgo $DECKDIR"
+    exit 1
+  fi
+fi
 
 # Memory caps (2026-09-06): PRECAUTIONARY, not a fix for an observed failure -- this driver's
 # history is OOM-free (user), because its decisions run budgeted and its games are lighter than
@@ -579,7 +597,8 @@ PREFLIGHT
     # a board-and-hand projection that earns its place in PLAY (TurnSolver.cpp, FadeKLandmarks), so
     # generation inherits it from the engine default like every other play rule.
     MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}" \
-    "$BIN" "$DECK" --cards-json src/cards/data/cards.json --gen-mulligan "$RECIPE" \
+    [ "$GEN_BIN" != "$BIN" ] && log "generation binary: $GEN_BIN (PGO+LTO, src tree $(cat build/PGO/SRC_TREE))"
+    "$GEN_BIN" "$DECK" --cards-json src/cards/data/cards.json --gen-mulligan "$RECIPE" \
       >> "$OUT/gen.log" 2>&1 || { log "GENERATION FAILED -- see $OUT/gen.log"; exit 1; }
     [ -e "$PROF" ] || { log "gen produced no profile (below the R>=10 floor?) -- see $OUT/gen.log"; exit 1; }
     log "gen complete -> $PROF"

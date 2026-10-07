@@ -12,11 +12,13 @@
 #   release          -O3            -> build/Release/          (DEFAULT; use this for almost everything)
 #   relwithdebinfo   -O2 + symbols  -> build/RelWithDebInfo/   (debugging a crash with a faithful stack)
 #   profile          -O3 + symbols  -> build/Profile/          (faithful profiling: same codegen as Release + symbols)
+#   pgo <deck-dir>.. -O3 + PGO+LTO  -> build/PGO/              (~1.3x faster, byte-identical results; Linux only;
+#                                                               trained on the named decks -- scripts/build_pgo.sh)
 #
 # There is deliberately NO debug (-O0) mode here: an unoptimized build must be a separate,
 # deliberate route (e.g. `cmake --build build --config Debug`), never the default.
 #
-# The Windows mirror of this script is build.cmd (-> build.ps1): same modes, same build/<Config>/
+# The Windows mirror of this script is build.cmd (-> build.ps1): same modes (except pgo, Linux-only), same build/<Config>/
 # layout, same guards. Both configure through CMakePresets.json so there is one source of truth.
 #
 # Usage:
@@ -24,6 +26,7 @@
 #   ./build.sh release
 #   ./build.sh relwithdebinfo
 #   ./build.sh profile
+#   ./build.sh pgo decks/<Deck>          # PGO+LTO, trained on that deck -> build/PGO
 #   ./build.sh <mode> -- --target mtg     # forward extra args to the build step
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -35,11 +38,12 @@ case "$mode" in
   release|Release)                        cfg=Release ;;
   relwithdebinfo|RelWithDebInfo|symbols)  cfg=RelWithDebInfo ;;
   profile|Profile)                        cfg=Profile ;;
+  pgo|PGO)                                cfg=PGO ;;
   -h|--help|help)
-    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *)
     echo "build.sh: unknown mode '$mode'" >&2
-    echo "  allowed (optimized only): release (default), relwithdebinfo, profile" >&2
+    echo "  allowed (optimized only): release (default), relwithdebinfo, profile, pgo <deck-dir>..." >&2
     echo "  most tasks just need:  ./build.sh" >&2
     exit 2 ;;
 esac
@@ -66,6 +70,11 @@ if ! command -v c++ >/dev/null 2>&1 && ! command -v g++ >/dev/null 2>&1; then
   echo "  see docs/INSTALL.md" >&2
   exit 1
 fi
+
+# PGO+LTO mode: its own single-config tree (build/pgo-work/ -> binaries in build/PGO/), trained on the
+# named decks. Explicit Release type, so it can never be the -O0 tree the guard below exists for.
+# See scripts/build_pgo.sh for the why/how and the SRC_TREE stamp scripts/mullgen.sh checks.
+if [ "$cfg" = PGO ]; then exec bash scripts/build_pgo.sh "$@"; fi
 
 # Stale single-config tree guard. build/<Config>/ is an OUTPUT dir of the multi-config generator,
 # NOT a build tree -- a CMakeCache.txt there came from a bare `cmake -S . -B build/Release`, which
