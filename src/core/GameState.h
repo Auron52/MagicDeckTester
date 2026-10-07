@@ -593,6 +593,16 @@ struct GameState
     // the walk == the old behaviour, so an unstamped GameState (the scenario harness) keeps every
     // trigger. Only ever err true.
     bool                     deck_has_creature_enter_watcher = true;  // Soul Warden-style cascade
+    // AND A SIXTH, 2026-10-06 -- the land-Aura walkers (Wild Growth / Fertile Ground / Overgrowth /
+    // Trace of Abundance). LandAuraBonus, LandAuraAddToPool, LandAuraColorMask and AnyColorLandAuras
+    // (SpellEffects.h) each walk the WHOLE battlefield for an Aura attached to ONE land, and the mana
+    // layer asks them per land per payment question, so the cost is O(lands x battlefield) on every
+    // deck. A deck with no land Aura gets 0 from every one of them; the walk was 1.2% of a
+    // SelesnyaLifegain keep-gen rollout's instructions just to learn that (callgrind,
+    // docs/design/selesnya-keepgen-bulk-cost.md). Stamped from the SAME predicate the walkers test
+    // (`is_land_aura`), mainboard + sideboard, held open by Garth -- so a clear bit proves every walk
+    // would have found nothing. DEFAULT TRUE == walk == the old behaviour for an unstamped state.
+    bool                     deck_has_land_aura              = true;  // Wild Growth & co.
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

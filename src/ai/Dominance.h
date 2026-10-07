@@ -361,6 +361,9 @@ static_assert(sizeof(Player) == 200,
 // big-spell-only float) + `floating_bigspell_pp` (the restriction it carries). Classification: the
 // creature-only float's class exactly -- MID-TURN state, emptied at every phase/turn reset, a
 // BOUNDARY ASSERTION in AtCleanBoundary. The pointer is meaningful only while the pool is non-empty.
+// +bool (2026-10-06, SelesnyaLifegain keep-gen bulk cost; no size change -- existing padding):
+// `deck_has_land_aura`. Classification: DECK CONSTANT, stamped once in StampDeckTraits and never
+// written again; it only skips land-Aura walks that provably find nothing -- nothing to fold.
 static_assert(sizeof(GameState) == 1072,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
