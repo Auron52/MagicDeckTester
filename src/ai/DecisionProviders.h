@@ -163,6 +163,12 @@ bool        GateProbeArmed();
 // kept, but the provider's SHIPPED ranking (the pruned answer, computed with the unpruned gates handed
 // back) goes first. Nothing is removed; only the order changes, and only in human play.
 class DecisionProvider;
+// PROOF INSTRUMENT (diagnostic only): a provider whose candidate rule prints a proof trace at a REAL tutor
+// resolution (Bruna: MTG_TRACE=wishproof / armoryproof) also stashes the rule's set here (thread-local), and
+// MTG_TUTOR_CHOSEN_RANK's [tutor-chosen] line appends it -- one line per resolution carrying BOTH the
+// committed fetch and the rule's set, so a control arm's fetch is attributable inside a pooled batch.
+// Empty unless such a trace is on; reading it clears it. Never read by play.
+std::string TakeTutorProofSet();
 std::vector<std::string> RankedTutorCandidates(const DecisionProvider& prov, const GameState& s,
                                                int controller, const CardParams& pp);
 
@@ -476,9 +482,16 @@ public:
     // Linvala (nothing can carry the Auras and Bruna cannot come down next turn; Vexing Shusher is OUT),
     // Troyan (only when mana is short for something we mean to cast), a cheap second Aura (no cheat path,
     // or lethal now), a regrowth that restores the Arcanum Wings cheat path. Nothing missing -> ONE name.
-    // Every other tutor (Open the Armory, the regrowths) is GenericProvider's list unchanged.
-    // MTG_WISH_FULL_WIDTH=1 (heurarm WISH_FULL_WIDTH) is the full-width PROOF CONTROL; MTG_UNPRUNED and
-    // human play keep every legal name (the human chooser MARKS this set, TutorMarksSuggested).
+    // OPEN THE ARMORY CANDIDATE RULE (USER spec 2026-10-07): at most four CONDITIONAL roles --
+    // Colossification (the deck's best payload Aura) unless one is in hand / on our battlefield, Arcanum
+    // Wings unless one is, Wild Growth only when mana is short (the SAME test as Troyan's, BrunaManaShort),
+    // Lightning Greaves when no haste Equipment is owned, no gatherer can already attack, and a creature
+    // that would attack at once is COMING (Bruna in hand or through a Glittering Wish in hand, a non-dork
+    // creature card in hand, a non-dork creature that entered this turn). Eldrazi Conscription, Mythic
+    // Proportions and Prodigious Growth are excluded. The regrowths keep GenericProvider's list.
+    // MTG_WISH_FULL_WIDTH=1 / MTG_ARMORY_FULL_WIDTH=1 (heurarm slots) are the full-width PROOF CONTROLS;
+    // MTG_UNPRUNED and human play keep every legal name (the human chooser MARKS each set,
+    // TutorMarksSuggested).
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     bool TutorMarksSuggested(const CardParams& pp) const override;
     // MTG_BRUNA_ORDER -- a PROPOSED cast order (analyze-deck Stage 4, 2026-10-05), DEFAULT OFF: cast

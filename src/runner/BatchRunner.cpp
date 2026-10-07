@@ -1624,6 +1624,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // Same lifetime rule, and it must also precede the engine build: a provider's
                     // cast order is consulted from the first solve onward (see ai/HeuristicArm.h).
                     heurarm::t_arm  = jobs[wi.job].flags;
+                    heurarm::t_job_name = jobs[wi.job].name.c_str();   // diagnostic trace attribution only
                     // Same lifetime rule as the arm: set unconditionally (empty => nullptr => the env
                     // default) so a previous job's numbering cannot leak through the reused thread.
                     decknumbering::t_map =

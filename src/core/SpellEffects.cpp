@@ -309,9 +309,12 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
             std::string top;
             for (int i = 0; i < static_cast<int>(uniq.size()) && i < 8; ++i)
             { top += (i ? " | " : "") + uniq[i]; }
-            std::fprintf(stderr, "[tutor-chosen] T%d src=%s chose=%s rank=%d/%d :: %s\n",
+            const std::string proof = TakeTutorProofSet();   // the provider's rule set (proof traces only)
+            std::fprintf(stderr, "[tutor-chosen] T%d src=%s chose=%s rank=%d/%d :: %s%s%s%s%s\n",
                          state.turn_number, source_name.c_str(), want.c_str(),
-                         rank, static_cast<int>(uniq.size()), top.c_str());
+                         rank, static_cast<int>(uniq.size()), top.c_str(),
+                         proof.empty() ? "" : " ## rule=", proof.c_str(),
+                         heurarm::t_job_name ? " ## job=" : "", heurarm::t_job_name ? heurarm::t_job_name : "");
         }
     }
     Player& ap = state.players[controller_index];

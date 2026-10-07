@@ -16074,14 +16074,30 @@ static bool BrunaWishFullWidth()
     return heurarm::Flag(heurarm::WISH_FULL_WIDTH, env);
 }
 
+// MTG_ARMORY_FULL_WIDTH=1 (heurarm ARMORY_FULL_WIDTH) = the Open the Armory PROOF CONTROL: GenericProvider's
+// list (every library Aura / Equipment name, library order), byte-identical to the pre-rule engine.
+static bool BrunaArmoryFullWidth()
+{
+    static const bool env = EnvOn("MTG_ARMORY_FULL_WIDTH");   // default OFF; =1 = the control arm
+    return heurarm::Flag(heurarm::ARMORY_FULL_WIDTH, env);
+}
+
 static bool IsMulticolorWish(const CardParams& pp)
 {
     return pp.wish_from_sideboard && pp.wish_requires_multicolored;
 }
 
+// Open the Armory: a LIBRARY tutor to hand whose type filter names Aura or Equipment.
+static bool IsArmoryTutor(const CardParams& pp)
+{
+    if (!pp.tutor_to_hand || pp.wish_from_sideboard || pp.tutor_from_graveyard) { return false; }
+    for (const std::string& t : pp.tutor_types) { if (t == "Aura" || t == "Equipment") { return true; } }
+    return false;
+}
+
 bool BrunaProvider::TutorMarksSuggested(const CardParams& pp) const
 {
-    return IsMulticolorWish(pp);
+    return IsMulticolorWish(pp) || IsArmoryTutor(pp);
 }
 
 // A PAYLOAD Aura: a power grant, a base setter or a colour grant -- not Arcanum Wings' swap, not a land Aura.
@@ -16124,14 +16140,9 @@ static bool WishColoursOk(const ManaCost& c, unsigned have)
     return (need & ~have) == 0;
 }
 
-// The rule above over `legal` (GenericProvider's list: every fetchable name, sideboard order).
-static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
-                                                    const std::vector<std::string>& legal)
+// ---- the shared CENSUS (Glittering Wish + Open the Armory): next turn's mana, the cheat paths, the hosts --
+struct BrunaCensus
 {
-    const Player& ap = s.players[static_cast<std::size_t>(me)];
-    CardDatabase& db = CardDatabase::Instance();
-
-    // ---- census: next turn's mana, the cheat paths, the hosts ---------------------------------------
     int supply_any = 0, supply_cre = 0;
     bool land_in_hand = false, gatherer_bf = false, swap_bf = false, creature_bf = false;
     bool body_bf = false, cheap_body_hand = false;   // a non-mana-dork creature: on board / MV<=3 in hand
@@ -16143,34 +16154,60 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     unsigned col_any = 0, col_cre = 0;
     const CardDefinition* gatherer_hand_d = nullptr; const CardDefinition* swap_hand_d = nullptr;
     const CardDefinition* swap_bf_d = nullptr;
-    int need_nc = 0, need_c = 0;                     // max mana value: noncreature / creature hand cards
+    int need_c = 0;                                  // max mana value among the hand's creatures
     std::vector<std::string> owned;                  // names in our hand or on our battlefield
     struct Host { int base; const Card* card; };
     std::vector<Host> hosts;
+    // (Open the Armory's Lightning Greaves role)
+    bool gatherer_ready_bf = false;   // a gatherer of ours that can attack without new haste
+    bool haste_equip_owned = false;   // a haste Equipment (Lightning Greaves) in hand or on our battlefield
+    bool body_hand = false;           // a non-mana-dork creature card in hand (any mana value)
+    bool sick_body_bf = false;        // a non-mana-dork creature of ours that entered this turn, pre-combat
+    bool wish_in_hand = false;        // a Glittering Wish in hand (the sideboard's Bruna is reachable)
+    bool is_owned(const std::string& n) const { return std::find(owned.begin(), owned.end(), n) != owned.end(); }
+    bool host_exists() const { return creature_bf || cheap_body_hand || gatherer_hand_mv >= 0 || need_c > 0; }
+};
+
+static BrunaCensus BrunaTakeCensus(const GameState& s, int me)
+{
+    BrunaCensus cen;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    CardDatabase& db = CardDatabase::Instance();
+    const bool precombat = s.phase != Phase::PostCombatMain && s.phase != Phase::Combat && s.phase != Phase::Ending;
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != me || q.def_absent) { continue; }
         const CardDefinition* d = db.LookupCached(q.card);
         if (d == nullptr) { continue; }
-        owned.push_back(q.card.m_name.str());
+        cen.owned.push_back(q.card.m_name.str());
         const CardParams& p = d->params;
-        if (p.attack_gather_auras && q.card.IsCreature()) { gatherer_bf = true; }
-        if (p.aura_swap_cost.has_value())                 { swap_bf = true; swap_bf_d = d; }
+        if (p.attack_gather_auras && q.card.IsCreature())
+        {
+            cen.gatherer_bf = true;
+            // Sick only matters THIS turn, before combat (next turn she attacks anyway).
+            if (!(q.entered_this_turn && precombat)) { cen.gatherer_ready_bf = true; }
+        }
+        if (p.aura_swap_cost.has_value())                 { cen.swap_bf = true; cen.swap_bf_d = d; }
+        if (p.is_equipment && p.equip_grants_haste)       { cen.haste_equip_owned = true; }
         const bool src = d->card.IsLand() || (p.mana_rock && !d->card.IsCreature())
                       || (q.card.IsCreature() && d->tmpl == CardTemplate::ManaDork);
         if (src)
         {
             int y = PermanentManaYield(s, q, *d);
             if (y <= 0) { y = ManaProducedPerTap(*d); }
-            if (y > 0) { (p.creature_mana_only ? supply_cre : supply_any) += y; }
-            ((p.creature_mana_only || p.mana_only_spell_min_mv > 0) ? col_cre : col_any) |= WishColourBits(p.produces);
+            if (y > 0) { (p.creature_mana_only ? cen.supply_cre : cen.supply_any) += y; }
+            ((p.creature_mana_only || p.mana_only_spell_min_mv > 0) ? cen.col_cre : cen.col_any) |= WishColourBits(p.produces);
         }
         if (p.is_land_aura)   // Wild Growth: its extra mana (an empty list = any colour)
-        { col_any |= p.land_aura_produces.empty() ? 0x1fu : WishColourBits(p.land_aura_produces); }
+        { cen.col_any |= p.land_aura_produces.empty() ? 0x1fu : WishColourBits(p.land_aura_produces); }
         if (q.card.IsCreature())
         {
-            creature_bf = true;
-            if (d->tmpl != CardTemplate::ManaDork) { body_bf = true; }
+            cen.creature_bf = true;
+            if (d->tmpl != CardTemplate::ManaDork)
+            {
+                cen.body_bf = true;
+                if (q.entered_this_turn && precombat) { cen.sick_body_bf = true; }
+            }
             // The host's current BASE power: printed + characteristic-defining (+ animation), or the
             // value an attached base-setter (Almost Perfect) already imposes.
             int base = q.card.m_power.value_or(0) + DynamicBasePower(*d, s, me);
@@ -16184,51 +16221,101 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
                 // A creature already WEARING one of our Auras is a carrier, mana dork or not (2026-10-06,
                 // held-out s7007 d3 gi933: Mythic Proportions on Avacyn's Pilgrim read as "no body", so the
                 // cheap Aura that was the last 2 points of the control's kill was never offered).
-                if (ad && ad->params.is_aura && !ad->params.is_land_aura) { body_bf = true; }
+                if (ad && ad->params.is_aura && !ad->params.is_land_aura) { cen.body_bf = true; }
             }
-            hosts.push_back({ base, &q.card });
+            cen.hosts.push_back({ base, &q.card });
         }
     }
-    for (const Card& c : ap.hand)
+    for (const Card& hc : ap.hand)
     {
-        const CardDefinition* d = db.LookupCached(c);
+        const CardDefinition* d = db.LookupCached(hc);
         if (d == nullptr) { continue; }
-        owned.push_back(c.m_name.str());
-        if (d->card.IsLand()) { land_in_hand = true; col_any |= WishColourBits(d->params.produces); continue; }
+        cen.owned.push_back(hc.m_name.str());
+        if (d->card.IsLand()) { cen.land_in_hand = true; cen.col_any |= WishColourBits(d->params.produces); continue; }
         const int mv = d->card.m_mana_cost.ManaValue();
         const CardParams& p = d->params;
         if (d->card.IsCreature())
         {
-            need_c = std::max(need_c, mv);
-            hosts.push_back({ d->card.m_power.value_or(0), &d->card });
-            if (d->tmpl != CardTemplate::ManaDork && mv <= 3) { cheap_body_hand = true; }
-            if (p.attack_gather_auras) { gatherer_hand_mv = mv; gatherer_hand_d = d; }
+            cen.need_c = std::max(cen.need_c, mv);
+            cen.hosts.push_back({ d->card.m_power.value_or(0), &d->card });
+            if (d->tmpl != CardTemplate::ManaDork) { cen.body_hand = true; if (mv <= 3) { cen.cheap_body_hand = true; } }
+            if (p.attack_gather_auras) { cen.gatherer_hand_mv = mv; cen.gatherer_hand_d = d; }
         }
-        else { need_nc = std::max(need_nc, mv); }
-        if (p.aura_swap_cost.has_value()) { swap_hand_mv = mv + p.aura_swap_cost->ManaValue(); swap_hand_d = d; }
-        if (IsWishPayloadAura(p)) { payload_hand = true; }
+        if (p.aura_swap_cost.has_value()) { cen.swap_hand_mv = mv + p.aura_swap_cost->ManaValue(); cen.swap_hand_d = d; }
+        if (IsWishPayloadAura(p)) { cen.payload_hand = true; }
+        if (p.is_equipment && p.equip_grants_haste) { cen.haste_equip_owned = true; }
+        if (IsMulticolorWish(p)) { cen.wish_in_hand = true; }
     }
-    if (land_in_hand) { ++supply_any; }
-    auto is_owned = [&](const std::string& n)
-    { return std::find(owned.begin(), owned.end(), n) != owned.end(); };
+    if (cen.land_in_hand) { ++cen.supply_any; }
+    return cen;
+}
 
-    // The power `d` adds on its best host (no host: a colourless base-0 body).
-    auto aura_power = [&](const CardDefinition& d)
+// ---- the shared MANA-SHORT test: Troyan (Glittering Wish) and Wild Growth (Open the Armory) -------------
+// USER 2026-10-07: "Troyan is basically good if you need acceleration and not worth it otherwise." /
+// "Wild Growth is not needed unless we need mana or acceleration." ONE test, so the two agree. The 5+ mana
+// value spells we actually mean to CAST: the hand's creatures (Bruna; creature-only mana counts toward
+// them), the hand's noncreature spells -- a payload Aura only when no gatherer is on our battlefield
+// (Bruna's attack trigger puts it on free) and a host exists (a creature on our battlefield or in hand) --
+// and what THIS tutor would otherwise fetch: `fetch_aura_mv` (an Aura, same gatherer / host conditions)
+// and `fetch_creature_mv` (Bruna). Short = next turn's supply (land drop included) is below the largest.
+static bool BrunaManaShort(const GameState& s, int me, const BrunaCensus& cen, int fetch_aura_mv,
+                           int fetch_creature_mv, int* need_n_out = nullptr, int* need_cr_out = nullptr)
+{
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    CardDatabase& db = CardDatabase::Instance();
+    const bool host_exists = cen.host_exists();
+    int need_n = 0, need_cr = cen.need_c;
+    for (const Card& hc : ap.hand)
     {
-        const CardParams& p = d.params;
-        auto on = [&](int base, const Card* card)
-        {
-            int pw = p.aura_power_bonus;
-            for (const CardParams::AuraColorBonus& cb : p.aura_color_bonuses)
-            { if (card != nullptr && card->HasColor(cb.color)) { pw += cb.power; } }
-            if (p.aura_set_base_power >= 0) { pw += p.aura_set_base_power - base; }
-            return pw;
-        };
-        if (hosts.empty()) { return on(0, nullptr); }
-        int best = std::numeric_limits<int>::min();
-        for (const Host& h : hosts) { best = std::max(best, on(h.base, h.card)); }
-        return best;
+        const CardDefinition* d = db.LookupCached(hc);
+        if (d == nullptr || d->card.IsLand() || d->card.IsCreature()) { continue; }
+        if (d->params.is_aura && (cen.gatherer_bf || !host_exists)) { continue; }
+        need_n = std::max(need_n, d->card.m_mana_cost.ManaValue());
+    }
+    if (fetch_aura_mv > 0 && !cen.gatherer_bf && host_exists) { need_n = std::max(need_n, fetch_aura_mv); }
+    need_cr = std::max(need_cr, fetch_creature_mv);
+    if (need_n_out != nullptr)  { *need_n_out = need_n; }
+    if (need_cr_out != nullptr) { *need_cr_out = need_cr; }
+    return (need_n >= 5 && cen.supply_any < need_n)
+        || (need_cr >= 5 && cen.supply_any + cen.supply_cre < need_cr);
+}
+
+// The power `d` adds on its best host (no host: a colourless base-0 body).
+static int BrunaAuraPower(const BrunaCensus& cen, const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    auto on = [&](int base, const Card* card)
+    {
+        int pw = p.aura_power_bonus;
+        for (const CardParams::AuraColorBonus& cb : p.aura_color_bonuses)
+        { if (card != nullptr && card->HasColor(cb.color)) { pw += cb.power; } }
+        if (p.aura_set_base_power >= 0) { pw += p.aura_set_base_power - base; }
+        return pw;
     };
+    if (cen.hosts.empty()) { return on(0, nullptr); }
+    int best = std::numeric_limits<int>::min();
+    for (const BrunaCensus::Host& h : cen.hosts) { best = std::max(best, on(h.base, h.card)); }
+    return best;
+}
+
+// The rule above over `legal` (GenericProvider's list: every fetchable name, sideboard order).
+static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
+                                                    const std::vector<std::string>& legal)
+{
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    CardDatabase& db = CardDatabase::Instance();
+
+    // ---- census: next turn's mana, the cheat paths, the hosts ---------------------------------------
+    const BrunaCensus cen = BrunaTakeCensus(s, me);
+    const int supply_any = cen.supply_any, supply_cre = cen.supply_cre;
+    const bool gatherer_bf = cen.gatherer_bf, swap_bf = cen.swap_bf, creature_bf = cen.creature_bf;
+    const bool body_bf = cen.body_bf, cheap_body_hand = cen.cheap_body_hand, payload_hand = cen.payload_hand;
+    const int gatherer_hand_mv = cen.gatherer_hand_mv, swap_hand_mv = cen.swap_hand_mv;
+    const unsigned col_any = cen.col_any, col_cre = cen.col_cre;
+    const CardDefinition* gatherer_hand_d = cen.gatherer_hand_d; const CardDefinition* swap_hand_d = cen.swap_hand_d;
+    const CardDefinition* swap_bf_d = cen.swap_bf_d;
+    auto is_owned = [&](const std::string& n) { return cen.is_owned(n); };
+    auto aura_power = [&](const CardDefinition& d) { return BrunaAuraPower(cen, d); };
 
     // A REGROWTH that can return an Aura-swap Aura (Arcanum Wings) from our graveyard: the target filter is
     // HasGraveyardTutorTarget's (type, colour, TutorNumericFilterOk -- Reborn Hope's multicolored conjunct).
@@ -16244,6 +16331,14 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
             if (type_ok && CardHasColorNamed(card, rp.tutor_color) && TutorNumericFilterOk(card, rp)) { return true; }
         }
         return false;
+    };
+
+    // A BODY candidate: a multicolored (wishable) non-mana-dork creature of mana value <= 3 -- not Troyan
+    // (big-spell mana), not a gatherer.
+    auto is_body = [](const CardDefinition& d)
+    {
+        return d.card.IsCreature() && d.tmpl != CardTemplate::ManaDork && d.params.mana_only_spell_min_mv == 0
+            && !d.params.attack_gather_auras && d.card.m_mana_cost.ManaValue() <= 3 && d.card.IsMulticolored();
     };
 
     // ---- classify the legal names --------------------------------------------------------------------
@@ -16288,6 +16383,22 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         if (d->card.m_mana_cost.ManaValue() <= 3)
         { if (pw > 0 && (cheap == nullptr || pw > cheap_pw)) { cheap = &n; cheap_pw = pw; } }
         else if (primary == nullptr || pw > primary_pw) { primary = &n; primary_d = d; primary_pw = pw; }
+    }
+    // VEXING SHUSHER IS OUT ENTIRELY (USER 2026-10-07). The body role is the POOL's hardest hitter only:
+    // once she (Linvala) has left the sideboard -- in hand, on our battlefield or in the graveyard -- a
+    // weaker body (Shusher) does not inherit the role. (2 of 11666 committed round-5 wishes took Shusher.)
+    if (body != nullptr)
+    {
+        int best_elsewhere = std::numeric_limits<int>::min();
+        auto see = [&](const Card& c)
+        {
+            const CardDefinition* d = db.LookupCached(c);
+            if (d != nullptr && is_body(*d)) { best_elsewhere = std::max(best_elsewhere, d->card.m_power.value_or(0)); }
+        };
+        for (const Card& c : ap.hand)      { see(c); }
+        for (const Card& c : ap.graveyard) { see(c); }
+        for (const Permanent& q : s.battlefield) { if (q.controller_index == me && !q.def_absent) { see(q.card); } }
+        if (best_elsewhere > body_pw) { body = nullptr; body_d = nullptr; }
     }
 
     const bool cheat = gatherer_bf
@@ -16410,28 +16521,13 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     }
     const bool hand_lethal = lethal_on_board || lethal_reach;
 
-    // ---- MANA SHORT (Troyan) -- USER 2026-10-07: "Troyan is basically good if you need acceleration and
-    // not worth it otherwise." The 5+ mana value spells we actually mean to CAST: the hand's creatures
-    // (Bruna), the hand's noncreature spells -- a payload Aura only when no gatherer is on our battlefield
-    // (Bruna's attack trigger puts it on free) and a host exists (a creature on our battlefield or in
-    // hand) -- and what this wish would otherwise fetch: Bruna, and the primary Aura when it is offered.
-    // Short = next turn's supply (land drop included) is below the largest such cost.
-    const bool host_exists = creature_bf || cheap_body_hand || gatherer_hand_mv >= 0 || need_c > 0;
-    int need_n = 0, need_cr = need_c;
-    for (const Card& c : ap.hand)
-    {
-        const CardDefinition* d = db.LookupCached(c);
-        if (d == nullptr || d->card.IsLand() || d->card.IsCreature()) { continue; }
-        if (d->params.is_aura && (gatherer_bf || !host_exists)) { continue; }
-        need_n = std::max(need_n, d->card.m_mana_cost.ManaValue());
-    }
+    // ---- MANA SHORT (Troyan) -- the shared test (BrunaManaShort): the 5+ spells we mean to cast, plus what
+    // this wish would otherwise fetch -- Bruna, and the primary Aura when it is offered.
     const bool primary_offered = primary != nullptr && !hand_lethal;
-    if (primary_offered && !gatherer_bf && host_exists)
-    { need_n = std::max(need_n, primary_d->card.m_mana_cost.ManaValue()); }
-    if (bruna_d != nullptr) { need_cr = std::max(need_cr, bruna_d->card.m_mana_cost.ManaValue()); }
-    const bool short_mana = (need_n >= 5 && supply_any < need_n)
-                         || (need_cr >= 5 && supply_any + supply_cre < need_cr);
-    need_nc = need_n;
+    int need_nc = 0, need_cr = 0;
+    const bool short_mana = BrunaManaShort(s, me, cen,
+        primary_offered ? primary_d->card.m_mana_cost.ManaValue() : 0,
+        bruna_d != nullptr ? bruna_d->card.m_mana_cost.ManaValue() : 0, &need_nc, &need_cr);
 
     // ---- the set ---------------------------------------------------------------------------------------
     std::vector<std::string> out;
@@ -16478,28 +16574,154 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     return out;
 }
 
+// ---- the OPEN THE ARMORY candidate rule (USER spec 2026-10-07) -------------------------------------------
+// USER: "Open the Armory should only have Colossification, Arcanum Wings, Wild Growth and maybe Eldrazi
+// Conscription as targets. Though, to be honest, I don't think we even need the Conscription when
+// Goldfishing. Wild Growth is not needed unless we need mana or acceleration and Arcanum Wings is only
+// useful if we don't already have one. Technically Colossification is not needed if we already have one
+// either." / "Actually, we also need to consider Lightning Greaves." / "Actually, I guess 4 is enough
+// really." / "The greaves condition we need to be a bit careful with, because it can be a setup turn for
+// Bruna to land." So at most FOUR roles, each CONDITIONAL (roles read from PARAMS, never names):
+//
+//   PRIMARY AURA (Colossification): the library's highest-power payload Aura -- only when it is the DECK's
+//     best payload (no stronger one in our hand, on our battlefield or in our graveyard: Eldrazi
+//     Conscription / Mythic Proportions / Prodigious Growth never inherit the role) and no copy of it is in
+//     our hand or on our battlefield.
+//   AURA SWAP (Arcanum Wings): only when no Aura-swap Aura is in our hand or on our battlefield.
+//   LAND AURA RAMP (Wild Growth): only when MANA IS SHORT -- the Troyan test (BrunaManaShort), with this
+//     tutor's own fetch (the primary Aura when offered) and Bruna reachable through a Glittering Wish in hand.
+//   HASTE EQUIPMENT (Lightning Greaves), FORWARD-LOOKING: no haste Equipment in our hand or on our
+//     battlefield, no gatherer of ours that can already attack, and a creature that would attack at once
+//     with haste is COMING -- Bruna in hand or through a Glittering Wish in hand, a non-mana-dork creature
+//     card in hand, or a non-mana-dork creature of ours that entered this turn (pre-combat). "It can be a
+//     setup turn for Bruna to land": nothing needs to be on the battlefield yet.
+//   EVERYTHING ELSE (Eldrazi Conscription, Mythic Proportions, Prodigious Growth) is excluded.
+//   Order (the base plan / rollout / d0 pick is the front): primary, swap, ramp, haste. NOTHING MISSING
+//   (an empty set): ONE name -- the library's top payload, else the first legal name -- never the pool.
+//
+// MTG_ARMORY_FULL_WIDTH=1 (heurarm ARMORY_FULL_WIDTH) = the full-width PROOF CONTROL. The cost of each
+// exclusion (Conscription / Mythic Proportions / Prodigious Growth) and of every Greaves variant was measured
+// with temporary slots (deleted) -- docs/design/glittering-wish-heuristic.md; the USER decides the exclusions.
+// Greaves "coming" clause: a WIDER variant (Greaves whenever none is owned and no gatherer can attack) measured
+// worse once the search could not pre-see the reshuffle Open the Armory performs (MTG_SHUFFLE_SALT_SEARCH
+// decouple ensemble, 4,000 games: v1 vs full width 61 better / 47 worse; wide vs v1 4 / 8).
+static std::vector<std::string> BrunaArmoryCandidates(const GameState& s, int me,
+                                                      const std::vector<std::string>& legal)
+{
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    CardDatabase& db = CardDatabase::Instance();
+    const BrunaCensus cen = BrunaTakeCensus(s, me);
+
+    const std::string* top = nullptr; const CardDefinition* top_d = nullptr; int top_pw = 0;
+    const std::string* swap = nullptr; const std::string* ramp = nullptr; const std::string* haste = nullptr;
+    for (const std::string& n : legal)
+    {
+        const CardDefinition* d = db.Lookup(n);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        if (IsWishPayloadAura(p))
+        {
+            const int pw = BrunaAuraPower(cen, *d);
+            if (top == nullptr || pw > top_pw) { top = &n; top_d = d; top_pw = pw; }
+        }
+        else if (p.aura_swap_cost.has_value())                          { if (swap == nullptr)  { swap = &n; } }
+        else if (p.is_land_aura && p.land_aura_extra_mana > 0)          { if (ramp == nullptr)  { ramp = &n; } }
+        else if (p.is_equipment && p.equip_grants_haste)                { if (haste == nullptr) { haste = &n; } }
+    }
+    // The deck's best payload seen OUTSIDE the library (hand, our battlefield, graveyard): a stronger one
+    // there means the library's top is a lesser Aura (Conscription when every Colossification is drawn).
+    int best_out = std::numeric_limits<int>::min();
+    auto see = [&](const Card& c)
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d != nullptr && IsWishPayloadAura(d->params)) { best_out = std::max(best_out, BrunaAuraPower(cen, *d)); }
+    };
+    for (const Card& c : ap.hand)      { see(c); }
+    for (const Card& c : ap.graveyard) { see(c); }
+    for (const Permanent& q : s.battlefield) { if (q.controller_index == me && !q.def_absent) { see(q.card); } }
+
+    const bool primary_ok = top != nullptr && top_pw >= best_out && !cen.is_owned(*top);
+    const bool swap_ok    = swap != nullptr && !cen.swap_bf && cen.swap_hand_mv < 0;
+    // Bruna reachable through a Glittering Wish in hand: a non-duplicate gatherer in the sideboard.
+    const CardDefinition* wish_bruna = nullptr;
+    if (cen.wish_in_hand)
+    {
+        for (const Card& c : ap.sideboard)
+        {
+            const CardDefinition* d = db.LookupCached(c);
+            if (d != nullptr && d->params.attack_gather_auras && d->card.IsCreature()
+                && !(d->card.HasSupertype(Supertype::Legendary) && cen.is_owned(c.m_name.str()))) { wish_bruna = d; break; }
+        }
+    }
+    int need_n = 0, need_cr = 0;
+    const bool short_mana = BrunaManaShort(s, me, cen,
+        primary_ok ? top_d->card.m_mana_cost.ManaValue() : 0,
+        wish_bruna != nullptr ? wish_bruna->card.m_mana_cost.ManaValue() : 0, &need_n, &need_cr);
+    const bool ramp_ok  = ramp != nullptr && short_mana;
+    const bool coming   = cen.gatherer_hand_d != nullptr || wish_bruna != nullptr || cen.body_hand || cen.sick_body_bf;
+    const bool haste_ok = haste != nullptr && !cen.haste_equip_owned && !cen.gatherer_ready_bf && coming;
+
+    std::vector<std::string> out;
+    if (primary_ok) { out.push_back(*top); }
+    if (swap_ok)    { out.push_back(*swap); }
+    if (ramp_ok)    { out.push_back(*ramp); }
+    if (haste_ok)   { out.push_back(*haste); }
+    // NOTHING MISSING: the fetch cannot matter -- ONE name, the library's top payload (else the first legal).
+    if (out.empty() && top != nullptr) { out.push_back(*top); }
+    if (out.empty() && !legal.empty()) { out.push_back(legal.front()); }
+    if (TRACE_ON("armorycands"))
+    {
+        std::string l;
+        for (const std::string& n : out) { l += (l.empty() ? "" : " | ") + n; }
+        TRACE("armorycands", "T%d n=%zu supply=%d+%d need=%d/%d short=%d coming=%d ready_gatherer=%d :: %s", s.turn_number,
+              out.size(), cen.supply_any, cen.supply_cre, need_n, need_cr, short_mana ? 1 : 0, coming ? 1 : 0,
+              cen.gatherer_ready_bf ? 1 : 0, l.c_str());
+    }
+    return out;
+}
+
+// The rule's set at this thread's last REAL proof-traced tutor resolution (see TakeTutorProofSet).
+static thread_local std::string g_tutor_proof_set;
+std::string TakeTutorProofSet() { std::string out; out.swap(g_tutor_proof_set); return out; }
+
 std::vector<std::string>
 BrunaProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
     std::vector<std::string> legal = GenericProvider::TutorCandidates(s, controller, pp);
-    // PROOF INSTRUMENT (MTG_TRACE=wishproof): at a REAL resolution, print the rule's set in EITHER arm,
-    // so a control-arm game's actual fetch (MTG_TUTOR_CHOSEN_RANK's chose=) can be checked against it --
-    // inside the set = search allocation; outside = a ranking miss to fix.
-    if (g_real_resolution && IsMulticolorWish(pp) && TRACE_ON("wishproof"))
+    const bool wish = IsMulticolorWish(pp), armory = !wish && IsArmoryTutor(pp);
+    // PROOF INSTRUMENTS (MTG_TRACE=wishproof / armoryproof): at a REAL resolution, print the rule's set in
+    // EITHER arm, so a control-arm game's actual fetch (MTG_TUTOR_CHOSEN_RANK's chose=) can be checked
+    // against it -- inside the set = search allocation; outside = a ranking miss to fix.
+    if (g_real_resolution && (wish || armory) && TRACE_ON(wish ? "wishproof" : "armoryproof"))
     {
-        const std::vector<std::string> h = BrunaWishCandidates(s, controller, legal);
-        std::string l, bf, hand;
+        const std::vector<std::string> h = wish ? BrunaWishCandidates(s, controller, legal)
+                                                : BrunaArmoryCandidates(s, controller, legal);
+        std::string l, bf, hand, gy;
         for (const std::string& n : h) { l += (l.empty() ? "" : " | ") + n; }
         for (const Permanent& q : s.battlefield)
-        { if (q.controller_index == controller && !q.card.IsLand()) { bf += q.card.m_name.str() + ","; } }
+        { if (q.controller_index == controller && !q.card.IsLand()) { bf += q.card.m_name.str() + (q.entered_this_turn ? "*," : ","); } }
         for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand) { hand += c.m_name.str() + ","; }
-        const char arm = BrunaWishFullWidth() ? 'C' : 'R';   // which arm printed it (pooled proof batches)
-        TRACE("wishproof", "T%d arm=%c n=%zu legal=%zu rule={%s} bf=[%s] hand=[%s]", s.turn_number, arm, h.size(),
-              legal.size(), l.c_str(), bf.c_str(), hand.c_str());
+        if (armory) { for (const Card& c : s.players[static_cast<std::size_t>(controller)].graveyard) { gy += c.m_name.str() + ","; } }
+        const bool full = wish ? BrunaWishFullWidth() : BrunaArmoryFullWidth();
+        const char arm = full ? 'C' : 'R';   // which arm printed it (pooled proof batches)
+        g_tutor_proof_set = std::string(1, arm) + "{" + l + "}";
+        if (wish)
+        {
+            TRACE("wishproof", "T%d arm=%c n=%zu legal=%zu rule={%s} bf=[%s] hand=[%s]", s.turn_number, arm, h.size(),
+                  legal.size(), l.c_str(), bf.c_str(), hand.c_str());
+        }
+        else
+        {
+            int lands = 0;
+            for (const Permanent& q : s.battlefield) { if (q.controller_index == controller && q.card.IsLand()) { ++lands; } }
+            TRACE("armoryproof", "T%d arm=%c n=%zu legal=%zu lands=%d rule={%s} bf=[%s] hand=[%s] gy=[%s]", s.turn_number, arm,
+                  h.size(), legal.size(), lands, l.c_str(), bf.c_str(), hand.c_str(), gy.c_str());
+        }
     }
-    if (!IsMulticolorWish(pp) || legal.size() <= 1
-        || DecisionUnpruned(UnprunedGate::Tutor) || BrunaWishFullWidth()) { return legal; }
-    std::vector<std::string> out = BrunaWishCandidates(s, controller, legal);
+    if ((!wish && !armory) || legal.size() <= 1 || DecisionUnpruned(UnprunedGate::Tutor)) { return legal; }
+    if (wish ? BrunaWishFullWidth() : BrunaArmoryFullWidth()) { return legal; }
+    std::vector<std::string> out = wish ? BrunaWishCandidates(s, controller, legal)
+                                        : BrunaArmoryCandidates(s, controller, legal);
     return out.empty() ? legal : out;
 }
 

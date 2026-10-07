@@ -674,18 +674,17 @@ TEST_CASE("Glittering Wish rule: Troyan only when mana is short")
     }
 }
 
-TEST_CASE("Glittering Wish rule: other tutors keep GenericProvider's list (Open the Armory)")
+TEST_CASE("Glittering Wish rule: the regrowths keep GenericProvider's list; the Wish and Open the Armory are marked")
 {
     WishFullWidthArm off(false);
     BoardSb b = EarlyWishBoard();
-    std::vector<Card> lib;
-    for (const std::string& n : { "Colossification", "Lightning Greaves", "Arcanum Wings", "Wild Growth" })
-    { lib.push_back(PlaceholderSb(n, b.next++)); }
-    b.s.players[0].library.assign(lib.begin(), lib.end());
-    const CardParams& armory = DefSb("Open the Armory").params;
-    CHECK(BrunaSb().TutorCandidates(b.s, 0, armory) == GenericProvider().TutorCandidates(b.s, 0, armory));
-    CHECK_FALSE(BrunaSb().TutorMarksSuggested(armory));
+    b.Grave("Arcanum Wings");
+    b.Grave("Colossification");
+    const CardParams& proc = DefSb("Auroral Procession").params;
+    CHECK(BrunaSb().TutorCandidates(b.s, 0, proc) == GenericProvider().TutorCandidates(b.s, 0, proc));
+    CHECK_FALSE(BrunaSb().TutorMarksSuggested(proc));
     CHECK(BrunaSb().TutorMarksSuggested(DefSb("Glittering Wish").params));
+    CHECK(BrunaSb().TutorMarksSuggested(DefSb("Open the Armory").params));
 }
 
 TEST_CASE("Glittering Wish rule: the BODY is Linvala only, when nothing can carry the Auras and Bruna cannot come down next turn")
@@ -1012,4 +1011,245 @@ TEST_CASE("Glittering Wish rule: a host-tapping Aura CAST on a host is not letha
     b.Hand("Eldrazi Conscription");
     const std::vector<std::string> c = WishCands(b);
     CHECK(Has(c, "Bruna, Light of Alabaster"));
+}
+
+TEST_CASE("Glittering Wish rule: VEXING SHUSHER is out entirely -- not even once Linvala has left the sideboard")
+{
+    WishFullWidthArm off(false);
+    // No body anywhere, two Forests, Colossification in hand: Linvala is the body.
+    auto shape = []()
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Forest");
+        b.Hand("Colossification");
+        return b;
+    };
+    {
+        BoardSb b = shape();
+        CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
+        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+    }
+    // Linvala already wished and now in the graveyard (gone from the sideboard): the body role does NOT
+    // pass to Shusher (round 5 offered him here: 2 of 11666 committed wishes took him).
+    {
+        BoardSb b = shape();
+        auto& sb = b.s.players[0].sideboard;
+        sb.erase(std::remove_if(sb.begin(), sb.end(),
+                 [](const Card& x) { return x.m_name.str() == "Linvala, Shield of Sea Gate"; }), sb.end());
+        b.Grave("Linvala, Shield of Sea Gate");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK_FALSE(Has(c, "Vexing Shusher"));
+        CHECK_FALSE(Has(c, "Linvala, Shield of Sea Gate"));
+    }
+}
+
+// ---- OPEN THE ARMORY CANDIDATE RULE (USER spec 2026-10-07) ----------------------------------------
+// At most four roles, each conditional: Colossification unless one is owned, Arcanum Wings unless one is
+// owned, Wild Growth only when mana is short (the Troyan test), Lightning Greaves when a creature that
+// would attack at once is coming. Eldrazi Conscription, Mythic Proportions, Prodigious Growth: excluded.
+// MTG_ARMORY_FULL_WIDTH (heurarm slot) is the full-width control.
+namespace
+{
+struct ArmoryFullWidthArm
+{
+    std::int8_t prev;
+    explicit ArmoryFullWidthArm(bool on) : prev(heurarm::t_arm[heurarm::ARMORY_FULL_WIDTH])
+    { heurarm::t_arm[heurarm::ARMORY_FULL_WIDTH] = on ? 1 : 0; }
+    ~ArmoryFullWidthArm() { heurarm::t_arm[heurarm::ARMORY_FULL_WIDTH] = prev; }
+};
+
+const std::vector<std::string> kArmoryLibrary = {
+    "Eldrazi Conscription", "Lightning Greaves", "Prodigious Growth", "Mythic Proportions",
+    "Colossification", "Arcanum Wings", "Wild Growth" };
+
+// Two lands + a land in hand (three mana next turn), Open the Armory in hand, the seven names in the library.
+BoardSb ArmoryBoard()
+{
+    BoardSb b;
+    for (const std::string& n : kNewSideboard) { b.Side(n); }
+    std::vector<Card> lib;
+    for (const std::string& n : kArmoryLibrary) { lib.push_back(PlaceholderSb(n, b.next++)); }
+    b.s.players[0].library.assign(lib.begin(), lib.end());
+    b.Put("Forest");
+    b.Put("Plains");
+    b.Hand("Forest");
+    b.Hand("Open the Armory");
+    return b;
+}
+
+std::vector<std::string> ArmoryCands(const BoardSb& b)
+{
+    return BrunaSb().TutorCandidates(b.s, 0, DefSb("Open the Armory").params);
+}
+}   // namespace
+
+TEST_CASE("Open the Armory rule: at most the four USER names; the full-width control arm offers all seven")
+{
+    ArmoryFullWidthArm off(false);
+    BoardSb b = ArmoryBoard();
+    b.Hand("Bruna, Light of Alabaster");
+    const std::vector<std::string> c = ArmoryCands(b);
+    CHECK(c.size() >= 1);
+    CHECK(c.size() <= 4);
+    for (const std::string& n : { "Eldrazi Conscription", "Mythic Proportions", "Prodigious Growth" })
+    { CHECK_MESSAGE(!Has(c, n), "excluded name offered: ", n); }
+    // Nothing owned, three mana next turn for a 6-drop Bruna in hand: all four roles are live.
+    CHECK(c == std::vector<std::string>{ "Colossification", "Arcanum Wings", "Wild Growth", "Lightning Greaves" });
+    ArmoryFullWidthArm on(true);
+    const std::vector<std::string> full = ArmoryCands(b);
+    CHECK(full.size() == 7);
+    CHECK(full == GenericProvider().TutorCandidates(b.s, 0, DefSb("Open the Armory").params));
+}
+
+TEST_CASE("Open the Armory rule: Colossification only when we have none (hand or battlefield)")
+{
+    ArmoryFullWidthArm off(false);
+    {
+        BoardSb b = ArmoryBoard();
+        CHECK(Has(ArmoryCands(b), "Colossification"));
+    }
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Colossification");
+        const std::vector<std::string> c = ArmoryCands(b);
+        CHECK_FALSE(Has(c, "Colossification"));
+        // ...and a lesser payload does not inherit the role.
+        CHECK_FALSE(Has(c, "Eldrazi Conscription"));
+        CHECK_FALSE(Has(c, "Mythic Proportions"));
+    }
+    {
+        BoardSb b = ArmoryBoard();
+        const int mother = b.Put("Mother of Runes");
+        b.Put("Colossification", false, mother);
+        CHECK_FALSE(Has(ArmoryCands(b), "Colossification"));
+    }
+    // Every Colossification drawn (none left in the library, one in the graveyard): Conscription is NOT
+    // promoted to the role -- the deck's best payload is outside the library.
+    {
+        BoardSb b = ArmoryBoard();
+        std::vector<Card> lib;
+        for (const std::string& n : kArmoryLibrary)
+        { if (n != "Colossification") { lib.push_back(PlaceholderSb(n, b.next++)); } }
+        b.s.players[0].library.assign(lib.begin(), lib.end());
+        b.Grave("Colossification");
+        const std::vector<std::string> c = ArmoryCands(b);
+        CHECK_FALSE(Has(c, "Eldrazi Conscription"));
+    }
+}
+
+TEST_CASE("Open the Armory rule: Arcanum Wings only when we have none (hand or battlefield)")
+{
+    ArmoryFullWidthArm off(false);
+    {
+        BoardSb b = ArmoryBoard();
+        CHECK(Has(ArmoryCands(b), "Arcanum Wings"));
+    }
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Arcanum Wings");
+        CHECK_FALSE(Has(ArmoryCands(b), "Arcanum Wings"));
+    }
+    {
+        BoardSb b = ArmoryBoard();
+        const int mother = b.Put("Mother of Runes");
+        b.Put("Arcanum Wings", false, mother);
+        CHECK_FALSE(Has(ArmoryCands(b), "Arcanum Wings"));
+    }
+}
+
+TEST_CASE("Open the Armory rule: Wild Growth only when mana is short -- the same test as Troyan's")
+{
+    ArmoryFullWidthArm off(false);
+    WishFullWidthArm woff(false);
+    // Short: three mana next turn, Bruna (6) in hand. The Wish offers Troyan on the same board.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Bruna, Light of Alabaster");
+        CHECK(Has(ArmoryCands(b), "Wild Growth"));
+        CHECK(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+    // Not short: seven mana next turn, nothing pricier than Bruna in hand (Colossification and Wings owned,
+    // so the Armory would fetch no 7-drop either). The Wish drops Troyan on the same board.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Bruna, Light of Alabaster");
+        b.Hand("Colossification");
+        b.Hand("Arcanum Wings");
+        for (const char* l : { "Forest", "Plains", "Island", "Island" }) { b.Put(l); }
+        CHECK_FALSE(Has(ArmoryCands(b), "Wild Growth"));
+        CHECK_FALSE(Has(WishCands(b), "Troyan, Gutsy Explorer"));
+    }
+    // Short only for what THIS tutor would fetch: six mana next turn, a host (Mother) out, no gatherer --
+    // Colossification (7) is the fetch, so Wild Growth rides along.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Put("Mother of Runes");
+        for (const char* l : { "Forest", "Plains", "Island" }) { b.Put(l); }
+        CHECK(Has(ArmoryCands(b), "Colossification"));
+        CHECK(Has(ArmoryCands(b), "Wild Growth"));
+    }
+}
+
+TEST_CASE("Open the Armory rule: Lightning Greaves is FORWARD-LOOKING -- a setup turn for Bruna to land")
+{
+    ArmoryFullWidthArm off(false);
+    // Bruna in hand, nothing on the battlefield: Greaves now so that she attacks the turn she lands.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Bruna, Light of Alabaster");
+        CHECK(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+    // Bruna reachable only through a Glittering Wish in hand (she is still in the sideboard): offered too.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Glittering Wish");
+        CHECK(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+    // A non-dork creature card in hand (Mother of Runes): offered.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Mother of Runes");
+        CHECK(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+    // Nothing coming (no creature card, no wish): not offered.
+    {
+        BoardSb b = ArmoryBoard();
+        CHECK_FALSE(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+    // A Greaves already in hand: not offered.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Hand("Bruna, Light of Alabaster");
+        b.Hand("Lightning Greaves");
+        CHECK_FALSE(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+    // Bruna already on the battlefield and able to attack: not offered.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Put("Bruna, Light of Alabaster");
+        b.Hand("Mother of Runes");
+        CHECK_FALSE(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+    // Bruna cast THIS turn (summoning sick, before combat): Greaves lets her attack now -- offered.
+    {
+        BoardSb b = ArmoryBoard();
+        b.s.phase = Phase::PreCombatMain;
+        b.Put("Bruna, Light of Alabaster", /*sick=*/true);
+        CHECK(Has(ArmoryCands(b), "Lightning Greaves"));
+    }
+}
+
+TEST_CASE("Open the Armory rule: nothing missing -> ONE name (the top payload), never the pool")
+{
+    ArmoryFullWidthArm off(false);
+    BoardSb b = ArmoryBoard();
+    b.Hand("Colossification");
+    b.Hand("Arcanum Wings");
+    b.Hand("Lightning Greaves");
+    for (const char* l : { "Forest", "Plains", "Island", "Island", "Forest" }) { b.Put(l); }
+    const std::vector<std::string> c = ArmoryCands(b);
+    REQUIRE(c.size() == 1);
+    CHECK(c.front() == "Colossification");
 }
