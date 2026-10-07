@@ -1,10 +1,14 @@
 # The equip route's per-link price was starving the detector that pays for itself (2026-10-06)
 
-Status: **NOTHING ADOPTED.** The PRICE result is complete and passes the adoption bar. **TOPMAIN is
-LOSSY and is OUT as a gate** — a 10,000-game run at 50x the shipped budget still changes 0.63% of
-games and makes 17 of them worse, four by two full turns (§5a-bis). An earlier claim in this file
-that it was byte-identical at large budgets came from a 250-game sample that could not have
-detected the effect; the user caught it.
+Status: **NOTHING ADOPTED.** The PRICE result is complete, passes the adoption bar, and is inert at
+unlimited budget BY CONSTRUCTION — that is the part that is ready. **TOPMAIN is PROBABLY SOUND but
+NOT PROVEN** (§5a, §5a-bis, §5a-ter): it perturbs 0.63% of games even at 50x the shipped budget and
+makes 17 of them worse, yet all 16 of those re-tested at `--budget-ms 0` come back byte-identical,
+so the finite-budget losses are reallocation rather than capability deletion. 67/67 instances are
+byte-identical at unlimited, with one named residual gap. **I reached a confident verdict on TOPMAIN
+twice and was wrong twice** — first on a 250-game null that could not have detected the effect (the
+user caught it), then on finite-budget losses that turn out to be reallocation — so this file offers
+no third verdict and the ruling is the user's.
 
 The headline: the shipped per-link price was set just high enough to make the route's lethal
 detection FAIL on the boards where it was worth the most, and a failed detection is the worst case
@@ -429,7 +433,58 @@ Note the 250-game sample also under-stated the COST by 3x (1,323 ms/game vs the 
 4,091 ms/game) because games 0-249 never reach the heavy tail. One unrepresentative sample, two
 wrong conclusions.
 
-**TOPMAIN IS THEREFORE OUT as a gate**, under the user's rule ("I won't accept a lossy solution...
+### 5a-ter. ...but at TRULY unlimited budget those same games are byte-identical. The honest status.
+
+The 17 games TOPMAIN made worse at b1000 were re-run at `--budget-ms 0` (16 of 17; g8496 did not
+finish — an unlimited-budget game on this deck has no bound, and one of the 16, g2572, took 24
+minutes):
+
+| games | at b1000 (50x) | at `--budget-ms 0` |
+|---|---|---|
+| 16 of the 17 TOPMAIN made worse | 5 -> 6 or 5 -> 7 | **16/16 byte-identical, same digest, all win turn 5** |
+
+So the b1000 losses are budget **reallocation**, not capability deletion: with no budget to
+reallocate, TOPMAIN finds exactly what base finds. That reconciles the two results — a work-removing
+change perturbs play at *any* finite budget (which is why the rate does not decay from b200 to
+b1000: the plan space is effectively unbounded relative to any budget, so freed work always goes
+somewhere), and only at a genuinely unlimited root does the perturbation vanish.
+
+**One of my own earlier objections was wrong and should not be reused.** I worried that selecting
+games which moved at a finite budget enriches for reallocation sensitivity rather than capability
+sensitivity, possibly a disjoint population. That is backwards for the main case: a game whose only
+kill sits in a frame TOPMAIN skips would differ at *every* budget, so it must appear in the
+finite-budget diff set — screening that set at unlimited is therefore a sound way to detect
+capability loss. Across **67 game-instances** tested at unlimited budget (16 + the 7 b200-movers +
+the 44 recovery-bar games), TOPMAIN is byte-identical every time.
+
+**The residual gap, stated precisely because it is the only one left.** A capability loss would be
+invisible to this method in one case: a game where base ALSO fails to find the kill at the finite
+budget (so no finite-budget diff, so the game is never selected), while at unlimited base finds it
+and TOPMAIN cannot. Closing that needs a broad, UNSELECTED unlimited-budget A/B, which is the one
+experiment this deck makes expensive (a 1,000-game `--budget-ms 0` run was abandoned with 13 games
+still running after 31 minutes).
+
+**So the status is: PROBABLY SOUND, with a named residual gap — not proven, and not refuted.** I
+reached a confident verdict twice and was wrong twice (first on an under-powered null, then on
+finite-budget losses that turn out to be reallocation), so this file does not offer a third. What
+should actually drive the decision is the *kind* of evidence available for each lever:
+
+* the **price** is inert at unlimited **by construction** — `ChargeDecisionUnits` returns on
+  `budget == nullptr` — a proof, corroborated by 36/36 identical at the bar;
+* **TOPMAIN** is inert at unlimited only **empirically** — 67/67 instances, with the gap above.
+
+Both levers' finite-budget losses recover at the repo's adoption bar, so they are the same kind of
+cost. The asymmetry is in the strength of the completeness guarantee, and that is a judgement for
+the user.
+
+**The alternative remains available either way**, and is the user's own: because TOPMAIN has good
+results (-25 game-turns and 0.879x at b20, stacking to 0.714x), a **budget-staged admission order**
+— wave *k* = turn *k* fully explored — would deliver the same saving with completeness by
+construction rather than by sample, which would make the residual gap moot.
+
+Superseded text follows for the record; read §5a-bis and this section together.
+
+**~~TOPMAIN IS THEREFORE OUT as a gate~~**, under the user's rule ("I won't accept a lossy solution...
 everything should be findable at unlimited or large budgets"). What remains open is the sanctioned
 alternative the user named in the same breath: because TOPMAIN *does* have good results
 (-25 game-turns and 0.879x wall at b20, and it stacks to 0.714x), it is a candidate for a
