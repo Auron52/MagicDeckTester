@@ -1,6 +1,6 @@
 # Glittering Wish + Open the Armory candidate rules (Bruna) -- status 2026-10-07
 
-Branch `wish-finish` (local, NOT pushed), on `phase-1-2-deck-analyzer` @ `15bf177a`. **NOT landed**: Bruna
+Branch `wish-finish` (local, NOT pushed), rebased onto `phase-1-2-deck-analyzer` @ `1caa094d` (2026-10-07). **NOT landed**: Bruna
 is out of the regression suite (USER 2026-10-06, it failed the 3x suite-cost rule) and is not re-added here.
 This work exists to bring Bruna back under 3x (budget: 3 x FiveColour = **3100.38 ms/game**, per-game core-ms
 at the deck's worst searched regression case). Everything below can be picked up from this doc alone; the
@@ -13,7 +13,7 @@ raw logs are under `logs/wish/` (gitignored) in the `wish-finish` worktree.
   different kept hand or an in-set allocation are the USER's two Wish cuts.
 * The census: the tutor axis fell from 30.0% to 9.3% of scored plans, total units 0.725x; the mulligan-
   bottoming playouts are now 71% of Bruna's units -- the next lever, and a USER decision.
-* The final measurement on a NEW held-out seed set (pooled batch D) is RUNNING; its sections are marked pending.
+* The final measurement on a NEW held-out seed set (pooled batch D) is DONE: searched play is neutral within noise (held-out +7 in 3,200 games), d0 much better, units 0.658x of full width; every held-out worse game is dispositioned (below). The cost re-measure is contended (provisional ~2.6x FiveColour, under 3x; the quiet-box number is owed).
 
 ## The rules as they stand (`BrunaProvider::TutorCandidates`, src/ai/DecisionProviders.cpp)
 
@@ -257,9 +257,26 @@ Glittering Wish in hand) or another non-dork attacker in hand / entered this tur
 Bruna to land" is covered whenever Bruna is reachable; a Greaves fetched for an attacker that is not yet
 reachable at all does not pay once the search cannot see which card the reshuffle brings.
 
-### Exclusion costs and the held-out Armory proof
+### Held-out Armory proof and the cost of each USER exclusion (batch D)
 
-Pending the final pooled batch (D): coupled add-back arms on every held-out searched cell and decoupled ones on the held-out d5 cells.
+Armory rule vs the Armory-only control (Wish rule on in both), held-out searched: **37 better / 29 worse, -7**
+(train: 75 / 82, +10 coupled; decoupled d5 61 / 47, -20). Units H/A 0.915x.
+
+Each excluded name put back into the rule's set (unconditionally, when legal), paired against the rule:
+
+| excluded name | coupled, held-out searched (3,200) | decoupled, held-out d5 (1,000) |
+|---|---|---|
+| Eldrazi Conscription | 7 better / 5 worse, **-2** | 1 / 2, +2 |
+| Mythic Proportions | 5 / 5, **0** | 0 / 1, +2 |
+| Prodigious Growth | 5 / 5, **0** | 1 / 3, +3 |
+
+**None of the three exclusions costs anything measurable** -- coupled they are within one game of neutral,
+and decoupled (the search cannot pre-see the reshuffle a different fetch causes) putting them back is
+slightly WORSE. The worse games where the control did fetch one of them (11 on train) are the reshuffle
+lottery: e.g. smoke gi9, where the rule's single "nothing missing" name was Colossification and the
+control's Prodigious Growth won a turn sooner only through the draws that followed the different shuffle.
+**Recommendation: keep all three out (the USER's list as written).** Eldrazi Conscription is the only one with
+a non-zero coupled sign (-2 in 3,200), which is noise-level.
 
 ## Candidate-count distributions (committed resolutions, all cells incl. d0; b2 = the final rules)
 
@@ -273,9 +290,102 @@ five-way state (Bruna | Almost Perfect | Linvala | Troyan | Unflinching Courage)
 Wings | Wild Growth, Colossification | Wings, Colossification | Wings | Wild Growth, Wings | Wild Growth |
 Greaves, and all four.
 
-## Final measurement (pooled batch D: train cost rows + a NEW held-out seed set)
+## Final measurement -- ONE pooled batch D (`mtg_r8`, play-identical to the final binary), rules (H) vs full width (C)
 
-Pending.
+Cells: the 21 removed suite rows (train; the overnight rows' H and C come from play-identical binaries --
+b2's rule arm and abG/abF's control, digests verified -- the smoke/regression rows were re-run in D), a NEW
+held-out seed set (d3 b20 s12.50M + s12.51M x1000, d5 b40 s12.52M + s12.53M x500, 2HG d3 b10 s12.54M x200,
+d0 s12.55M + s12.56M x2000) and the two old cost cells (d5 b20 s10.1M x400, d3 b10 s10.2M x200). Loss = 9.
+
+| cells | n | better | worse | net turns | per game (se) |
+|---|---|---|---|---|---|
+| **held-out searched** (d3 + d5 + 2HG) | 3200 | 67 | 64 | **+7** | +0.0022 (0.0040) |
+| held-out d0 | 4000 | 443 | 167 | -467 | -0.117 |
+| train searched (21 rows) | 6725 | 132 | 132 | +4 | +0.0006 |
+| train d0 | 10000 | 1069 | 410 | -1058 | -0.106 |
+| cost cells (searched) | 600 | 9 | 15 | +6 | +0.010 (0.008) |
+
+Per held-out cell: d3 s12.50M 13/21 (+10), d3 s12.51M 27/24 (+1), d5 s12.52M 13/13 (+4), d5 s12.53M 10/4 (-6),
+2HG 4/2 (-2). **Searched play is neutral within noise (+7 in 3,200 held-out games; +4 in 6,725 train games);
+d0 is much better** (the front pick is no longer shuffle order / sideboard order). The USER's priority is the
+searched result: it is NOT net <= 0 on held-out (+7), and the measured cost of the USER's Shusher cut alone
+(-34 in 6,725 train games when he is put back, i.e. ~-0.005/game) is larger than the whole deficit -- the
+Shusher question (below) is what decides whether the rules are net better in searched play.
+
+**Units (deterministic):** held-out searched H/C **0.658x**; Armory-only control/C 0.719x; H/A 0.915x. Census
+(216 games, d5 b20): 0.725x of full width.
+
+### Worse-game dispositions on the final rules (two-stage recovery on the final binary, single-game replays)
+
+64 held-out searched games the full-width control won sooner (batch D, rules H vs C). Each was recovered in
+two stages on the final binary (`mtg_r9`, play-identical to D's rule arm: digests and units equal on all 9
+train smoke/regression rows; the rebased binary on `1caa094d` reproduces the 5 regression rows' digests too)
+and replayed single-game in both arms with the proof traces (`logs/wish/dispo_final.txt`):
+
+| disposition | games |
+|---|---|
+| recovered at stage 1 (`--depth <control win turn> --budget-ms 100`) | 18 |
+| recovered at stage 2 (d8 b0) | 13 |
+| **USER cut -- Vexing Shusher**: unrecovered; the control's line wished for Shusher | **17** |
+| **USER cut -- Bruna over Linvala**: d5 s12.52M gi351, the control wished for Linvala, which the rule drops because Bruna can come down next turn; unrecovered at d8 b0 (T7 vs T5) | **1** |
+| kept hand differs (the bottoming playouts read the rule; physically different games) | 5 |
+| Open the Armory outside the set: Lightning Greaves (v1's "an attacker is coming" clause) | 4 |
+| Open the Armory outside the set: Wild Growth when mana is not short | 3 |
+| Open the Armory outside the set: Prodigious Growth (USER exclusion; incl. 2HG gi66) | 2 |
+| Glittering Wish, second cheap Aura: the rule's cheap-Aura role offered Unflinching Courage, the control took Steel of the Godhead (d5 s12.52M gi207) | 1 |
+
+Every unrecovered game falls in a named class: the USER's two Wish cuts (18), a different kept hand (5), the
+Armory's USER list / conditions (9 -- coupled: Open the Armory reshuffles and the coupled search pre-sees the
+reshuffle, the lottery confound measured above), and one in-role cheap-Aura allocation (1). The Shusher cut
+is again the largest single source, and it is the USER's question below (now being characterised).
+
+## Cost against the 3x suite rule (budget 3100.38 ms/game = 3 x FiveColour)
+
+The gated number is per-game core-ms at the deck's worst SEARCHED regression row. **The quiet-box ms check is
+still OWED**: the box had been quiet for a few minutes after the 2026-10-07 container restart, but another
+container woke at ~22:08 (host load 25-42 from then on, ~24 of 24 cores busy before any run of ours started),
+so every ms figure below is CONTENDED and provisional. What it can and cannot say:
+
+**Deterministic units (batch D)** on the gated rows themselves, against the pre-sideboard list (git
+`97f68219^`, run in the pre-rule configuration -- both tutors full width -- on today's engine):
+
+| regression row | rules (H) units/game | pre-sideboard list | new list, full width (C) | H / pre-sideboard | H / C |
+|---|---|---|---|---|---|
+| d5 b20 s3003 (**worst row**) | **170,845** | 188,729 | 269,587 | **0.905** | 0.634 |
+| d5 b20 s2002 | 152,924 | 186,088 | 276,862 | 0.822 | 0.552 |
+| d3 b10 s3003 | 95,104 | 110,483 | 201,515 | 0.861 | 0.472 |
+| d3 b10 s2002 | 74,599 | 96,949 | 179,029 | 0.769 | 0.417 |
+
+The old anchors reproduce on today's engine: the pre-sideboard list plays the d5 s10.1M x400 cell at 69.5M
+units (anchor 68.8M) and the d3 s10.2M x200 cell at 17.5M (anchor 17.1M); the rules play them at **61.5M (0.89x)**
+and **13.3M (0.78x)**.
+
+**Contended ms, like-for-like (2026-10-07 22:24-22:29, rebased onto `1caa094d`, ONE pooled batch, interleaved,
+`logs/cost/cal1.log`):** the regression tier's searched rows for the rules, the OLD pre-sideboard list and
+FiveColour (the reference deck) in the same pool:
+
+| row | ms/game | units/game | us/unit | x FiveColour worst |
+|---|---|---|---|---|
+| rules d5 b20 s3003 (worst) | 9,061 | 170,845 | 53.0 | **3.65** |
+| OLD list d5 b20 s2002 (its worst) | 8,949 | 186,088 | 48.1 | **3.61** |
+| FiveColour 2HG d3 s2002 (its worst) | 2,482 | 34,952 | 71.0 | 1.00 |
+
+* The OLD list measured **2.63 s/game = 2.55x** on a quiet box (2026-10-05) and passed; under this contention it
+  reads **3.61x**. Contention inflates Bruna ~1.4x relative to FiveColour, so a contended ratio is not a usable
+  gate reading for this deck (the 2026-10-06 note saw 8.24x at load ~47 for the same reason; the gate as written
+  -- contended Bruna over the CACHED quiet reference -- read 8.71x here).
+* What IS robust under contention is the same-deck comparison: **rules / OLD list = 1.01x in ms** on the worst row
+  (0.905x in units -- the rules save 10% of the units but cost ~12% more per unit, 53.0 vs 47.1 us/unit; whether
+  that is the rules' census running on every tutor-candidate call, rollouts included, or simply the new list's
+  play is not yet profiled).
+* **Estimate: the rules cost about what the OLD list cost -- ~2.6-2.7 s/game, ~2.6x FiveColour, under the 3.10 s
+  budget.** Also measured: the rebased binary plays Bruna's five regression rows digest-identically to the final
+  rule binary. **Owed:** the same pooled manifest (`logs/cost/cal.json`) on a quiet box -- or
+  `suite_gate.py --cost decks/Bruna` with the rows restored (`logs/cost/bruna_rows_measurement.patch`) plus the
+  FiveColour rows in the same run. Re-adding Bruna to the suite stays the USER's call.
+
+The bottoming-eval proposal (PBEV) would cut a further 35% of units (0.649x of the rules on the held-out
+searched cells) at a quality cost of +17 turns in 3,800 games (4 better / 21 worse).
 
 ## Branch-source census -- "What other major branch sources do we have?" (USER 2026-10-07)
 
@@ -335,9 +445,11 @@ not applied".
 
 1. **Vexing Shusher.** "Leave out Shusher" costs 34 turns in 6,725 searched games (38 better / 7 worse for
    putting him back; 4.6 se). Proposal: Shusher only in the need-a-carrier state, beside Linvala (+1 candidate
-   in ~a third of wishes, +1% units). **Default taken: your rule (Shusher out).**
+   in ~a third of wishes, +1% units). USER 2026-10-07: *"Shusher I'm not totally sold on unconditionally. Can we
+   figure out when it does well?"* -- the characterisation and a derived condition are in progress (see the
+   Shusher section). **Default taken: your rule (Shusher out).**
 2. **Bruna over Linvala.** Neutral (11 / 8, -5). Recommendation: keep it. **Default: kept.**
-3. **The three Armory exclusions** (Eldrazi Conscription, Mythic Proportions, Prodigious Growth): cost pending the final batch (D).
+3. **The three Armory exclusions** (Eldrazi Conscription, Mythic Proportions, Prodigious Growth): none costs anything measurable on held-out (coupled: Conscription 7 better / 5 worse, Mythic 5/5, Prodigious 5/5; decoupled d5: putting each back is slightly worse).
    **Default taken: excluded (your list).**
 4. **Lightning Greaves.** v1 (an attacker must be reachable: Bruna in hand or via a Wish, a non-dork creature
    in hand / just cast) is shipped; the wider v2 (whenever none is owned and Bruna is not ready) is 14 turns
@@ -345,11 +457,11 @@ not applied".
    **Default: v1.** A decoupled d3 check is the open item if you want Greaves wider.
 5. **Mulligan-bottoming playouts are 71% of Bruna's units.** Options: (a) the keep/bottom table (needs Bruna in
    the suite first); (b) the Melira-precedent profile policy `bottom_eval_depth 0, bottom_eval_topk 5` --
-   its measurement is pending (D). **Default: not adopted** (profile unchanged).
+   measured on held-out: 0.649x units of the rules, +17 turns in 3,800 games (4 better / 21 worse) -- a real quality cost. **Default: not adopted** (profile unchanged).
 6. **Interchangeable-copy fold** (a SOUND identity fold the census prices at 2.27x of the enumeration walk;
-   engine-wide, CPU not budget units). Proposal: implement it default-ON after a byte-identity check.
-   **Default: not done here** (outside this deck's provider).
-7. **Re-adding Bruna to the suite** is gated on the 3x cost rule. pending (D).
+   engine-wide, CPU not budget units). USER 2026-10-07: *"We should do the duplicate-copy fold"* -- being
+   implemented engine-wide, default ON once smoke and regression are byte-identical.
+7. **Re-adding Bruna to the suite** is gated on the 3x cost rule. Contended estimate ~2.6-2.7 s/game (~2.6x FiveColour: the rules cost 1.01x the old list in like-for-like ms, and the old list measured 2.55x quiet); the quiet-box number is owed. **Default: not re-added** (your call).
 
 ## History (rounds 1-5 of the Wish rule; logs under logs/wish/, gitignored)
 
