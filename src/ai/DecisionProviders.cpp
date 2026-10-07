@@ -23104,6 +23104,46 @@ inline int NodeUnits()
     }();
     return v;
 }
+// THE LATER-MAIN WAVE (MTG_EQUIP_ROUTE_LATEMAIN_UNITS, default 1 = INERT).
+//
+// WHAT IT IS FOR. MTG_EQUIP_ROUTE_TOPMAIN buys real wall (-25 game-turns and 0.879x at b20,
+// stacking to 0.714x with a lowered price) by REFUSING the route on any frame after the turn's
+// first main. That is a GATE: `EquipRoutePiecesInPlace` returns false, at every budget including
+// unlimited, so a kill that exists only after a mid-turn cast is unfindable by any budget. Under
+// the user's rule (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE UNFINDABLE")
+// that disqualifies it however well it measures -- and measuring it could not settle the question
+// either way: 0.63% of games still move at 50x the shipped budget, yet the games it makes worse
+// there come back byte-identical at `--budget-ms 0`, so the finite-budget differences are budget
+// REALLOCATION and the completeness question stayed open on a sampling argument.
+//
+// THIS IS THE SAME SAVING WITH THE QUESTION REMOVED. Instead of refusing a later-main frame, price
+// it higher. Then the behaviour is staged by budget, which is what the user asked for ("there might
+// be a way to do this with waves if TOPMAIN has good results" + "adding more budget should fill in
+// more of these lines proportionally"):
+//   * a small budget exhausts quickly on a later-main frame, so the spend concentrates on the first
+//     main, where the yield is -- wave 0 in practice;
+//   * more budget reaches further into the later frames, proportionally;
+//   * at an UNLIMITED root the price is NEVER READ -- `TurnSolver::ChargeDecisionUnits` returns
+//     immediately on `budget == nullptr` and the per-link cut test requires `budget != nullptr` --
+//     so the walk is byte-identical to today. SOUND BY CONSTRUCTION, not by sample. That is the
+//     whole point: it inherits the price lever's proof instead of needing its own.
+// Nothing is ever refused, so the frame is still ENTERED and a cheap certificate can still fire
+// there even under a tight budget; only the DFS depth below it is bought rather than granted. It
+// stays searched-with-heuristics (USER: "I still want to retain searched-with-heuristics no matter
+// the approach") -- this orders and prices, it does not pick.
+//
+// The multiplier is applied to the FRAME's entry position, captured once in DfsBounds, not to the
+// live `spells_cast_this_turn` -- the DFS itself casts, so reading it per link would make the price
+// climb as the walk descended and would charge wave 0 like a later main the moment it cast anything.
+inline int LaterMainUnits()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_EQUIP_ROUTE_LATEMAIN_UNITS");
+        const int n = (e && *e) ? std::atoi(e) : 1;
+        return n > 0 ? n : 1;
+    }();
+    return v;
+}
 inline int RolloutDfsNodes()
 {
     static const int v = []() -> int {
@@ -23461,6 +23501,10 @@ struct DfsBounds
     bool          tranches   = true;      // re-open the breadth cap's dropped groups per link (the
                                           // complete regimes); false = wave 0 only (the capped ones)
     int           nodes_used = 0;
+    // Units charged per link for THIS frame. Resolved once at RunSearch entry (see LaterMainUnits):
+    // NodeUnits() on the turn's first main, NodeUnits() * LaterMainUnits() after it. Captured rather
+    // than recomputed per link because the DFS's own casts move `spells_cast_this_turn`.
+    int           unit_price = 0;         // 0 = unset; RunSearch always assigns before the walk
 };
 // Mana the plan spends on things other than casts (paid equips, activations). Inside a chain that
 // is never worth doing before the LAST link -- the attack is at the end and metalcraft makes the
@@ -23674,7 +23718,7 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
         if (b.nodes_left <= 0) { b.cut = true; break; }
         --b.nodes_left;
         ++b.nodes_used;
-        TurnSolver::ChargeDecisionUnits(b.budget, NodeUnits());
+        TurnSolver::ChargeDecisionUnits(b.budget, b.unit_price > 0 ? b.unit_price : NodeUnits());
         GameState next = s;
         TurnSolver::ApplyPlan(next, *reps[order[i]], /*is_pre_combat=*/true);
         if (Trace() && TracePlans() && iters_left == kDfsMaxLinks && !HumanPlayActive())
@@ -23818,6 +23862,10 @@ static int RunSearch(GameState& s, int me, RunMode mode)
         b.tranches = false;             // the trial's menu; no cap, so the proven kill is reached
         regime     = "apply-capped";
     }
+    // THE FRAME'S PRICE, resolved once here (see LaterMainUnits). `s` is still the frame's ENTRY
+    // board at this point -- RunSearchRec applies every link on a copy -- so this reads the position
+    // the frame was asked from, not a position the walk created.
+    b.unit_price = NodeUnits() * (s.spells_cast_this_turn == 0 ? 1 : LaterMainUnits());
     Seen& seen = SeenForThisDecision();
     const std::uint64_t hits0 = DSeen().hits;
     const auto t0 = std::chrono::steady_clock::now();
@@ -23832,7 +23880,8 @@ static int RunSearch(GameState& s, int me, RunMode mode)
         // depth-0 game spent 148.9 s of its 152 s in a 10-link replay whose every link re-enumerated
         // every dropped group of a 30-card hand; the same walk over wave 0 took 54 ms.
         DfsBounds b0;
-        b0.tranches = false;
+        b0.tranches   = false;
+        b0.unit_price = b.unit_price;   // same frame, same price; b0 is a narrower MENU, not a cheaper one
         r = RunSearchRec(s, me, kDfsMaxLinks, b0, seen);
         if (r == 1) { b = b0; regime = "apply-wave0"; }
         else        { r = RunSearchRec(s, me, kDfsMaxLinks, b, seen); b.nodes_used += b0.nodes_used; }
@@ -23845,11 +23894,12 @@ static int RunSearch(GameState& s, int me, RunMode mode)
     {
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         std::fprintf(stderr,
-                     "[equip-route] t%d SEARCH %s (%s%s; %d links applied, tt hits %llu, tt boards %zu, %.1f ms)\n",
+                     "[equip-route] t%d SEARCH %s (%s%s; %d links applied, price %d, tt hits %llu, tt boards %zu, %.1f ms)\n",
                      s.turn_number, r == 1 ? "LETHAL" : (b.cut ? "CUT" : (b.partial ? "PARTIAL" : "no win")), regime,
                      b.budget != nullptr
                          ? (" " + std::to_string(b.budget->Remaining()) + " units left").c_str() : "",
-                     b.nodes_used, (unsigned long long)(DSeen().hits - hits0), seen.size(), ms);
+                     b.nodes_used, b.unit_price,
+                     (unsigned long long)(DSeen().hits - hits0), seen.size(), ms);
     }
     if (mode == RunMode::Apply && r != 1)
     {
