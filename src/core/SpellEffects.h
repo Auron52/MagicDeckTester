@@ -16875,6 +16875,18 @@ inline std::optional<Color> UntapBurstFeedColor(const CardDefinition& def)
     return Color::Green;
 }
 
+// RESERVED BURST TARGETS (MTG_TAP_BURST_RESERVE_EXACT). DEFAULT ON; =0 restores the old over-credit
+// from ONE binary (byte-identical either way: it only tightens the backtracker's relaxations, which
+// are pure prunes). A payment held under a reserve mask (the whole-turn prepay's "keep the mana
+// creatures home" rungs) never taps a reserved source, so the DFS's burst branch -- which needs its
+// target TAPPED at that node -- can never reach an Elf that is reserved and still untapped. The
+// planner-form bound below counted it anyway: a Lodge beside three reserved Priests was credited
+// the Priests' 10-11 mana, every such prepay read as affordable, and the DFS proved it unpayable by
+// enumeration (all 1,029 solves over 2,000 nodes in a SelesnyaLifegain keep-gen sample, 54% of the
+// backtracker's work; docs/design/selesnya-keepgen-tail.md §8).
+inline bool TapBurstReserveExactEnabled()
+{ static const bool v = EnvOn("MTG_TAP_BURST_RESERVE_EXACT", true); return v; }
+
 // Best current one-tap yield among the controller's burst-legal targets: creatures of the untap
 // ability's subtype that are mana dorks producing exactly the feed colour, not summoning-sick (a
 // sick Elf can neither have tapped nor re-tap, CR 302.6), and -- when `require_tapped` -- tapped
@@ -16882,18 +16894,27 @@ inline std::optional<Color> UntapBurstFeedColor(const CardDefinition& def)
 // planner form (require_tapped=false) also counts an untapped, tappable target: it taps once
 // normally first (its own credit) and the burst reverses that tap; ManaSourceRank's reserve tier
 // makes the executor realise exactly that order. 0 when the model is off or nothing qualifies.
+// `reserved_mask` (battlefield indices; the backtracker's relaxations only, 0 everywhere else):
+// an untapped target the payment may not tap is not a target (see TapBurstReserveExactEnabled). A
+// TAPPED reserved Elf still counts -- the burst reverses a tap that already happened.
 inline int UntapBurstBestYield(const GameState& state, int controller,
-                               const CardDefinition& lodge_def, bool require_tapped)
+                               const CardDefinition& lodge_def, bool require_tapped,
+                               std::uint64_t reserved_mask = 0)
 {
     static const bool s_on = EnvOn("MTG_UNTAP_BURST", true);   // DEFAULT ON; =0 restores plain-{C}-only
     if (!s_on) { return 0; }
     const std::optional<Color> feed = UntapBurstFeedColor(lodge_def);
     if (!feed.has_value()) { return 0; }
+    if (!TapBurstReserveExactEnabled()) { reserved_mask = 0; }
     int best = 0;
-    for (const Permanent& q : state.battlefield)
+    const int nbf = static_cast<int>(state.battlefield.size());
+    for (int qi = 0; qi < nbf; ++qi)
     {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(qi)];
         if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
         if (require_tapped && !q.tapped) { continue; }
+        // Index >= 64 is outside the mask: treat it as unreserved (an over-credit, the safe side).
+        if (!q.tapped && qi < 64 && (reserved_mask & (1ull << qi))) { continue; }
         if (!CanTapNow(q, state.battlefield)) { continue; }   // summoning-sick -> no tap to reverse
         if (!CardHasSubtype(q.card, lodge_def.params.untap_creature_subtype)) { continue; }
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
@@ -16909,9 +16930,10 @@ inline int UntapBurstBestYield(const GameState& state, int controller,
 // Net extra mana one Lodge tap adds via the burst OVER its own plain "{T}: Add {C}" tap:
 // (best yield - 1) when the target taps for 2+, else 0. This is the PLANNER form (an untapped
 // target counts -- see UntapBurstBestYield); the payment layer re-tests with require_tapped.
-inline int UntapLandBurstNet(const GameState& state, int controller, const CardDefinition& def)
+inline int UntapLandBurstNet(const GameState& state, int controller, const CardDefinition& def,
+                             std::uint64_t reserved_mask = 0)
 {
-    const int y = UntapBurstBestYield(state, controller, def, /*require_tapped=*/false);
+    const int y = UntapBurstBestYield(state, controller, def, /*require_tapped=*/false, reserved_mask);
     return y >= 2 ? y - 1 : 0;
 }
 
@@ -28799,8 +28821,12 @@ inline int LandAuraBonusFolded(const std::vector<std::pair<int, int>>& fold, con
 //
 // `aura_fold` nullptr = read the aura bonus by the exact per-source LandAuraBonus rescan (what the
 // backtracker's own gate has always done -- byte-identical); non-null = read it out of a fold.
+// `reserved_mask` = the payment's held sources (battlefield indices), for the untap burst's targets
+// only (see TapBurstReserveExactEnabled). The backtracker passes its own mask on BOTH sides of its
+// running total -- the top-level sum and the per-tap subtraction -- so the two stay one bound.
 inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const CardDefinition& dd,
-                            const std::vector<std::pair<int, int>>* aura_fold = nullptr)
+                            const std::vector<std::pair<int, int>>* aura_fold = nullptr,
+                            std::uint64_t reserved_mask = 0)
 {
     int b = SourceMaxNet(pp, dd);
     // Scaled LAND (Three Tree City): N of a chosen colour, N = creatures you control, minus its feeder.
@@ -28812,7 +28838,7 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     { b = std::max(b, ScaledDorkCount(state, pp.controller_index, dd)); }
     // Untap-land (Wirewood Lodge): the static bound reads 1 ({C}); the burst nets (best scaled yield - 1).
     if (dd.params.untap_creature_cost.has_value())
-    { b = std::max(b, UntapLandBurstNet(state, pp.controller_index, dd)); }
+    { b = std::max(b, UntapLandBurstNet(state, pp.controller_index, dd, reserved_mask)); }
     // Domain source (Faeburrow / Bloom Tender): one tap yields |domain| mana (2-5) where
     // ManaProducedPerTap reads 1 -- the under-count that once pruned payable WUBRG costs.
     if (dd.params.domain_mana)
@@ -28842,7 +28868,7 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
 // output, not SourceMaxNetLive's net -- a fed Cascade Bluffs nets +1 but puts 2 into one colour, and
 // crediting the net would under-count that colour.
 inline void SourceColorCapLive(const GameState& state, const Permanent& pp, const CardDefinition& dd,
-                               std::uint8_t& mask, int& amt)
+                               std::uint8_t& mask, int& amt, std::uint64_t reserved_mask = 0)
 {
     constexpr std::uint8_t kAll = (1u << static_cast<int>(Color::White))
                                 | (1u << static_cast<int>(Color::Blue))
@@ -28860,14 +28886,14 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
     //   scaled land      -- Three Tree City adds N of the chosen colour and eats its feeder from
     //                       float, so the colour gain is N, not N - feeder.
     //   untap burst      -- Wirewood Lodge adds `by` of the feed colour for one of them back.
-    amt = SourceMaxNetLive(state, pp, dd);
+    amt = SourceMaxNetLive(state, pp, dd, nullptr, reserved_mask);
     if (dd.params.is_filter)    { amt = std::max(amt, 2); }
     if (dd.params.ramp_filter || dd.params.any_color_filter) { amt = std::max(amt, 1); }
     if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state)); }
     if (dd.params.untap_creature_cost.has_value())
     {
         amt = std::max(amt, UntapBurstBestYield(state, pp.controller_index, dd,
-                                                /*require_tapped=*/false));
+                                                /*require_tapped=*/false, reserved_mask));
     }
     if (amt < 1) { amt = 1; }   // never under-credit a live source
     // UNTAP-LAND BURST, exact colours (BundleExactEnabled): the DFS's Lodge branches add either the
@@ -29235,7 +29261,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
         if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
         if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
         if (!ManaSubtypeGateLive(state, active, *d)) { continue; } // Arbor Elf: no Forest
-        total += SourceMaxNetLive(state, p, *d, aura_fold);
+        total += SourceMaxNetLive(state, p, *d, aura_fold, reserved_mask);
     }
     // §2b: one mana per body a live sac-for-mana outlet can eat (MTG_SAC_OUTLET_PAY). THIS IS
     // LOAD-BEARING, not bookkeeping: PaymentManaCovers turns a short bound into a PROOF of

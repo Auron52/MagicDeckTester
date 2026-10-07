@@ -969,3 +969,44 @@ TEST_CASE("payment: Karoo and untap-land are priced exactly by the flow oracle a
                                         nullptr, &lt));
     }
 }
+
+// RESERVED BURST TARGETS (MTG_TAP_BURST_RESERVE_EXACT, 2026-10-07, selesnya-keepgen-tail.md §8). The
+// whole-turn prepay's reserve rungs hold the mana creatures home; the DFS never taps a reserved
+// source, so Wirewood Lodge can never burst off a reserved Priest that is still untapped -- but the
+// relaxations credited that burst, and every such prepay was proved unpayable by enumeration. The
+// soundness contract again: refuse what the held board really cannot pay, and still admit a burst
+// off a Priest that is reserved but ALREADY tapped (the untap reverses a tap that happened).
+TEST_CASE("payment: Wirewood Lodge cannot burst off a reserved, untapped Priest")
+{
+    EnsureCards();
+    // Forest + Priest (three Elves: Priest, Llanowar, Mystic -> taps for 3) + 2 Elves + Lodge.
+    const std::vector<std::string> names = {"Forest", "Priest of Titania", "Llanowar Elves",
+                                            "Elvish Mystic", "Wirewood Lodge"};
+    const std::uint64_t hold_priest = 1ull << 1;
+    const GameState held = MakeBoard(names);
+    auto pays = [](const GameState& b, const ManaCost& c, std::uint64_t res, bool prepay) -> bool
+    {
+        GameState s = b; ManaPool lo, full;
+        return TapForCostBacktrack(s, c, true, ManaPool{}, nullptr, nullptr, prepay ? nullptr : &lo,
+                                   0, -1, res, prepay ? &full : nullptr);
+    };
+    for (const bool prepay : {false, true})
+    {
+        // Held Priest: Forest {G} + Llanowar {G} + Mystic {G} + Lodge {C} = 4. A burst off a 1-yield
+        // Elf nets nothing, so 4 is the whole board.
+        CHECK(pays(held, Cost(4), hold_priest, prepay));
+        CHECK_FALSE(pays(held, Cost(5), hold_priest, prepay));
+        CHECK_FALSE(pays(held, Cost(0, 0, 0, 0, 0, /*g=*/4), hold_priest, prepay));   // Lodge's {C} is not {G}
+        // Same board, Priest NOT held: tap it for 3, then the Lodge bursts it again (+2) -> 3+3+2 = 8.
+        CHECK(pays(held, Cost(0, 0, 0, 0, 0, /*g=*/8), 0, prepay));
+    }
+    // Priest reserved but tapped at entry: the burst reverses that tap. Forest + Llanowar + Mystic =
+    // {G}{G}{G}; the Lodge eats one {G} and re-taps the Priest for 3 -> five {G}, and no sixth.
+    GameState tapped = MakeBoard(names);
+    tapped.battlefield[1].tapped = true;
+    for (const bool prepay : {false, true})
+    {
+        CHECK(pays(tapped, Cost(0, 0, 0, 0, 0, /*g=*/5), hold_priest, prepay));
+        CHECK_FALSE(pays(tapped, Cost(0, 0, 0, 0, 0, /*g=*/6), hold_priest, prepay));
+    }
+}
