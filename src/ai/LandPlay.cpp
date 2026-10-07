@@ -111,6 +111,7 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // that enters as the tenth permanent and then bounces a land still grants the blessing. This is
     // THE land drop for all three callers, so this one edit is executor/rollout lockstep.
     RefreshCityBlessing(state);
+    RefreshStoriedLatch(state);   // storied: a land drop raises the permanent count too
 
     ap.hand.erase(it);
     ++ap.lands_played_this_turn;

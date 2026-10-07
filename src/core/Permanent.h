@@ -450,6 +450,12 @@ struct Permanent
                                            // FireOnCastTriggers (both cast paths), reset at BOTH untap
                                            // sites (GameEngine::UntapStep + TurnSolver's per-turn reset)
                                            // -- rollout/executor lockstep or [fd-diverge].
+    // Kili the Resourceful's "This ability triggers only once each turn." PER PERMANENT, because
+    // the restriction is a property of the ABILITY (the Nykthos Paragon precedent below): a used
+    // copy NO LONGER TRIGGERS, rather than triggering and resolving to nothing. FLIPS MID-TURN,
+    // so it needs the full fold treatment its neighbour has -- fungibility, sim key, dominance and
+    // the payment parity check -- not just BuildSimKey.
+    bool      storied_draw_used_this_turn = false;
     bool      lifegain_counters_used_this_turn = false; // Nykthos Paragon's "Do this only once each
                                            // turn" on "whenever you gain life, you may put that many
                                            // +1/+1 counters on each creature you control". PER

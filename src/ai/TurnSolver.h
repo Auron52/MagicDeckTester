@@ -1909,6 +1909,13 @@ public:
     // strictly beaten ("worse" -- under the MTG_AURA_HOST_BRANCH control arm, a counterexample
     // candidate). Read-only: the board is copied, nothing is cached. No-op unless the stream is on.
     static void TraceAuraHostProof(const GameState& state, bool is_pre_combat, const Plan& plan);
+    // Kili the Resourceful: the card number of the Equipment whose equip this plan's storied waiver
+    // pays for, or 0 when no waiver applies. The plan's MOST EXPENSIVE equip -- a sound dominance
+    // fold, not a greedy pick (every equip cost is pure generic and the attaches happen either way,
+    // so the board is identical under any assignment and waiving the max minimises mana spent).
+    // Resolved ONCE per trailing pass, from the same list in the same position in both worlds, so
+    // the executor and the rollout cannot disagree about which equip is free.
+    static int StoriedWaivedEquipId(const GameState& state, const std::vector<Action>& acts);
 
     // Card numbers of battlefield sources a plan with a mana-unlock equip must hold untapped until
     // that equip fires -- the "reserve red" half of the same line. Empty for every other plan.

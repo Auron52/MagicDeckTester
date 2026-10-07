@@ -1416,6 +1416,23 @@ struct CardParams
     int  equip_scale_power_per_equipment = 0;
     int  equip_scale_tough_per_equipment = 0;
 
+    // Adaptive Omnitool ("equipped creature gets +1/+1 for each ARTIFACT YOU CONTROL") -- the same
+    // dynamic shape as the pair above but a DIFFERENT DENOMINATOR, and a strictly wider one: it
+    // counts artifacts the controller has anywhere on the battlefield, attached or not, including
+    // artifact LANDS (the 4 Ancient Den) and the Omnitool itself, where the Gauntlets count only
+    // Equipment attached to the host. The two denominators coexist on one host and simply ADD.
+    // The one-pass summation in EquipBonusFor stays EXACT, but its stated justification had to be
+    // amended: it is not "every scaler on a host sees the same count" (false once there are two
+    // denominators) but "every scaler WITH THE SAME DENOMINATOR sees the same count" -- so the pass
+    // keeps one accumulator pair per denominator and multiplies each by its own count, once, after
+    // the loop. The artifact count is HOISTED OUT of the per-Equipment loop and computed only when
+    // an artifact scaler is actually present, because EquipBonusFor is one of the hottest helpers
+    // in the engine (measured as the bulk of LethalToughness's samples under EnumeratePlans) and an
+    // unconditional board walk per scored creature would undo the attached_idx prefilter that
+    // exists precisely to stop board-level walks there.
+    int  equip_scale_power_per_artifact = 0;
+    int  equip_scale_tough_per_artifact = 0;
+
     // Umezawa's Jitte: equip_combat_damage_charges counters land on the Jitte each time the
     // equipped creature deals combat damage (collapsed to "to a player" -- approved: nothing
     // blocks; the counter GAIN itself is fully modeled, incl. the double-strike two-event
@@ -1453,6 +1470,48 @@ struct CardParams
     // mid-plan metalcraft flip (cast artifact #3, then equip) stays lockstep.
     bool draw_on_equipment_etb = false;
     int  metalcraft_equip_zero_artifacts = 0;
+
+    // ---- Kili the Resourceful -------------------------------------------------------------------
+    // STORIED: "If you control three or more artifacts, legendaries, and/or Sagas, you have an
+    // enduring story for the rest of the game." The threshold (3). Drives RefreshStoriedLatch ->
+    // Player::has_enduring_story, a one-way per-player DESIGNATION; see that field. ONE pool: a
+    // permanent that is several of artifact/legendary/Saga counts once.
+    int  storied_permanents = 0;
+    // "As long as you have an enduring story, you may pay {0} rather than pay the equip cost of the
+    // FIRST equip ability you activate each turn." An ALTERNATIVE COST (CR 118.8), so it replaces
+    // the whole equip cost rather than reducing it.
+    //
+    // DELIBERATELY NOT WIRED INTO EquipCostGenericNow, and this is the design decision that matters:
+    // that function is a pure function of state, read per candidate at ENUMERATION, and at
+    // enumeration no equip has been activated yet -- so a state-only read would price EVERY equip
+    // candidate at {0} and under-state the plan's mana by the sum of all but one. Metalcraft can be
+    // read that way because it really is all-or-nothing; a once-per-turn waiver cannot, and the
+    // error would be OPTIMISTIC, the one direction a plan's mana term must never be.
+    //
+    // So the waiver is a PER-PLAN assignment instead: credited once at the affordability gate
+    // (beside SameTurnMetalcraftEquipCredit, which is the same correction for the same reason) and
+    // consumed at the payment sites. WHICH equip receives it is the plan's MOST EXPENSIVE one --
+    // a sound dominance fold, not a greedy pick: every equip cost here is pure generic and the
+    // attaches all happen either way, so the board is identical under any assignment and waiving
+    // the max strictly minimises mana spent. Waiving by apply ORDER instead would be the forbidden
+    // greedy pick, and would also play worse.
+    //
+    // REDUNDANT WHENEVER METALCRAFT IS LIVE (3+ artifacts implies 3+ artifacts/legendaries/Sagas),
+    // and uncapped-worse there, so the credit yields to the metalcraft credit. Its non-redundant
+    // slice is boards with NO Puresteel out -- where it is a one-per-turn Puresteel for Colossus
+    // Hammer's equip {8}, the only cost on this list that another route cannot reach by turn 4.
+    bool storied_first_equip_free = false;
+    // "Whenever another Dwarf or Equipment you control enters, draw a card. This ability triggers
+    // only once each turn." ONE printed trigger with TWO subtype conditions, so one param holding
+    // both, read at ONE site in the universal enter cascade -- beside Puresteel's
+    // draw_on_equipment_etb but OUTSIDE its is_equipment gate, because Equipment is an artifact
+    // subtype while Dwarf is a creature subtype and the cascade sees both. "ANOTHER" excludes the
+    // source by card number. Fires for a CAST entrant and one PUT onto the battlefield alike.
+    std::vector<std::string> draw_on_other_subtype_enter;
+    // The "only once each turn" cap. Tracked on Permanent::storied_draw_used_this_turn, because the
+    // restriction is a property of the ABILITY, not of the player (the Nykthos Paragon precedent):
+    // a used copy NO LONGER TRIGGERS rather than triggering and resolving to nothing.
+    bool draw_on_other_subtype_enter_once_each_turn = false;
 
     // Sigarda's Aid: "Whenever an Equipment you control enters, you may attach it to target
     // creature you control." Same trigger CONDITION as draw_on_equipment_etb above (and wired
@@ -1518,6 +1577,23 @@ struct CardParams
     // filter implemented but structurally dead here (deck has zero Auras -- approved deferral);
     // deterministic bottoming + battlefield trigger order (approved conventions).
     int  attack_dig_attach_count = 0;
+
+    // Adaptive Omnitool: "Whenever equipped creature attacks, look at the top six cards of your
+    // library. You may reveal an artifact card from among them and put it into your HAND. Put the
+    // rest on the bottom ... in a random order." attack_dig_hand_count = 6,
+    // attack_dig_hand_types = ["Artifact"]. The sibling of attack_dig_attach_count above, and it
+    // differs structurally in ONE way that the fire site has to get right: this param lives on the
+    // EQUIPMENT and triggers when its HOST attacks, where the Skyhunter's lives on the attacker.
+    // Fired by FireAttackEquipDigHand from the same two lockstep sites; the payload is the shared
+    // PerformLookTakeDig, so the type filter, the provider dig ranking, the human chooser (-1 = the
+    // printed "may") and the rest-to-bottom are all inherited rather than rebuilt. Deterministic
+    // bottoming in examined order (the approved convention this file already states for etb_dig,
+    // etb_reveal and attack_dig_attach -- the printed "random order" is unobservable in a goldfish,
+    // and a real randomisation would add an RNG draw that both worlds must advance identically for
+    // no modelled gain). Needs NO attack-damage projection addend: a card entering hand adds no
+    // power to a declared attacker, which is the opposite of Dwalin's hone counters.
+    int                      attack_dig_hand_count = 0;
+    std::vector<std::string> attack_dig_hand_types;
 
     // Stoneforge Mystic ability 2: "{1}{W}, {T}: You may put an Equipment card from your hand
     // onto the battlefield." tap_put_from_hand_cost is a full ManaCost string (colored -- the
@@ -2365,6 +2441,14 @@ struct CardParams
     std::string static_self_pump_per_other_subtype;
     int         static_self_pump_power = 0;
     int         static_self_pump_tough = 0;
+    // The subtype above is an ARTIFACT (or other non-creature) subtype, not a creature type.
+    // ONLY read to suppress the AnimatedAllTypes() arm of that loop: an animated land is a creature
+    // with all CREATURE types (CR 205.3b), which makes it a Giant for Borderland Behemoth but does
+    // NOT make it an Equipment for Adelbert Steiner. Adelbert is the first non-creature-subtype use
+    // of this param family, which is what turned a dormant wart into a live one. Default FALSE is
+    // today's behaviour, so every pre-existing card is byte-identical; there is no subtype-kind
+    // registry to derive this from (SubtypeRegistry interns name<->id only).
+    bool        static_self_pump_subtype_is_noncreature = false;
 
     // Permanent death-watcher ("Whenever [this or] another <subtype> you control dies, ...").
     // Fired from the SBA creature-death site (executor) and the rollout death path (lockstep) for

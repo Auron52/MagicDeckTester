@@ -1089,6 +1089,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.equip_cost_less_per_target_color =
         params.value("equip_cost_less_per_target_color", 0);
     p.equip_scale_tough_per_equipment = params.value("equip_scale_tough_per_equipment", 0);
+    p.equip_scale_power_per_artifact  = params.value("equip_scale_power_per_artifact", 0);
+    p.equip_scale_tough_per_artifact  = params.value("equip_scale_tough_per_artifact", 0);
     p.equip_combat_damage_charges = params.value("equip_combat_damage_charges", 0);
     p.charge_pump_power         = params.value("charge_pump_power", 0);
     p.charge_pump_tough         = params.value("charge_pump_tough", 0);
@@ -1108,8 +1110,16 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("hone_counters_on_enter_or_attack", 0);
     p.begin_combat_attach_all   = params.value("begin_combat_attach_all", false);
     p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
+    p.storied_permanents        = params.value("storied_permanents", 0);
+    p.storied_first_equip_free  = params.value("storied_first_equip_free", false);
+    p.draw_on_other_subtype_enter =
+        params.value("draw_on_other_subtype_enter", std::vector<std::string>{});
+    p.draw_on_other_subtype_enter_once_each_turn =
+        params.value("draw_on_other_subtype_enter_once_each_turn", false);
     p.upkeep_tokens_per_equipment = params.value("upkeep_tokens_per_equipment", false);
     p.attack_dig_attach_count   = params.value("attack_dig_attach_count", 0);
+    p.attack_dig_hand_count     = params.value("attack_dig_hand_count", 0);
+    p.attack_dig_hand_types     = params.value("attack_dig_hand_types", std::vector<std::string>{});
     if (params.contains("tap_put_from_hand_cost"))
     {
         p.tap_put_from_hand_cost =
@@ -1326,6 +1336,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.static_self_pump_per_other_subtype   = params.value("static_self_pump_per_other_subtype", std::string());
     p.static_self_pump_power    = params.value("static_self_pump_power", 0);
     p.static_self_pump_tough    = params.value("static_self_pump_tough", 0);
+    p.static_self_pump_subtype_is_noncreature =
+        params.value("static_self_pump_subtype_is_noncreature", false);
     p.dies_watch_subtype        = params.value("dies_watch_subtype", std::string());
     p.dies_watch_includes_self  = params.value("dies_watch_includes_self", false);
     p.dies_trigger_damage       = params.value("dies_trigger_damage", 0);

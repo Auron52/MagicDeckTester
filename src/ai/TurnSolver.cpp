@@ -549,7 +549,12 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.skip_next_untap ? 16384ull : 0ull)       // EXERT (CR 701.38): will miss its next untap
          | (p.animated_printed_types ? 32768ull : 0ull)   // typed animation, NOT all creature types
          | (p.lifegain_counters_used_this_turn ? 65536ull : 0ull)   // Nykthos Paragon once-each-turn
-         | (p.etb_tap_pending ? 131072ull : 0ull));  // Colossification's deferred ETB tap
+         | (p.etb_tap_pending ? 131072ull : 0ull)                   // Colossification's deferred ETB tap
+         // NOTE (rebase 2026-10-08): this flag and etb_tap_pending were BOTH authored against bit
+         // 131072 on the two sides of the rebase. Sharing a bit would alias two distinct states into
+         // one sim key -- a silent search-correctness bug, not a cosmetic clash -- so Kili's flag
+         // moved to the next free bit (1<<18; 1<<19 and up are still unused here).
+         | (p.storied_draw_used_this_turn ? 262144ull : 0ull));     // Kili once-each-turn draw
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -6493,6 +6498,82 @@ static int SameTurnMetalcraftEquipCredit(const GameState& state, const std::vect
     return credit;
 }
 
+// Kili the Resourceful's STORIED waiver: "you may pay {0} rather than pay the equip cost of the
+// FIRST equip ability you activate each turn." The affordability-gate twin of the metalcraft credit
+// above, and it exists for exactly the same reason: the equip's generic was baked at enumeration and
+// the waiver is not visible there.
+//
+// WHICH equip receives the waiver is the subset's MOST EXPENSIVE one, and that is a SOUND DOMINANCE
+// FOLD rather than a greedy pick. Proof: EquipActionCostNow sets only `generic`, so every equip cost
+// here is pure generic; the subset of attaches is already fixed, so the resulting board is IDENTICAL
+// under any assignment of the waiver; therefore waiving the maximum strictly minimises total mana
+// spent, and any action affordable under some other assignment is affordable under this one. Nothing
+// is made unfindable at any budget. (Assigning by APPLY ORDER instead would be the forbidden greedy
+// pick -- an arbitrary choice among real alternatives -- and would also simply play worse.)
+//
+// YIELDS TO METALCRAFT, which is what keeps the two credits from double-counting: 3+ artifacts
+// implies 3+ artifacts/legendaries/Sagas, so whenever metalcraft will be on it has already credited
+// EVERY selected equip and this must add nothing. The caller therefore only consults this when the
+// metalcraft credit came back 0 -- which is also precisely the board class where the card earns its
+// slot (no Puresteel out, Colossus Hammer's equip {8} otherwise unpayable before turn 4).
+static int StoriedFirstEquipWaiverCredit(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel)
+{
+    const int     controller = state.active_player_index;
+    const Player& ap         = state.players[controller];
+    // The designation must already be held and the turn's first equip must still be unspent. Both
+    // are real state, not projections: the latch is raised by RefreshStoriedLatch at the enter
+    // cascade, so a storied permanent cast by THIS subset has not latched yet when this runs -- a
+    // conservative under-credit, in the safe direction.
+    if (!ap.has_enduring_story || ap.equip_activated_this_turn) { return 0; }
+    bool have_waiver = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.storied_first_equip_free) { have_waiver = true; break; }
+    }
+    if (!have_waiver) { return 0; }
+    int best = 0;
+    for (int j : sel)
+    {
+        if (cands[j].kind == Action::Kind::Equip && cands[j].cost.generic > best)
+        { best = cands[j].cost.generic; }
+    }
+    return best;
+}
+
+// The card number of the Equipment whose equip this plan's storied waiver pays for, or 0. Shared by
+// every PAYMENT site so the score computed by StoriedFirstEquipWaiverCredit above and the mana
+// actually spent cannot disagree -- and so the two worlds (executor and rollout) agree by
+// construction rather than by audit. Max cost, ties broken by the LOWEST source id so the choice is
+// deterministic and therefore safe to fold into a key.
+int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<Action>& acts)
+{
+    const int     controller = state.active_player_index;
+    const Player& ap         = state.players[controller];
+    if (!ap.has_enduring_story || ap.equip_activated_this_turn) { return 0; }
+    bool have_waiver = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.storied_first_equip_free) { have_waiver = true; break; }
+    }
+    if (!have_waiver) { return 0; }
+    int best_id = 0, best_cost = 0;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::Equip) { continue; }
+        const int c = EquipActionCostNow(state, controller, a.sac_source_id, a.cost,
+                                         a.sac_victim_id).generic;
+        if (c <= 0) { continue; }                     // already free: the waiver would be wasted
+        if (c > best_cost || (c == best_cost && a.sac_source_id < best_id))
+        { best_cost = c; best_id = a.sac_source_id; }
+    }
+    return best_id;
+}
+
 // MTG_METALCRAFT_EQUIP_HOIST -- does this frame's OWN casts make the equips free? The precondition
 // for extending the AUTO-EQUIP collapse (see that block) across the same-turn metalcraft flip.
 //
@@ -10539,6 +10620,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // any other deck, so this refusal is byte-identical everywhere else.
     why = foldcensus::kLifegainCountersUsed;
     if (p.lifegain_counters_used_this_turn) { return false; }
+    if (p.storied_draw_used_this_turn)      { return false; }
     why = foldcensus::kChosenColor;
     if (p.chosen_color != -1) { return false; }
     why = foldcensus::kIceAge;
@@ -14215,6 +14297,11 @@ static bool PaidPowerlessEquipWithheld(const GameState& state, const CardDefinit
     const CardParams& p = ed.params;
     if (p.equip_power_bonus > 0)                { return false; }   // adds power on its own
     if (p.equip_scale_power_per_equipment > 0)  { return false; }   // Gauntlets itself always does
+    // Adaptive Omnitool: flat bonus 0 and per-equipment scaler 0, so WITHOUT this carve-out it
+    // reads as a powerless shield and a PAID equip is withheld -- while in fact it is the opposite
+    // of powerless (+1/+1 per artifact you control, >= 3 whenever metalcraft makes the equip free,
+    // and the 4 Ancient Den are artifacts). Same reason the Gauntlets line above exists.
+    if (p.equip_scale_power_per_artifact > 0)   { return false; }
     if (p.equip_grants_haste)                   { return false; }   // the benefit is the ATTACK
     if (p.equip_grants_lifelink)                { return false; }
     if (p.equip_combat_damage_charges > 0)      { return false; }   // Jitte's charge engine
@@ -14302,6 +14389,8 @@ static bool FreeEquipmentCastIsDominant(const Action& a)
     if (p.equip_power_bonus < 0 || p.equip_tough_bonus < 0) { return false; }
     if (p.equip_scale_power_per_equipment < 0)             { return false; }
     if (p.equip_scale_tough_per_equipment < 0)             { return false; }
+    if (p.equip_scale_power_per_artifact < 0)              { return false; }
+    if (p.equip_scale_tough_per_artifact < 0)              { return false; }
     return true;
 }
 
@@ -40337,6 +40426,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         std::vector<int> _act_hold = TurnSolver::ActivationTapReserveUnion(state, trailing_acts);
         if (!_act_hold.empty()) { _act_reserve.emplace(std::move(_act_hold)); }
     }
+    // KILI'S STORIED WAIVER -- resolved ONCE per trailing pass, before any equip is paid, because
+    // StoriedWaivedEquipId reads `equip_activated_this_turn` and the first equip below flips it.
+    // Computed from the SAME list in the SAME position in both worlds, so the executor and the
+    // rollout cannot disagree about which equip is free. 0 = no waiver applies.
+    const int _storied_waived = TurnSolver::StoriedWaivedEquipId(state, trailing_acts);
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -41037,11 +41131,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                  || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
                 && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCostDirect(state,
-                                    EquipActionCostNow(state, state.active_player_index,
-                                                       a.sac_source_id, a.cost,
-                                                       a.sac_victim_id),
+                                    StoriedWaivedCost(state, state.active_player_index,
+                                                      a.sac_source_id, a.cost, a.sac_victim_id,
+                                                      _storied_waived),
                                     /*for_creature=*/false))
-            { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+            {
+                ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
+                // The turn's first equip is now spent, whichever one it was (lockstep twin in
+                // AIEngine). Set unconditionally: the waiver is "the FIRST equip you activate",
+                // so an equip that was already free still consumes it.
+                state.players[state.active_player_index].equip_activated_this_turn = true;
+            }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)
         {
@@ -41938,6 +42038,10 @@ static void SimulateCombat(GameState& state)
     // inside are nulled by RevealLogPause, so rollouts always take the provider picks.
     FireAttackDigAttach(state, active, atk_idx);
 
+    // Adaptive Omnitool's attack dig-to-HAND. Mirrors GameEngine::CombatPhase (lockstep); the human
+    // dig chooser inside is nulled by RevealLogPause, so rollouts always take the provider pick.
+    FireAttackEquipDigHand(state, active, atk_idx);
+
     // Surtland Flinger's attack-trigger fling. Mirrors GameEngine::CombatPhase (lockstep);
     // mutates atk_idx, since the sacrifice shifts battlefield indices.
     FireAttackSacFling(state, active, atk_idx);
@@ -42176,8 +42280,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
+    ap.equip_activated_this_turn = false;          // Kili's waiver is per TURN (same lockstep)
     RefreshDevotionCreatures(state);               // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ UntapStep)
     RefreshCityBlessing(state);                    // ascend backstop for any non-cascade board change (lockstep w/ UntapStep)
+    RefreshStoriedLatch(state);                    // storied backstop, same contract (lockstep w/ UntapStep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     // Rimescale ice lock -- lockstep twin of GameEngine::UntapStep's gate (see the comment there).
@@ -42215,6 +42321,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
+            p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
     }
@@ -43573,6 +43680,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // a metalcraft reducer is present-or-castable AND some Equip candidate is still priced above
     // {0}; so a deck without Puresteel, and this deck once metalcraft is already on, skip the
     // per-subset credit entirely and stay byte-identical.
+    // Kili's storied waiver, same frame-level shape and the same purpose: skip the per-subset
+    // credit entirely unless the designation is ALREADY held, the turn's first equip is still
+    // unspent, a waiver permanent is on the battlefield, and some Equip candidate is still priced
+    // above {0}. Every deck without the param, and every turn after the waiver is spent, stays
+    // byte-identical and pays only these four tests once per frame.
+    bool any_storied = false;
+    if (CostTricksEnabled())
+    {
+        const Player& sp = state.players[state.active_player_index];
+        if (sp.has_enduring_story && !sp.equip_activated_this_turn)
+        {
+            bool waiver = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && d->params.storied_first_equip_free) { waiver = true; break; }
+            }
+            if (waiver)
+            {
+                for (const Action& ra : cands)
+                {
+                    if (ra.kind == Action::Kind::Equip && ra.cost.generic > 0)
+                    { any_storied = true; break; }
+                }
+            }
+        }
+    }
     bool any_metalcraft = false;
     if (MetalcraftCreditEnabled() && CostTricksEnabled())   // same family as the reducer/affinity
     {                                                       // credits -> same MTG_NO_COST_TRICKS hatch
@@ -44687,6 +44822,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Same-turn METALCRAFT (Puresteel Paladin): this subset's own artifact casts can flip the
         // equip cost to {0} before the trailing equip pass pays it, so credit the equips' baked
         // generic. See SameTurnMetalcraftEquipCredit for the order + optimism soundness argument.
+        bool mc_credited = false;
         if (any_metalcraft)
         {
             const int mcred = SameTurnMetalcraftEquipCredit(state, cands, sel);
@@ -44703,6 +44839,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 combined.generic             = std::max(0, combined.generic - mcred);
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - mcred);
             }
+            mc_credited = (mcred > 0);
             if (mcstats::Enabled())
             {
                 bool big = false;
@@ -44717,6 +44854,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                         : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined)));
                 }
+            }
+        }
+        // Kili the Resourceful's STORIED waiver -- its own block, deliberately NOT nested inside the
+        // metalcraft one above, because `any_metalcraft` is FALSE in exactly the board class where
+        // this card earns its slot (no Puresteel out). Consulted only when metalcraft credited
+        // nothing, so the two can never double-count: see StoriedFirstEquipWaiverCredit.
+        if (any_storied && !mc_credited)
+        {
+            const int scred = StoriedFirstEquipWaiverCredit(state, cands, sel);
+            if (scred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - scred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - scred);
             }
         }
         // "{cost}, {T}" SELF-FUNDING DEBIT -- applied LAST, after every same-turn credit, because it
@@ -52784,6 +52934,8 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // that differ in it have genuinely different futures (one doubles its tokens every end step,
         // the other does not). Folded only when TRUE -> byte-identical for every non-ascend deck.
         if (p.has_city_blessing) { Fold(k, 0x0CB1E); }
+        if (p.has_enduring_story)        { Fold(k, 0x5709A); }   // STORIED designation (monotone)
+        if (p.equip_activated_this_turn) { Fold(k, 0xE9A1F); }   // Kili waiver already spent
         // Emblem anthem count (Gideon, Ally of Zendikar -4). Same shape as the city's blessing above
         // and load-bearing rather than cosmetic: it raises the power of every creature we control for
         // the rest of the game, so two states differing only in it reach lethal on different turns.
@@ -53155,6 +53307,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // exactly what a flag that flips MID-TURN requires. Do not add a second fold there.
         // Folded ONLY when SET, so every other deck keeps the EXACT prior key (no GT moves).
         if (perm.lifegain_counters_used_this_turn) { Fold(tk, 0x9A8A6); }
+        if (perm.storied_draw_used_this_turn)      { Fold(tk, 0x57091); }
         // Marked damage: coarse drop #3 (combat leftovers; state-based actions already ran, so
         // by the time an m2 solve sees the board the survivors' damage is history, not future).
         if (g_simkey_m2coarse == 0)

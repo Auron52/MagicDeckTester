@@ -426,6 +426,7 @@ struct GameState
     // unconditionally true in every run and gate nothing. The gate has to be per-GAME, stamped
     // from the decklist, which is exactly what deck_reads_mv_cast above already does.
     bool                     deck_has_ascend            = true;   // RefreshCityBlessing
+    bool                     deck_has_storied           = true;   // RefreshStoriedLatch
     bool                     deck_has_devotion_creature = true;   // RefreshDevotionCreatures
     bool                     deck_has_dragon_ping       = true;   // Scourge of Valkas' enter ping
     // Same shape, different consumer: LiveSacPayOutlet's board scan (§2b, Utopia Mycon / Skirk

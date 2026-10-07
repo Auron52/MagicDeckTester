@@ -13907,7 +13907,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || !p.draw_on_cast_subtypes.empty() || p.equip_grants_vigilance
             || p.equip_scale_power_per_equipment > 0
             // Ardenn, Intrepid Archaeologist (2026-10-05 swap screen): new + gated, same argument.
-            || p.begin_combat_attach_all)
+            || p.begin_combat_attach_all
+            // Round-3 swap screen (2026-10-07): Adaptive Omnitool's per-artifact equip scaler and
+            // its attack dig-to-hand, plus Kili the Resourceful's storied equip waiver. New +
+            // gated, same argument -- and each is OR-ed in so no single swap loses the signature.
+            || p.equip_scale_power_per_artifact > 0 || p.attack_dig_hand_count > 0
+            || p.storied_permanents > 0)
         {
             equipment = true;
         }
@@ -24193,13 +24198,19 @@ static std::uint64_t PurchaseKey(const TurnSolver::Plan& p)
 // Equipment), which is what makes a Colossus Hammer outrank a second draw engine here.
 static int PayloadScore(const TurnSolver::Plan& p, const GameState& s, int me)
 {
-    int equips_on_board = 0;
+    int equips_on_board = 0, arts_on_board = 0;
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != me) { continue; }
+        if (q.card.HasType(CardType::Artifact)) { ++arts_on_board; }
         const CardDefinition* qd = comboroute::DefOf(q.card);
         if (qd != nullptr && qd->params.is_equipment) { ++equips_on_board; }
     }
+    // Counted LAZILY, at most once per plan and never at all unless an artifact-scaling Equipment
+    // is actually in it -- PayloadScore runs per PLAN on the equip route's hot path, so an
+    // unconditional second pass over p.actions here would be a real per-plan cost on the deck whose
+    // per-plan cost was the whole subject of 2026-10-07's perf work.
+    int arts_cast = -1;
     int score = 0;
     for (const Action& a : p.actions)
     {
@@ -24208,6 +24219,23 @@ static int PayloadScore(const TurnSolver::Plan& p, const GameState& s, int me)
         if (!cp.is_equipment) { continue; }
         score += cp.equip_power_bonus
                + cp.equip_scale_power_per_equipment * (equips_on_board + 1);
+        // Adaptive Omnitool: without this term the route prices casting it at ZERO payload, since
+        // its flat bonus and its per-equipment scaler are both 0. The count credits the plan's own
+        // artifact casts, because an Equipment cast in this very chain is itself an artifact and so
+        // raises the count it scales off -- the same (equips_on_board + 1) reasoning one line up.
+        if (cp.equip_scale_power_per_artifact != 0)
+        {
+            if (arts_cast < 0)
+            {
+                arts_cast = 0;
+                for (const Action& b : p.actions)
+                {
+                    if (b.kind != Action::Kind::CastFromHand || b.def == nullptr) { continue; }
+                    if (b.def->card.HasType(CardType::Artifact)) { ++arts_cast; }
+                }
+            }
+            score += cp.equip_scale_power_per_artifact * (arts_on_board + arts_cast);
+        }
     }
     return score;
 }
@@ -24229,7 +24257,11 @@ static void ChainTerms(const TurnSolver::Plan& p, int& watchers, int& waste)
         if (IsEquipmentDrawWatcher(*a.def)) { ++watchers; continue; }
         if (mv == 0) { continue; }                      // free: costs the chain nothing either way
         if (cp.is_equipment
-            && (cp.equip_power_bonus > 0 || cp.equip_scale_power_per_equipment > 0)) { continue; }
+            && (cp.equip_power_bonus > 0 || cp.equip_scale_power_per_equipment > 0
+                // Adaptive Omnitool is a PAID ({2}, or {1} behind Cid) Equipment whose power is
+                // entirely in a scaler, so without this it is scored as pure `waste` -- the exact
+                // mis-pricing class this term was written to name.
+                || cp.equip_scale_power_per_artifact > 0)) { continue; }
         waste += mv;                                    // paid, no draws, no damage
     }
 }
