@@ -126,3 +126,36 @@ The spec asked for "1-3 candidates almost always". The proof shows that every cu
 five-way state (Bruna / Almost Perfect / Linvala / Vexing Shusher / Troyan) loses games to the
 full-width control. Keeping up to five still costs only 0.6-0.75x units of full width, and the
 new-list cost comes back to the old list's level. Default taken: correctness over size, keep five.
+
+## USER spec 2026-10-07 (recorded verbatim; the work below is OWED)
+
+**Glittering Wish refinements** (round 5 implements most of them; see commits 375411d2..f4881764):
+* "I would leave out Vexing Shusher. Others should be skippable based on the current conditions."
+* "Troyan is basically good if you need acceleration and not worth it otherwise. An aura may not be
+  necessary if we have good ones (and enough for lethal) in hand."
+* "Linvala should lose in other situations... if I have the choice to cast bruna or Linvala next turn
+  then we should definitely cast Bruna."
+* "We might also have to have Arcanum Wings in hand for Linvala to be worth it?" (a hypothesis, to be settled
+  by the games).
+
+**Open the Armory candidate rule (NOT started).** Same hook (`BrunaProvider::TutorCandidates`), same
+proof against a full-width control:
+* "Open the Armory should only have Colossification, Arcanum Wings, Wild Growth and maybe Eldrazi
+  Conscription as targets. Though, to be honest, I don't think we even need the Conscription when
+  Goldfishing. Wild Growth is not needed unless we need mana or acceleration and Arcanum Wings is only
+  useful if we don't already have one. Technically Colossification is not needed if we already have one
+  either." / "Actually, we also need to consider Lightning Greaves." / "So, up to 5 options, but most
+  can be dropped based on the circumstances." / "Actually, I guess 4 is enough really." / "And then we
+  could heuristically eliminate more of them since you rarely have need of all of them."
+* So there are at most 4 candidates, each conditional:
+  * Colossification and Arcanum Wings, each only when we don't already have one.
+  * Wild Growth, only when we need mana or acceleration (share the Troyan acceleration test).
+  * Lightning Greaves, with its condition derived from the games (e.g. no Greaves already, and an
+    attacker needs haste).
+* Eldrazi Conscription is OUT. Mythic Proportions and Prodigious Growth are not on the user's list
+  either, so they are out too. Measure what each exclusion costs and REPORT it; the user decides.
+* Then narrow further heuristically. The user: "you rarely have need of all of them".
+
+**Also asked:** "What other major branch sources do we have?" This needs a fresh census on the
+current build. The last census (2026-10-05, pre-sideboard) found no Bruna-specific site; 68.7% of the
+units were mulligan-bottoming playouts.
