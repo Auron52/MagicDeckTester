@@ -1,6 +1,8 @@
 # Attackers are tapped at combat DAMAGE, not at declaration (CR 508.1f) -- deferred residue
 
-Status: PARTLY FIXED 2026-10-06 (the Arcanum Wings combat swap); the general case is DEFERRED.
+Status: FIXED for the Arcanum Wings combat swap -- LANDED 2026-10-07 with the combat-swap attack hold, USER-approved
+(*"We should allocate the creatures beforehand to be the sources of mana for the swap and not attack with
+them."*). Firebreathing and the general case are DEFERRED (below).
 
 ## The rule
 
@@ -16,7 +18,7 @@ UNTAPPED: `GameEngine::CombatPhase` / `TurnSolver::SimulateCombat` run the attac
 makers, Bruna's gather), then `ApplyCombatAuraSwap`, then `Firebreathe` (leftover-mana attacker
 pumps), then damage.
 
-## Fixed (2026-10-06)
+## Fixed (landed 2026-10-07)
 
 `ApplyCombatAuraSwap` now taps the non-vigilant attackers before it probes or pays
 (`MTG_COMBAT_SWAP_TAPPED_ATTACKERS`, default ON, `=0` restores). Found while building the human-play
@@ -27,6 +29,27 @@ probe saw the attacker's mana) and the search's combat pin scored. Unit:
 swap". Only runs when an attached Aura-swap permanent opens the window, so every deck without an
 `aura_swap_cost` card is byte-identical -- in autonomous AND human play (the human `dig` chooser is
 installed for every deck, so the gate is the attached Wings, not the chooser).
+
+**The attack hold that goes with it** (`HoldForCombatAuraSwap` in `DecisionProvider::AttackWith`,
+`MTG_COMBAT_SWAP_ATTACK_HOLD`, default ON): with a combat swap pinned, the mana creatures the {2}{U}
+needs (lowest combat power first) stay home instead of attacking, so their mana can legally pay.
+
+**Measured (Bruna, paired, every former suite row: smoke + regression + overnight, 16,725 games,
+`logs/cr508_bruna_ab/`):** 270 games slower, 9 faster, net +0.011..+0.053 turns per row. 251 of the
+270 had a REAL combat swap paid by an attacking Birds / Pilgrim at or before the old win turn
+(`MTG_TRACE=swapatkpay` on the pre-fix binary): illegal wins, removed on purpose (Karoo precedent).
+The other 19: 12 searched games where only the search's rollouts had credited illegal swaps -- all 12
+recover the old turn at `--depth 8 --budget-ms 0`; 7 d0 games caused by the attack hold (below).
+Every other suite deck is byte-identical (smoke 114/114, regression and overnight differ only by the
+known batch run-to-run nondeterminism, each moved game reproducing GT-equal on both binaries in
+isolation).
+
+**Known weakness of the hold (open, proposal to the user):** it is blind to what the held creature
+would have hit for. Bruna d0 s4004 gi360: a Birds of Paradise wearing Colossification + Eldrazi
+Conscription + Mythic Proportions was held home to pay a swap onto a 1/1 Mother of Runes -- 1 damage
+instead of 40. All 7 hold-caused d0 slowdowns are this shape. Proposed amendment (branch
+`cr508-hold-gain`): hold only when the swap's power gain on the host exceeds the held creatures'
+combat power. On the d0 rows it recovers those 7 plus 2 more and makes nothing worse.
 
 ## Deferred: the rest of the combat window
 
@@ -41,21 +64,3 @@ installed for every deck, so the gate is the attached Wings, not the chooser).
   as an idempotent backstop -- would cover every present and future combat-time spend at once, but
   every reader of `tapped` between declaration and damage (attack triggers that count untapped
   creatures, Jorn's untap, convoke-like effects) has to be audited first. Not started.
-
-## STATUS 2026-10-06: the fix above is PARKED (branch `viewer-combat-swap-engine-parked`)
-
-Split out of the human-play swap-timing change at the user's request (it moves Bruna GT). The parked
-branch also carries `HoldForCombatAuraSwap` (`DecisionProvider::AttackWith`, `MTG_COMBAT_SWAP_ATTACK_HOLD`):
-with a combat swap pinned, the mana creatures the {2}{U} needs stay home instead of swinging.
-
-Measured with both (Bruna only moves; every other config byte-identical):
-* smoke: bruna d0 +21 (11 slower, 4 -> unwon), d3 +8, d5 +2, bruna2hg d3 +2; 0 faster.
-* regression: d0 s2002 +11, d3 s2002 +6, d3 s3003 +2 (2 faster), d5 s2002 +4, d5 s3003 0 (1 faster);
-  ref gate 0 play-drift / 0 board-diverged.
-* Attribution (smoke, 23 slower games): both levers `=0` reproduces GT on all 23; 21 had a REAL combat
-  swap paid by an attacking Birds / Pilgrim (`MTG_TRACE=swapatkpay`) -- illegal wins removed; d3/d5 gi1
-  = budget churn (recovers T4 at d8 b0). Regression attribution was started but not finished.
-* Bruna d5 b20, 1200 paired games: CR fix alone 2 better / 52 worse; CR fix + hold 0 / 35 (+0.032
-  turns/game); sampled worse games gi42/198/1110 all had the attacking host pay its own swap. Search
-  hit rate on the automatic-win state with the parked branch: 158/158 + 18/18.
-Decision needed (user): accept the GT-worse-on-purpose correctness fix (Karoo precedent) or not.

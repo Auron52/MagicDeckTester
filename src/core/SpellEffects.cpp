@@ -1616,6 +1616,26 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         if (d == nullptr || !d->params.aura_swap_cost.has_value()) { continue; }
         if (human || p.card.m_number == pin % kAuraSwapRankStride) { wings_list.push_back(p.card.m_number); }
     }
+    // ATTACKERS ARE ALREADY TAPPED HERE (CR 508.1f: "The active player taps the chosen creatures" as
+    // part of declaring attackers -- before attack triggers, and so before this window). The engine
+    // taps them only at combat damage (ResolveCombatDamage), so without this an attacking Birds of
+    // Paradise / Avacyn's Pilgrim paid the {2}{U} with mana it cannot make: an ILLEGAL combat swap,
+    // offered to the human (the dig prompt's affordability probe) and scored by the search's combat
+    // pin alike (found 2026-10-06 building the human swap timing; unit "CR 508.1f"). Vigilance keeps
+    // a creature untapped, as at damage. Idempotent with ResolveCombatDamage's own tap. Shared by both
+    // combat worlds, so lockstep. MTG_COMBAT_SWAP_TAPPED_ATTACKERS=0 restores the old payment.
+    // Only when a swap window is really open (a Wings is attached): human play reaches this function
+    // for EVERY deck (the dig chooser is always installed there), and nothing else here may change.
+    static const bool s_tap_attackers = EnvOn("MTG_COMBAT_SWAP_TAPPED_ATTACKERS", true);
+    if (s_tap_attackers && !wings_list.empty())
+    {
+        for (int ai : atk_idx)
+        {
+            if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
+            Permanent& ap = state.battlefield[static_cast<std::size_t>(ai)];
+            if (ap.controller_index == controller && !CreatureHasVigilance(ap, state)) { ap.tapped = true; }
+        }
+    }
     for (const int wnum : wings_list)
     {
         int wi = -1;
@@ -1718,10 +1738,9 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
         }
         // Pay {2}{U} from what is untapped now (the plan left it up). A swap that cannot be paid
         // does not happen -- the variant then scores like declining it.
-        // MEASUREMENT (MTG_TRACE=swapatkpay): report a combat swap that an ATTACKING creature's mana
-        // paid. CR 508.1f taps attackers as they are declared, but this engine taps them only at
-        // combat damage, so such a payment is illegal -- see docs/design/attackers-tapped-at-
-        // declaration.md (the fix is parked there with its measured suite cost).
+        // MEASUREMENT (MTG_TRACE=swapatkpay): with MTG_COMBAT_SWAP_TAPPED_ATTACKERS=0 (the pre-fix
+        // payment), report a combat swap that an ATTACKING creature's mana paid -- the illegal case
+        // the fix removes. Lets a suite delta be attributed game by game.
         std::vector<char> atk_untapped;
         if (TRACE_ON("swapatkpay"))
         {

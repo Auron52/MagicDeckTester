@@ -1017,3 +1017,78 @@ TEST_CASE("Human swap timing: a deferred swap nobody can pay any more is dropped
     for (const Card& c : b.s.players[0].hand) { if (c.m_number == colo) { in_hand = true; } }
     CHECK(in_hand);
 }
+
+// references/suboptimal/Bruna/claude_s3_gi2 T4 (the user's own game, won T5): Wings on Avacyn's Pilgrim
+// (opponent at 18), Birds of Paradise the only blue source, Boseiju + two Remote Farms (a Plains
+// here). The goldfish attack default sends the 0-power Birds too -- tapped at declaration (CR 508.1f),
+// so its {U} could not pay the combat swap. With the swap pinned for combat the attack heuristic holds
+// the Birds home (HoldForCombatAuraSwap): its {U} pays, Pilgrim swings for 1 + 20 = the T4 kill. Human
+// play predicts that attack set, so the main-phase swap the user committed is deferred to combat.
+TEST_CASE("Human swap timing: claude_s3_gi2 T4 -- the Birds stays home to pay, the swap moves to combat")
+{
+    BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = pilgrim;
+    b.s.battlefield.push_back(w);
+    const int birds = b.Put("Birds of Paradise");
+    b.Put("Boseiju, Who Endures");
+    b.Put("Plains");                 // (the game's two Remote Farms, depletion counters aside)
+    b.Hand("Colossification");
+    b.s.players[1].life = 18;
+    CHECK(DeclareAttackerIndices(b.s).size() == 2);           // no pin: Pilgrim AND Birds swing
+    {
+        GameState pinned = b.s;
+        pinned.scripted_combat_aura_swap = 70;
+        const std::vector<int> atk = DeclareAttackerIndices(pinned);
+        REQUIRE(atk.size() == 1);                              // pinned: the Birds is held
+        CHECK(pinned.battlefield[static_cast<std::size_t>(atk[0])].card.m_number == pilgrim);
+        CHECK(birds != pilgrim);
+    }
+    TurnSolver::Plan plan = HumanSwapPlan("Colossification");
+    CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == 0);
+    // The greedy's own timing rule (every creature that could attack is tapped) stays conservative.
+    SolveSwapArm on(true);
+    TurnSolver::Plan auton = plan;
+    TurnSolver::DeferAuraSwapToCombat(b.s, /*is_pre_combat=*/true, auton);
+    CHECK(auton.actions.size() == 1);
+}
+
+// CR 508.1f: attacking creatures are tapped as they are declared -- before the Aura-swap window. The
+// engine taps them only at combat damage, so an attacking Birds of Paradise used to pay the combat
+// swap's {U}. Pilgrim (host) and Birds attack; Boseiju + Plains cannot make {U}: no swap.
+TEST_CASE("CR 508.1f: an attacking mana creature cannot pay the in-combat Aura swap")
+{
+    BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = pilgrim;
+    b.s.battlefield.push_back(w);
+    const int birds = b.Put("Birds of Paradise");
+    b.Put("Boseiju, Who Endures");
+    b.Put("Plains");
+    const int colo = b.Hand("Colossification");
+    b.s.scripted_combat_aura_swap = 70;
+    std::vector<int> atk = { BfIndex(b.s, pilgrim), BfIndex(b.s, birds) };
+    ApplyCombatAuraSwap(b.s, 0, atk);
+    bool in_hand = false;
+    for (const Card& c : b.s.players[0].hand) { if (c.m_number == colo) { in_hand = true; } }
+    CHECK(in_hand);                                       // no swap: the {U} source is attacking
+    // Control: Birds stays home -> its {U} pays, the swap happens.
+    BoardBs c;
+    const int p2 = c.Put("Avacyn's Pilgrim");
+    Permanent w2 = w; w2.aura_attached_to = p2;
+    c.s.battlefield.push_back(w2);
+    c.Put("Birds of Paradise");
+    c.Put("Boseiju, Who Endures");
+    c.Put("Plains");
+    const int colo2 = c.Hand("Colossification");
+    c.s.scripted_combat_aura_swap = 70;
+    std::vector<int> atk2 = { BfIndex(c.s, p2) };
+    ApplyCombatAuraSwap(c.s, 0, atk2);
+    int host2 = 0;
+    for (const Permanent& p : c.s.battlefield) { if (p.card.m_number == colo2) { host2 = p.aura_attached_to; } }
+    CHECK(host2 == p2);
+}

@@ -840,10 +840,22 @@ Wings is still asked). Otherwise the swap stays in main 1 exactly as before.
 * **Bruna's gather** resolves before the swap window; if the human puts the named Aura onto Bruna from
   hand there, the deferred swap finds it gone and the ordinary `dig` prompt opens instead.
 
-**"An attacker" is the set the engine will really declare** (`DeclareAttackerIndices`, evaluated with
-the combat pin set); the host must be in it. Two related ENGINE defects found here (attackers paying
-the combat swap, CR 508.1f; the attack default sending the {U} source) are PARKED on branch
-`viewer-combat-swap-engine-parked` -- see `docs/design/attackers-tapped-at-declaration.md`.
+**"An attacker" is the set the engine will really declare** (the one refinement over the greedy's
+rule, which taps every creature that COULD attack): `DeclareAttackerIndices` on the board, evaluated
+with the combat pin set -- because with a swap pinned for combat the attack heuristic now HOLDS the
+mana creatures the {2}{U} needs (`HoldForCombatAuraSwap` in `DecisionProvider::AttackWith`,
+`MTG_COMBAT_SWAP_ATTACK_HOLD`, shared by both combat worlds): a 0-power Birds of Paradise whose {U} is
+the only blue stays home instead of swinging for nothing. The host must be in the set.
+
+**Two rules defects this found (fixed 2026-10-07, USER-approved: *"We should allocate the creatures
+beforehand to be the sources of mana for the swap and not attack with them."*):**
+* **CR 508.1f -- attackers are tapped when declared.** The engine tapped them only at combat damage,
+  so in the swap window an attacking Birds / Pilgrim still paid the {2}{U}: the `dig` prompt's
+  affordability probe offered ILLEGAL swaps and the search's combat pin scored them.
+  `ApplyCombatAuraSwap` now taps the non-vigilant attackers before probing or paying
+  (`MTG_COMBAT_SWAP_TAPPED_ATTACKERS`, only when an attached Wings opens the window). The same class
+  remains open for firebreathing: `docs/design/attackers-tapped-at-declaration.md`.
+* **The attack default threw that mana away** -- the hold above is the legal way to keep it.
 
 **Replay of OLD recordings (an old recording must never be invalidated by a new behaviour).** The
 reference writer stamps `"combat_swap_timing": 1` on every game recorded under the rule.
@@ -851,9 +863,10 @@ reference writer stamps `"combat_swap_timing": 1` on every game recorded under t
 WITHOUT the stamp, which restores the old main-phase timing (and the old summaries) for that replay.
 `MTG_HUMAN_COMBAT_SWAP=0` is the env twin. At adoption the only reference holding a main-phase
 Colossification swap was `references/suboptimal/Bruna/claude_s3_gi2` (T4, Wings on Avacyn's Pilgrim,
-Birds the only blue): the engine declares the Birds too, so the combat supply has no {U} and the swap
-stays in main -- it replays identically with or without the gate (verified). With the parked attack
-hold the same picks would defer and win T4.
+opponent at 18, Birds the only blue). The gate is load-bearing there: with `--legacy-main-swap` it
+replays exactly as played (main-phase swap, T5 win); WITHOUT it the same recorded picks defer the swap
+to combat, the Birds stays home to pay, Pilgrim swings for 21 and the game is won on **T4** -- the
+line the user describes. The recording stays exactly as played and replays under the legacy gate.
 
 **Parity with the search.** The search keeps both windows in-tree: the main-phase `AuraSwap` action
 (its damage-max pick) and the in-combat pin variants (`Plan::combat_aura_swap_choice`, damage-max at

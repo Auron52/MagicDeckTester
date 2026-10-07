@@ -1959,6 +1959,70 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     return true;
 }
 
+// HOLD A MANA CREATURE FOR THE COMBAT AURA SWAP (MTG_COMBAT_SWAP_ATTACK_HOLD, default ON; =0 off).
+// An Arcanum Wings swap pinned for the combat window (scripted_combat_aura_swap -- the search's pin,
+// the d0/rollout pin, or a human's deferred main-phase swap) is paid AFTER attackers are declared,
+// and a declared attacker is tapped (CR 508.1f) so its mana is gone. The goldfish attack default
+// sends everything, including a 0-power Birds of Paradise whose {U} is the only blue left for the
+// {2}{U} -- so the swap that would put +20 on the attacking host went unpaid. Hold exactly the mana
+// creatures the swap needs: tap the host and every other would-be attacker, then release the mana
+// creatures (lowest combat power first) until the {2}{U} is payable; a creature in that released set
+// stays home. Nothing is held if the swap is payable anyway or cannot be paid even holding every one.
+// Attack-declaration heuristic (the permitted greedy class), shared by both combat worlds.
+static bool HoldForCombatAuraSwap(const GameState& s, const Permanent& p)
+{
+    if (s.scripted_combat_aura_swap < 0) { return false; }
+    static const bool s_on = EnvOn("MTG_COMBAT_SWAP_ATTACK_HOLD", true);
+    if (!s_on) { return false; }
+    const int me = s.active_player_index;
+    if (p.controller_index != me || p.tapped || !p.card.IsCreature()) { return false; }
+    const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+    if (pd == nullptr || pd->tmpl != CardTemplate::ManaDork || CreatureHasVigilance(p, s)) { return false; }
+    const int wnum = s.scripted_combat_aura_swap % kAuraSwapRankStride;
+    const Permanent* wp = nullptr;
+    for (const Permanent& q : s.battlefield)
+    { if (q.card.m_number == wnum && q.controller_index == me && q.aura_attached_to != 0) { wp = &q; break; } }
+    if (wp == nullptr) { return false; }
+    const CardDefinition* wd = CardDatabase::Instance().LookupCached(wp->card);
+    if (wd == nullptr || !wd->params.aura_swap_cost.has_value()) { return false; }
+    const int host = wp->aura_attached_to;
+    if (p.card.m_number == host) { return false; }   // the host is the one that must swing
+    GameState cs = s;
+    std::vector<std::pair<int, int>> dorks;   // (combat power, battlefield index) of releasable sources
+    for (int i = 0; i < static_cast<int>(cs.battlefield.size()); ++i)
+    {
+        Permanent& q = cs.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != me || q.tapped || !q.card.IsCreature()) { continue; }
+        const bool is_host = q.card.m_number == host;
+        if (!is_host && !CanAttackFull(q, s.battlefield, me)) { continue; }
+        if (CreatureHasVigilance(q, s)) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!is_host && qd && qd->tmpl == CardTemplate::ManaDork) { dorks.push_back({ CombatPowerOf(q, s), i }); }
+        q.tapped = true;
+    }
+    RevealLogPause quiet;
+    const ManaCost& cost = *wd->params.aura_swap_cost;
+    { GameState t = cs; if (TapForCostDirect(t, cost, /*for_creature=*/false)) { return false; } }
+    std::sort(dorks.begin(), dorks.end());
+    for (const auto& d : dorks)
+    {
+        cs.battlefield[static_cast<std::size_t>(d.second)].tapped = false;
+        GameState t = cs;
+        if (TapForCostDirect(t, cost, /*for_creature=*/false))
+        {
+            // Payable once this many are home: hold p iff it is among them.
+            for (const auto& e : dorks)
+            {
+                if (cs.battlefield[static_cast<std::size_t>(e.second)].card.m_number == p.card.m_number)
+                { return true; }
+                if (&e == &d) { break; }
+            }
+            return false;
+        }
+    }
+    return false;   // holding every one still cannot pay: attack normally
+}
+
 bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker) const
 {
     // "This creature attacks each combat if able" (Deathbellow Raider, CR 508.1a). A RESTRICTION,
@@ -1972,6 +2036,7 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
         if (ad && ad->params.must_attack) { return true; }
     }
     if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }
+    if (HoldForCombatAuraSwap(s, attacker)) { return false; }
     return ShouldAttackWith(s, attacker);
 }
 

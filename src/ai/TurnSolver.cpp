@@ -30652,7 +30652,10 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a); 
 // the very function GameEngine's combat calls, so a recorded --force-attackers pin is honoured too),
 // and require the swap's host to be among them (an Aura swap onto a creature that is not going to
 // attack gains nothing in combat). Human play needs the exact set: its attack declaration is the
-// engine's, so a creature it keeps home (a mana creature its AttackWith holds) still pays the swap.
+// engine's, and a 0-power Birds of Paradise the attack heuristic holds home for the pinned swap
+// (DecisionProvider::AttackWith -> HoldForCombatAuraSwap) is exactly the {U} that pays it
+// (references/suboptimal/Bruna/claude_s3_gi2 T4: Wings on Avacyn's Pilgrim, Birds the only blue --
+// the combat swap is the T4 kill, and the all-attackers approximation calls it unpayable).
 static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Plan& plan, std::size_t q,
                                    int host = 0)
 {
@@ -30661,9 +30664,8 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
     if (host > 0)
     {
         // Read OUTSIDE the RevealLogPause below: the pause nulls the --force-attackers pin. Declared
-        // WITH the combat pin this deferral would set, so any attack heuristic that reads the pin
-        // (the parked HoldForCombatAuraSwap, docs/design/attackers-tapped-at-declaration.md) is part
-        // of the prediction.
+        // WITH the combat pin this deferral would set, so the attack heuristic's hold for the swap's
+        // mana (DecisionProvider::AttackWith -> HoldForCombatAuraSwap) is part of the prediction.
         GameState as = state;
         if (as.scripted_combat_aura_swap < 0) { as.scripted_combat_aura_swap = sw.sac_source_id; }
         const std::vector<int> atk = DeclareAttackerIndices(as);

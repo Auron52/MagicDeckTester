@@ -1547,3 +1547,44 @@ d3). This is the Wish-axis cost already raised as open question 1 -- it still st
 ## Human-play Wings swap timing (2026-10-06) -- LANDED 2026-10-07 (human play only)
 
 See `docs/design/viewer-combat-swap-status.md` for what landed, its verification and measurements.
+
+## CR 508.1f + combat-swap attack hold -- LANDED 2026-10-07 (USER-approved)
+
+USER: *"We should allocate the creatures beforehand to be the sources of mana for the swap and not attack
+with them."* Attackers are tapped before the in-combat Arcanum Wings swap pays (CR 508.1f), and with a swap
+pinned for combat the mana creatures the {2}{U} needs stay home (`HoldForCombatAuraSwap`). Rules and
+mechanism: `docs/design/attackers-tapped-at-declaration.md`; human-play side: `tools/play/DECISIONS.md`.
+
+**Paired A/B, every former Bruna suite row** (Bruna left the suite in a6ee9c7e, so no tier shows it):
+pre-fix binary (`56ea019a`) vs the fix, same manifest, `logs/cr508_bruna_ab/`. Loss-penalized avg turn:
+
+| row | games | before | after | delta |
+|---|---|---|---|---|
+| smoke d0 / d3 / d5 s1001 | 1000 / 150 / 75 | 6.4570 / 4.8600 / 4.9200 | 6.4780 / 4.9133 / 4.9467 | +0.021 / +0.053 / +0.027 |
+| smoke 2HG d3 s1001 | 50 | 5.4200 | 5.4600 | +0.040 |
+| regression d0 s2002 | 1000 | 6.4540 | 6.4650 | +0.011 |
+| regression d3 s2002 / s3003 | 150 / 150 | 5.1267 / 5.0800 | 5.1667 / 5.0933 | +0.040 / +0.013 |
+| regression d5 s2002 / s3003 | 75 / 75 | 5.0400 / 5.1467 | 5.0933 / 5.1467 | +0.053 / 0 |
+| overnight d0 (4 seeds) | 4 x 2000 | 6.426..6.463 | 6.444..6.479 | +0.011..+0.026 |
+| overnight d3 (4 seeds) | 4 x 1000 | 5.020..5.084 | 5.039..5.118 | +0.019..+0.034 |
+| overnight d5 (4 seeds) | 4 x 500 | 4.964..5.116 | 4.996..5.144 | +0.018..+0.032 |
+
+16,725 games: **270 slower, 9 faster**. Every moved game was replayed on the pre-fix binary with
+`MTG_TRACE=swapatkpay` (each reproduced its recorded turn):
+* **251 / 270 slower games had a REAL combat swap paid by an attacking Birds / Avacyn's Pilgrim at or
+  before the old win turn** -- illegal wins, removed on purpose (the Karoo-payment precedent).
+* **12 searched slower games** with no real illegal payment (d3: s4004 gi795/838, s5005 gi305/468,
+  s6006 gi297, s7007 gi791/933; d5: s5005 gi305/468, s6006 gi297; smoke d3/d5 gi1): the old search's
+  rollouts had credited illegal swaps. 10 return to the old turn with `MTG_COMBAT_SWAP_TAPPED_ATTACKERS=0`,
+  gi933 with either lever off, gi791 only with both. **All 12 recover the old turn at `--depth 8
+  --budget-ms 0`.**
+* **7 d0 slower games** (s10010 gi489/631/1652, s4004 gi360, s8008 gi633/1143/1548) are the ATTACK HOLD:
+  each returns to the old turn with `MTG_COMBAT_SWAP_ATTACK_HOLD=0`. Mechanism (s4004 gi360, T7): the
+  d0 greedy pins a swap onto a 1/1 Mother of Runes; the hold keeps home the mana creatures that pay
+  it -- including a Birds wearing Colossification + Eldrazi Conscription + Mythic Proportions. One
+  damage instead of forty. **Proposed amendment, NOT adopted (user's call):** hold only when the
+  swap's power gain on the host exceeds the held creatures' combat power (branch `cr508-hold-gain`).
+  On all 10,000 d0 games of these rows it recovers those 7 plus 2 more (s10010 gi898 unwon -> T8,
+  s4004 gi1836 T7 -> T6) and changes nothing else.
+* 9 faster games: 5 were old T5 wins through an illegal payment that now win T4 legally (the hold keeps
+  the {U} source home); the other 4 are search churn.
