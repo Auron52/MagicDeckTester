@@ -99,7 +99,7 @@ Single-replay, before (d379968d) vs after:
 
 | rollout (logged in gen) | before | after | win turn |
 |---|---|---|---|
-| Lodge, Avatar, Priest x3, Paragon x2 -- draw r=1 (15,861,417 ms) | still running at **> 60 min** single-thread when stopped | **504 ms** | 6 = 6 (after; before n/a) |
+| Lodge, Avatar, Priest x3, Paragon x2 -- draw r=1 (15,861,417 ms) | **> 90 min** single-thread, unfinished when I stopped it (contended box, load 30-45) | **504 ms** (> 10,700x) | 6 after (before never finished) |
 | Mystic x2, Priest, Genesis Wave, Forest x2, Branchloft -- draw r=0 (3,175,289 ms) | **1,148,105 ms** | **436 ms** (2,633x) | 5 = 5 |
 | Avatar, Priest, Forest x4, Steppe -- draw r=0 (440,723 ms) | **41,694 ms** | **159 ms** (262x) | 6 = 6 |
 
@@ -125,7 +125,10 @@ the move the BASE commit d379968d (mana-cache scaled-dork key) already records a
 selesnya_smoke_d3_s1001"); it is not this change. Proof: the same binary with `MTG_TAP_BUNDLE_EXACT=0`
 gives the identical digests for all three Selesnya smoke cells (d0 `9ec6bc35db96e6e8`, d3
 `4067858d4eb1db88`, d5 `706e6d60ef51cb7e`). Every other deck -- including Fungus's Simic Growth
-Chamber Karoo -- matched GT byte-for-byte. Play wall at the shipped settings (d3/b10, d5/b20) is
+Chamber Karoo -- matched GT byte-for-byte. **Regression tier (10 threads): 165/165 PASS byte-identical
+(all five Selesnya cells included), scenarios 147/147, viewer references 506 refs: 0 play-drift /
+0 board-diverged / 0 enum-gap.** CI (push, eeb3fffc): ubuntu + windows green, Linux/Windows
+determinism parity green. Play wall at the shipped settings (d3/b10, d5/b20) is
 unchanged within noise (two interleaved runs per arm: d3 269/313 s ON vs 278/286 s OFF core-ms); the
 saving is a keep-gen (d2/b3 prepay-heavy rollout) effect. Unit suite 457/457, including a new
 soundness test (`payment: Karoo and untap-land are priced exactly ...`) that passes on both arms.
