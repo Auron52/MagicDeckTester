@@ -787,6 +787,33 @@ wearing a dominance proof's clothing** — precisely the defect the no-greedy ru
 4. **Ties are free.** Two candidates that both kill next turn are *equal* on the objective, so
    first-or-cheapest is a legitimate tie-break, not a greedy pick among unequals.
 
+### The scan is INCOMPLETE BY DESIGN — a fast path, not an approximation of the search
+
+User, 2026-10-07: *"So we do not do a complete search in the heuristic. We just look for any wins
+that are easy to find and use that to simplify our choice."*
+
+That is the correct characterisation and it should be written into the code comment, because it sets
+what a reviewer must check. The scan is an **opportunistic detector**: it looks for *easy* wins, is
+allowed to miss hard ones, and exists to **simplify the choice** rather than to decide it in general.
+
+Two consequences worth being explicit about:
+
+- **It cannot make a line unfindable, so the completeness invariant is safe.** The detector
+  short-circuits only when it has *proved* the objective's bound is attained — and when it does not
+  fire, the full pruned search runs unchanged. So at unlimited budget nothing is refused that would
+  otherwise be found. This is the test CLAUDE.md applies at the top of the budget range, and this
+  design passes it by construction rather than by measurement.
+- **The acceptance criteria are therefore asymmetric**, and conflating them is the likely review
+  mistake:
+
+| property | status | how to check |
+|---|---|---|
+| never fires wrongly (no false positive) | **MUST HOLD — correctness** | diagnostic assert: a claimed kill really kills next turn |
+| fires often (coverage of real kills) | nice to have — **performance only** | count fire rate; a miss costs work, never quality |
+
+A reviewer should ask *"can it ever fire wrongly?"*, **not** *"does it find every win?"* The second
+question is about how much work the fast path saves; only the first can cost a game.
+
 ### Where this leaves the rest of the design
 
 Everything earlier in this document is now subordinate to the bound:
