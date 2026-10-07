@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f6c495c7  date 2026-10-06
+# Regression ground truth -- commit 5811d859  date 2026-10-07
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -110,7 +110,7 @@ pirates_smoke_d0_s1001=4.7390/1c7cce78ee5347b7
 pirates_smoke_d3_s1001=4.3533/dd56b9e90294338c
 pirates_smoke_d5_s1001=4.3467/abc848d90f53225a
 selesnya_smoke_d0_s1001=6.2760/9ec6bc35db96e6e8
-selesnya_smoke_d3_s1001=5.4200/64d71f6bfe58e643
+selesnya_smoke_d3_s1001=5.4267/4067858d4eb1db88
 selesnya_smoke_d5_s1001=5.3067/706e6d60ef51cb7e
 soldiers_smoke_d0_s1001=4.6000/0611c83ed8bc5a10
 soldiers_smoke_d3_s1001=4.3333/98cf0632c8c00549
@@ -571,17 +571,17 @@ pirates_overnight_d5_s5005=4.3720/2da82f653cc90e0f
 pirates_overnight_d5_s6006=4.3820/62499753f589ef0f
 pirates_overnight_d5_s7007=4.3120/580b3b3d905d421b
 selesnya_overnight_d0_s4004=6.2595/76677f11c784a78b
-selesnya_overnight_d0_s6006=6.2895/0fcf37c322aeb446
+selesnya_overnight_d0_s6006=6.2895/25f55757ba2239c6
 selesnya_overnight_d0_s8008=6.2645/b5f76dd87c058002
 selesnya_overnight_d0_s10010=6.2890/dbcb7dae1927f058
-selesnya_overnight_d3_s4004=5.2630/14a90c237d06ca69
-selesnya_overnight_d3_s5005=5.3250/972fe5045adf5148
-selesnya_overnight_d3_s6006=5.3220/10352ffe4e860c9d
-selesnya_overnight_d3_s7007=5.3110/93ac574c325d9dac
+selesnya_overnight_d3_s4004=5.2630/3aa1f8086566cf26
+selesnya_overnight_d3_s5005=5.3250/abf55c9b613977c8
+selesnya_overnight_d3_s6006=5.3220/47eb78d5d89c5647
+selesnya_overnight_d3_s7007=5.3110/11e4f972cf8a5dbb
 selesnya_overnight_d5_s4004=5.2720/fae51776a5e3f8bf
 selesnya_overnight_d5_s5005=5.3300/6160673e9becf9c6
-selesnya_overnight_d5_s6006=5.3340/fb1e5e8534c171d6
-selesnya_overnight_d5_s7007=5.2840/ec5bda4d9c4ce58e
+selesnya_overnight_d5_s6006=5.3340/534323566ddca01b
+selesnya_overnight_d5_s7007=5.2840/56692dc034673827
 soldiers_overnight_d0_s4004=4.5960/1408751e4aafb7d3
 soldiers_overnight_d0_s6006=4.6135/10e8f9cfa632f9a3
 soldiers_overnight_d0_s8008=4.5860/0e2154ae2c07e80a
