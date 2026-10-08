@@ -5535,13 +5535,17 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   }
   // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
   // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
-  // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
-  // (needs a real choice), or the game ends (result -> showResult clears the flag). Capped defensively.
+  // through the rest of this one. Stops as soon as the turn advances, the cap is hit, or the game
+  // ends (result -> showResult clears the flag). A NON-main decision of the SAME turn (a Karoo
+  // bounce, Bruna's gather, an in-combat swap) needs a real choice, so it is shown and the skip stays
+  // ARMED: once it is answered, the next main-phase frame of this turn is passed as before. (It used
+  // to cancel the skip, so every Karoo land dropped the user back into Main 1 -- USER 2026-10-08.)
   if (!undoing && S.commitTurn != null) {
     if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
       S.commitTurnPasses = (S.commitTurnPasses||0) + 1; dec._autoStep=true; S.plan=[]; commitLine(); return;
     }
-    S.commitTurn = null;   // turn advanced / non-main / cap hit -> resume normal interaction
+    if (dec && dec.type!=='main_phase' && dec.turn===S.commitTurn) return;   // answer it, keep skipping
+    S.commitTurn = null;   // turn advanced / cap hit -> resume normal interaction
   }
 }
 // A main-phase decision offered when the opponent is already dead (<=0 life) -- the game is over,
@@ -5567,13 +5571,19 @@ function showResult(r) {
   S.history.push({ turn:r.won?r.win_turn:'—', label:r.won?`WON turn ${r.win_turn}`:'no win', win:r.won });
   renderHistory(); renderBoard(); hideVerdict(); $('vialslot').innerHTML='';
   $('endcontrols').style.display='';
-  $('saveref').textContent = S.hadReject ? 'Save game log (had rejects)' : 'Save as reference (clean)';
-  $('saveref').className = S.hadReject ? '' : 'primary';
-  // Suboptimal save: only offered on a CLEAN win — it means "I won, but this game should end
-  // sooner". No-win or reject games can't be a "should-be-faster" target.
-  $('saveref-sub').style.display = (!S.hadReject && r.won) ? '' : 'none';
+  // A saved REJECTION does not taint the game (USER 2026-10-08: "it may be a successful line even if
+  // one of the ways of doing it was rejected"). A reference records only the lines that PLAYED -- the
+  // rejected attempt never entered S.choices -- so the file is identical either way, and both routes
+  // write it through the same audited saveTrace. The rejection itself is already its own artifact in
+  // logs/play/rejections/. So the game is ALWAYS offered as a reference; the note just says where the
+  // rejection went.
+  $('saveref').textContent = 'Save as reference';
+  $('saveref').className = 'primary';
+  // Suboptimal save: offered on any WIN -- "I won, but this game should end sooner". A no-win game
+  // can't be a "should-be-faster" target.
+  $('saveref-sub').style.display = r.won ? '' : 'none';
   $('saveinfo').textContent = S.hadReject
-    ? 'This game had rejected lines — saved to logs/play/, not the permanent reference set.' : '';
+    ? 'A rejected line from this game was saved separately to logs/play/rejections/ -- it does not affect this reference (only the lines that played are recorded).' : '';
 }
 
 async function step() {
@@ -5695,7 +5705,9 @@ async function saveRef(suboptimal) {
   $('saveinfo').textContent='saving…';
   // A suboptimal save is a clean line flagged "should be faster" -> always the reference endpoint
   // (with suboptimal:true), never the had-reject log path.
-  const route = (S.hadReject && !suboptimal) ? '/api/save' : '/api/save-reference';
+  // Always the reference endpoint: a saved rejection no longer demotes the game to a logs/play/ game
+  // log (see showResult). /api/save stays for any other caller.
+  const route = '/api/save-reference';
   const res=await post(route, suboptimal ? {...cfg(), suboptimal:true} : cfg());
   $('saveinfo').innerHTML = res.savedAs ? `Saved:<br><b>${esc(res.savedAs)}</b><br>Open it in <code>tools/replay/</code>.`
       + (res.backup ? `<br><small>${backupSummary(res.backup)}</small>` : '')

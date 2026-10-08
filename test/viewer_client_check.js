@@ -1657,6 +1657,65 @@ async function testEquipFromHand() {
 // (which every validate_line fixture asserts on) accepted the line both before and after the fix --
 // enumeration is deliberately optimistic. Only a real commit through the apply path can see it, and
 // only the GUI turns the silent drop into a visible failure.
+// COMMIT TURN SURVIVES A SAME-TURN SUB-DECISION (USER 2026-10-08, Bruna seed 13). "Commit turn"
+// arms an auto-pass of the rest of the turn; a Karoo land's bounce prompt is a NON-main decision of
+// that same turn, and advanceTo used to CANCEL the skip on it -- so after answering "return Forest"
+// the user was dropped back into Main 1 of T2 instead of the game moving on to T3. This replays the
+// user's own game: mulligan to 5 (bottom Colossification + Open the Armory), T1 Forest, then T2
+// "Azorius Chancery" committed with Commit turn, answer the bounce -> the next frame must be T3.
+async function testCommitTurnSurvivesBounce() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'Bruna', seed: 13, turns: 8 });
+  const st = () => S(win);
+  const dec = () => st().decision;
+  for (const k of [0, 0, 1]) {               // mulligan, mulligan, keep 5 (the user's choices)
+    chk(dec() && dec().type === 'mulligan', `expected a mulligan frame, got ${dec() && dec().type}`);
+    if (fails.length) return fails;
+    win.commitMulligan(dec(), k); await settle(win);
+  }
+  chk(dec() && dec().type === 'bottom', `expected the bottom frame, got ${dec() && dec().type}`);
+  if (fails.length) return fails;
+  {
+    const hand = dec().hand || [];
+    const pick = ['Colossification', 'Open the Armory'].map(n => hand.findIndex(c => c.name === n));
+    chk(pick.every(i => i >= 0), `the kept 7 holds Colossification + Open the Armory (hand: ${hand.map(c => c.name).join(', ')})`);
+    if (fails.length) return fails;
+    st().bottomSel = new Set(pick); win.commitBottomBatch(dec()); await settle(win);
+  }
+  chk(dec() && dec().type === 'main_phase' && dec().turn === 1, 'reached T1 main');
+  if (fails.length) return fails;
+  st().plan = []; win.queueCard('Forest', 'land');
+  await win.commitTurn(); await settle(win);
+  chk(dec() && dec().type === 'main_phase' && dec().turn === 2,
+      `T1 Forest + Commit turn should land on T2 main, got ${dec() && dec().type} T${dec() && dec().turn}`);
+  if (fails.length) return fails;
+  chk((dec().me.hand || []).some(c => c.name === 'Azorius Chancery'), 'T2 hand holds Azorius Chancery');
+  if (fails.length) return fails;
+  st().plan = []; win.queueCard('Azorius Chancery', 'land');
+  await win.commitTurn(); await settle(win);
+  chk(dec() && dec().type === 'bounce' && dec().turn === 2,
+      `Azorius Chancery should prompt its bounce on T2, got ${dec() && dec().type} T${dec() && dec().turn}`);
+  if (fails.length) return fails;
+  chk(st().commitTurn === 2, `the Commit-turn skip must stay ARMED across the bounce prompt (S.commitTurn=${st().commitTurn})`);
+  const d = dec();
+  win.pushChoice(d, d.heuristic_default == null ? 0 : d.heuristic_default, `${d.source}: return`);
+  await settle(win);
+  chk(dec() && dec().turn === 3,
+      `after answering the bounce, Commit turn must finish T2 and move on -- got ${dec() && dec().type} T${dec() && dec().turn}`);
+  // SAVING A REJECTION NO LONGER DEMOTES THE GAME (USER 2026-10-08, same game: the T4 two-Wish line
+  // was rejected and saved, and the finished game could then only be saved as a logs/play/ game log).
+  // The end screen must still offer the REFERENCE save, and the "should be faster" save on a win.
+  st().hadReject = true;
+  win.showResult({ won: true, win_turn: 6, events: [] });
+  const btn = win.document.getElementById('saveref'), sub = win.document.getElementById('saveref-sub');
+  chk(btn && btn.textContent === 'Save as reference',
+      `after a saved rejection the end screen must still offer "Save as reference", got "${btn && btn.textContent}"`);
+  chk(sub && sub.style.display !== 'none', 'the "should be faster" save is offered on a won game even after a saved rejection');
+  return fails;
+}
+
 async function testColorlessFirstTapOrder() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -1959,6 +2018,14 @@ async function testColorlessFirstTapOrder() {
     catch (e) { console.error(`✗ colourless-first tap order: harness error: ${e.stack || e}`); process.exit(2); }
     if (cfFails.length) { anyFail = true; console.log(`✗ colourless-first tap order: ${cfFails.length} fail`); cfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ colourless-first tap order (s9 T2: Lodge {C} pays Sol Ring, Natural Order keeps its {G}{G})'); }
+  }
+  // Commit turn keeps going after a same-turn sub-decision (a Karoo bounce).
+  {
+    let ctFails;
+    try { ctFails = await testCommitTurnSurvivesBounce(); }
+    catch (e) { console.error(`✗ commit turn across a bounce: harness error: ${e.stack || e}`); process.exit(2); }
+    if (ctFails.length) { anyFail = true; console.log(`✗ commit turn across a bounce: ${ctFails.length} fail`); ctFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ commit turn across a bounce (Bruna s13 T2: Azorius Chancery, answer the bounce -> T3) + a saved rejection still offers Save as reference'); }
   }
   for (const sc of SCENARIOS) {
     let res;

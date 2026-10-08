@@ -1508,7 +1508,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { savedAs: path.relative(ROOT, full) });
     }
     if (req.method === 'POST' && url.pathname === '/api/save-reference') {
-      // Promote a CLEAN human-played game (no rejects) to the tracked references set. These are
+      // Promote a human-played game to the tracked references set (a rejected ATTEMPT recorded during
+      // the game does not disqualify it: only the lines that played are in the choices). These are
       // no-clairvoyance ground-truth games whose win-turn a good AI should match. With
       // suboptimal:true the game goes to references/suboptimal/<deck>/ instead -- a "known-slow"
       // target (you believe the win is reachable EARLIER), kept out of the verified benchmark the
