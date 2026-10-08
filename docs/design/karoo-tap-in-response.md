@@ -1,7 +1,9 @@
 # Karoo tap-in-response + the USER's bounce order (MTG_BOUNCE_UNTAPPED_FIRST)
 
-Status: **BUILT, default OFF, measured on the regression tier — adoption awaits the USER's sign-off**
-(and, if wanted, a held-out `CASES=overnight` run). Nothing in ground truth moves with the lever off.
+Status: **HUMAN PLAY: the float is ON (2026-10-08). AUTONOMOUS: the lever stays default OFF** — the
+held-out run (2026-10-08, below) is net better on every deck, but ONE game does not recover at
+`--depth 8 --budget-ms 0`, a real loss from the ORDER half; the flip awaits the USER's call. Nothing in
+ground truth moves with the lever off.
 
 ## What the user asked for
 
@@ -147,10 +149,82 @@ searched rung (d3/200ms), 2 at d5/500ms (hinata d3 s2002 gi73, hinata d3 s3003 g
 
 No slower game was traced to a float defect (wrong amount, wrong colour, phantom mana or a missed one).
 
+## Held-out A/B (2026-10-08): overnight tier, the 9 Karoo decks, one pooled batch, 112,800 paired games
+
+`DECKS=fungus,hinata,creature_giving,mirrorwing,minotaur,kitty,dragons,melira,selesnya CASES=overnight
+bash test/karoo_tap_in_response_ab.sh` on a copied binary of `384d7dab` (232 jobs, both arms in one
+`--batch`, 24/24 workers busy at every heartbeat). Angels is out (its Azorius Chancery was cut), Bruna is
+not in the suite, fungusb / kittyv2 hold no Karoo.
+
+| deck | games | faster | slower | sum Δturns | mean/game | searched: faster / slower / Δ | units |
+|---|---|---|---|---|---|---|---|
+| creature_giving | 14000 | 128 | 22 | -107 | -0.0076 ± 0.0010 | 4 / 2 / -2 | 0.9987 |
+| dragons | 14000 | 638 | 34 | -665 | -0.0475 ± 0.0021 | 4 / 4 / +0 | 0.9944 |
+| fungus | 10800 | 411 | 53 | -376 | -0.0348 ± 0.0021 | 3 / 2 / -1 | 1.0030 |
+| hinata | 10800 | 416 | 140 | -428 | -0.0396 ± 0.0037 | 12 / 8 / -8 | 1.0022 |
+| hinata2hg | 400 | 1 | 4 | +5 | +0.0125 ± 0.0109 | 1 / 4 / +5 | 0.9865 |
+| kitty | 14000 | 151 | 47 | -110 | -0.0079 ± 0.0011 | 2 / 0 / -2 | 1.0037 |
+| melira | 9400 | 204 | 75 | -177 | -0.0188 ± 0.0026 | 0 / 1 / +1 | 1.0005 |
+| minotaur | 14000 | 252 | 23 | -235 | -0.0168 ± 0.0012 | 0 / 1 / +1 | 1.0028 |
+| minotaur2hg | 600 | 0 | 0 | +0 | +0.0000 | 0 / 0 / +0 | 1.0036 |
+| mirrorwing | 10800 | 444 | 159 | -396 | -0.0367 ± 0.0034 | 7 / 0 / -7 | 0.9954 |
+| selesnya | 14000 | 362 | 138 | -259 | -0.0185 ± 0.0021 | 4 / 4 / +0 | 0.9994 |
+| **all** | 112800 | 3007 | 695 | -2748 | **-0.0244 ± 0.0007** | 37 / 26 / -13 | 0.9998 |
+
+Every deck's aggregate is <= 0 (Hinata with its 2HG rows: -423 over 11,200). The 2HG configuration
+alone is +5 over 400 games -- its 4 slower games are all budget churn (below). Work units flat.
+
+### Every searched slower game (26), escalated in one pooled batch per stage
+
+Stage 0 re-ran each game as a chunked single-game job at the A/B's own settings (reproduced all 26:
+the chunk mechanics are exact). Stage 1 = `--depth <base win turn> --budget-ms 100`, stage 2 = `--depth 8
+--budget-ms 0`, both arms.
+
+* **23 converge at stage 1** (lever <= base): creature_giving d3 s5005 gi171, d3 s7007 gi681; dragons d3
+  s4004 gi577, d3 s5005 gi382; fungus d5 s4004 gi106, d3 s4004 gi106; hinata2hg d5 s4004 gi5 (5 -> 8 in
+  the A/B), gi37, d5 s7007 gi40, gi54; hinata d3 s4004 gi222, gi335, d3 s5005 gi104, d3 s6006 gi30, gi42,
+  gi314, d5 s7007 gi253; melira d3 s6006 gi74; minotaur d3 s7007 gi155; selesnya d3 s4004 gi560, gi609,
+  d3 s5005 gi340, d3 s6006 gi752. Budget churn at the tier's 10-40 ms.
+* **1 converges at stage 2**: hinata d3 s5005 gi68 (6 = 6 at d8/unlimited). Its first play difference is
+  on T1 (Sol Ring vs Ponder), before any Karoo is played -- the lever changes how the rollouts value
+  future Karoo turns, and at d3/10 ms that perturbs the root choice.
+* **1 game PERSISTS at d8/unlimited -- a real loss from the ORDER half**: Dragons seed 4004 gi47 (both
+  its d3 and d5 cells, 5 -> 6; at d8/0 still 5 -> 6). T4: Lightning Greaves, then Gruul Turf. Every land
+  is untapped when the bounce resolves (Greaves was paid by Sol Ring; the Mountains are kept for Scourge
+  of Valkas' firebreathing). Base order: a tie, index order returns Haven of the Spirit Dragon. Lever
+  order: the Mountain is FLOATABLE, so it takes the no-loss credit (+100) over Haven (restricted mana,
+  not floatable) and is returned -- but its floated {R} dies at the end of main 1 (CR 106.4) with
+  nothing left to cast, and in combat Scourge firebreathes once instead of twice: 5 damage, not 6. T5
+  leaves the opponent at 1; the win slips to T6. No search setting recovers it because the bounce pick
+  is NOT SEARCHED: `BounceKarooLand` takes `BounceLandCandidates(...).front()`.
+
+The d0 slower games (669) were spot-checked, not each root-caused (regression skill: d0 is light-touch);
+e.g. creature_giving d0 s6006 gi1449 (5 -> unwon): T2 land-first Chancery returns the only land, a
+Forbidden Orchard; with the float the d0 greedy spends it on Crop Rotation (sacrificing the Chancery for
+an Orchard) and loses the T3 double-Crop-Rotation line -- legal mana, the permitted d0 greedy's choice.
+
+### Decision: NOT flipped (the USER's call)
+
+Every deck nets <= 0 and the overall gain is -0.0244 turns/game, but CLAUDE.md's adoption bar also asks
+that every slower game recover at `--depth 8 --budget-ms 0`, and Dragons s4004 gi47 does not. The
+loss is the ORDER half, not the float: the no-loss credit treats a floatable untapped land as free to
+return, but the float only lives until the end of the PHASE -- and in searched play the Karoo is played
+AFTER the main-phase casts (`karoo_deferred`), so the float usually has no consumer while the land's
+mana for combat / main 2 is gone.
+
+**Proposed amendment (not built):** make the Karoo bounce a SEARCHED dimension -- a plan field (like
+`fetch_target`) that the enumerator fans over the distinct `BounceLandCandidates` and both apply worlds
+honour, the provider's order becoming the ordering and the d0 / beyond-horizon default. That is also
+what the no-greedy rule asks for: `ranked.front()` inside the search window is a provider top pick
+taken without branching. With it the search can return the Haven in gi47. A cheaper alternative is an
+order-only tweak (no-loss credit for a floatable untapped land only when the float has a consumer this
+phase -- a land-first d0 play, or a land Aura held for the Karoo), but it re-opens a heuristic the
+search should own.
+
 ## Open for the USER
 
-* Adopt (flip the default ON)? Train-tier evidence above; a held-out `CASES=overnight` run is the
-  standing next step if you want one before flipping.
+* Adopt (flip the default ON) as measured (-0.0244/game held-out, every deck <= 0, one Dragons game
+  that only a searched bounce would recover), or after the searched-bounce amendment above?
 * Tie-break choice made here: among lands that both re-enter untapped and cost nothing this phase, a
   TAPPED one is returned before an untapped floatable one (keeps the untapped land for main 2). Your
   rule did not cover that case; say if you want it the other way.
