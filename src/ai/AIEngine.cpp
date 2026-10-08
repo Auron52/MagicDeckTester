@@ -2462,7 +2462,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // UntapSecondMainLive: a deck whose only combat-generated resource is Jorn's untap plays main 2
     // on exactly the turns it fired -- the same predicate every simulated turn of the search reads.
     bool play_this_phase =
-        is_pre_combat_main || m_search_post_combat || UntapSecondMainLive(state) || use_external;
+        is_pre_combat_main || m_search_post_combat || UntapSecondMainLive(state)
+        || DigSecondMainLive(state) || use_external;
 
     // External-controller intercept (Claude-play / human-play prototype, opt-in via
     // SetExternalChooser; inert otherwise so the normal autonomous AI path is
@@ -3117,7 +3118,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // the ordinary autonomous path. Any staged cards / drip sweep are handled there exactly as
         // in a game that never had a chooser. Re-derive the phase gate without the human term.
         m_external_chooser = nullptr;
-        play_this_phase = is_pre_combat_main || m_search_post_combat || UntapSecondMainLive(state);
+        play_this_phase = is_pre_combat_main || m_search_post_combat || UntapSecondMainLive(state)
+                          || DigSecondMainLive(state);
         // ...AND PLAY THE SHIPPED SEARCH FROM HERE (2026-09-15, Session 30). The harness set
         // MTG_UNPRUNED for the replay's menu; without this the search that takes over is the
         // viewer's unpruned one, and a hand-off reads better than the autonomous engine ever

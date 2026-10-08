@@ -15328,6 +15328,79 @@ inline bool UntapSecondMainLive(const GameState& state)
     return false;
 }
 
+// Is THIS turn's post-combat main live because an attack-triggered dig put a card in our HAND?
+// USER 2026-10-08: "to consider just the new card in the second main and only when it matters" --
+// "if it's an equipment, and a bit more complexity if we have not played our land drop and get an
+// Ancient Den". Design, exhaustiveness proof and the soundness argument:
+// docs/design/omnitool-restricted-second-main.md.
+//
+// THE CASE TABLE this implements (the admitted option set is applied at the post-combat action
+// filter; this predicate only decides whether the phase opens at all):
+//   case 0  the attack was LETHAL            -> unreachable, and FREE: both post-combat sites sit
+//                                               behind OpponentHasLost(), so a winning attack never
+//                                               reaches this predicate. Nothing to test for.
+//   case 1  arrival is an EQUIPMENT          -> live; cast + equip it, nothing else
+//   case 2  arrival is a LAND, drop UNUSED   -> live; the full plan space (the new mana is genuinely
+//                                               new, so main 1 could not have spent it)
+//   case 3  arrival is a LAND, drop SPENT    -> NOT live; it is just a card in hand until next turn
+//
+// WHY RESTRICTING TO THE ARRIVAL IS A SOUND IDENTITY FOLD AND NOT A LOSSY GATE -- the load-bearing
+// argument, and what distinguishes this from MTG_EQUIP_ROUTE_TOPMAIN (which CLAUDE.md names as the
+// BAD shape, a gate predicate that makes a line unfindable at unlimited budget). Everything already
+// in hand before combat was castable in main 1, and casting it there is WEAKLY BETTER in a goldfish:
+// an equip's benefit lands in combat and main 1 precedes combat; a creature cast pre-combat can be
+// equipped and can attack; a land played pre-combat yields mana for that same main. So every line
+// this refuses is reachable -- at the same combat, via next turn's main 1, or strictly better via
+// this turn's main 1, all of which the search already enumerates. The three things that would break
+// that equivalence (creature removal killing the host, artifact removal flipping metalcraft off, not
+// getting a next turn) ALL REQUIRE AN OPPONENT WHO ACTS, and none exists in the goldfish.
+//
+// *** THIS SOUNDNESS IS GOLDFISH-SPECIFIC AND MUST BE RE-DERIVED FOR PHASE 2 (a real opponent). ***
+// Under an opponent who removes things, the fold becomes a genuine (if small) loss and the admitted
+// set has to be widened or re-justified. Do not carry the argument forward silently.
+//
+// Read from the POST-COMBAT board and from a record stamped inside the dig itself, so it is a pure
+// function of state: the executor and every simulated turn of the search compute it identically
+// (lockstep by construction). The deck constant is first, so no other deck pays even the turn
+// comparison -- the same economy as UntapSecondMainLive above.
+inline bool DigSecondMainLive(const GameState& state)
+{
+    if (!state.deck_has_attack_dig_hand) { return false; }   // deck constant: no cost for other decks
+    if (state.combat_hand_turn != static_cast<std::int16_t>(state.turn_number)
+        || state.combat_hand[0] == 0) { return false; }
+    // heurarm-slotted rather than a bare `static const bool`, and that is required rather than
+    // stylistic: the A/B that prices this must run BOTH arms inside ONE pooled `mtg --batch`, which
+    // a process-wide env static cannot express (the Accomplished Alchemist slot carries the same
+    // note, for the same reason, after the first attempt to price a searched m2 sequentially got
+    // opposite signs from neighbour load). Read AFTER the two cheap state gates so the common path
+    // never touches it. DEFAULT OFF -- this changes play, so adopting it is the USER's decision.
+    static const bool s_env = EnvOn("MTG_OMNITOOL_M2", false);
+    if (!heurarm::Flag(heurarm::OMNITOOL_M2, s_env)) { return false; }
+    const Player& ap = state.ActivePlayer();
+    const bool drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    for (std::uint8_t slot : state.combat_hand)
+    {
+        if (slot == 0) { continue; }
+        const int num = static_cast<int>(slot);
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_number != num) { continue; }
+            // case 2 / case 3: a land is only worth a phase while the drop is still open.
+            if (c.IsLand()) { if (drop_open) { return true; } break; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            // case 1. NOTE the deliberate absence of an AFFORDABILITY test: an unaffordable
+            // Equipment opens a phase that enumerates nothing and costs only the empty harvest. The
+            // cards this fires for are the {0}-{1} Equipment that make the deck function, so a cost
+            // gate would almost never close, and pricing one here would mean an EffectiveSpellCost
+            // walk on a predicate read at every post-combat site. If the measured gate rate comes
+            // back high enough to care, THAT is the refinement to add -- measure before building it.
+            if (d && d->params.is_equipment) { return true; }
+            break;
+        }
+    }
+    return false;
+}
+
 // ---- Creature Giving upkeep triggers (Varchild's War-Riders / Defense of the Heart) -----------
 // Both are UPKEEP effects of the active player, applied IDENTICALLY at the executor's upkeep
 // (GameEngine::RestOfUpkeep) and the rollout's simulated turn-start (TurnSolver::
@@ -16882,9 +16955,14 @@ bool PerformEtbDig(GameState& state, int controller_index,
 // matching one of `types` (CardMatchesTypeName on the printed card) and, when max_mv >= 0, with
 // printed mana value <= max_mv; provider-ranked pick (EtbDigCandidates), the searched pin
 // (g_scripted_etbdig_choice, consumed), the human dig chooser (src_name), the rest to the bottom.
+// `took_number` (optional, default nullptr -- every pre-existing call site is unchanged) reports the
+// CARD NUMBER that entered hand, which the caller cannot otherwise recover: EnterHand appends and the
+// hand is not ordered by arrival. Read BEFORE EnterHand, so it is safe whether that consumes the
+// card or not. Used by FireAttackEquipDigHand to record the combat arrival the restricted second main
+// is allowed to consider (GameState::combat_hand).
 bool PerformLookTakeDig(GameState& state, int controller_index, int count,
                         const std::vector<std::string>& types, int max_mv,
-                        const std::string& src_name);
+                        const std::string& src_name, int* took_number = nullptr);
 // Indices (into the top `count` of `controller`'s library, look order) of the cards a
 // PerformLookTakeDig with these filters would accept RIGHT NOW -- the SAME predicate, so an
 // enumerator sizing a searched pick axis or dropping a whiff agrees with resolution exactly.

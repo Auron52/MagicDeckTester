@@ -1131,6 +1131,21 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // The Omnitool's per-turn RESTRICTED main 2 (DigSecondMainLive) is only ever live in a deck
+    // that runs an attack-triggered dig into HAND. MAINBOARD ONLY, matching the Jorn stamp above
+    // and for the same reason: a sideboard card cannot fire a trigger, and widening to the
+    // sideboard would arm the predicate for every arm of a screen whose sideboard holds the card
+    // -- including the arms that do not play it, which is precisely the asymmetry a screen must
+    // not have. (Contrast deck_has_attack_threshold below, which spans both zones because it gates
+    // a COST scan rather than a behaviour, so over-arming it is merely slower, never unfair.)
+    state.deck_has_attack_dig_hand = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.attack_dig_hand_count > 0) { return true; }
+        }
+        return false;
+    }();
     // Harbin's attack-threshold pump: only a deck that runs one pays its per-combat board scan.
     state.deck_has_attack_threshold = [&deck]{
         for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
