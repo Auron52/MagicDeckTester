@@ -333,6 +333,7 @@ enum Slot : int
     PD_PAIN_DEFER,            // MTG_PD_PAIN_DEFER          Prevent Damage: PAIN DEFERRAL -- when the spell(s) a pain-useful payment funds will ADD to our damage->lifegain->drain chain on resolution (a Faithmender, a Vito / Dina, a second Tamanoa, Manabarbs...), pay with the sources whose pain is worth least LATER and keep the painful lands for the end-of-main-1 sweep, where every hit is worth at least as much (dmgev::PainAwarePay). USER 2026-10-08 (s11 gi10 T5: Citadel's 3 spent before Rhox resolved). Default ON; =0 = the pain-first payer
     BOUNCE_SEARCH,            // MTG_BOUNCE_SEARCH          the Karoo bounce is a SEARCHED plan dimension (Plan::bounce_choice; KarooBounceSearchOn, EngineFlags.h): the provider narrows the returnable lands (DecisionProvider::BounceSearchCandidates -- one candidate in the easy cases, the 2-3 real options in a contested one) and the enumeration fans the contested ones, instead of BounceKarooLand taking the provider's front() inside the search window (a no-greedy-rule violation). USER 2026-10-08: "The Karoo decision should also be searched with heuristics. However, we may want to heuristic it more often than not, since the decision is usually an easy one."
     BOUNCE_FOLD,              // MTG_BOUNCE_FOLD            SOUND identity fold for the searched Karoo bounce (BounceFoldOn, EngineFlags.h): a bounce variant whose index resolves -- on the bounce state its applied sibling already measured -- to a candidate a sibling already applied is declined BEFORE the unit charge and the apply. The variant differs from that sibling only in bounce_choice, so its apply is the sibling's apply. DEFAULT ON; MTG_BOUNCE_FOLD_VERIFY applies it anyway and compares the post-apply key.
+    POST_ENTRY_PING_ALL,      // MTG_POST_ENTRY_PING_ALL    breakpoint site 9's fan-out predicate (CardHasPostEntryActivation, TurnSolver.cpp) covers a PingAll source (Pyrohemia, ping_all_cost): a plan that CASTS one gets bp_choice variants, so "cast Pyrohemia, then {R}: ping in the same main" is a searched continuation. Without it the apply-time gate accepted the key but nothing ever fanned the plan, so the continuation was unreachable at any depth/budget (PD claude-play sweep s61003 T5, 2026-10-08). DEFAULT ON; =0 restores the old predicate
     COUNT
 };
 
@@ -627,6 +628,7 @@ inline const char* Name(int slot)
         "MTG_PD_PAIN_DEFER",
         "MTG_BOUNCE_SEARCH",
         "MTG_BOUNCE_FOLD",
+        "MTG_POST_ENTRY_PING_ALL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
