@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Kalonian Hydra"/>
+        <card number="3" name="Neverwinter Hydra"/>
+        <card number="4" name="Primordial Hydra"/>
+        <card number="1" name="Steelbane Hydra"/>
+        <card number="4" name="Voracious Hydra"/>
+        <card number="23" name="Forest"/>
+        <card number="2" name="Gargos, Vicious Watcher"/>
+        <card number="4" name="Vernal Bloom"/>
+        <card number="1" name="Nissa, Who Shakes the World"/>
+        <card number="2" name="Gauntlet of Power"/>
+        <card number="4" name="Search for Tomorrow"/>
+        <card number="4" name="Nature's Lore"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="2" name="Three Visits"/>
+        <card number="1" name="Garruk, Primal Hunter"/>
+    </zone>
+</cockatrice_deck>
