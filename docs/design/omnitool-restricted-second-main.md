@@ -999,3 +999,31 @@ heurarm slot; (3) **the user's adoption decision**, which is not an agent's to m
   arbitrary rules it would surface. This is a repo-wide change, not a kitty one; it is listed here
   only because the Omnitool is the instance that exposed it. **User-owned: whether to build it, and
   in what order against the deck work.**
+
+### Reachability + inertness, MEASURED 2026-10-08 (the step before any quality A/B)
+
+A null quality A/B cannot distinguish *"fires and changes nothing"* from *"never fires"*, and only
+the second is a wiring bug (the `MTG_CONDEMN_M1_BP_PROBE` precedent). Both halves are now measured,
+with the arms differing ONLY in the heurarm flag, same seeds, one pooled batch:
+
+| run | deck | digest | units |
+|---|---|---|---|
+| `m2_off` | Omnitool arm (1 maindeck) | `0daa085fabe38bb9` | 288,641 |
+| `m2_on`  | Omnitool arm (1 maindeck) | `0daa085fabe38bb9` | **289,369 (+0.25%)** |
+| `suite_off` | shipped v2 (Omnitool sideboard) | `9216b92899752ff0` | 250,751 |
+| `suite_on`  | shipped v2 (Omnitool sideboard) | `9216b92899752ff0` | **250,751 (identical)** |
+
+**It FIRES.** Units are deterministic and both arms share identical keys (the folds gate on the deck
+constant, not the flag), so the +728 is real search work: the restricted second main is opened and
+searched. 40 games is far too small to say anything about quality — it changed no outcome there.
+
+**And it is PROVABLY INERT where the card is not maindecked** — bit-identical units, not merely an
+equal digest, which is the stronger statement: the deck constant blocks the feature before any work
+happens. So `kittyv2` GT cannot move, and that is measured rather than argued from the stamp's source.
+
+**+0.25% is consistent with the gate's own cost model rather than suspiciously low.** The phase needs
+an Omnitool *attached to an attacker* AND a non-lethal attack AND an actionable arrival, on a list
+running ONE copy in 60 cards that wins around turn 3.9 — so the Omnitool is usually not in play at
+all, let alone equipped. That cuts both ways and should be said plainly: the same low trigger rate
+that makes this cheap also bounds how much it can raise the Omnitool's measured value, which is the
+user's own point about the card (*"its effectiveness is largely shown when we don't go off quickly"*).
