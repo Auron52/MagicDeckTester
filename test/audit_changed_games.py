@@ -77,6 +77,18 @@ def new_side(key):
 keys = sorted(os.path.basename(f)[:-5] for f in glob.glob(f"test/gt_logs/*_{MODE}_*.wins"))
 if not keys:
     print(f"no committed gt_logs for mode '{MODE}'"); sys.exit(2)
+# Only the cases THIS run played. test/logs/<mode>/wins/ keeps every .wins any earlier run left behind,
+# so a `--deck=<x>` run used to be audited against other decks' stale files too: 2026-10-08 a 5-case
+# SelesnyaLifegain run reported "slower=619 faster=290, net slower" from 129 Auras/... files three weeks
+# old, while its own five cases were all net FASTER. The run's manifest names exactly what it played.
+stale = 0
+if not OLD_GIT:
+    mf = f"test/logs/{MODE}/manifest.json"
+    if os.path.exists(mf):
+        import json
+        ran = {j.get("name") for j in json.load(open(mf)).get("jobs", [])}
+        stale = sum(1 for k in keys if k not in ran and os.path.exists(f"test/logs/{MODE}/wins/{k}.wins"))
+        keys = [k for k in keys if k in ran]
 
 # tallies split by searched vs d0. `played` = play changed at the SAME loss-penalized score (only
 # visible via the per-game play digest -- the coarse avg fingerprint cannot see it).
@@ -117,7 +129,8 @@ for key in keys:
 base = "HEAD~1 gt_logs" if OLD_GIT else "committed gt_logs"
 new_desc = "current gt_logs" if OLD_GIT else f"test/logs/{MODE}/wins"
 print(f"AUDIT {MODE}   (old = {base}   new = {new_desc})")
-print(f"  configs changed: {len(keys) - unchanged - missing}   unchanged: {unchanged}   no-run-dir: {missing}")
+print(f"  configs changed: {len(keys) - unchanged - missing}   unchanged: {unchanged}   no-run-dir: {missing}"
+      + (f"   (ignored {stale} stale .wins from earlier runs: not in this run's manifest)" if stale else ""))
 for b in ("searched", "d0"):
     t = tot[b]
     print(f"  [{b:8}] slower={t['slower']}  faster={t['faster']}  play-changed={t['played']}  "
