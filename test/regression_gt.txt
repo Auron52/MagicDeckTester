@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 1caa094d  date 2026-10-08
+# Regression ground truth -- commit 35a7c3ac  date 2026-10-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -117,7 +117,7 @@ selesnya_smoke_d3_s1001=5.2267/f79ca7dfd950d31f
 selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
 soldiers_smoke_d0_s1001=4.6000/0611c83ed8bc5a10
 soldiers_smoke_d3_s1001=4.3333/98cf0632c8c00549
-soldiers_smoke_d5_s1001=4.3600/107c876c54356824
+soldiers_smoke_d5_s1001=4.3467/6db3750a481a9bcb
 snow_smoke_d0_s1001=6.4660/ae25442a03503915
 snow_smoke_d3_s1001=6.0000/13ce3a7e1c79588b
 snow_smoke_d5_s1001=6.0000/d90c911f6a435617
@@ -275,8 +275,8 @@ selesnya_regression_d5_s2002=5.0000/75eccda635e92604
 selesnya_regression_d5_s3003=5.2000/902ac9d162a2e71c
 soldiers_regression_d0_s2002=4.6100/55f673f4b21fb0fa
 soldiers_regression_d3_s2002=4.3800/7a38baf2467bb6d3
-soldiers_regression_d3_s3003=4.3600/e79a3fe0168d5b3a
-soldiers_regression_d5_s2002=4.3733/0dec85180eea49d8
+soldiers_regression_d3_s3003=4.3467/69af91ede396562f
+soldiers_regression_d5_s2002=4.3733/3bf10dece669c7c7
 soldiers_regression_d5_s3003=4.3867/4bf62b16c476a108
 snow_regression_d0_s2002=6.4410/db2a18d6a341b2e9
 snow_regression_d3_s2002=6.0000/7bc7feadd0c2313a
@@ -589,14 +589,14 @@ soldiers_overnight_d0_s4004=4.5960/1408751e4aafb7d3
 soldiers_overnight_d0_s6006=4.6135/10e8f9cfa632f9a3
 soldiers_overnight_d0_s8008=4.5860/0e2154ae2c07e80a
 soldiers_overnight_d0_s10010=4.6210/31ee247f948ad0ef
-soldiers_overnight_d3_s4004=4.3850/d4c37092970ec78c
-soldiers_overnight_d3_s5005=4.3620/3694b7bd495c6a41
-soldiers_overnight_d3_s6006=4.4110/f2b489fa39c1b794
-soldiers_overnight_d3_s7007=4.3700/836fb12056c2a9bb
-soldiers_overnight_d5_s4004=4.3800/09762067c51284d2
-soldiers_overnight_d5_s5005=4.3740/40dab84de15452a2
-soldiers_overnight_d5_s6006=4.4020/8262a4e7894cc8d5
-soldiers_overnight_d5_s7007=4.3740/9aae5500f385c588
+soldiers_overnight_d3_s4004=4.3840/1286c9ad28c5003a
+soldiers_overnight_d3_s5005=4.3620/b137572827111d87
+soldiers_overnight_d3_s6006=4.4110/e424287e78665696
+soldiers_overnight_d3_s7007=4.3700/9bf7742a8eee4dfe
+soldiers_overnight_d5_s4004=4.3780/9d74dc4ce45f674b
+soldiers_overnight_d5_s5005=4.3700/10838c0564644609
+soldiers_overnight_d5_s6006=4.3980/392e04e9e0ef070c
+soldiers_overnight_d5_s7007=4.3740/8e985dbe790d2386
 giants_overnight_d0_s4004=6.0765/2ef74be2b70bf355
 giants_overnight_d0_s6006=6.0790/cf2bf7092289312e
 giants_overnight_d0_s8008=6.0740/48f6ab21086490b3

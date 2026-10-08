@@ -1316,6 +1316,50 @@ Nightbound (If a player casts at least two spells during their own turn, it be
 
 <!-- verify_deck:end -->
 
+## Value leaf -- generated, ADOPTED 2026-10-08
+
+USER 2026-10-08: do the value leaf first ("it fits the profile to be fast under the leaf, potentially
+with trust"), then the mulligan profile.
+
+**Generation.** `bash scripts/valueleaf.sh run decks/Soldiers` at `35a7c3ac` (src tree `bf680c55`), on
+the PGO+LTO engine, 14:17-15:23Z. Phase A 2,500 games -> 10,937 rows; GBDT held-out RMSE 0.37 turns
+(the observed range elsewhere is 0.45-0.55). Phase C matrix (400 games/cell, H1-5 x V1-8) clean through
+the C.5 risk gate. Phase D: crossover `1->1 2->1 3->1 4->2 5->6 6->6 7->6 8->6`; V4 not trusted (its
+95% upper bound 0.00271 > tol 0.0020), trust candidate d5.
+
+**Phase E (held-out, 8 seeds x 1000 games, d5/b20 play):**
+
+| arm | avg | delta | paired t | seeds better/worse/tied | core-s |
+|---|---|---|---|---|---|
+| no leaf (incumbent play) | 4.37250 | -- | -- | -- | 12,464 |
+| **value leaf** | 4.37137 | **-0.00113** | -2.83 | 5/0/3 | 1,658 (**0.13x**) |
+
+* **Trust d5 ACCEPTED:** ON-OFF +0.00000 (one-sided 95% upper +0.00062 <= tol 0.0020), 8/8 seeds
+  byte-identical, 0.88x the cost. Promoted into `value_trust_depth`.
+* Depth sweep d4 / d5 / d6 vs the shipped default: all four arms 4.37800 on 2,000 paired games (d5/d6
+  byte-identical; d4 differs in digest on 1 of 4 seeds at the same score). Depth beyond 4 does not
+  move this deck at b20 -- it mostly wins on T4. No play-depth change proposed.
+* Adopted as staged (no `value_play` play block: play stays the built-in d5/b20 with the leaf live).
+
+**Phase F (run with the leaf LIVE, so the setting is measured under it):** `mull_gen_depth=1`,
+`mull_gen_budget_ms=3` (rank fidelity 0.9934 >= 0.990 floor vs the d5/b20 play reference, 0.49x the
+play cost; d2/b3 0.9965 at 0.68x, d5/b20 = 1.0). **K = 19** recorded in `value_play.expected_buckets`
+-- the first recorded value, which the USER is asked to confirm. (Phase F refuses on a first leaf until
+the sidecar is live, which is why adoption came first.)
+
+**Suite (all three tiers, `--deck=soldiers,soldiers2hg`, PGO+LTO):** 0 slower games anywhere.
+
+| tier | cases changed | faster | slower | same score, line differs |
+|---|---|---|---|---|
+| smoke | 1/4 | 1 | 0 | 0 |
+| regression | 2/5 | 2 | 0 | 4 |
+| overnight | 8/12 | 6 | 0 | 26 |
+
+d0 cases unchanged (no search, no leaf). Every same-score change spot-checked reads "kept hand + draws
+IDENTICAL -> a clean like-for-like LINE change" at the same win turn -- the new evaluator choosing an
+equal line. Viewer references: 556, 0 play-drift / 0 board-diverged / 0 enum-gap / 0 mull-drift.
+Accepted; `check_gt_logs.py` 659 consistent.
+
 ## Stage 4/5 status + OPEN USER QUESTIONS (2026-10-04; none blocked the run -- default taken for each)
 Status: Stage 4 + 5a/5b/5c/5c2/5e/5f/5g/5h/5i + 4-bis DONE; 5d claude-play sweep RUN (see
 "## Claude-play sweep"; flags resolved 2026-10-05). verify_deck after this run: the only
