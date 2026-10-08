@@ -924,11 +924,71 @@ Note the cleanup-discard row is the same item already open on kitty v2 (its buck
 cards, so Sram, Cid and Dwalin are unbucketed and shed before surplus Equipment) — and the dig
 hook's own docstring names cleanup-discard as the sibling defect. Same class, same remedy.
 
+## BUILT 2026-10-08 — `MTG_OMNITOOL_M2`, default OFF (commit 370b012a)
+
+The user asked for it directly (*"Can we fix the omnitool issue? I gave you rules for how to do that
+cheaply"*), restated the scope as *"to consider just the new card in the second main and only when it
+matters"* / *"if it's an equipment, and a bit more complexity if we have not played our land drop and
+get an Ancient Den"*, and set the binding constraint: *"overall, it should be a cheap operation."*
+The case table above is implemented unchanged.
+
+**Shape B (searched), as recommended.** `DigSecondMainLive` (`SpellEffects.h`, beside Jorn's
+`UntapSecondMainLive`) opens the phase; the admitted-set restriction lives at `TurnSolver`'s
+post-combat action filter, independent of the condemnation filter beside it.
+
+**Where the cost went, against the three predictions above.**
+
+- **Case 0 is free *by construction*, not merely cheap** — stronger than this doc predicted. Both
+  post-combat sites sit behind `OpponentHasLost()`, so a lethal attack never reaches the predicate
+  and there is no lethality *test* to pay for at all.
+- **The deck constant is first**, so every other deck pays one bool test, and the arrival record is
+  written **inside the dig**, so nothing is paid on any turn no dig fired.
+- **Equips are filtered as well as casts, and that is the cost-critical half** — a point this doc
+  missed. This deck's heaviest frames *are* the equip powerset (12-group frames at odo=4096, per the
+  `ZERO_POWER_EQUIP_FREE_ONLY` measurement), so a post-combat main that reopened that axis would
+  hand back more than the gate saves. An `Equip` names its Equipment in `sac_source_id`, so "only
+  the arrival" is exact. `AttachAllEquipment` (Balan) is dropped as a mass attach of *old*
+  Equipment.
+
+**Two cheaper-looking routes were rejected on measured cost. Do not retry them.**
+
+1. **`m1_hand` / `CondemnsPassedMainPhase`** identifies the new card by subtraction and looks free.
+   `StampM1Hand` walks the hand pool on **every rollout turn** and measured **+14-16% compute** on
+   AntiLifegain (`DecisionProviders.cpp`, the `CondemnsPassedMainPhase` note). Wrong trade on the
+   branchiest deck in the suite, for a phase that fires on a minority of turns.
+2. **`m1start_hand_mask`** (the existing "newly arrived lands only" main-2 land-drop mechanism) is
+   genuinely free, but it means *new since the pre-combat main began*. This deck draws constantly
+   mid-main off Sram and Puresteel, so it would fire on nearly every turn — recreating precisely the
+   full-second-main cost the gate exists to avoid.
+
+**State cost: `sizeof(GameState)` 864 → 872 (+8).** `combat_hand[2]` as uint8 card numbers (they are
+1–60) with **0 as an empty sentinel** so no separate count is needed, plus an int16 turn stamp, plus
+the deck-constant bool. The first shape (`int[4]` + a count) cost +24; wedging the four bytes into
+`m1_hand_n`'s padding gap was tried and **measured at the same 872**, so it was reverted rather than
+left with a comment claiming a saving it does not make. Guard and the `Dominance.h` maintenance
+ledger updated.
+
+**Folded into BOTH keys** (sim + dominance), deck-, nonzero- and turn-gated, XOR over the members so
+trigger order cannot split equivalent states. The fold is load-bearing, not defensive: two states can
+hold the **identical hand** and still differ here — one dug the card in combat, the other has held it
+since main 1 — and only the first may cast it post-combat.
+
+**GT is untouched.** The Omnitool is **sideboard-only** on the shipped kitty v2 list and the deck
+stamp is **mainboard-only** — a choice made so a screen cannot arm the predicate for arms that do not
+play the card, which incidentally keeps the constant false for every regression-suite deck, so neither
+key fold can fire. `mtg-test` 409/410, the one failure being the pre-existing `decks/` folder census
+(untracked `decks/Hydras/` makes 33 against a pinned 32).
+
+**Still to do, in order:** (1) a **reachability** check — a null A/B cannot distinguish "fires and
+changes nothing" from "never fires", and only the second is a wiring bug (the
+`MTG_CONDEMN_M1_BP_PROBE` precedent); (2) the quality/cost A/B, both arms in one pooled batch via the
+heurarm slot; (3) **the user's adoption decision**, which is not an agent's to make.
+
 ## Open
 
-- **The user's ruling on whether to build this at all.** Until then the Omnitool ships with no second
-  main, and every Omnitool screening arm is a **lower bound** on the card.
-- Parked behind round 5 (user, 2026-10-07: *"For now we'll wait on Round 5."*).
+- **The user's ADOPTION ruling** (the build decision is now answered). Until adoption the Omnitool
+  ships with no second main, and every Omnitool screening arm is a **lower bound** on the card —
+  including round 8's `omnitool_for_kite3`, which ran before this existed.
 - **The dig ranker is independently adoptable and probably worth more than the second main.** It
   needs no second main, no new param and no gate — it replaces a shuffle-order pick in a decision
   that is live on >50% of digs. Worth measuring as its own screening arm, ahead of the second main.
