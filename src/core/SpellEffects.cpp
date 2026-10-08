@@ -2005,9 +2005,9 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
                 {
                     if (bouncestats::Enabled())
                     {
-                        bouncestats::g_pinned.fetch_add(1, std::memory_order_relaxed);
+                        bouncestats::Pinned();
                         if (static_cast<std::size_t>(g_scripted_bounce_choice) >= cands.size())
-                        { bouncestats::g_clamped.fetch_add(1, std::memory_order_relaxed); }
+                        { bouncestats::Clamped(); }
                     }
                     const std::size_t k = std::min<std::size_t>(
                         static_cast<std::size_t>(g_scripted_bounce_choice), cands.size() - 1);

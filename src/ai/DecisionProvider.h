@@ -2393,11 +2393,38 @@ public:
     // (BounceRule) for the MTG_BOUNCE_STATS census. DecisionUnpruned(KarooBounce) returns the whole
     // ranked list. Never empty when `legal` is not.
     enum BounceRule { kBounceOnly = 0, kBounceTappedClean, kBounceIdentical, kBounceReplayFold,
-                      kBounceDominated, kBounceContested, kBounceUnpruned, kBounceRuleCount };
+                      kBounceDominated, kBounceContested, kBounceUnpruned, kBounceUserRule,
+                      kBounceRuleCount };
     static constexpr std::size_t kBounceSearchWidth = 3;
     virtual std::vector<int> BounceSearchCandidates(
         const GameState& s, int controller, int self_index,
         const std::vector<int>& legal, int* why = nullptr) const;
+
+    // THE USER'S DEFAULT (MTG_BOUNCE_USER_RULE, 2026-10-08): among the returnable lands (`legal`, after
+    // the Karoo / Aura exclusions), one that is (1) TAPPED -- its mana already spent this turn -- (2)
+    // RE-ENTERS UNTAPPED when replayed (a basic; a fastland / checkland / shock / reveal land only if it
+    // really would, on the board the bounce leaves), and (3) makes no colour that no OTHER land staying
+    // on the battlefield makes (the Karoo included; colourless makes no colour) loses nothing by being
+    // returned, so it is returned with NO search. Several qualifying: identical copies fold, else the
+    // provider's order (BounceLandCandidates). Returns the battlefield index, or -1 when none qualifies.
+    // `qualifying_names` (optional) receives how many DISTINCT names qualified (the census). Used by
+    // BounceLandCandidates (it becomes the front: the d0 / beyond-horizon pick and the prompt default)
+    // and BounceSearchCandidates (the whole candidate set).
+    //
+    // THE OVERRIDE HOOK (USER: "this is for the base provider class. We can override it to add more
+    // complex rules for other decks."). Receives the board, the controller, the LEGAL returnable lands
+    // (battlefield indices; the Karoo itself excluded) and the provider's ORDER over them
+    // (BounceLandCandidates before any promotion). Must return ONE member of `legal` -- the land to
+    // return with no search -- or -1 to leave the decision to the order and the search. It only ever
+    // restricts (to one) and so orders (that one first); it never invents a land, and an override
+    // must keep the Aura exemption (never return an enchanted land). Called only while
+    // MTG_BOUNCE_USER_RULE is on.
+    // Is the bounce rule above live for THIS provider? Base: MTG_BOUNCE_USER_RULE. A provider whose
+    // override carries a rule of its own (HinataProvider, MTG_HINATA_BOUNCE_RULE) answers for its own
+    // flag too, so a deck's rule ships independently of the base default.
+    virtual bool BounceUserRuleActive() const;
+    virtual int BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
+                                   const std::vector<int>& order, int* qualifying_names = nullptr) const;
 
     // LegendKeepIndex -- legend rule (CR 704.5j): you control two or more legendary permanents with
     // the same name, so you CHOOSE one to keep and the rest go to the graveyard. `duplicates` is the

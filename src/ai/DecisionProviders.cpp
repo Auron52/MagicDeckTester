@@ -1614,7 +1614,7 @@ std::vector<int> DecisionProvider::SacrificeLandCandidates(
 }
 
 std::vector<int> DecisionProvider::BounceLandCandidates(
-    const GameState& s, int /*controller*/, int /*self_index*/,
+    const GameState& s, int controller, int /*self_index*/,
     const std::vector<int>& legal) const
 {
     // SPARE THE ENCHANTED LAND (MTG_BOUNCE_SPARE_AURA, default ON; 2026-09-15). Returning a land
@@ -1670,7 +1670,236 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
     // The original scan kept a strict `>` winner, so the LOWEST index wins ties -- stable_sort on a
     // descending score over an ascending input reproduces that.
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return score(a) > score(b); });
+    // THE USER'S DEFAULT (MTG_BOUNCE_USER_RULE): a tapped land that re-enters untapped and makes no
+    // colour another kept land does not is THE pick -- the front, so the d0 runner, the playout beyond
+    // the horizon, the base plan and the prompt's default all take it (BounceSearchCandidates offers
+    // nothing else).
+    if (BounceUserRuleActive())
+    {
+        const int pick = BounceUserRulePick(s, controller, legal, out);
+        if (pick >= 0 && out.front() != pick)
+        {
+            out.erase(std::remove(out.begin(), out.end(), pick), out.end());
+            out.insert(out.begin(), pick);
+        }
+    }
     return out;
+}
+
+// Does this battlefield land enter UNTAPPED when it is replayed -- on the board the bounce leaves (the
+// land itself gone, the Karoo on the battlefield)? A basic does; a tapland, a Karoo and a depletion
+// land do not; a fastland / checkland / shock / reveal / control land only if its condition would hold.
+static bool BounceReplayEntersUntapped(const GameState& s, int controller, int idx,
+                                       const CardDefinition& d)
+{
+    const CardParams& q = d.params;
+    if (q.etb_bounce_land || q.enters_tapped_with_depletion > 0) { return false; }
+    if (q.etb_pay_life_to_untap > 0)
+    { return s.players[static_cast<std::size_t>(controller)].life > q.etb_pay_life_to_untap; }
+    if (!q.etb_untap_reveal_subtypes.empty()) { return LandControlUntapMet(s, d) || LandCanReveal(s, d); }
+    if (!q.etb_untap_control_subtypes.empty()) { return LandControlUntapMet(s, d); }
+    if (q.fastland_max_other_lands >= 0)
+    {
+        int other = 0;   // the lands the replay will see: every land we control now, but this one
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+            if (i != idx && p.controller_index == controller && p.card.IsLand()) { ++other; }
+        }
+        return other <= q.fastland_max_other_lands;
+    }
+    if (!q.checkland_subtypes.empty())
+    {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+            if (i == idx || p.controller_index != controller || !p.card.IsLand()) { continue; }
+            const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+            const SubtypeSet& subs = od ? od->card.m_subtypes : p.card.m_subtypes;
+            for (const std::string& want : q.checkland_subtypes)
+            { for (const std::string& st : subs) { if (st == want) { return true; } } }
+        }
+        return false;
+    }
+    return !q.enters_tapped;
+}
+
+bool DecisionProvider::BounceUserRuleActive() const { return BounceUserRuleOn(); }
+
+// Hinata carries its own rule (MTG_HINATA_BOUNCE_RULE), so it is live here whatever the base default.
+bool HinataProvider::BounceUserRuleActive() const
+{
+    return (HinataBounceRuleOn() && KarooTapInResponseOn()) || BounceUserRuleOn();
+}
+
+int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
+                                         const std::vector<int>& order, int* qualifying_names) const
+{
+    if (qualifying_names != nullptr) { *qualifying_names = 0; }
+    // The colours one land makes, as a WUBRG bitmask (colourless makes none) -- INCLUDING what a land
+    // Aura on it adds (Wild Growth's {G}): an enchanted land stays, so its whole output covers.
+    auto colours = [&](const Permanent& p) -> unsigned {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return 0u; }
+        unsigned m = static_cast<unsigned>(LandAuraColorMask(s, p)) & 31u;
+        for (Color c : EffectiveProducesFor(s, controller, *d, &p))
+        {
+            switch (c)
+            {
+                case Color::White: m |= 1u;  break;
+                case Color::Blue:  m |= 2u;  break;
+                case Color::Black: m |= 4u;  break;
+                case Color::Red:   m |= 8u;  break;
+                case Color::Green: m |= 16u; break;
+                default: break;
+            }
+        }
+        return m;
+    };
+    // The returnable candidates: `legal` less the Karoo / Aura exclusions BounceSearchCandidates makes
+    // while any other land is returnable (the order already ranks them last).
+    static const bool s_spare_aura_env = EnvOn("MTG_BOUNCE_SPARE_AURA", true);
+    const bool spare_aura = heurarm::Flag(heurarm::BOUNCE_SPARE_AURA, s_spare_aura_env);
+    auto is_karoo = [&](int i) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
+        return d != nullptr && d->params.etb_bounce_land;
+    };
+    auto has_aura = [&](int i) {
+        if (!spare_aura) { return false; }
+        const int num = s.battlefield[static_cast<std::size_t>(i)].card.m_number;
+        for (const Permanent& q : s.battlefield) { if (q.aura_attached_to != 0 && q.aura_attached_to == num) { return true; } }
+        return false;
+    };
+    std::vector<int> pool = legal;
+    auto drop_if_others = [&](auto pred) {
+        bool other = false;
+        for (int i : pool) { if (!pred(i)) { other = true; break; } }
+        if (other) { pool.erase(std::remove_if(pool.begin(), pool.end(), pred), pool.end()); }
+    };
+    drop_if_others(is_karoo);
+    drop_if_others(has_aura);
+    std::vector<std::string> names;   // distinct qualifying names
+    int pick = -1;
+    for (int i : order)   // the provider's order decides among several
+    {
+        if (std::find(pool.begin(), pool.end(), i) == pool.end()) { continue; }
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (!p.tapped) { continue; }                                                   // (1)
+        // USER: "we need an exemption for cases where the land has an aura on it of course." Never
+        // the rule's pick, whatever the exclusions above left (the Aura would die with the bounce).
+        {
+            bool enchanted = false;
+            for (const Permanent& a : s.battlefield)
+            { if (a.aura_attached_to != 0 && a.aura_attached_to == p.card.m_number) { enchanted = true; break; } }
+            if (enchanted) { continue; }
+        }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !BounceReplayEntersUntapped(s, controller, i, *d)) { continue; }   // (2)
+        unsigned kept = 0u;                                                            // (3)
+        for (int j = 0; j < static_cast<int>(s.battlefield.size()); ++j)
+        {
+            const Permanent& o = s.battlefield[static_cast<std::size_t>(j)];
+            if (j != i && o.controller_index == controller && o.card.IsLand()) { kept |= colours(o); }
+        }
+        const unsigned mine = colours(p);
+        if ((mine & ~kept) != 0u) { continue; }
+        const std::string nm = p.card.m_name.str();
+        if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+        if (pick < 0) { pick = i; }
+    }
+    if (qualifying_names != nullptr) { *qualifying_names = static_cast<int>(names.size()); }
+    return pick;
+}
+
+// THE USER'S HINATA KAROO RULE (see the declaration). Generic in everything but its ordering: the
+// "colour the deck needs less" is DERIVED from the coloured pips of every nonland card the controller
+// owns in the game (library, hand, graveyard, battlefield), so nothing about Mountain or Island is
+// hardcoded -- on Hinata2 the derivation gives red < blue, i.e. "the mountain would go".
+int HinataProvider::BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
+                                       const std::vector<int>& order, int* qualifying_names) const
+{
+    if (!HinataBounceRuleOn())
+    { return DecisionProvider::BounceUserRulePick(s, controller, legal, order, qualifying_names); }
+    if (qualifying_names != nullptr) { *qualifying_names = 0; }
+    // Pip need per colour (WUBRG), over the deck as the game holds it.
+    int need[5] = { 0, 0, 0, 0, 0 };
+    auto add_pips = [&](const Card& c) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { return; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        need[0] += mc.white; need[1] += mc.blue; need[2] += mc.black; need[3] += mc.red; need[4] += mc.green;
+    };
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : me.library)   { add_pips(c); }
+    for (const Card& c : me.hand)      { add_pips(c); }
+    for (const Card& c : me.graveyard) { add_pips(c); }
+    for (const StagedCard& c : me.staged_cards)       { add_pips(c.card); }
+    for (const SuspendedCard& c : me.suspended_cards) { add_pips(c.card); }
+    for (const Permanent& p : s.battlefield) { if (p.owner_index == controller && !p.is_token) { add_pips(p.card); } }
+    // The colours a land makes, WUBRG bits 0..4 (colourless makes none). The candidates are never
+    // enchanted, so a land Aura's colour cannot enter here.
+    auto colours = [&](const Permanent& p) -> unsigned {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return 0u; }
+        unsigned m = 0u;
+        for (Color c : EffectiveProducesFor(s, controller, *d, &p))
+        {
+            switch (c)
+            {
+                case Color::White: m |= 1u;  break;
+                case Color::Blue:  m |= 2u;  break;
+                case Color::Black: m |= 4u;  break;
+                case Color::Red:   m |= 8u;  break;
+                case Color::Green: m |= 16u; break;
+                default: break;
+            }
+        }
+        return m;
+    };
+    auto karoo_at = [&](int i) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
+        return d != nullptr && d->params.etb_bounce_land;
+    };
+    bool non_karoo = false;
+    for (int i : legal) { if (!karoo_at(i)) { non_karoo = true; break; } }
+    struct Key { int colours; int copies; int need; int pos; int idx; };
+    std::vector<Key> keys;
+    std::vector<std::string> names;
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const int i = order[static_cast<std::size_t>(pos)];
+        if (std::find(legal.begin(), legal.end(), i) == legal.end()) { continue; }
+        if (non_karoo && karoo_at(i)) { continue; }
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        bool enchanted = false;   // the Aura exemption: never return an enchanted land
+        for (const Permanent& a : s.battlefield)
+        { if (a.aura_attached_to != 0 && a.aura_attached_to == p.card.m_number) { enchanted = true; break; } }
+        if (enchanted) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !BounceReplayEntersUntapped(s, controller, i, *d)) { continue; }
+        // An untapped land is returned only when its mana floats (the adopted tap-in-response
+        // model): otherwise returning it throws its mana away, which is not what the rule assumes.
+        if (!p.tapped && !(KarooFloatModelled() && KarooBounceFloatable(s, p, *d))) { continue; }
+        const unsigned m = colours(p);
+        int n_col = 0, n_need = 0;
+        for (int c = 0; c < 5; ++c) { if (m & (1u << c)) { ++n_col; n_need += need[c]; } }
+        int copies = 0;
+        for (const Permanent& o : s.battlefield)
+        { if (o.controller_index == controller && o.card.IsLand() && o.card.m_name == p.card.m_name) { ++copies; } }
+        keys.push_back({ n_col, copies, n_need, pos, i });
+        const std::string nm = p.card.m_name.str();
+        if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+    }
+    if (keys.empty()) { return DecisionProvider::BounceUserRulePick(s, controller, legal, order, qualifying_names); }
+    if (qualifying_names != nullptr) { *qualifying_names = static_cast<int>(names.size()); }
+    // Fewest colours, then most copies, then the less-needed colour, then the base order.
+    const Key* best = &keys.front();
+    for (const Key& k : keys)
+    {
+        const auto rank = [](const Key& x) { return std::make_tuple(x.colours, -x.copies, x.need, x.pos); };
+        if (rank(k) < rank(*best)) { best = &k; }
+    }
+    return best->idx;
 }
 
 std::vector<int> DecisionProvider::BounceSearchCandidates(
@@ -1722,6 +1951,20 @@ std::vector<int> DecisionProvider::BounceSearchCandidates(
     };
     drop_if_others([](const Info& f) { return f.karoo; });
     drop_if_others([](const Info& f) { return f.aura; });
+
+    // THE USER'S DEFAULT (MTG_BOUNCE_USER_RULE) comes FIRST: a tapped land that re-enters untapped and
+    // makes no colour no other kept land makes is returned with no search. It sharpens the
+    // tapped-clean rule below (its pick is always one of those lands) and outranks the depletion-refresh
+    // alternative and the colour-by-colour contest with a land in hand. BounceLandCandidates already
+    // made it the front.
+    if (BounceUserRuleActive())
+    {
+        int names = 0;
+        const int pick = BounceUserRulePick(s, controller, legal, ranked, &names);
+        if (bouncestats::Enabled() && g_bounce_searched_site && names > 1)
+        { bouncestats::UserMulti(); }
+        if (pick >= 0) { set_why(kBounceUserRule); return { pick }; }
+    }
 
     bool hand_land = false;
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)

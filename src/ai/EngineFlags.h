@@ -178,6 +178,30 @@ inline bool KarooTapInResponseOn()
 // stillborn / collapse skips do. SOUND by identity: the variant is a clone of that sibling differing
 // only in bounce_choice, both resolve the bounce to the same land on the same state, so the apply is
 // the same apply. MTG_BOUNCE_FOLD_VERIFY applies the variant anyway and checks the post-apply key.
+// MTG_BOUNCE_USER_RULE -- the USER's Karoo bounce default (2026-10-08, two refinements the same day):
+// "I guess we should implement some default heuristic for Karoo bounces. We don't need to search if
+// there is a tapped land that comes into play untapped [...]" / "I mean that it doesn't generate
+// colours any other land doesn't." A returnable land that is TAPPED, re-enters UNTAPPED on its replay,
+// and makes no colour that no other land we keep makes, is returned with no search
+// (DecisionProvider::BounceUserRulePick). Rides the lever: in a legacy replay (no `karoo_float`
+// stamp) the lever is off in human play, so an old recording's defaults are untouched.
+inline bool BounceUserRuleOn()
+{
+    static const bool env_on = EnvOn("MTG_BOUNCE_USER_RULE");
+    return heurarm::Flag(heurarm::BOUNCE_USER_RULE, env_on) && KarooTapInResponseOn();
+}
+
+// MTG_HINATA_BOUNCE_RULE -- the USER's Hinata Karoo rule (HinataProvider::BounceUserRulePick; live
+// through HinataProvider::BounceUserRuleActive whatever MTG_BOUNCE_USER_RULE says). DEFAULT ON
+// (2026-10-08): held-out (overnight) vs the tip, Hinata -30 turns over 10,800 games (42 faster / 18
+// slower), its 2HG rows -7 over 400 (4 / 0); every searched slower game recovers at both escalation
+// stages. Read only by that override (and the MTG_BOUNCE_STATS census).
+inline bool HinataBounceRuleOn()
+{
+    static const bool env_on = EnvOn("MTG_HINATA_BOUNCE_RULE", true);
+    return heurarm::Flag(heurarm::HINATA_BOUNCE_RULE, env_on);
+}
+
 inline bool BounceFoldOn()
 {
     static const bool env_on = EnvOn("MTG_BOUNCE_FOLD", true);

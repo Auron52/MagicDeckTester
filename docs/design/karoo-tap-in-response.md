@@ -4,6 +4,9 @@ Status: **ADOPTED 2026-10-08 -- `MTG_BOUNCE_UNTAPPED_FIRST` and `MTG_BOUNCE_SEAR
 first held-out run found one game the ORDER half lost and no budget recovered (the bounce was not
 searched); the USER asked for the bounce to be searched, and the second held-out run (lever + searched
 bounce) clears the bar on every deck. Human play floats the returned land regardless (2026-10-08).
+The USER's Hinata bounce rule (`MTG_HINATA_BOUNCE_RULE`) is ADOPTED (default ON); the USER's base
+bounce default (`MTG_BOUNCE_USER_RULE`) did not clear the held-out bar and ships default OFF, pending
+the user (branch `karoo-user-tapland` holds it ON).
 
 ## What the user asked for
 
@@ -400,8 +403,147 @@ continuation that spends more lands changes the bounce state. Totals barely move
 per tier) because a budgeted search spends what it saves -- 1.7M units now go to lines instead of
 duplicates.
 
+## The USER's bounce default and the Hinata rule (MTG_BOUNCE_USER_RULE, MTG_HINATA_BOUNCE_RULE, 2026-10-08)
+
+**What the user asked for.** *"I guess we should implement some default heuristic for Karoo bounces. We
+don't need to search if there is a tapped land that comes into play untapped"*, refined the same day to
+*"I mean that it doesn't generate colours any other land doesn't"*, with *"we need an exemption for cases
+where the land has an aura on it of course"*, and placed: *"this is for the base provider class. We can
+override it to add more complex rules for other decks."* For Hinata: *"In the Hinata case, I would say you
+are probably pretty happy to remove any come-into-play-untapped land, but starting with the ones that
+produce fewer colours and that you have more of. So if you have 2 islands 1 mountain and 1 forbidden
+orchard, an island would go first"* and *"I meant 1 island and 1 mountain, the mountain would go."*
+
+**What was built.**
+
+* `DecisionProvider::BounceUserRulePick` -- a VIRTUAL hook in the base provider (documented in
+  `DecisionProvider.h`). It receives the board, the controller, the legal returnable lands and the
+  provider's order over them, and returns ONE member of `legal` (returned with no search) or -1. It only
+  restricts and orders; it never invents a land. `BounceUserRuleActive()` (also virtual) says whether
+  the rule is live for that provider. Existing overrides of the bounce surface before this change:
+  **none** (no provider overrode `BounceLandCandidates` or `BounceSearchCandidates`).
+* **The base rule** (`MTG_BOUNCE_USER_RULE`): a returnable land that is (1) TAPPED, (2) re-enters
+  UNTAPPED when replayed on the board the bounce leaves (`BounceReplayEntersUntapped`: a basic; a shock
+  only with the life; a reveal land only with something to reveal; a fastland / checkland / control land
+  only when its condition holds; never a Karoo or a depletion land), and (3) makes no colour that no
+  other land we keep makes (the Karoo included; colourless makes none; a land Aura's added colour counts
+  for the land it is on). Several qualifying: the provider's order decides (identical copies fold). An
+  enchanted land is never the pick. Its pick is the FRONT of `BounceLandCandidates` (the d0 runner, the
+  playout beyond the horizon, the prompt default) and the whole of `BounceSearchCandidates`.
+* **The Hinata override** (`HinataProvider::BounceUserRulePick`, `MTG_HINATA_BOUNCE_RULE`, the user's
+  variant A): among the returnable lands that re-enter untapped -- tapped, or untapped and floatable
+  (its mana floats on the return: `KarooBounceFloatable`, the apply's own predicate) -- never an
+  enchanted one: FEWEST colours, then MOST copies on our battlefield, then the colour the deck needs
+  LESS, then the base order. None qualifies -> the base rule. The "needs less" colour is DERIVED, not
+  hardcoded: coloured pips of every nonland card the controller holds in the game (library, hand,
+  graveyard, staged, suspended, own battlefield). On Hinata2: **W 4, U 34, R 30** -- red is needed less,
+  so a lone Mountain goes before a lone Island, **which matches the user's "the mountain would go"**.
+  (A game that exiles 5+ blue pips for good could flip it; nothing in the list does that in practice.)
+* Tests (`test/unit/test_karoo_bounce_search.cpp`): the base rule (covered Island picked; uncovered
+  colour / tapped re-entry / a fastland both ways; an enchanted Forest with Wild Growth never picked,
+  the Mountain is; an enchanted-only board does not fire; an Aura's colour on a kept Plains covers a
+  Forest), and the Hinata rule (2 Islands + Mountain + Orchard -> Island; 1 Island + 1 Mountain ->
+  Mountain, also with the Mountain untapped; an enchanted Mountain is skipped; Mystic Monastery never
+  qualifies, the Orchard does).
+
+**Measurement.** ONE pooled batch (423 jobs; tip 140,780 games, base rule 140,780, Hinata A 14,250):
+every Karoo deck's smoke + regression rows (train) and overnight rows (held-out), d0 and searched. The
+tip arm reproduced ground truth on **all 140,780 games** (win turn AND game digest). Loss = 9.
+
+Base rule vs the tip, held-out (overnight), per deck:
+
+| deck | games | faster | slower | net | units |
+|---|---|---|---|---|---|
+| creature_giving | 14,000 | 0 | 0 | 0 | 1.0000 |
+| dragons | 14,000 | 0 | 1 (d3) | **+1** | 0.9974 |
+| fungus | 10,800 | 0 | 0 | 0 | 1.0000 |
+| hinata | 10,800 | 0 | 1 (d3) | **+1** | 1.0003 |
+| hinata2hg | 400 | 0 | 0 | 0 | 0.9996 |
+| kitty | 14,000 | 0 | 0 | 0 | 1.0000 |
+| melira | 9,400 | 0 | 0 | 0 | 1.0005 |
+| minotaur | 14,000 | 0 | 0 | 0 | 0.9989 |
+| minotaur2hg | 600 | 0 | 0 | 0 | 1.0033 |
+| mirrorwing | 10,800 | 0 | 1 (d0) | **+1** | 0.9983 |
+| selesnya | 14,000 | 0 | 0 | 0 | 1.0004 |
+
+Train: dragons +1 (smoke d3 s1001 gi195), hinata -1, every other deck 0. **Not one game on held-out got
+faster.** Every slower game was escalated in one pooled batch per kind, both stages
+(`--depth <win turn> --budget-ms 100`, then `--depth 8 --budget-ms 0`): **all four recover at both
+stages** (the rule's arm equals the tip's). Root causes:
+
+* **dragons d3 s7007 gi959 (5 -> 6).** T3 Gruul Turf: the rule returns the tapped Mountain ({R} covered
+  by the Turf); the tip's search returned the untapped Haven of the Spirit Dragon (floating its {C}).
+  Both T4 boards hold 5 mana that casts Scourge of Valkas (Haven's coloured mana pays a Dragon); on the
+  rule's board the d3 / 20 ms search cast Atsushi instead and missed the T5 kill. At 5 / 100 ms and
+  8 / unbounded both arms win T5. Budget churn; the rule's state is not worse (it keeps an untapped land
+  for the rest of the turn).
+* **hinata d3 s4004 gi245 (6 -> 7).** The root T2 choice changed (Forbidden Orchard vs Izzet
+  Boilerworks) because the rule changes the bounces inside the lookahead; nothing the rule picked was
+  ever played. Budget churn: T5 for both arms at both stages.
+* **dragons smoke d3 s1001 gi195 (5 -> 6)**: T5 for both at both stages.
+* **mirrorwing d0 s4004 gi1865 (5 -> 6).** T3 Gruul Turf: the rule returns the Forest; the base ORDER
+  returned Game Trail. The order reads "re-enters untapped" off `enters_tapped` alone, so it ties a
+  reveal land with a basic -- but with no Forest or Mountain in hand Game Trail re-enters TAPPED. The
+  rule's T4 therefore holds one more mana; the d0 runner spent it on Zada + Gold Rush + Fists of Flame +
+  Ignoble Hierarch instead of Mirrorwing Dragon (T6 instead of T5). Searched, both arms win T4. The
+  rule's state is strictly better; the loss is the d0 runner's cast choice.
+
+Census (`MTG_BOUNCE_STATS`, all Karoo rows, both tiers): real-game contested bounces (width 2-3)
+**1,195 -> 1,098 (-8.1%)**; inside the search **4,358,366 -> 4,211,377 (-3.4%)**. The rule decided 7,494
+real bounces and 10.8M searched ones, but mostly where an existing rule already left one candidate
+(search: tapped_clean 6.24M -> 0.37M, replay_fold 4.41M -> 0.06M, identical 2.45M -> 1.97M). 3.39M of its
+10.8M search firings (31%) had more than one distinct qualifying name, so the order decided. Units:
+-0.26% (dragons) to +0.33% (minotaur2hg).
+
+**Base rule verdict: does NOT clear the bar** (dragons, hinata and mirrorwing each +1 on held-out;
+*"+1 is not neutral"*). Not pushed: it is committed on the local branch `karoo-user-tapland` with
+`MTG_BOUNCE_USER_RULE` default ON, and in the pushed tree default OFF (the code ships because the Hinata
+rule falls back to it). No board was found where the rule's choice is worse than the search's: all
+four losses are budget churn or the d0 runner's cast order, and every one recovers. See "Open for the
+USER" for the proposals.
+
+Hinata A vs the tip (and vs the base rule), Hinata rows only:
+
+| rows | tier | games | faster | slower | net | units |
+|---|---|---|---|---|---|---|
+| hinata | held-out | 10,800 | 42 | 18 | **-30** | 0.9820 (searched) |
+| -- of which d0 | held-out | 8,000 | 32 | 13 | -23 | |
+| -- of which searched | held-out | 2,800 | 10 | 5 | -7 | |
+| hinata2hg | held-out | 400 | 4 | 0 | **-7** | 0.9733 |
+| hinata | train | 2,825 | 11 | 3 | -13 | 0.9905 |
+| hinata2hg | train | 225 | 1 | 0 | -1 | 0.9754 |
+
+Against the base rule: hinata -31, hinata2hg -7 (held-out). All 5 searched slower held-out games
+(hinata d3 s6006 gi372, d3 s7007 gi66, d5 s4004 gi16 and gi158, d5 s7007 gi286) recover at both stages;
+so do all 16 d0 slower games (13 held-out, 3 train) when searched.
+
+Census, Hinata rows only (all three tiers; the tip's from a separate Hinata-only census run):
+
+| | tip | Hinata A |
+|---|---|---|
+| real bounces, one-wide | 1,365 of 1,766 (77.3%) | 1,749 of 1,767 (99.0%) |
+| real bounces, contested (2-3 wide) | 401 (259 + 142) | **18** (18 + 0) |
+| searched bounces, contested | 1,300,034 of 4.97M (26.2%) | **29,349** of 4.62M (0.6%) |
+| pinned bounce applies | 732,237 | 276,844 (-62%) |
+
+The rule decided 1,083 real and 4.19M searched bounces, 2.75M of them with more than one qualifying name
+(the ranking chose).
+
+**Hinata A verdict: ADOPTED, `MTG_HINATA_BOUNCE_RULE` default ON** -- both Hinata and its 2HG rows net
+<= 0 on held-out (-30, -7) and every slower game recovers. Live through
+`HinataProvider::BounceUserRuleActive` whatever the base default says.
+
 ## Open for the USER
 
+* **The base bounce default (`MTG_BOUNCE_USER_RULE`) is NOT adopted -- your call.** Held-out: +1 each on
+  dragons, hinata and mirrorwing, 0 elsewhere, and no game faster anywhere. All four slower games
+  recover when escalated and none is a board where the rule's choice is worse (three budget churn, one
+  d0 cast-order miss after the rule gave the runner MORE mana). Options: (a) adopt it as is on your
+  word; (b) leave it OFF -- the narrowing it adds over the existing rules is small (-8.1% contested real
+  bounces, -3.4% in the search); (c) the amendment the Mirrorwing game points at: let the provider's
+  ORDER use the same re-entry predicate (`BounceReplayEntersUntapped`) instead of `enters_tapped`
+  alone, so a reveal land with nothing to reveal stops tying with a basic -- a correctness fix to the
+  order the d0 runner and the playouts already use, measured on its own. The branch keeps the rule ON.
 * ~~Adopt?~~ Adopted with the searched bounce (above).
 * The Hinata 2HG rows alone net +6 over 400 held-out games (all budget churn); Hinata as a deck nets
   -412. Counted as one deck here, as run #1 did -- say if 2HG should be judged as its own deck.

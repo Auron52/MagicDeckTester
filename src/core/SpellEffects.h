@@ -27583,41 +27583,59 @@ inline thread_local BounceProbe g_bounce_probe;
 // was when it emitted (its sizing is an upper bound; the gap is what the post-apply dedup absorbs).
 namespace bouncestats
 {
+// Every counter is split by ARM -- bit 0 when the USER's bounce default (MTG_BOUNCE_USER_RULE) is on for
+// the job that counted it, bit 1 when the Hinata rule (MTG_HINATA_BOUNCE_RULE; live only in a Hinata
+// deck) is on -- so one pooled A/B batch reports the before/after census.
 inline bool Enabled() { static const bool on = EnvOn("MTG_BOUNCE_STATS"); return on; }
-inline std::atomic<unsigned long long> g_real[5]{}, g_search[5]{}, g_rule_real[8]{}, g_rule_search[8]{},
-                                       g_emit[5]{}, g_pinned{0}, g_clamped{0},
-                                       g_folded{0}, g_fold_ok{0}, g_fold_bad{0};
+inline int Arm() { return (BounceUserRuleOn() ? 1 : 0) + (HinataBounceRuleOn() ? 2 : 0); }
+using Ctr = std::atomic<unsigned long long>;
+inline Ctr g_real[4][5]{}, g_search[4][5]{}, g_rule_real[4][8]{}, g_rule_search[4][8]{}, g_emit[4][5]{},
+           g_pinned[4]{}, g_clamped[4]{}, g_folded[4]{}, g_user_multi[4]{}, g_fold_ok{0}, g_fold_bad{0};
+inline void Add(Ctr& c) { c.fetch_add(1, std::memory_order_relaxed); }
 inline void Record(std::size_t n, int rule, bool real)
 {
+    const int a = Arm();
     const std::size_t b = n >= 4 ? 4 : n;
-    (real ? g_real : g_search)[b].fetch_add(1, std::memory_order_relaxed);
-    if (rule >= 0 && rule < 8) { (real ? g_rule_real : g_rule_search)[rule].fetch_add(1, std::memory_order_relaxed); }
+    Add((real ? g_real : g_search)[a][b]);
+    if (rule >= 0 && rule < 8) { Add((real ? g_rule_real : g_rule_search)[a][rule]); }
 }
-inline void RecordEmit(std::size_t width)
-{ g_emit[width >= 4 ? 4 : width].fetch_add(1, std::memory_order_relaxed); }
+inline void RecordEmit(std::size_t width) { Add(g_emit[Arm()][width >= 4 ? 4 : width]); }
+inline void Pinned()    { Add(g_pinned[Arm()]); }
+inline void Clamped()   { Add(g_clamped[Arm()]); }
+inline void Folded()    { Add(g_folded[Arm()]); }
+inline void UserMulti() { Add(g_user_multi[Arm()]); }
 struct Dump
 {
     ~Dump()
     {
         if (!Enabled()) { return; }
-        auto row = [](const char* tag, std::atomic<unsigned long long>* h) {
-            std::fprintf(stderr, "[bounce-stats] %-7s width 1=%llu 2=%llu 3=%llu 4+=%llu\n", tag,
-                         h[1].load(), h[2].load(), h[3].load(), h[4].load());
-        };
-        auto rules = [](const char* tag, std::atomic<unsigned long long>* r) {
-            std::fprintf(stderr, "[bounce-stats] %-7s rule only=%llu tapped_clean=%llu identical=%llu"
-                         " replay_fold=%llu dominated=%llu contested=%llu unpruned=%llu\n", tag,
-                         r[0].load(), r[1].load(), r[2].load(), r[3].load(), r[4].load(), r[5].load(),
-                         r[6].load());
-        };
-        row("real", g_real);     rules("real", g_rule_real);
-        row("search", g_search); rules("search", g_rule_search);
-        std::fprintf(stderr, "[bounce-stats] emitted fan width 1=%llu 2=%llu 3=%llu 4+=%llu\n",
-                     g_emit[1].load(), g_emit[2].load(), g_emit[3].load(), g_emit[4].load());
-        std::fprintf(stderr, "[bounce-stats] pinned bounces=%llu, of which clamped (index past the "
-                     "resolution set: an inert variant)=%llu\n", g_pinned.load(), g_clamped.load());
-        std::fprintf(stderr, "[bounce-stats] folded before apply (MTG_BOUNCE_FOLD)=%llu; verify ok=%llu bad=%llu\n",
-                     g_folded.load(), g_fold_ok.load(), g_fold_bad.load());
+        for (int a = 0; a < 4; ++a)
+        {
+            unsigned long long any = g_pinned[a].load() + g_folded[a].load();
+            for (int k = 0; k < 5; ++k) { any += g_real[a][k].load() + g_search[a][k].load() + g_emit[a][k].load(); }
+            if (any == 0) { continue; }
+            const char* arm = a == 3 ? "user+hinata" : a == 2 ? "hinata-rule" : a == 1 ? "user-rule" : "base";
+            auto row = [&](const char* tag, Ctr* h) {
+                std::fprintf(stderr, "[bounce-stats] %s %-7s width 1=%llu 2=%llu 3=%llu 4+=%llu\n", arm, tag,
+                             h[1].load(), h[2].load(), h[3].load(), h[4].load());
+            };
+            auto rules = [&](const char* tag, Ctr* r) {
+                std::fprintf(stderr, "[bounce-stats] %s %-7s rule only=%llu tapped_clean=%llu identical=%llu"
+                             " replay_fold=%llu dominated=%llu contested=%llu unpruned=%llu user_rule=%llu\n",
+                             arm, tag, r[0].load(), r[1].load(), r[2].load(), r[3].load(), r[4].load(),
+                             r[5].load(), r[6].load(), r[7].load());
+            };
+            row("real", g_real[a]);     rules("real", g_rule_real[a]);
+            row("search", g_search[a]); rules("search", g_rule_search[a]);
+            std::fprintf(stderr, "[bounce-stats] %s emitted fan width 1=%llu 2=%llu 3=%llu 4+=%llu\n", arm,
+                         g_emit[a][1].load(), g_emit[a][2].load(), g_emit[a][3].load(), g_emit[a][4].load());
+            std::fprintf(stderr, "[bounce-stats] %s pinned bounces=%llu, of which clamped (index past the "
+                         "resolution set: an inert variant)=%llu; folded before apply=%llu; user rule with "
+                         "more than one qualifying name=%llu\n", arm, g_pinned[a].load(), g_clamped[a].load(),
+                         g_folded[a].load(), g_user_multi[a].load());
+        }
+        if (g_fold_ok.load() + g_fold_bad.load() > 0)
+        { std::fprintf(stderr, "[bounce-stats] fold verify ok=%llu bad=%llu\n", g_fold_ok.load(), g_fold_bad.load()); }
     }
 };
 inline Dump g_dump;

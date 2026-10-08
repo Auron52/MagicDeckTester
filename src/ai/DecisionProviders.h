@@ -965,6 +965,18 @@ public:
     // either (overnight makespan 68s vs 69s). A train-only delta of that size is what a selection
     // artifact looks like, so there is nothing to adopt. (Both seed sets DO agree Hinata dislikes a
     // WIDE width -- w12 is its worst arm on each -- so if the base ever moves, it must not move up.)
+
+    // THE USER'S HINATA KAROO RULE (MTG_HINATA_BOUNCE_RULE; USER 2026-10-08): "In the Hinata case, I
+    // would say you are probably pretty happy to remove any come-into-play-untapped land, but starting
+    // with the ones that produce fewer colours and that you have more of. So if you have 2 islands 1
+    // mountain and 1 forbidden orchard, an island would go first." + "I meant 1 island and 1 mountain,
+    // the mountain would go." Among the returnable lands that RE-ENTER UNTAPPED (tapped, or untapped
+    // and floatable -- its mana floats on the return), never an enchanted one: FEWEST colours, then
+    // MOST copies on our battlefield, then the colour the deck's spells need LESS (pip counts from the
+    // deck; Mountain before Island on this list), then the base order. None qualifies -> the base rule.
+    bool BounceUserRuleActive() const override;
+    int BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
+                           const std::vector<int>& order, int* qualifying_names = nullptr) const override;
 };
 
 // Dragonstorm (mono-red ritual-storm combo): a {8}{R} Storm sorcery puts min(storm+1, Dragons

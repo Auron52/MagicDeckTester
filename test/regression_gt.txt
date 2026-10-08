@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b1a5d710  date 2026-10-08
+# Regression ground truth -- commit 2035c006  date 2026-10-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -6,6 +6,9 @@
 # accepted-with-regressions (smoke, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
 # accepted-with-regressions (regression, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
 # accepted-with-regressions (overnight, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
+# accepted-with-regressions (overnight, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (5 searched, 13 d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
+# accepted-with-regressions (smoke, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (searched + d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
+# accepted-with-regressions (regression, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (searched + d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -34,9 +37,9 @@ whiteknights_smoke_d5_s1001=4.1467/be2f0e7be56975f6
 antilife_smoke_d0_s1001=4.8930/ea45a9ecc08bd11a
 antilife_smoke_d3_s1001=4.1880/83bca8fcf408e681
 antilife_smoke_d5_s1001=4.1800/98f08878a259d50a
-hinata_smoke_d0_s1001=6.9170/6b8989e51bdac033
-hinata_smoke_d3_s1001=5.6733/86e0063fd7282883
-hinata_smoke_d5_s1001=5.8133/5d5ddef97f32a267
+hinata_smoke_d0_s1001=6.9070/0b9a84c854d504a4
+hinata_smoke_d3_s1001=5.6600/e7665e5c12cf89e0
+hinata_smoke_d5_s1001=5.8133/23503120ce3361bf
 dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
 dragonstorm_smoke_d3_s1001=4.5533/20845bbf0f586889
 dragonstorm_smoke_d5_s1001=4.5200/db5874513c4b01f3
@@ -82,7 +85,7 @@ melira_smoke_d5_s1001=4.7200/0ae9eef65f5bc091
 angels_smoke_d0_s1001=5.2460/d6c99fee478865cc
 angels_smoke_d3_s1001=4.6720/0408f2acbc589626
 angels_smoke_d5_s1001=4.6267/4939c25a07901df7
-hinata2hg_smoke_d3_s1001=5.6133/c6dc4a1f6b7cf146
+hinata2hg_smoke_d3_s1001=5.6133/8a056c86cd40e3f9
 antilife2hg_smoke_d3_s1001=3.9700/8a6d41d530e7abd3
 minotaur2hg_smoke_d3_s1001=5.3500/6864ca4d91aab3f6
 goblins2hg_smoke_d3_s1001=4.0400/3c28068e1afacb63
@@ -170,11 +173,11 @@ antilife_regression_d3_s2002=4.2833/12a5d791d3ac66b6
 antilife_regression_d3_s3003=4.2000/5d7d477c2ef963dc
 antilife_regression_d5_s2002=4.3000/230b712d1d37d360
 antilife_regression_d5_s3003=4.1880/d9126d2dff28af48
-hinata_regression_d0_s2002=6.9720/239db94be9c40f7f
-hinata_regression_d3_s2002=5.6250/ed5f2508e5a46f3c
-hinata_regression_d3_s3003=5.6550/fcd9dcf3b88eaea8
-hinata_regression_d5_s2002=5.7000/58ba1a3d4eef3162
-hinata_regression_d5_s3003=5.6300/48e99dd9f27c72bf
+hinata_regression_d0_s2002=6.9730/494a37b91756efe7
+hinata_regression_d3_s2002=5.6250/b542f85aceb11a41
+hinata_regression_d3_s3003=5.6500/05537c5c9ea05eb9
+hinata_regression_d5_s2002=5.6900/c472f840bb79a126
+hinata_regression_d5_s3003=5.6300/ff12a1d1dd43be2a
 dragonstorm_regression_d0_s2002=5.4690/7201ed24da535e71
 dragonstorm_regression_d3_s2002=4.3533/959e97bdac31da3d
 dragonstorm_regression_d3_s3003=4.5233/77115c9bf80f74cd
@@ -250,8 +253,8 @@ angels_regression_d3_s2002=4.6200/5dd892343736454c
 angels_regression_d3_s3003=4.7367/e2c25a7870704927
 angels_regression_d5_s2002=4.6200/22a4bc995a628d0f
 angels_regression_d5_s3003=4.7240/75d0f99274081305
-hinata2hg_regression_d3_s2002=5.5100/d0bb2fda2a30dfe1
-hinata2hg_regression_d5_s2002=5.4800/403d0eefc08d7acc
+hinata2hg_regression_d3_s2002=5.5000/886b06c5d3aa0b0b
+hinata2hg_regression_d5_s2002=5.4800/1a16475a1db8a485
 antilife2hg_regression_d3_s2002=4.3267/87e3f827783416a5
 minotaur2hg_regression_d3_s2002=5.3867/844738798ed3e1b8
 goblins2hg_regression_d3_s2002=4.1500/5387aa7a74cf6303
@@ -382,18 +385,18 @@ antilife_overnight_d5_s4004=4.2090/ea339390dedd4f82
 antilife_overnight_d5_s5005=4.2490/6c804ff11ef89e54
 antilife_overnight_d5_s6006=4.2090/dbc1fd80cee3b33b
 antilife_overnight_d5_s7007=4.1750/534d0a89f57979d2
-hinata_overnight_d0_s4004=6.9800/557e06a042c307d9
-hinata_overnight_d0_s6006=6.9280/aa3cda7b98b0550e
-hinata_overnight_d0_s8008=6.9600/b9fb245d7c0ef478
-hinata_overnight_d0_s10010=6.9205/02dedf9dd5b3a7c3
-hinata_overnight_d3_s4004=5.7075/8a2a7e1cbb1c32c6
-hinata_overnight_d3_s5005=5.6600/daceb42f0e9e9531
-hinata_overnight_d3_s6006=5.7325/d902ffb561b29ac8
-hinata_overnight_d3_s7007=5.7025/575cce331355a314
-hinata_overnight_d5_s4004=5.7033/b9bd63df03b2bed5
-hinata_overnight_d5_s5005=5.6600/5982591ec0362775
-hinata_overnight_d5_s6006=5.7833/e2cbf647ccc23975
-hinata_overnight_d5_s7007=5.7033/53fbf88a83e466bb
+hinata_overnight_d0_s4004=6.9760/4f93941cd1e66ad6
+hinata_overnight_d0_s6006=6.9250/00cdb1f9a7e7288f
+hinata_overnight_d0_s8008=6.9575/d23dac7b7ee20454
+hinata_overnight_d0_s10010=6.9185/bb35f13970953082
+hinata_overnight_d3_s4004=5.7050/31220adec346d70f
+hinata_overnight_d3_s5005=5.6600/a14ec9a07addb843
+hinata_overnight_d3_s6006=5.7325/c2f6bc09915a77bf
+hinata_overnight_d3_s7007=5.7000/5a476cec646ec3b4
+hinata_overnight_d5_s4004=5.7100/279e29dd2e5d4350
+hinata_overnight_d5_s5005=5.6433/8f1e0bb5f287462e
+hinata_overnight_d5_s6006=5.7833/f9d3364b1f334984
+hinata_overnight_d5_s7007=5.6967/93be1e9677d8d4a8
 dragonstorm_overnight_d0_s4004=5.4135/0ef5500e4b036bfe
 dragonstorm_overnight_d0_s6006=5.5380/58a7e78976e59fe8
 dragonstorm_overnight_d0_s8008=5.4145/38225a91963d2a9f
@@ -634,10 +637,10 @@ giants_overnight_d5_s4004=5.7160/ab3ad6ae5b905eee
 giants_overnight_d5_s5005=5.5680/0439500eeb34c543
 giants_overnight_d5_s6006=5.6680/832434d594e9c231
 giants_overnight_d5_s7007=5.6340/7ee6b388de031e61
-hinata2hg_overnight_d5_s4004=5.5200/25ba0befc0068890
-hinata2hg_overnight_d5_s5005=5.4300/afc6e970f06aec20
-hinata2hg_overnight_d5_s6006=5.7600/2cff26da5834b90d
-hinata2hg_overnight_d5_s7007=5.6900/afe3b54b63ab5cda
+hinata2hg_overnight_d5_s4004=5.4900/6d07a2e44950a67f
+hinata2hg_overnight_d5_s5005=5.4200/698f4b7875eecace
+hinata2hg_overnight_d5_s6006=5.7500/ee4955687094e597
+hinata2hg_overnight_d5_s7007=5.6700/554d22eb79ce8935
 antilife2hg_overnight_d5_s4004=4.1700/571945a8a3ce279a
 antilife2hg_overnight_d5_s5005=4.2200/91e6f1aa8cb76200
 antilife2hg_overnight_d5_s6006=4.1033/330ff6479497ad54

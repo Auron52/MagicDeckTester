@@ -56588,7 +56588,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (bounce_fold.verify) { bounce_expect = bounce_fold.KeyOf(p); }
             else
             {
-                bouncestats::g_folded.fetch_add(1, std::memory_order_relaxed);
+                bouncestats::Folded();
                 if (rec_vals) { node_vals.push_back(max_turns + 1); }
                 if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
                 FswDeclinedTrace(state, depth, p, "bounce-fold", {}, state, -1, best.win_turn);
@@ -61880,7 +61880,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (bounce_fold.verify) { bounce_expect = bounce_fold.KeyOf(plan); }
                     else
                     {
-                        bouncestats::g_folded.fetch_add(1, std::memory_order_relaxed);
+                        bouncestats::Folded();
                         if (bp_nobp.count(static_cast<std::size_t>(sib)) != 0)
                         { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
                         ++candidates_done;
