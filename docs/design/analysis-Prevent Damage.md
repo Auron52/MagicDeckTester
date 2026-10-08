@@ -1462,6 +1462,8 @@ the inert PARTIALs above (D10).
   the new deck in the regression test until it is optimized, but we can continue that when I get to it."*
   The deck stays OUT of all three tiers until the performance work (D1) brings it inside the 3x cost
   rule; the route for that optimisation (D1 options) is still open for the user's review.
+  **RESOLVED 2026-10-08:** the deck is inside the 3x rule (see "## Suite admission" at the end) and is now
+  in all three tiers with accepted GT. D1 is moot.
 
 ## Living Wish ranking (user doctrine 2026-09-29)
 
@@ -1840,3 +1842,58 @@ auto-tapped replay of the same plan now reproduces the user's line (opp 3 / us 1
 
 **USER DECISION (surfaced, default taken = ON):** keep `MTG_PD_PAIN_DEFER` on. It is a payment rule (the
 standing mana-payment exemption), dominant per payment by construction, net faster on both cells.
+
+## Suite admission (2026-10-08) -- the 3x rule PASSES; all three tiers + GT added
+
+USER: "Let's take a look at optimizing Prevent Damage." Scratch: `logs/pd_opt/` (gitignored).
+
+**The gate, measured fairly.** `test/suite_cost.json` was partly stale: Soldiers' 3,078 ms/game and
+Selesnya's 1,844 were measured BEFORE their value leaf / keep table (both adopted since), and every
+cached entry predates the PGO binary. So PD was measured in ONE pooled `--batch` (PGO at HEAD
+`b1a5d710`, 20 threads) together with every searched regression case of all 28 decks that ship both
+artifacts. The box carried ~20-25 cores of EXTERNAL load (load avg ~44), so every deck ran ~2x its cached
+cost -- only the RATIOS are quoted:
+
+| deck | worst searched case | ms/game in the batch | cached |
+|---|---|---|---|
+| **pd** | d5 b20 s3003 | **3,092** | -- |
+| hinata (costliest both-artifact deck in the batch) | d3 s3003 | 2,328 | 594.6 |
+| fivecolour | 2HG d3 s2002 | 1,690 | 1,033.5 |
+| melira | d5 s2002 | 1,170 | 578.5 |
+| selesnya | d3 s2002 | 318 | 1,843.6 (pre-keep-table) |
+| soldiers | d3 s3003 | 173 | 3,077.8 (pre-leaf, pre-table) |
+
+**PD = 1.33x hinata, 1.83x fivecolour -> inside 3x on either yardstick.** (Down from 3.8x on 09-29: the
+keep rule, name-dedupe bottoming, the Quake / Wish / Zenith narrowing, and PGO.) Hinata reads 3.9x its
+cached cost against ~2x for the rest -- two 34-41 s SLOW-GAMEs at d3 s3003; worth a look by whoever owns
+it. The cached yardstick is now soldiers' stale 3,078, which inflates the 3x budget to 9,233 ms/game for
+every deck that consults it (Bruna's re-admission among them) -- refresh with `suite_gate.py
+--measure-all` on a quiet box.
+
+**Rows added** (`test/regression_cases.sh`, keys `pd` / `pd2hg`): the P9 counts; overnight at the 2x gate
+budgets the other decks use (d3 b20 / d5 b40). Makespans filtered to PD: smoke 15 s, regression 31 s,
+overnight 104 s (~37 core-min). All three tiers clean; 556 references replay with 0 drift / 0 diverged /
+0 enum-gap; 26 keys accepted, `check_gt_logs.py` consistent. `suite_gate --cost` records 3,649 ms/game
+(the tier's own 25-game d5 s2002, same loaded box).
+
+**Where the cost is now** (`MTG_TURN_CENSUS` + `MTG_BF_CENSUS` + `MTG_DEDUP_CENSUS`, 300 games d5 b20,
+seeds 930000.., 20 single-threaded processes; 8,243 decisions, 32.6M units):
+- **Clairvoyant London bottoming = 44.7% of units** (6,688 bottom decisions, 22/game, mean 2,176 units
+  against the 900-unit budget -- the id ladder's depth-1 floor; 20% of these units are overrun-aborted
+  passes the anytime rescue then commits). The exhaustive keep/bottom table replaces all of it.
+- **Real play = 55.3%** (1,555 decisions, 5.2/game, mean 11,589 units, 18% over the 18k budget):
+  `rollout_step` 30.5% + `greedy_fallback` 29.7% (the horizon rollout the value leaf replaces) + `la_cand`
+  32.4% + `la_bp_wave` 6.1%.
+- **Width: Beseech the Queen is in ~44% of all scored candidates** (`bf_action`), then Rolling Earthquake
+  13%, Dina 12%, GSZ 10%. Chosen-X share 25.5% (Earthquake 97k, GSZ 80k). A T4 decision dump (s930065,
+  252k units = 14x budget) shows the shape: 136 plans = 4 land drops x Beseech's twobrid variants
+  (k=1/k=2) x ~18 library names.
+- **Post-apply duplicates: 41-42% of scored candidates** reach a state a sibling already reached
+  (`dedup_dup / dedup_seen`), 99% of them copy permutations, `nodrop`, non-bp. BUT `MTG_CAND_DEDUP`
+  (skip the duplicate's rollout) is INERT here -- measured, 500 paired games d5 b20 (s95001/s96001 x200,
+  2HG s97001 x100, two concurrent processes): **1 game moved (better), units -1.1%, CPU +1.8%**. The
+  duplicates' rollouts are already served by the transposition table, so no lever there.
+
+**Next (pipeline order):** claude-play re-sweep on HEAD (the recorded one predates every sweep fix and
+§5i) -> value leaf -> keep table. The Beseech axis is the remaining width lever; a doctrine is the
+USER's (see "Search width: the Beseech axis" below once measured).

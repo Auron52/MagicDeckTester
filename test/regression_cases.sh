@@ -59,6 +59,7 @@ declare -A DECK_FILE=(
   [pirates]=decks/Pirates/Pirates.cod
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
   [soldiers]=decks/Soldiers/soldiers.cod
+  [pd]="decks/Prevent Damage/Prevent Damage.cod"
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
@@ -91,6 +92,7 @@ declare -A DECK_PROF=(
   [pirates]=decks/Pirates/Pirates.profile.json
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
   [soldiers]=decks/Soldiers/soldiers.profile.json
+  [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -361,6 +363,9 @@ SMOKE_CASES=(
   "melira2hg          3 1001 25 10"
   "pirates2hg         3 1001 50 10"
   "soldiers2hg        3 1001 50 10"
+  # pd2hg: a RELEVANT deck, not a canary -- Dina ("each opponent loses 1"), Rolling Earthquake /
+  # Pyrohemia ("each player") and Vito ("target opponent") all read heads / life. See the pd rows.
+  "pd2hg              3 1001 15 10"
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
   # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
@@ -412,6 +417,21 @@ SMOKE_CASES=(
   "soldiers 0 1001 1000 0"
   "soldiers 3 1001  150 10"
   "soldiers 5 1001   75 20"
+  # pd (Prevent Damage): Tamanoa / Rhox Faithmender turn Manabarbs, Spellshock, painland and sweeper
+  # self-damage into lifegain; Vito / Dina turn the lifegain into the drain. Tutors (Beseech, Living
+  # Wish into a 15-card sideboard, Green Sun's Zenith) make it the widest searched menu in the repo.
+  # ADDED 2026-10-08 (analysis-Prevent Damage.md, "Suite admission"): kept OUT of all three tiers
+  # until it fit the 3x rule (USER 2026-09-28). Measured 2026-10-08 in ONE pooled batch with every
+  # searched regression case of every both-artifact deck (PGO binary, 20 threads, an externally
+  # loaded box -- every deck ran ~2x its cached cost, so only the RATIO is quoted): worst PD case d5
+  # b20 s3003 3,092 ms/game vs hinata 2,328 (the batch's costliest both-artifact deck) = 1.33x,
+  # fivecolour 1,690 = 1.83x. Per-game ~2.5 s d3 b10 / ~3.1 s d5 b20 in that batch, so the counts
+  # are the ledger's P9 shape (small d5 counts: a 30 s SLOW-GAME at d3 is possible). Pre value leaf
+  # and pre keep table: clairvoyant bottoming is ~45% of its search units, so GT WILL move when the
+  # artifacts land.
+  "pd 0 1001 1000 0"
+  "pd 3 1001   25 10"
+  "pd 5 1001   15 20"
   # bruna: REMOVED FROM ALL THREE TIERS 2026-10-06 (USER: "Yes, we should take Bruna out.") -- it fails
   # the 3x suite-cost rule (CLAUDE.md): ~3.9 s/game after the Glittering Wish sideboard widened from 4 to
   # 11 names, against a 3.10 s budget (3x fivecolour), and it was 35% of the overnight tier's work units.
@@ -629,6 +649,8 @@ REGRESSION_CASES=(
   "fluctuator2hg 3 2002  100 10"
   # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
   "angels2hg     3 2002  150 10"
+  # pd2hg: see the pd SMOKE block (a 2HG-relevant deck).
+  "pd2hg         3 2002   25 10"
   # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
   "fluctuator 0 2002 1000 0"
   "fluctuator 3 2002  150 10"
@@ -663,6 +685,12 @@ REGRESSION_CASES=(
   "soldiers 3 3003  150 10"
   "soldiers 5 2002   75 20"
   "soldiers 5 3003   75 20"
+  # pd: see the SMOKE block. These are the GATED cells (worst searched case d5 b20 s3003).
+  "pd 0 2002 1000 0"
+  "pd 3 2002   40 10"
+  "pd 3 3003   40 10"
+  "pd 5 2002   25 20"
+  "pd 5 3003   25 20"
   # bruna: removed 2026-10-06, see the SMOKE block.
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
@@ -1080,6 +1108,20 @@ OVERNIGHT_CASES=(
   "soldiers 5 5005  500 40"
   "soldiers 5 6006  500 40"
   "soldiers 5 7007  500 40"
+  # pd: see the SMOKE block. The ledger's P9 counts at the overnight convention's 2x gate budgets
+  # (d3 b20, d5 b40), ~1 core-h on a quiet box.
+  "pd 0  4004 2000 0"
+  "pd 0  6006 2000 0"
+  "pd 0  8008 2000 0"
+  "pd 0 10010 2000 0"
+  "pd 3 4004  100 20"
+  "pd 3 5005  100 20"
+  "pd 3 6006  100 20"
+  "pd 3 7007  100 20"
+  "pd 5 4004   75 40"
+  "pd 5 5005   75 40"
+  "pd 5 6006   75 40"
+  "pd 5 7007   75 40"
   # bruna: removed 2026-10-06, see the SMOKE block.
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
@@ -1146,6 +1188,11 @@ OVERNIGHT_CASES=(
   "pirates2hg    5 5005 150 40"
   "pirates2hg    5 6006 150 40"
   "pirates2hg    5 7007 150 40"
+  # pd2hg: 2/3 of the deck's own 75-game d5 rows (it reads heads/life -- see the pd SMOKE block), b40.
+  "pd2hg         5 4004  50 40"
+  "pd2hg         5 5005  50 40"
+  "pd2hg         5 6006  50 40"
+  "pd2hg         5 7007  50 40"
   # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
   # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule

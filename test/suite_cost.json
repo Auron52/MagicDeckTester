@@ -170,6 +170,14 @@
    "total_core_ms": 91040,
    "worst_case": "mirrorwing_regression_d5_s2002"
   },
+  "pd": {
+   "cost_per_game_ms": 3649.48,
+   "jobs": 6,
+   "key": "pd",
+   "tier": "regression",
+   "total_core_ms": 420153,
+   "worst_case": "pd_regression_d5_s2002"
+  },
   "selesnya": {
    "cost_per_game_ms": 1843.64,
    "jobs": 5,
