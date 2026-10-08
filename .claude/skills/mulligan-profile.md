@@ -552,6 +552,14 @@ high R → clairvoyance (acceptable); if blind-*worse* → R-noise (raise R).
 ## Adoption
 
 - **Keep:** presence-gated — it takes effect the moment the profile ships. No flag.
+- **The GT move, per game:** adopting a table changes hundreds of suite games, and every one still needs
+  a verdict before `--accept`. Run `python3 test/keep_adoption_attribution.py <mode> <deck-key>` after
+  each tier (from the repo root, before `--accept`). It replays the deck's cases with the run's own
+  binary, table off (or `--old-profile` for a regeneration) and on, proves each side reproduces its
+  baseline, and classifies every changed game: a different mulligan count, a different bottom, or
+  digest-only (the bottomed cards' ORDER, play identical). Anything else is UNEXPLAINED — the table
+  leaked into play — and it exits 1. SelesnyaLifegain 2026-10-08, regression tier: 851 changed games =
+  636 mulligan count + 206 bottom + 9 order-only, 0 unexplained.
 - **Bottoming:** always on (generation bakes `bottoming_enabled=true`; no off switch). It ships with the
   profile; confirm it with the confounded A/B (`MTG_CONFOUND_BOTTOM`, `KM_MODE=bottom`) as a sanity check,
   not a gate. A failure means fix the heuristic / raise R, not disable bottoming.
