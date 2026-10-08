@@ -21,6 +21,7 @@
 #include <mutex>
 #include <ostream>
 #include <set>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -2313,6 +2314,61 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // reads as); a retained resume declares a new id for itself with a `prov` line and sets this, so
     // replaying the log can always tell which engine produced which cell-side.
     int journal_prov = 0;
+    // DURABLE APPEND (2026-10-07). Every journal write goes through journal_emit_locked (caller holds
+    // journal_mtx). The stream used to be written and flushed with no error check, so the FIRST failed
+    // write set badbit and every later record -- and every later auto-backup -- silently went nowhere for
+    // the rest of the run. That is exactly what happened when the repo's 9p mount dropped mid-generation
+    // (SelesnyaLifegain, 2026-10-07 21:09Z): the process computed on for an hour with nothing banked.
+    // Now a record that cannot be confirmed on disk is HELD in memory (journal_pending) and the journal is
+    // reopened in append mode at most every 30 s; on recovery a newline terminates any record the failure
+    // cut mid-line (the replay skips an unparsable or empty line) and every held record is written in
+    // order. A record that reached the file before the failure may be written twice (the close before a
+    // reopen also drains whatever the failed stream still buffered); replay is idempotent on that
+    // (highest n wins, a terminal record locks its cell-side). Tested 2026-10-08 with an RLIMIT_FSIZE cap
+    // lifted mid-run: one cut line + one blank line, every other record identical to an uninterrupted
+    // run, and the resume reloaded every cell-side. In normal operation the
+    // bytes written are exactly what the stream wrote before (same precision, same order).
+    std::string journal_pending;
+    bool        journal_failed = false;
+    std::chrono::steady_clock::time_point journal_retry_last{};
+    auto journal_emit_locked = [&](const std::string& rec) -> bool
+    {
+        journal_pending += rec;
+        const auto now = std::chrono::steady_clock::now();
+        if (journal_failed)
+        {
+            if (now - journal_retry_last < std::chrono::seconds(30)) { return false; }
+            journal_retry_last = now;
+            journal_f.close(); journal_f.clear();
+            journal_f.open(journal_path, std::ios::out | std::ios::app);
+            if (!journal_f.is_open()) { journal_f.clear(); return false; }
+            journal_f << std::setprecision(17);
+            journal_f << "\n";   // end a record the failure may have cut mid-line
+        }
+        journal_f << journal_pending;
+        journal_f.flush();
+        if (!journal_f.good())
+        {
+            if (!journal_failed)
+            {
+                journal_retry_last = now;
+                std::cerr << "[keepgen] JOURNAL WRITE FAILED on " << journal_path << " -- holding records in"
+                             " memory and retrying every 30 s. Work since the last good write is NOT on disk"
+                             " until this recovers.\n" << std::flush;
+            }
+            journal_failed = true;
+            return false;
+        }
+        if (journal_failed)
+        {
+            std::cerr << "[keepgen] journal RECOVERED: wrote " << journal_pending.size()
+                      << " held bytes to " << journal_path << "\n" << std::flush;
+            journal_failed = false;
+        }
+        journal_pending.clear();
+        gen_prog.note_journal_write();
+        return true;
+    };
     // Refs fixed from the complete floor, restored on resume so the run is byte-identical (compute_refs
     // must see the r0-floor snapshot, not the current cnt): persisted in the REFS record and reloaded.
     bool refs_loaded = false;
@@ -2358,22 +2414,25 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     {
         if (!journal_on) { return; }
         std::lock_guard<std::mutex> lk(journal_mtx);
-        if (!journal_f.is_open()) { return; }
-        journal_f << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
-                  << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f;
+        if (!journal_f.is_open() && !journal_failed) { return; }
+        // Built as a string (same precision 17 the stream carries), then handed to the durable emit.
+        std::ostringstream jr;
+        jr << std::setprecision(17);
+        jr << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
+           << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f;
         // Only a mixed run pays the bytes: id 0 is the default on read, so an ordinary journal is
         // byte-identical to what it was before provenance existed.
-        if (journal_prov != 0) { journal_f << ",\"g\":" << journal_prov; }
-        if (fn > 0) { journal_f << ",\"fs\":" << fs << ",\"fq\":" << fq << ",\"fn\":" << fn; }
+        if (journal_prov != 0) { jr << ",\"g\":" << journal_prov; }
+        if (fn > 0) { jr << ",\"fs\":" << fs << ",\"fq\":" << fq << ",\"fn\":" << fn; }
         if (sv != nullptr && !sv->empty())
         {
-            journal_f << ",\"sv\":[";
-            for (std::size_t z = 0; z < sv->size(); ++z) { if (z) { journal_f << ","; } journal_f << (*sv)[z]; }
-            journal_f << "]";
+            jr << ",\"sv\":[";
+            for (std::size_t z = 0; z < sv->size(); ++z) { if (z) { jr << ","; } jr << (*sv)[z]; }
+            jr << "]";
         }
-        journal_f << "}\n";
-        journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
-        gen_prog.note_journal_write();
+        jr << "}\n";
+        // flush inside -> the OS page cache, so a process kill (not power loss) keeps it
+        if (!journal_emit_locked(jr.str())) { return; }   // held; no backup of a journal we cannot write
         // ---- AUTOMATIC ROLLING BACKUP (MTG_JOURNAL_BACKUP_S, default 900s; 0 disables) ------------
         // USER DIRECTIVE 2026-10-02, after a 350 MB / 5.58M-record journal -- days of compute -- was
         // destroyed: *"We need automatic updates ... Disk space is cheap. Losing work like this is
@@ -3054,7 +3113,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         root["sizes"] = sizes;
         const std::string tmp = path + ".tmp";
-        { std::ofstream f(tmp); if (!f) { return false; } f << root.dump(); if (!f) { return false; } }
+        // Checked AFTER close: an ofstream buffers, so a failed write can surface only when the buffer
+        // drains at flush/close -- the old `if (!f)` straight after `<<` could pass a file the disk never
+        // received, and the caller then deleted the journal on the strength of it.
+        { std::ofstream f(tmp); if (!f) { return false; } f << root.dump(); f.flush(); f.close();
+          if (f.fail()) { return false; } }
         std::error_code ec; std::filesystem::rename(tmp, path, ec);
         return !ec;
     };
@@ -3718,8 +3781,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // means, so this is backward-compatible with every journal already on disk.
                 meta["provenance"] = nlohmann::json::array({
                     nlohmann::json{ { "id", 0 }, { "play_digest", play_digest }, { "commit", cfg.commit } } });
-                journal_f << nlohmann::json({ { "meta", meta } }).dump() << "\n";
-                journal_f.flush();
+                { std::lock_guard<std::mutex> jl(journal_mtx);
+                  journal_emit_locked(nlohmann::json({ { "meta", meta } }).dump() + "\n"); }
             }
             else if (retain_active)
             {
@@ -3728,11 +3791,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // kind rather than rewriting line 1 (which would break the append-only durability the
                 // journal's whole design rests on). Everything this process writes from here is id 1.
                 journal_prov = 1;
-                journal_f << nlohmann::json{ { "prov", journal_prov },
-                                             { "play_digest", play_digest },
-                                             { "commit", cfg.commit },
-                                             { "retained_from", retain_foreign_digest } }.dump() << "\n";
-                journal_f.flush();
+                { std::lock_guard<std::mutex> jl(journal_mtx);
+                  journal_emit_locked(nlohmann::json{ { "prov", journal_prov },
+                                                      { "play_digest", play_digest },
+                                                      { "commit", cfg.commit },
+                                                      { "retained_from", retain_foreign_digest } }.dump() + "\n"); }
                 std::cerr << "[keepgen] journal: declared provenance id " << journal_prov << " = play "
                           << play_digest << " (commit " << cfg.commit << "); records from the retained"
                           << " engine keep id 0\n" << std::flush;
@@ -4490,13 +4553,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             if (!journal_on) { return; }
             std::lock_guard<std::mutex> lk(journal_mtx);
-            if (!journal_f.is_open()) { return; }
+            if (!journal_f.is_open() && !journal_failed) { return; }
             nlohmann::json r;
             r["refs"] = 1;
             r["dopt0"] = Dopt_ref[0]; r["dopt1"] = Dopt_ref[1];
             r["vg"] = { vg_ref[0], vg_ref[1] };
-            journal_f << r.dump() << "\n"; journal_f.flush();
-            gen_prog.note_journal_write();
+            journal_emit_locked(r.dump() + "\n");
         };
 
         // ROLLING vg: re-derive the freeze shrink target from the CURRENT accumulators (each live cell's
@@ -4528,12 +4590,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // Lock order is fold_mtx -> journal_mtx here and journal_mtx alone in journal_append, so
                 // there is no cycle.
                 std::lock_guard<std::mutex> jk(journal_mtx);
-                if (journal_f.is_open())
+                if (journal_f.is_open() || journal_failed)
                 {
                     nlohmann::json r;
                     r["vgroll"] = { vg[0], vg[1] }; r["vgbase"] = completed_level;
-                    journal_f << r.dump() << "\n"; journal_f.flush();
-                    gen_prog.note_journal_write();
+                    journal_emit_locked(r.dump() + "\n");
                 }
             }
             vg_roll = vg; vg_base = completed_level;
@@ -4937,13 +4998,43 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // recompute() derives V from the fresh accumulators, so it clobbers the change-detection carry on
         // resolved cells -- re-assert it before the raw/profile/report are written off these tables.
         apply_prior_override();
-        if (!cfg.out_raw.empty()) { write_raw_atomic(cfg.out_raw); }
-        // The final raw is now the authoritative, complete state -> the journal is superseded. Close and
-        // remove it so a later invocation doesn't resume from a stale journal for an already-finished run.
-        if (journal_on && journal_f.is_open())
+        // The final raw is the authoritative, complete state -- but ONLY once it is on disk. A failed write
+        // (a dropped mount, a full disk) used to be ignored and the journal deleted anyway, which would have
+        // thrown away the whole generation. Retry for up to 2 h (the in-memory tables are the only copy of
+        // any work the journal could not bank), and keep the journal unless the raw really landed.
+        bool raw_ok = cfg.out_raw.empty();
+        if (!cfg.out_raw.empty())
         {
-            journal_f.close();
-            std::error_code ec; std::filesystem::remove(journal_path, ec);
+            raw_ok = write_raw_atomic(cfg.out_raw);
+            for (int attempt = 1; !raw_ok && attempt <= 240; ++attempt)
+            {
+                std::cerr << "[keepgen] FINAL RAW WRITE FAILED (" << cfg.out_raw << ") -- retry " << attempt
+                          << "/240 in 30 s; the journal is kept\n" << std::flush;
+                std::this_thread::sleep_for(std::chrono::seconds(30));
+                // Bank any held records too, so a mount that comes back saves them even if the raw never lands.
+                if (journal_on && journal_failed)
+                { std::lock_guard<std::mutex> jl(journal_mtx); journal_emit_locked(std::string()); }
+                raw_ok = write_raw_atomic(cfg.out_raw);
+            }
+        }
+        if (journal_on && (journal_f.is_open() || journal_failed))
+        {
+            if (raw_ok)
+            {
+                // Superseded: close and remove it so a later invocation doesn't resume from a stale journal
+                // for an already-finished run.
+                journal_f.close();
+                std::error_code ec; std::filesystem::remove(journal_path, ec);
+            }
+            else
+            {
+                { std::lock_guard<std::mutex> jl(journal_mtx); journal_emit_locked(std::string()); }
+                journal_f.close();
+                std::cerr << "[keepgen] FATAL: the final raw could not be written after 2 h of retries. The journal"
+                             " is KEPT (" << journal_path << "); re-run the same command to finish from it.\n"
+                          << std::flush;
+                std::exit(1);
+            }
         }
         rollouts_done += fed_total;
         std::cerr << "[keepgen] continuous size-7 DONE: " << fed_total << " rollouts, "
