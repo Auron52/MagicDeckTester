@@ -57,13 +57,20 @@ def ci_entry(d, name):
     shipped as decks/Soldiers/soldiers.cod: on Windows it played and saved references normally, while
     on Linux every exact-name resolver (this registry, ref_bench, viewer_protocol_check, the viewer's
     deck list) silently found NO deck -- its six hand-played references were never replayed. So the
-    stem is matched the way the user's filesystem matches it."""
-    if os.path.exists(os.path.join(d, name)):
-        return name
+    stem is matched the way the user's filesystem matches it.
+
+    The EXACT match must come from the directory listing, not os.path.exists: on a case-insensitive
+    filesystem (this container's /workspaces mount) exists("Soldiers/Soldiers.cod") is True for
+    soldiers.cod, so this returned the name it was ASKED for rather than the one on disk -- the stem
+    came back "Soldiers", every sidecar path was derived from it, and suite_gate.py refused the deck as
+    "not in the regression suite" (its key maps soldiers.cod). 2026-10-08."""
     try:
-        hits = [e for e in os.listdir(d) if e.lower() == name.lower()]
+        entries = os.listdir(d)
     except OSError:
         return None
+    if name in entries:
+        return name
+    hits = [e for e in entries if e.lower() == name.lower()]
     return hits[0] if len(hits) == 1 else None
 
 

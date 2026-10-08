@@ -51,8 +51,25 @@ RECIPE=${3:-complete}
 DECKDIR=${DECKDIR%/}
 STEM=$(basename "$DECKDIR")
 
+# ci_find <dir> <name> -> <name> as SPELLED ON DISK in <dir> (exact first, else the unique
+# case-insensitive match). Not `[ -e ]`: /workspaces is case-INSENSITIVE, so `[ -e Soldiers/Soldiers.cod ]`
+# is true for soldiers.cod and STEM stayed "Soldiers" -- every artifact below would have been written as
+# Soldiers.keepmodel.*, which the engine (resolving off soldiers.profile.json) never finds on a
+# case-sensitive machine. Same rule as scripts/deck_registry.py ci_entry. 2026-10-08.
+ci_find() {
+    local f b hit="" n=0
+    for f in "$1"/*; do
+        b=${f##*/}
+        [ "$b" = "$2" ] && { printf '%s\n' "$b"; return 0; }
+        [ "${b,,}" = "${2,,}" ] && { hit=$b; n=$((n+1)); }
+    done
+    [ "$n" = 1 ] && { printf '%s\n' "$hit"; return 0; }
+    return 1
+}
 DECK=""
-for ext in cod txt; do [ -e "$DECKDIR/$STEM.$ext" ] && { DECK="$DECKDIR/$STEM.$ext"; break; }; done
+for ext in cod txt; do
+    _hit=$(ci_find "$DECKDIR" "$STEM.$ext") && { DECK="$DECKDIR/$_hit"; STEM=${_hit%."$ext"}; break; }
+done
 # VARIANT / ARCHIVED LISTS -- decks/<Name>/<Variant>/<Name>.cod, a list kept beside the shipping one
 # with the artifacts fitted to it. Files inside a variant are named after the PARENT deck, not the
 # variant folder, and that is deliberate: the engine resolves every sidecar directory-relative off
@@ -63,7 +80,7 @@ for ext in cod txt; do [ -e "$DECKDIR/$STEM.$ext" ] && { DECK="$DECKDIR/$STEM.$e
 if [ -z "$DECK" ]; then
     _parent=$(basename "$(dirname "$DECKDIR")")
     for ext in cod txt; do
-        [ -e "$DECKDIR/$_parent.$ext" ] && { DECK="$DECKDIR/$_parent.$ext"; STEM=$_parent; break; }
+        _hit=$(ci_find "$DECKDIR" "$_parent.$ext") && { DECK="$DECKDIR/$_hit"; STEM=${_hit%."$ext"}; break; }
     done
 fi
 [ -n "$DECK" ] || { echo "no <stem>.cod or <stem>.txt in $DECKDIR (tried \"$STEM\" and the parent folder's name)"; exit 1; }

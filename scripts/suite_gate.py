@@ -123,17 +123,35 @@ def deck_key(deck_path):
     return None
 
 
+def _on_disk(d, name):
+    """-> `name` as it is spelled in directory `d` (exact first, else the unique case-insensitive
+    match), or None. NOT os.path.exists: on a case-insensitive filesystem (this container's
+    /workspaces) exists("decks/Soldiers/Soldiers.cod") is True for soldiers.cod, and the
+    wrong-case path then misses DECK_FILE's exact value -- the gate refused Soldiers, a deck in all
+    three tiers, as "NOT in the regression suite" (2026-10-08). Same rule as deck_registry.ci_entry."""
+    try:
+        entries = os.listdir(d)
+    except OSError:
+        return None
+    if name in entries:
+        return name
+    hits = [e for e in entries if e.lower() == name.lower()]
+    return hits[0] if len(hits) == 1 else None
+
+
 def resolve_decklist(arg):
-    """Accept a deck DIRECTORY or a decklist path; -> the decklist path. Mirrors mullgen.sh."""
+    """Accept a deck DIRECTORY or a decklist path; -> the decklist path, spelled as on disk.
+    Mirrors mullgen.sh."""
     p = os.path.abspath(arg)
     if os.path.isfile(p):
-        return p
+        d, f = os.path.split(p)
+        return os.path.join(d, _on_disk(d, f) or f)
     if os.path.isdir(p):
         stem = os.path.basename(p.rstrip("/"))
         for ext in (".cod", ".txt"):
-            c = os.path.join(p, stem + ext)
-            if os.path.exists(c):
-                return c
+            hit = _on_disk(p, stem + ext)
+            if hit:
+                return os.path.join(p, hit)
         for f in sorted(os.listdir(p)):
             if f.endswith((".cod", ".txt")):
                 return os.path.join(p, f)
