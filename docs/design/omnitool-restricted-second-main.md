@@ -1,16 +1,48 @@
 # Adaptive Omnitool: a RESTRICTED second main phase
 
-**Status: BUILT 2026-10-08 behind `MTG_OMNITOOL_M2`, DEFAULT OFF, NOT ADOPTED** (commits 370b012a,
-d4fc069e, a3f6311a). The user asked for it directly — *"Can we fix the omnitool issue? I gave you
-rules for how to do that cheaply"* — and the case table below is implemented unchanged. Reachability
-and inertness are measured (see the section at the end); the quality/cost A/B and the **adoption
-decision** are not done.
+**Status: BUILT 2026-10-08 behind `MTG_OMNITOOL_M2`, DEFAULT OFF — NOT ADOPTED, by USER RULING**
+(commits 370b012a, d4fc069e, a3f6311a). The user asked for it directly — *"Can we fix the omnitool
+issue? I gave you rules for how to do that cheaply"* — and the case table below is implemented
+unchanged. Reachability and inertness are measured (see the end), and the A/B was then run.
 
-Until adoption the Omnitool still ships with **no** second main, so every screening arm that plays
-it — including round 8's `omnitool_for_kite3`, which ran before this existed — remains a **LOWER
-BOUND** on the card.
+**THE DECISION IS MADE AND IT IS THE USER'S** (2026-10-08): *"Yeah, we don't need the
+MTG_OMNITOOL_M2 without Omnitool."* The lever stays **default OFF**. This is a ruling, not a
+deferral and not an agent's choice to leave something off.
 
-Owner of the adoption decision: the USER. This document is input to that decision, not the decision.
+**The reasoning chain, in the order it actually happened** — because the lever did not fail on its
+own merits so much as lose its reason to exist:
+
+1. **The card lost its slot first.** Round 8 priced `omnitool_for_kite3` against the 4th Kite Shield
+   and it was **worse at both formats** (+0.0057 std, +0.0105 2hg), i.e. 1.8x worse at 2hg. The
+   user's standing conditional was *"I would take 1 Omnitool if they are essentially a wash as it has
+   more upside for drawn-out games"* — a wash is what it needed, and it did not get one. So Adaptive
+   Omnitool stays **sideboard** on the shipped v3 list.
+2. **The lever then measured a null anyway.** Round 9 ran `omnitool_for_kite3` and
+   `omnitool_for_kite3_m2` with identical card counts differing only in the flag, so its worth is the
+   difference of their deltas on shared seeds: **+0.0000 at std (only 4 of 8000 games differ)** and
+   **+0.0014 at 2hg (t +2.40, 18 of 8000)** — i.e. marginally *harmful* where it was predicted to
+   help most. The most likely mechanism is budget displacement (it costs +0.25% units, taken from the
+   rest of the search), which is a *re-pricing*, not a lost line.
+3. **With the card sideboarded, the lever is unreachable in shipped play.** The deck stamp
+   (`deck_has_attack_dig_hand`) is **mainboard-only**, so on the shipped list it is provably inert —
+   **bit-identical `units`, 250,751 = 250,751**. Hence the user's phrasing: without the Omnitool
+   maindecked, there is nothing for it to do.
+
+**WHAT IS NOT RETRACTED, and why this document stays:** the original objection was real and is now
+fixed in code. A card entering hand at declare-attackers is a 2c-bis resource castable only
+post-combat, and with no second main it was simply DELAYED a turn — so every Omnitool number
+measured *before* this existed was a **LOWER BOUND**, and round 8's was. Round 9 is the measurement
+taken *with* the bound removed, which is what makes the "Omnitool is out" verdict a fair hearing
+rather than an artefact of a missing turn structure. **It also means a pre-registered prediction of
+mine was wrong and is recorded as such:** I expected the fix to pay out most at 2hg (longer race,
+more non-lethal attacks — the gate's own precondition), and 2hg is precisely where it measured
+slightly negative.
+
+**IF THE OMNITOOL IS EVER MAINDECKED, RE-RUN THE A/B BEFORE TRUSTING ANY OF THIS** — and note the
+flag's own soundness caveat, which no measurement here touches: the admitted-set restriction is an
+identity fold **only in a goldfish** (see `DigSecondMainLive`'s comment). Under a real opponent,
+removal killing the host, removal flipping metalcraft off, or there being no next turn each break the
+"casting it in main 1 is weakly better" argument. **Re-derive for phase 2.**
 
 ## The card and the problem
 
