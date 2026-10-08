@@ -70,6 +70,17 @@
     "toughness": "2",
     "type_line": "Artifact Creature — Construct"
   },
+  "Adaptive Omnitool": {
+    "cmc": 2.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{2}",
+    "oracle_text": "Equipped creature gets +1/+1 for each artifact you control.\nWhenever equipped creature attacks, look at the top six cards of your library. You may reveal an artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.\nEquip {3}",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
+  },
   "Adarkar Wastes": {
     "cmc": 0.0,
     "keywords": [],
@@ -78,6 +89,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Adelbert Steiner": {
+    "cmc": 2.0,
+    "keywords": [
+      "Lifelink"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Lifelink\nAdelbert Steiner gets +1/+1 for each Equipment you control.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Legendary Creature — Human Knight"
   },
   "Adeline, Resplendent Cathar": {
     "cmc": 3.0,
@@ -2625,6 +2647,17 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Legendary Creature — Goblin Warrior"
+  },
+  "Kíli the Resourceful": {
+    "cmc": 2.0,
+    "keywords": [
+      "Storied"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Storied (If you control three or more artifacts, legendaries, and/or Sagas, you have an enduring story for the rest of the game.)\nAs long as you have an enduring story, you may pay {0} rather than pay the equip cost of the first equip ability you activate each turn.\nWhenever another Dwarf or Equipment you control enters, draw a card. This ability triggers only once each turn.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Dwarf Scout"
   },
   "Land's Edge": {
     "cmc": 3.0,
