@@ -2967,10 +2967,10 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     }
     d.Note(std::string("reply an option index -- the ") + noun + " to "
            + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick."
-           // Karoo tap-in-response (MTG_BOUNCE_UNTAPPED_FIRST): say what happens to an untapped
-           // land, so the human knows returning it does not cost this phase's mana. Lever off ->
-           // the note is byte-identical.
-           + ((!sacrifice && noun == "land" && KarooTapInResponseOn())
+           // Karoo tap-in-response: say what happens to an untapped land, so the human knows
+           // returning it does not cost this phase's mana. The apply's own predicate
+           // (KarooFloatModelled: the autonomous lever, or human play under the 2026-10-08 rule).
+           + ((!sacrifice && noun == "land" && KarooFloatModelled())
               ? " An UNTAPPED land you return is first tapped for mana in response (it floats until"
                 " the phase ends), unless tapping it has a cost or side effect (pain, energy, a"
                 " depletion counter) or its mana is spend-restricted."
@@ -4141,6 +4141,9 @@ if (!log_dir.empty())
     // it replays exactly as played (test/viewer_protocol_check.py). Additive key; omitted when the
     // run itself was legacy, so re-writing an old recording does not mislabel it.
     if (HumanCombatSwapOn()) { out << ", \"combat_swap_timing\": 1"; }
+    // Same pattern for the human Karoo TAP-IN-RESPONSE float (HumanKarooFloatOn, 2026-10-08): a
+    // reference without `karoo_float` predates it and replays under --legacy-karoo-float.
+    if (HumanKarooFloatRuleOn()) { out << ", \"karoo_float\": 1"; }
     out << ",\n  \"decisions\": [\n";
     for (size_t i = 0; i < trace.size(); ++i)
     {
@@ -6898,6 +6901,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // also: "charge_counters" / "storage_counters" /
 //                                    // "spore_counters" / "quest_counters", and
 //                                    // "equips": "<host card name>" to stage an ATTACHED Equipment/Aura
+//                                    // "depletion_counters": N  (Remote Farm / Peat Bog)
 //                                    // A TOKEN (no cards.json entry) is staged with
 //                                    // { "token": true, "power": 1, "toughness": 1,
 //                                    //   "subtypes": ["Saproling"], "color": "G" } -- see the
@@ -6913,6 +6917,9 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
 //     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
 //     "expect_opponent_life": 13,    // optional: pin the exact damage a non-lethal payoff dealt
+//     "expect_attached": [{"aura": "Wild Growth", "host": "Azorius Chancery"}],  // optional: an Aura
+//                                    // of that name ends attached to a permanent of that name
+//                                    // ("attached": false asserts it is NOT)
 //     "expect_exile_contains": ["X"],  // optional: X in the exile zone (and not on the battlefield)
 //                                    // at the end -- removal a passive opponent never notices
 //     "expect_active_life": 20,      // optional: pin OUR life (incidental lifegain / pain taps) --
@@ -7168,6 +7175,15 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             p.created_by_number = e.value("created_by_number", 0);
             p.quest_counters    = e.value("quest_counters", 0);
             p.hone_counters     = e.value("hone_counters", 0);
+            // Depletion counters (Remote Farm / Peat Bog), which the land drop stamps on entry and a
+            // staged permanent never gets -- without them a depletion land reads as already spent.
+            if (const int dc = e.value("depletion_counters", 0); dc > 0)
+            {
+                Counter dep;
+                dep.type  = Counter::Type::Depletion;
+                dep.count = dc;
+                p.counters.push_back(dep);
+            }
             // "As this enters, choose a color" (Coldsteel Heart). A permanent STAGED directly onto
             // the battlefield never ran the as-enters replacement (FireOwnEtbTriggers fires only on
             // a real entry), so without this it would sit at chosen_color = -1 and silently fall
@@ -7525,7 +7541,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // The history the viewer would show is captured (g_play_event_sink) so a fixture can assert it:
     //   "expect_human_summary_contains": "...",   // the committed line's menu summary
     //   "expect_history_contains": ["...", ...]    // the play-event narration of the whole run
+    //   "human_variants": ["...", ...]             // per line (optional): a `choose` takes the first
+    //                                              // variant whose label contains this, as the human
+    //                                              // picks a sub-decision (an Aura's host); "" = first
     const std::vector<std::string> human_lines = j.value("human_lines", std::vector<std::string>{});
+    const std::vector<std::string> human_variants = j.value("human_variants", std::vector<std::string>{});
     std::size_t human_next = 0;
     std::vector<std::string> human_summaries;
     std::vector<PlayEvent>   human_events;
@@ -7539,10 +7559,21 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             [&](const GameState& fs, std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
             {
                 if (human_next >= human_lines.size()) { return -1; }
+                const std::string& want_variant =
+                    human_next < human_variants.size() ? human_variants[human_next] : std::string();
                 const std::string& line = human_lines[human_next++];
                 TurnSolver::LineCheck chk = TurnSolver::CheckLine(fs, is_pre, ParseLineSpec(line), &plans);
                 int idx = chk.plan_index;
-                if (idx < 0 && !chk.variants.empty()) { idx = chk.variants[0].plan_index; }
+                if (idx < 0 && !chk.variants.empty())
+                {
+                    idx = chk.variants[0].plan_index;
+                    if (!want_variant.empty())
+                    {
+                        idx = -1;   // a named variant that is not offered is a FAIL, never a fallback
+                        for (const TurnSolver::LineVariant& v : chk.variants)
+                        { if (v.label.find(want_variant) != std::string::npos) { idx = v.plan_index; break; } }
+                    }
+                }
                 if (idx < 0 || idx >= static_cast<int>(plans.size()))
                 {
                     std::cout << "scenario: human line \"" << line << "\" NOT offered on T" << fs.turn_number
@@ -7707,6 +7738,34 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             }
             std::cout << "scenario: PASS (" << want << " exiled)\n";
         }
+    }
+
+    // Optional ATTACHMENT assertion (end of the run): [{"aura": "Wild Growth", "host": "Azorius
+    // Chancery", "attached": true}, ...] -- is an Aura of that name on the battlefield attached to a
+    // permanent of that name (`attached: false` asserts it is NOT). A land Aura changes no life total
+    // or win turn on the turn it lands, so nothing above can see whether it resolved, or onto what.
+    for (const auto& a : j.value("expect_attached", json::array()))
+    {
+        const std::string aura = a.value("aura", std::string());
+        const std::string host = a.value("host", std::string());
+        const bool        want = a.value("attached", true);
+        bool hit = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_name.str() != aura || p.aura_attached_to == 0) { continue; }
+            for (const Permanent& h : state.battlefield)
+            {
+                if (h.card.m_number == p.aura_attached_to && h.card.m_name.str() == host) { hit = true; break; }
+            }
+            if (hit) { break; }
+        }
+        if (hit != want)
+        {
+            std::cout << "scenario: FAIL expected " << aura << (want ? " attached to " : " NOT attached to ")
+                      << host << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (" << aura << (want ? " attached to " : " not attached to ") << host << ")\n";
     }
 
     // Optional NEGATIVE assertion: fail (exit 1) if the engine DID win, when the fixture asserts it
@@ -8131,6 +8190,7 @@ int main(int argc, char* argv[])
         if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
         if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }
         if (flag == "--legacy-main-swap")    { g_play_legacy_main_swap = true; continue; }   // replay a reference recorded before the human combat-swap timing rule (value-less)    // #4: value-less, same trap as above
+        if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try
         {

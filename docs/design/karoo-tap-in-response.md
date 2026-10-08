@@ -49,6 +49,53 @@ measured as a regression.
    the human's pick gets the float too (verified on Hinata `--claude-play --seed 7`, choices
    `1,4,-1,-1,8,-1,-1,4,2,1`: returning the untapped Mountain shows `floating_mana {R:1}` next frame).
 
+## Human play: the float is ON regardless of the lever (2026-10-08)
+
+USER, Bruna seed 18 gi17 T3 (keep 7; T1 Remote Farm; T2 Forest, Avacyn's Pilgrim, Open the Armory ->
+Colossification): the line `land=Azorius Chancery; cast: Wild Growth -> Azorius Chancery` was
+REJECTED. *"The engine is rejecting this even though this is a perfectly valid way to play the line.
+You just need to float the Green."*
+
+**Root cause.** The line was never illegal to the validator: `--validate-line
+"land=Azorius Chancery;cast=Wild Growth"` returned `choose` with three host variants, the Chancery one
+included (plan 109 on the tip). The rejection came at EXECUTION. Both apply worlds defer a Karoo past
+the cast loop and hold a land Aura that names it (`karoo_host_auras`), so the order was: play the
+Chancery -> its ETB bounce prompt (default = the Forest, an untapped land that re-enters untapped;
+the human picked it) -> `BounceKarooLand` -> `FloatKarooBouncedLand` was a no-op because
+`MTG_BOUNCE_UNTAPPED_FIRST` is OFF -> the Forest left untapped -> the held Wild Growth had no {G}
+source -> `dropped_casts: ["Wild Growth"]` -> the viewer rolled the line back ("not enough mana").
+
+**The bounce choice.** CheckLine never sees it: the bounce is a resolution-time prompt answered after
+the line is committed. Its menu match is bounce-agnostic (the enumerator offers the host variant), and
+its trial-apply (`plan_pays`, advisory, used only to order payable variants first) runs with every
+chooser nulled, so `BounceKarooLand` takes the provider's default pick (the Forest). The human's own
+pick is applied only by the executor. On this board, returning Remote Farm instead would have left the
+Forest to pay {G} even on the tip (verified: Wild Growth attaches to the Chancery); returning the Forest
+-- the user's line, keeping Remote Farm's {W}{W} -- needs the float. With the float modelled, both picks
+pay, so no `bounce=` line verb was added: the remaining case where the pick still matters is returning
+an untapped land the model does not float (pain / depletion / filter / restricted mana), where the
+prompt's answer is applied for real and a shortfall is reported as a dropped cast, which is accurate.
+
+**Fix.** `HumanKarooFloatOn()` (`src/core/GameLogger.h`): in human play the float is modelled whatever
+the lever says (`KarooFloatModelled()` = lever || human play, `SpellEffects.h`), for the executor, the
+enumeration and CheckLine alike; the bounce note says so. The provider's ORDER (the lever's other
+half) stays on the lever -- in human play the person picks the land. `HumanPlayActive()` is false in
+the engine's clairvoyant rollouts and after a `--choices-then-auto` hand-back, so autonomous play is
+byte-identical.
+
+**Old recordings.** The reference writer stamps `"karoo_float": 1`; `viewer_protocol_check.py`'s
+`recording_rule_args` passes `--legacy-karoo-float` for a reference without it (the
+`combat_swap_timing` / `--legacy-main-swap` pattern); `MTG_HUMAN_KAROO_FLOAT=0` is the env twin.
+`--legacy-karoo-float` reproduces the tip's seed-18 frame byte for byte (dropped Wild Growth).
+
+Tests: `test/scenarios/bruna_human_karoo_float_wild_growth.json` (the user's T3 board through the
+human path: the Forest is tapped for {G} in response, Wild Growth ends on the Chancery) and its control
+`bruna_human_karoo_float_legacy.json` (the legacy arm: no float, Wild Growth not attached); the
+scenario harness gained `depletion_counters`, `human_variants` and `expect_attached` for them.
+`test/viewer_client_check.js` `testKarooFloatWildGrowth` plays the user's game through the real client
+(keep, T1, T2 + Open the Armory, T3 Chancery + Wild Growth dragged onto it, return the Forest) and
+requires no rollback and Wild Growth attached to the Chancery.
+
 ## Verification (lever OFF)
 
 `mtg-test` 469/469 (6 new cases in `test/unit/test_karoo_tap_in_response.cpp`); scenarios 147/147;

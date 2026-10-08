@@ -1293,6 +1293,32 @@ inline bool HumanCombatSwapOn()
     return s_env && !g_play_legacy_main_swap;
 }
 
+// HUMAN-PLAY KAROO TAP-IN-RESPONSE (USER 2026-10-08, Bruna seed 18 T3: "The engine is rejecting this
+// even though this is a perfectly valid way to play the line. You just need to float the Green.").
+// A Karoo's "return a land you control to its owner's hand" is a triggered ability, so the land about
+// to be returned can be tapped for mana in response (CR 605.3a) and that mana floats until the phase
+// ends (CR 106.4). The model is BUILT (FloatKarooBouncedLand, SpellEffects.h) and the USER decided it
+// is the right one on 2026-10-06 ("Yes, this is the correct way to handle it"); for AUTONOMOUS play it
+// stays behind MTG_BOUNCE_UNTAPPED_FIRST (KarooTapInResponseOn, EngineFlags.h) together with the
+// provider's bounce ORDER until its held-out A/B clears. A human may always do it, so in human play
+// the FLOAT is on regardless of that lever (the order is not: it is the AI's default pick, and the
+// human chooses the land themselves). HumanPlayActive() is false inside the engine's clairvoyant
+// rollouts and after a --choices-then-auto hand-back, so autonomous play is byte-identical.
+// `--legacy-karoo-float` turns it off for REPLAY: a reference recorded before this rule carries no
+// `karoo_float` key, and its replayers (test/viewer_protocol_check.py) pass the flag so the recording
+// replays exactly as played (the combat-swap pattern above). MTG_HUMAN_KAROO_FLOAT=0 is its env twin
+// (scenario controls); DEFAULT ON.
+inline bool g_play_legacy_karoo_float = false;
+inline bool HumanKarooFloatRuleOn()   // the rule the run plays under (the recording stamp reads this)
+{
+    static const bool s_env = EnvOn("MTG_HUMAN_KAROO_FLOAT", true);
+    return s_env && !g_play_legacy_karoo_float;
+}
+inline bool HumanKarooFloatOn()       // ...and whether it applies HERE (human play, not a rollout)
+{
+    return HumanKarooFloatRuleOn() && HumanPlayActive();
+}
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit

@@ -381,8 +381,16 @@ def recording_rule_args(ref):
     a host-tapping Aura onto a would-be attacker is applied in the COMBAT window. A recording made
     before carries no key and may hold the old main-phase swap, so it is replayed with
     --legacy-main-swap -- an OLD recording must never be invalidated by a NEW behaviour. Inert on
-    every deck without an Aura-swap card."""
-    return [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
+    every deck without an Aura-swap card.
+
+    `karoo_float` (2026-10-08, USER on Bruna seed 18: "You just need to float the Green."): from then
+    on, in human play, a land a Karoo returns is tapped for mana in response when it can be
+    (HumanKarooFloatOn). A recording made before carries no key and was played without that mana, so
+    it is replayed with --legacy-karoo-float. Inert on every deck without a Karoo."""
+    args = [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
+    if not ref.get("karoo_float"):
+        args.append("--legacy-karoo-float")
+    return args
 
 
 def side_channel_args(decisions, pin_lines=False, ordmap=None):

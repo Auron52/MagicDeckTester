@@ -1716,6 +1716,88 @@ async function testCommitTurnSurvivesBounce() {
   return fails;
 }
 
+// HUMAN-PLAY KAROO TAP-IN-RESPONSE (USER 2026-10-08, Bruna seed 18 T3: "The engine is rejecting this
+// even though this is a perfectly valid way to play the line. You just need to float the Green.").
+// The user's own game: keep 7; T1 Remote Farm; T2 Forest + Avacyn's Pilgrim + Open the Armory ->
+// Colossification; T3 Azorius Chancery with Wild Growth dragged onto it. The Chancery's ETB returns the
+// Forest -- the land the {G} has to come from -- and the Forest is tapped for {G} IN RESPONSE (CR
+// 605.3a), which then pays Wild Growth onto the Chancery. Before the fix the Forest went back untapped,
+// Wild Growth came back as a dropped cast and the client rolled the whole line back ("not enough mana").
+async function testKarooFloatWildGrowth() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'Bruna', seed: 18, turns: 8 });
+  const st = () => S(win);
+  const dec = () => st().decision;
+  chk(dec() && dec().type === 'mulligan', `expected the keep frame, got ${dec() && dec().type}`);
+  if (fails.length) return fails;
+  win.commitMulligan(dec(), 1); await settle(win);                   // keep 7
+  chk(dec() && dec().type === 'main_phase' && dec().turn === 1, `reached T1 main, got ${dec() && dec().type}`);
+  if (fails.length) return fails;
+  st().plan = []; win.queueCard('Remote Farm', 'land');
+  await win.commitTurn(); await settle(win);
+  chk(dec() && dec().type === 'main_phase' && dec().turn === 2,
+      `T1 Remote Farm + Commit turn should land on T2 main, got ${dec() && dec().type} T${dec() && dec().turn}`);
+  if (fails.length) return fails;
+  st().plan = [];
+  win.queueCard('Forest', 'land');
+  win.queueCard("Avacyn's Pilgrim", 'permanent');
+  win.queueCard('Open the Armory', 'nonpermanent');
+  await win.commitTurn(); await settle(win);
+  for (let i = 0; i < 6 && dec() && dec().turn === 2; i++) {        // Open the Armory's search, answered
+    const d = dec();
+    if (d.type === 'tutor_etb') {
+      const c = (d.candidates || []).findIndex(x => x.name === 'Colossification');
+      win.pushChoice(d, c < 0 ? 0 : c, `${d.source}: Colossification`);
+    } else if (d.type === 'main_phase') { st().plan = []; await win.commitLine(); }
+    else if (!(await stepForward(win, 'ai'))) break;
+    await settle(win);
+  }
+  chk(dec() && dec().type === 'main_phase' && dec().turn === 3,
+      `reached T3 main, got ${dec() && dec().type} T${dec() && dec().turn}`);
+  if (fails.length) return fails;
+  const d3 = dec();
+  const chancery = (d3.me.hand || []).find(c => c.name === 'Azorius Chancery');
+  chk(chancery && (d3.me.hand || []).some(c => c.name === 'Wild Growth'), 'T3 hand holds Azorius Chancery + Wild Growth');
+  chk((d3.me.battlefield || []).some(p => p.name === 'Forest') && (d3.me.battlefield || []).some(p => p.name === 'Remote Farm'),
+      'T3 board holds the Forest and Remote Farm');
+  if (fails.length) return fails;
+  st().plan = [];
+  win.queueCard('Azorius Chancery', 'land');
+  chk(win.tryEnchantDrop('Wild Growth', 'permanent', chancery.num),
+      'Wild Growth can be dragged onto the Azorius Chancery being played (the engine offers that host)');
+  if (fails.length) return fails;
+  await win.commitLine(); await settle(win);
+  for (let i = 0; i < 6; i++) {                                      // any sub-decision, as a human answers it
+    const p = win.document.querySelector('#decpanel .varpick');
+    if (!p) break;
+    p.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await settle(win);
+  }
+  chk(dec() && dec().type === 'bounce' && dec().source === 'Azorius Chancery',
+      `the Chancery should prompt its bounce, got ${dec() && dec().type}`);
+  if (fails.length) return fails;
+  {
+    const d = dec();
+    const forest = (d.options || []).findIndex(o => o.name === 'Forest');
+    chk(forest >= 0, 'the Forest is a legal land to return');
+    if (fails.length) return fails;
+    win.pushChoice(d, forest, `${d.source}: return Forest`);
+    await settle(win);
+  }
+  const ve = win.document.getElementById('verdict');
+  chk(!(ve && ve.style.display === 'block' && /not enough mana/.test(ve.textContent)),
+      `the line must NOT be rolled back for mana (verdict: "${ve && ve.textContent.slice(0, 120)}")`);
+  const after = dec();
+  const bf = ((after || {}).me || {}).battlefield || [];
+  const wg = bf.find(p => p.name === 'Wild Growth');
+  chk(wg && wg.attached_to === chancery.num,
+      `Wild Growth resolved onto the Chancery (attached_to=${wg && wg.attached_to}, want ${chancery.num})`);
+  chk((((after || {}).me || {}).hand || []).some(c => c.name === 'Forest'), 'the Forest went back to hand');
+  chk(bf.some(p => p.name === 'Remote Farm' && !p.tapped), 'Remote Farm is still untapped (its {W}{W} is still there)');
+  return fails;
+}
+
 async function testColorlessFirstTapOrder() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -2026,6 +2108,14 @@ async function testColorlessFirstTapOrder() {
     catch (e) { console.error(`✗ commit turn across a bounce: harness error: ${e.stack || e}`); process.exit(2); }
     if (ctFails.length) { anyFail = true; console.log(`✗ commit turn across a bounce: ${ctFails.length} fail`); ctFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ commit turn across a bounce (Bruna s13 T2: Azorius Chancery, answer the bounce -> T3) + a saved rejection still offers Save as reference'); }
+  }
+  // Karoo tap-in-response in human play: float the returned Forest's {G} for Wild Growth.
+  {
+    let kfFails;
+    try { kfFails = await testKarooFloatWildGrowth(); }
+    catch (e) { console.error(`✗ karoo float: harness error: ${e.stack || e}`); process.exit(2); }
+    if (kfFails.length) { anyFail = true; console.log(`✗ karoo float: ${kfFails.length} fail`); kfFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ karoo float (Bruna s18 T3: Azorius Chancery returns the Forest, tapped for {G} in response -> Wild Growth on the Chancery)'); }
   }
   for (const sc of SCENARIOS) {
     let res;

@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Remote Farm", "controller": 0, "tapped": false, "depletion_counters": 1 },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Avacyn's Pilgrim", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Azorius Chancery", "Wild Growth", "Glittering Wish", "Mother of Runes", "Colossification", "Bruna, Light of Alabaster"],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "human_lines": ["land=Azorius Chancery;cast=Wild Growth"],
+  "human_variants": ["Wild Growth → Azorius Chancery"],
+  "expect_human_summary_contains": "land=Azorius Chancery; cast: Wild Growth → Azorius Chancery",
+  "expect_history_contains": ["Forest -- tapped for {G} in response to the bounce"],
+  "expect_attached": [{ "aura": "Wild Growth", "host": "Azorius Chancery" }],
+  "comment": "HUMAN-PLAY KAROO TAP-IN-RESPONSE (USER 2026-10-08, Bruna seed 18 gi17 T3: 'The engine is rejecting this even though this is a perfectly valid way to play the line. You just need to float the Green.'). The user's T3 board: Remote Farm (1 depletion counter), Forest, Avacyn's Pilgrim; the human plays Azorius Chancery and Wild Growth onto it. The executor defers the Karoo past the cast loop and holds the Aura for its host; the Chancery's ETB returns the Forest (the default bounce pick: an untapped land that re-enters untapped), and the Forest is tapped for {G} IN RESPONSE (CR 605.3a; the mana floats until the phase ends, CR 106.4), which pays Wild Growth onto the Chancery. Before the fix the Forest left untapped-and-unused, Wild Growth was a dropped cast and the viewer rolled the line back. Control: bruna_human_karoo_float_legacy.json (the pre-rule replay arm, MTG_HUMAN_KAROO_FLOAT=0 = --legacy-karoo-float's env twin, must NOT attach)."
+}

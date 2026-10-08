@@ -878,3 +878,31 @@ same damage-max pick (Bruna sweep fix H). The one deliberate asymmetry: a human 
 Pinned by `test/unit/test_bruna_sweep.cpp` ("Human swap timing: ...") and the human-path scenarios
 `test/scenarios/bruna_human_wings_swap_{deferred_to_combat,legacy_main,unpayable_in_combat}.json`
 (the scenario harness's new `human_lines` option drives AIEngine's external-chooser path).
+
+## A land a Karoo returns is tapped for mana in response (2026-10-08)
+
+USER, Bruna seed 18 T3: *"The engine is rejecting this even though this is a perfectly valid way to
+play the line. You just need to float the Green."* The line: Azorius Chancery, then Wild Growth onto
+the Chancery, returning the Forest -- the only {G} source. The Chancery's "return a land you control to
+its owner's hand" is a TRIGGERED ability, so before it resolves the player taps the Forest for {G}
+(CR 605.3a); the {G} floats until the phase ends (CR 106.4) and pays Wild Growth.
+
+In human play this float is now always modelled (`HumanKarooFloatOn`, `src/core/GameLogger.h`), on the
+same apply the autonomous lever `MTG_BOUNCE_UNTAPPED_FIRST` uses (`FloatKarooBouncedLand`): an UNTAPPED
+returned land whose tap is free and unrestricted is tapped as it leaves, and the history says
+`Forest -- tapped for {G} in response to the bounce`. The bounce prompt's note says so. Not floated:
+pain / energy / life taps, depletion lands, filters and other conversion sources, spend-restricted
+mana. The bounce prompt's DEFAULT is unchanged (the provider's order stays on the autonomous lever);
+the human picks the land.
+
+The bounce is answered AFTER the line is committed, so `--validate-line` never sees it: the menu match
+is bounce-agnostic, and CheckLine's advisory trial-apply takes the default pick. The pick is applied for
+real by the executor, and with the float modelled, returning any tapped or floatable land costs no mana
+this phase -- so the pick only matters for a land the model does not float, where a shortfall comes
+back as a dropped cast.
+
+**Replay of OLD recordings.** The reference writer stamps `"karoo_float": 1`;
+`test/viewer_protocol_check.py`'s `recording_rule_args` passes `--legacy-karoo-float` for a reference
+without it, so a game recorded before the rule replays exactly as played. `MTG_HUMAN_KAROO_FLOAT=0` is
+the env twin. Pinned by `test/scenarios/bruna_human_karoo_float_{wild_growth,legacy}.json` and
+`test/viewer_client_check.js` (`testKarooFloatWildGrowth`, the user's game through the real client).

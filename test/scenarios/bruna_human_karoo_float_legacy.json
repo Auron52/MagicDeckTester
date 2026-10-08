@@ -1,0 +1,60 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_HUMAN_KAROO_FLOAT": "0"
+  },
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Remote Farm",
+      "controller": 0,
+      "tapped": false,
+      "depletion_counters": 1
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Avacyn's Pilgrim",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Azorius Chancery",
+    "Wild Growth",
+    "Glittering Wish",
+    "Mother of Runes",
+    "Colossification",
+    "Bruna, Light of Alabaster"
+  ],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "human_lines": [
+    "land=Azorius Chancery;cast=Wild Growth"
+  ],
+  "human_variants": [
+    "Wild Growth → Azorius Chancery"
+  ],
+  "expect_human_summary_contains": "land=Azorius Chancery; cast: Wild Growth → Azorius Chancery",
+  "expect_attached": [
+    {
+      "aura": "Wild Growth",
+      "host": "Azorius Chancery",
+      "attached": false
+    }
+  ],
+  "comment": "CONTROL for bruna_human_karoo_float_wild_growth.json: the same human line under the PRE-RULE replay arm (MTG_HUMAN_KAROO_FLOAT=0, the env twin of --legacy-karoo-float that replays references recorded before 2026-10-08). The Forest is returned WITHOUT being tapped, so nothing pays Wild Growth's {G} and it is a dropped cast -- exactly the seed-18 rejection. Fails if the human float leaks into the legacy arm, which would change how an old recording replays.",
+  "expect_history_lacks": [
+    "in response to the bounce"
+  ]
+}

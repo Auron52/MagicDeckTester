@@ -27543,16 +27543,25 @@ inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, con
     return !EffectiveProducesFor(state, p.controller_index, d, &p).empty();
 }
 
-// Tap the land at battlefield index `idx` for mana into the float, if the lever is on and it is
-// floatable. Called by BounceKarooLand on its final pick (heuristic OR the human's) immediately
-// before the land leaves -- the ONE land-drop ETB shared by the executor, the rollout and the
-// enumeration probe, so the two worlds realise the same float by construction. Returns true iff it
-// tapped. The rollout and the enumerator need no separate credit: the float is real GameState, and
-// every later pool in the phase already reads state.floating_mana (AvailableManaPool et al.), exactly
-// as it reads a ritual's.
+// Is the tap-in-response float modelled here? The autonomous lever (MTG_BOUNCE_UNTAPPED_FIRST), or
+// HUMAN PLAY, where a person may always tap the land in response (HumanKarooFloatOn, GameLogger.h --
+// USER 2026-10-08, Bruna seed 18: "You just need to float the Green."). One predicate for the apply
+// and the viewer's bounce note, so the note never promises a float the apply does not make.
+inline bool KarooFloatModelled()
+{
+    return KarooTapInResponseOn() || HumanKarooFloatOn();
+}
+
+// Tap the land at battlefield index `idx` for mana into the float, if the float is modelled here
+// (KarooFloatModelled) and it is floatable. Called by BounceKarooLand on its final pick (heuristic OR
+// the human's) immediately before the land leaves -- the ONE land-drop ETB shared by the executor,
+// the rollout and the enumeration probe, so the two worlds realise the same float by construction.
+// Returns true iff it tapped. The rollout and the enumerator need no separate credit: the float is
+// real GameState, and every later pool in the phase already reads state.floating_mana
+// (AvailableManaPool et al.), exactly as it reads a ritual's.
 inline bool FloatKarooBouncedLand(GameState& state, int controller, int idx)
 {
-    if (!KarooTapInResponseOn()) { return false; }
+    if (!KarooFloatModelled()) { return false; }
     if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return false; }
     Permanent& p = state.battlefield[idx];
     if (p.controller_index != controller) { return false; }
