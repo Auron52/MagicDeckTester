@@ -47,8 +47,36 @@ BUILD_DIR    = REPO_ROOT / "build"
 # the Linux dev container) both place the binary under build/Release/; only the
 # executable suffix differs by platform.
 EXE_SUFFIX   = ".exe" if platform.system() == "Windows" else ""
-ANALYZER_BIN = BUILD_DIR / "Release" / f"mtg-analyze{EXE_SUFFIX}"
-MTG_BIN      = BUILD_DIR / "Release" / f"mtg{EXE_SUFFIX}"   # goldfish binary (cost-diagnostic A/B)
+# The BUILD targets stay Release: ./build.sh (below) and every multi-config generator put the
+# binaries here, and build/PGO is produced by a separate route (scripts/build_pgo.sh, Linux only).
+ANALYZER_REL = BUILD_DIR / "Release" / f"mtg-analyze{EXE_SUFFIX}"
+MTG_REL      = BUILD_DIR / "Release" / f"mtg{EXE_SUFFIX}"   # goldfish binary (cost-diagnostic A/B)
+
+# ...but what we RUN is PGO+LTO when it is fresh. USER 2026-10-08: "we should be using PGO+LTO for
+# everything except maybe quick development cycles" / "it makes sense to have that on for all of
+# those operations, since they are all generally long-running". A profile run IS one of those -- the
+# card-score derivation is a many-core multi-minute-to-hours job on a deck like KittyEquipment -- and
+# this driver was the one long runner still hardcoding build/Release while mullgen.sh, valueleaf.sh,
+# deck_compare.py and the overnight tier all resolve through the harness.
+#
+# SAFE BY CONSTRUCTION, which is why it needs no A/B of its own: PGO/LTO change code layout,
+# inlining and branch prediction only (no -ffast-math, no -march), so the analyzer computes the same
+# profile -- measured byte-identical on the rollout and play digests. engine_bin() returns build/PGO
+# only while its SRC_TREE stamp equals HEAD:src AND src/ is clean, so a development cycle silently
+# gets Release with no build delay, and a stale PGO binary can never run against a different engine.
+# MTG_PGO=0 pins Release; MTG_ANALYZE_BIN / MTG_BIN still override outright.
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from engine_bin import engine_bin as _engine_bin, kind as _engine_kind   # noqa: E402
+
+
+def AnalyzerBin():
+    """mtg-analyze to RUN: build/PGO when fresh, else the Release build this script makes."""
+    return Path(_engine_bin("mtg-analyze")) if ANALYZER_REL.exists() else ANALYZER_REL
+
+
+def GoldfishBin():
+    """mtg to RUN: build/PGO when fresh, else the Release build this script makes."""
+    return Path(_engine_bin("mtg")) if MTG_REL.exists() else MTG_REL
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -662,10 +690,11 @@ def RebuildProject() -> bool:
 def RunAnalyzer(deck_path: Path, cards_json: Path, seed: int | None = None) -> dict:
     # The analyzer is a fixed-recipe profile generator: it takes no game-count,
     # depth, or budget knobs. Win-rate evaluation is the regression suite's job.
-    if not ANALYZER_BIN.exists():
-        raise RuntimeError(f"Analyzer binary not found: {ANALYZER_BIN}")
+    analyzer_bin = AnalyzerBin()
+    if not analyzer_bin.exists():
+        raise RuntimeError(f"Analyzer binary not found: {analyzer_bin}")
     cmd = [
-        str(ANALYZER_BIN),
+        str(analyzer_bin),
         str(deck_path),
         "--cards-json", str(cards_json),
     ]
@@ -748,8 +777,9 @@ def RunCostDiagBatch(deck_path: Path, games: int, seed: int, scratch: Path,
     20 (ResolvePlaySettings). Still searched -- no greedy substitute. The arm rides the per-job heurarm
     slot (`flags`), so both arms share one work queue and are seed-paired game for game.
     """
-    if not MTG_BIN.exists():
-        raise RuntimeError(f"goldfish binary not found: {MTG_BIN} (build first)")
+    goldfish_bin = GoldfishBin()
+    if not goldfish_bin.exists():
+        raise RuntimeError(f"goldfish binary not found: {goldfish_bin} (build first)")
     prof = _CostDiagProfile(deck_path)
     jobs = []
     for tag, on in (("base", False), ("reframe", True)):
@@ -850,7 +880,7 @@ def _RunBatch(manifest: dict, log_dir: Path, threads: int, extra_env: dict) -> s
         json.dump(manifest, f, indent=1)
     env = os.environ.copy()
     env.update(extra_env)
-    cmd = [str(MTG_BIN), "--batch", str(manifest_path), "--threads", str(threads),
+    cmd = [str(GoldfishBin()), "--batch", str(manifest_path), "--threads", str(threads),
            "--game-log-dir", str(log_dir / "wins")]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, env=env, cwd=REPO_ROOT)
