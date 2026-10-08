@@ -68,6 +68,22 @@ Release first: `./build.sh` (never raw `cmake` — see CLAUDE.md; a bare `cmake`
 Seeds are **disjoint across modes on purpose**, so running more modes covers more
 seeds. Budgets are shared across all decks — see "Adding a deck" below.
 
+> **THE ENGINE IS PGO+LTO, AND THE TIER PICKS IT UP FOR FREE** (user, 2026-10-08: PGO+LTO *"for
+> everything except maybe quick development cycles"*). `harness_bin` returns `build/PGO/mtg` whenever
+> that build is FRESH — its `SRC_TREE` stamp equals `HEAD:src` **and** `src/` is clean — so **smoke
+> and regression use it with no build delay when it happens to be fresh, and run `build/Release`
+> otherwise**. The **overnight** tier is long enough to be worth a wait, so it calls
+> `harness_pgo_ensure` and *builds* a stale PGO first (`test/regression.sh:245-248`). `MTG_PGO=0` pins
+> Release; an explicit `MTG_BIN` always wins and skips the whole mechanism.
+>
+> **This cannot move GT, which is the only thing that matters here.** PGO/LTO change code layout,
+> inlining and branch prediction only — no `-ffast-math`, no `-march` — and are measured
+> byte-identical on both the rollout and play digests. So **a fingerprint produced under PGO is
+> comparable to one produced under Release**, a tier does not need rebaselining because the engine
+> build changed, and a digest difference across builds would be a BUG to report, never something to
+> `--accept` over. The one number that is *not* comparable is the `ms` column — size and compare work
+> in `units`.
+
 ```bash
 bash test/regression.sh --smoke      # fast gate
 bash test/regression.sh              # pre-commit

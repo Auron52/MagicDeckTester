@@ -5,6 +5,44 @@ the whole process for **building one for a deck** — new deck or regeneration �
 to ship it.
 
 
+## THE ENGINE IS PGO+LTO. GENERATION RUNS ON `build/PGO` (user, 2026-10-08)
+
+USER: *"we should be using PGO+LTO for everything except maybe quick development cycles."* A value
+leaf is a multi-hour-to-multi-day run (the Hinata/Mirrorwing class is ~36 h), so a flat **~1.3x** off
+every phase is the largest free win available to this skill — hours, for a one-off ~10-15 min build.
+
+**`scripts/valueleaf.sh run` already does it** — it calls `harness_pgo_ensure` before phase 0
+(`scripts/valueleaf.sh:1134`) and then logs which engine it picked, so **read that line** rather than
+assuming:
+
+```
+engine: ./build/PGO/mtg (PGO+LTO; MTG_PGO=0 pins Release)
+```
+
+Every phase resolves its binary through `harness_bin`, and the **matrix** phase goes through
+`scripts/engine_bin.py`, so all five phases and both tails are covered by the one call. Requirements:
+
+* **COMMIT `src/` FIRST.** `build/PGO` is used only while its `SRC_TREE` stamp equals `HEAD:src`
+  **and** `src/` is clean; a dirty `src/` silently falls back to `build/Release` and you lose ~25% of
+  a multi-hour run with **no warning**. This is already implied by Rule 0 (generate on ONE frozen
+  commit), so it adds no constraint you did not have.
+* **`MTG_PGO=0` pins Release**, and must be set on **both** arms of any wall-clock comparison.
+
+**IT CANNOT CHANGE WHAT THE LEAF LEARNS, AND THAT IS THE LOAD-BEARING POINT HERE.** The value leaf is
+*fitted to the deck's play*, so a compiler flag that altered play would invalidate the model. PGO/LTO
+change code layout, inlining and branch prediction only — **no `-ffast-math`, no `-march`** — and are
+measured byte-identical on both the rollout digest and the play digest
+(`docs/design/selesnya-keepgen-bulk-cost.md`). Consequences worth stating, because each one is a
+question somebody will otherwise ask:
+
+* **The PLAY DIGEST is unchanged**, so Rule 0's "one consistent play digest" is not broken by
+  switching to PGO — including mid-run. A chunk produced under Release and a chunk produced under PGO
+  are *the same chunk*, and the mismatch harness will agree.
+* **Rows, labels and the fitted model are identical**; only wall-clock moves. So a leaf trained under
+  PGO needs no extra verification beyond what this skill already prescribes.
+* **`units` is unaffected by construction** (a work counter, not a clock) — which is why cost
+  comparisons in this skill should be read in `units`, not `ms`, whenever the engine build may differ.
+
 ## HARD PRECONDITION — the deck MUST be in the regression suite (user directive, 2026-09-26)
 
 `scripts/valueleaf.sh run` **refuses to start** (exit 3) unless every deck in the queue resolves to a
