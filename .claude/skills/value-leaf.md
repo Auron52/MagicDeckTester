@@ -226,6 +226,16 @@ table), and nothing inside a phase is allowed to add a barrier of its own.
 **Nothing is adopted.** Every artifact lands in `logs/eval/<stem>.value.STAGED.json`; live sidecars
 are never written. Phase E produces the numbers an adoption decision needs — you make the call.
 
+**A deck's FIRST leaf stops at phase F, and that is the designed route, not a failure to work around.**
+`mullgen_finalize.py` refuses ("no <stem>.value.json -- the value leaf must exist first") because the
+mulligan-generation setting it measures must be measured UNDER the leaf the deck will ship -- and once a
+sidecar exists its `value_play` REPLACES the profile's generation keys wholesale (absent keys read 0 =
+inherit play), so a setting written to the profile beforehand would be silently dropped anyway. So, on a
+first model: read phase E, adopt the staged file as `decks/<Deck>/<stem>.value.json` if it is not worse,
+re-run `valueleaf.sh run decks/<Deck>` (finished phases skip; F measures with the leaf live and records
+K), then take GT for the deck's keys in all three tiers -- the leaf changes play, and a trust depth needs
+the overnight tier too. Soldiers 2026-10-08 is the worked example (`docs/design/analysis-soldiers.md`).
+
 ## The three traps that cost real time
 
 **1. Sidecar PRESENCE activates the hybrid — `enabled: false` is not off.** The engine resolves
