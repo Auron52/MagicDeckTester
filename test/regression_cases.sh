@@ -47,7 +47,7 @@ declare -A DECK_FILE=(
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
-  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod
+  [kittyv2]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
@@ -81,7 +81,7 @@ declare -A DECK_PROF=(
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
-  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json
+  [kittyv2]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
@@ -231,10 +231,26 @@ SMOKE_CASES=(
   "kitty 0 1001 1000 0"
   "kitty 3 1001  250 10"
   "kitty 5 1001  150 20"
-  # kittyv2: KittyEquipment v2-puresteel-hammer -- the CANDIDATE list (Puresteel Paladin / Sram /
-  # Colossus Hammer / Sigarda's Aid / Dwalin + 0-cost shields), carried as a SECOND kitty deck
-  # until it is adopted, at which point it takes `kitty`'s rows and v1's are dropped (user,
-  # 2026-10-02: "a second Kitty deck until adoption when we drop the old one").
+  # kittyv2: the CANDIDATE list (Puresteel Paladin / Sram / Colossus Hammer / Sigarda's Aid / Dwalin
+  # + 0-cost shields), carried as a SECOND kitty deck until it is adopted, at which point it takes
+  # `kitty`'s rows and v1's are dropped (user, 2026-10-02: "a second Kitty deck until adoption when
+  # we drop the old one").
+  #
+  # REPOINTED 2026-10-08 to v3-adelbert-gauntlets. The case KEY stays `kittyv2` deliberately: this
+  # row is "the candidate kitty list", and renaming it would churn every GT key for no gain while
+  # the promotion above is still pending. v3 is the SETTLED list -- four changes from v2 (Golem-Skin
+  # Gauntlets 3->4, Skateboard 2->1, Cid out, Adelbert Steiner in), decided by the user on 2026-10-08.
+  # The 10th-creature slot was NOT settled on speed: `g4_cid` was faster at both std and 2hg
+  # (+0.0064 / +0.0096 against this list), and the user took Adelbert for removal resilience the
+  # goldfish cannot represent -- Adelbert's +1/+1 counts EQUIPMENT YOU CONTROL, not Equipment
+  # attached, so he is a 2+N/1+N lifelinker with zero equips in exactly the board state that beats
+  # this deck. See the commit for the full rationale.
+  #
+  # WHY THE PROMOTION IS NOT DONE YET (it is the user's standing ruling above, deliberately deferred,
+  # not forgotten): v1 is the CHEAPEST searched deck in the suite only because it ships an exhaustive
+  # keep model AND a value leaf. v3 ships NEITHER yet, so taking v1's full counts (1000/250/150)
+  # today would multiply this row's cost by ~2.7x while the artifacts are still being generated.
+  # Order: generate v3's mulligan + value leaf, re-measure, THEN promote and drop v1.
   #
   # SIZING, and why the counts are a fifth of v1's. This list costs ~10x v1 per game at the gate
   # cells (measured 2026-10-02: 2.0 s/game d3 b10, 2.46 s/game d5 b20 vs v1's 0.17-0.22) and the
