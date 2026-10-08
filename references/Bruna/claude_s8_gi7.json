@@ -1,0 +1,253 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 55, "name": "Sol Ring" }, { "num": 54, "name": "Skycloud Expanse" }, { "num": 16, "name": "Bruna, Light of Alabaster" }, { "num": 27, "name": "Forest" }, { "num": 3, "name": "Avacyn's Pilgrim" }, { "num": 4, "name": "Avacyn's Pilgrim" }, { "num": 17, "name": "Bruna, Light of Alabaster" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Avacyn's Pilgrim, Sol Ring", "land": "Forest", "drops": ["Sol Ring"], "casts": ["Avacyn's Pilgrim", "Sol Ring"], "cast_order_canonical": ["Avacyn's Pilgrim", "Sol Ring"], "actions": [{ "card": "Avacyn's Pilgrim" }, { "card": "Sol Ring" }] },
+    { "index": 1, "summary": "land=Forest; cast: Sol Ring, Avacyn's Pilgrim", "land": "Forest", "drops": ["Avacyn's Pilgrim"], "casts": ["Sol Ring", "Avacyn's Pilgrim"], "cast_order_canonical": ["Sol Ring", "Avacyn's Pilgrim"], "actions": [{ "card": "Sol Ring" }, { "card": "Avacyn's Pilgrim" }] },
+    { "index": 2, "summary": "land=Forest; cast: Avacyn's Pilgrim", "land": "Forest", "casts": ["Avacyn's Pilgrim"], "actions": [{ "card": "Avacyn's Pilgrim" }] },
+    { "index": 3, "summary": "land=Forest; cast: Sol Ring", "land": "Forest", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 4, "summary": "land=Skycloud Expanse; cast: (nothing)", "land": "Skycloud Expanse", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Avacyn's Pilgrim", "Sol Ring"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Mythic Proportions" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Forest", "idx": 0, "num": 27, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Skycloud Expanse; cast: Avacyn's Pilgrim, Sol Ring", "land": "Skycloud Expanse", "casts": ["Avacyn's Pilgrim", "Sol Ring"], "cast_order_canonical": ["Avacyn's Pilgrim", "Sol Ring"], "actions": [{ "card": "Avacyn's Pilgrim" }, { "card": "Sol Ring" }] },
+    { "index": 1, "summary": "land=Skycloud Expanse; cast: Sol Ring, Avacyn's Pilgrim", "land": "Skycloud Expanse", "drops": ["Avacyn's Pilgrim"], "casts": ["Sol Ring", "Avacyn's Pilgrim"], "cast_order_canonical": ["Sol Ring", "Avacyn's Pilgrim"], "actions": [{ "card": "Sol Ring" }, { "card": "Avacyn's Pilgrim" }] },
+    { "index": 2, "summary": "land=none; cast: Avacyn's Pilgrim, Sol Ring", "land": null, "casts": ["Avacyn's Pilgrim", "Sol Ring"], "cast_order_canonical": ["Avacyn's Pilgrim", "Sol Ring"], "actions": [{ "card": "Avacyn's Pilgrim" }, { "card": "Sol Ring" }] },
+    { "index": 3, "summary": "land=none; cast: Sol Ring, Avacyn's Pilgrim", "land": null, "drops": ["Avacyn's Pilgrim"], "casts": ["Sol Ring", "Avacyn's Pilgrim"], "cast_order_canonical": ["Sol Ring", "Avacyn's Pilgrim"], "actions": [{ "card": "Sol Ring" }, { "card": "Avacyn's Pilgrim" }] },
+    { "index": 4, "summary": "land=Skycloud Expanse; cast: Avacyn's Pilgrim", "land": "Skycloud Expanse", "casts": ["Avacyn's Pilgrim"], "actions": [{ "card": "Avacyn's Pilgrim" }] },
+    { "index": 5, "summary": "land=none; cast: Avacyn's Pilgrim", "land": null, "casts": ["Avacyn's Pilgrim"], "actions": [{ "card": "Avacyn's Pilgrim" }] },
+    { "index": 6, "summary": "land=Skycloud Expanse; cast: Sol Ring", "land": "Skycloud Expanse", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 7, "summary": "land=none; cast: Sol Ring", "land": null, "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 8, "summary": "land=Skycloud Expanse; cast: (nothing)", "land": "Skycloud Expanse", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Eldrazi Conscription" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false, "taps": "W" }, { "name": "Forest", "idx": 0, "num": 27, "is_land": true, "taps": "G" }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Bruna, Light of Alabaster", "land": null, "casts": ["Bruna, Light of Alabaster"], "actions": [{ "card": "Bruna, Light of Alabaster" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "tapped": true, "is_land": false }, { "name": "Bruna, Light of Alabaster", "idx": 6, "num": 16, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "tapped": true, "is_land": false }, { "name": "Bruna, Light of Alabaster", "idx": 6, "num": 16, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Glittering Wish" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false, "taps": "W" }, { "name": "Bruna, Light of Alabaster", "idx": 6, "num": 16, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "is_land": true, "taps": "G" }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 11,
+  "type": "tutor_etb",
+  "source": "Glittering Wish",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false, "taps": "W" }, { "name": "Bruna, Light of Alabaster", "idx": 6, "num": 16, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Bruna, Light of Alabaster" }, { "index": 1, "name": "Indrik Umbra" }, { "index": 2, "name": "Almost Perfect" }, { "index": 3, "name": "Unflinching Courage" }, { "index": 4, "name": "Linvala, Shield of Sea Gate" }, { "index": 5, "name": "Troyan, Gutsy Explorer" }, { "index": 6, "name": "Detention Sphere" }, { "index": 7, "name": "Steel of the Godhead" }, { "index": 8, "name": "Vexing Shusher" }, { "index": 9, "name": "Auroral Procession" }, { "index": 10, "name": "Reborn Hope" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 4, "source": "Glittering Wish (searched)", "cards": [{ "name": "Almost Perfect", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false, "taps": "W" }, { "name": "Bruna, Light of Alabaster", "idx": 6, "num": 16, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 200002, "name": "Almost Perfect", "cost": "{4}{W}{G}", "mv": 6, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": [1, 1, 1], "decision": {
+  "decision_index": 13,
+  "type": "dragon",
+  "source": "Bruna, Light of Alabaster — put Aura cards from your hand",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Avacyn's Pilgrim", "idx": 3, "num": 4, "is_land": false, "taps": "W" }, { "name": "Bruna, Light of Alabaster", "idx": 6, "num": 16, "is_land": false }, { "name": "Forest", "idx": 0, "num": 27, "tapped": true, "is_land": true }, { "name": "Skycloud Expanse", "idx": 2, "num": 54, "is_land": true }, { "name": "Sol Ring", "idx": 4, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 200002, "name": "Almost Perfect", "cost": "{4}{W}{G}", "mv": 6, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "max_puts": 3,
+  "ai_set": [0, 1, 2],
+  "candidates": [{ "index": 0, "def": true, "name": "Mythic Proportions" }, { "index": 1, "def": true, "name": "Eldrazi Conscription" }, { "index": 2, "def": true, "name": "Almost Perfect" }],
+  "note": "reply one int per candidate (1 = put this card onto the battlefield), up to max_puts total. The engine keeps the rule's play order. Default = the AI's pick."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "trigger", "text": "Bruna, Light of Alabaster: puts Mythic Proportions (from hand), Eldrazi Conscription (from hand), Almost Perfect (from hand) onto it" },
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1), Bruna, Light of Alabaster (27) — 28 to opponent (20→-8)" }
+  ]
+}
