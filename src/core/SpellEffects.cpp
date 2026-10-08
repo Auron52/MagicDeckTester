@@ -932,7 +932,7 @@ bool PerformEtbDig(GameState& state, int controller_index,
 
 bool PerformLookTakeDig(GameState& state, int controller_index, int count,
                         const std::vector<std::string>& types, int max_mv,
-                        const std::string& src_name)
+                        const std::string& src_name, int* took_number)
 {
     if (count <= 0) { return false; }
     Player& ap = state.players[controller_index];
@@ -1008,7 +1008,8 @@ bool PerformLookTakeDig(GameState& state, int controller_index, int count,
     }
 
     bool took = false;
-    if (take >= 0) { EnterHand(state, controller_index, examined[take], HandEntryReason::Dig);
+    if (take >= 0) { if (took_number != nullptr) { *took_number = examined[take].m_number; }
+                     EnterHand(state, controller_index, examined[take], HandEntryReason::Dig);
                      took = true; }
     for (int i = 0; i < static_cast<int>(examined.size()); ++i)
     {
@@ -1992,9 +1993,37 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
             { ed = CardDatabase::Instance().LookupCached(e.card); src_name = e.card.m_name.str(); break; }
         }
         if (ed == nullptr) { continue; }   // the equipment left the battlefield mid-resolution
+        int took = -1;
         PerformLookTakeDig(state, controller, ed->params.attack_dig_hand_count,
                            ed->params.attack_dig_hand_types, /*max_mv=*/-1,
-                           src_name + " (attack dig)");
+                           src_name + " (attack dig)", &took);
+        // RECORD THE COMBAT ARRIVAL for the restricted second main (GameState::combat_hand; the
+        // predicate that reads it is DigSecondMainLive). Only the ACTIVE player's arrivals matter --
+        // the post-combat main is theirs -- and in this goldfish only they ever attack, but the test
+        // is explicit rather than assumed so a future attacking opponent cannot silently open our
+        // second main.
+        //
+        // THIS IS THE LOCKSTEP POINT, and it is why the record is written here rather than at either
+        // caller: GameEngine::CombatPhase and the rollout's SimulateCombat both route through this
+        // one function, so the executor and every simulated turn of the search stamp the identical
+        // value at the identical logical moment. A record written in one world only is the
+        // [fd-diverge] defect class this file's trigger sites are repeatedly careful about.
+        //
+        // The turn guard is reset-free: stamping combat_hand_turn on first arrival of the turn makes
+        // every earlier turn's record unreadable without a clearing pass anywhere (the m1_hand
+        // pattern). Overflow past the cap is DROPPED, narrowing the admitted option set rather than
+        // widening it -- a missed second-main option costs one deferred turn, an unsound one costs a
+        // line the search never evaluated.
+        if (took > 0 && took <= 0xFF && controller == state.active_player_index)
+        {
+            if (state.combat_hand_turn != static_cast<std::int16_t>(state.turn_number))
+            {
+                state.combat_hand_turn = static_cast<std::int16_t>(state.turn_number);
+                state.combat_hand.fill(0);
+            }
+            for (std::uint8_t& slot : state.combat_hand)
+            { if (slot == 0) { slot = static_cast<std::uint8_t>(took); break; } }
+        }
     }
 }
 

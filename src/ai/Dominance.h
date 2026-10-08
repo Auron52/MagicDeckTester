@@ -368,7 +368,23 @@ static_assert(sizeof(Player) == 200,
 // +bool (2026-10-06, SelesnyaLifegain keep-gen bulk cost; no size change -- existing padding):
 // `deck_has_land_aura`. Classification: DECK CONSTANT, stamped once in StampDeckTraits and never
 // written again; it only skips land-Aura walks that provably find nothing -- nothing to fold.
-static_assert(sizeof(GameState) == 1072,
+// +8 bytes (2026-10-08, the Omnitool's restricted second main): `combat_hand[2]` (uint8 card
+// numbers, 0 = empty sentinel), `combat_hand_turn` (int16) and the deck constant
+// `deck_has_attack_dig_hand`. Measured, not estimated: 864 -> 872, and the first shape (int[4] plus
+// a separate count) cost +24, so the sentinel and the narrow turn stamp removed two thirds of it;
+// wedging the four bytes into m1_hand_n's padding gap was tried and measured at the same 872.
+// Classification: the bool is a DECK CONSTANT stamped once in StampDeckTraits that only
+// short-circuits DigSecondMainLive -- identical across every pair of states Build() compares, so
+// nothing to fold. The other two are GAME STATE and ARE folded above (deck-, nonzero- and
+// turn-gated, XOR over the members so trigger order cannot split equivalent states). THEY MUST BE
+// FOLDED, and the reason is the whole point of the field: two states can hold the IDENTICAL hand and
+// still differ here -- one dug the card during combat, the other has held it since main 1 -- and only
+// the first may cast it in the restricted post-combat main, so merging them would play an option the
+// restriction forbids.
+// REBASE NOTE (2026-10-08): the 864 -> 872 above is the pre-rebase measurement. Rebased onto
+// upstream's 1072 the same three fields land differently in padding, so the number below is a FRESH
+// measured sizeof under the merged layout, not 1072 + 8 arithmetic.
+static_assert(sizeof(GameState) == 1080,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -635,6 +651,20 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // daybound permanent shows, and whether a transform trigger fires). Exact-match; nonzero-gated,
     // so every deck that never runs a daybound card keeps its exact prior key.
     if (s.day_night != 0) { fold(0xDA1A00ull + static_cast<std::uint64_t>(s.day_night)); }
+    // COMBAT HAND ARRIVALS (Adaptive Omnitool's attack dig): the restricted second main's admitted
+    // option set. Two states with the IDENTICAL hand differ here when one dug the card in combat and
+    // the other has held it since main 1 -- and only the first may cast it post-combat -- so they are
+    // not interchangeable and must not fold together. Deck-gated, nonzero-gated and turn-gated, so
+    // every other deck and every non-dig turn keeps its exact prior key. XOR so trigger order, which
+    // is not a property of the position, cannot split two equivalent states.
+    if (s.deck_has_attack_dig_hand && s.combat_hand[0] != 0
+        && s.combat_hand_turn == static_cast<std::int16_t>(s.turn_number))
+    {
+        std::uint64_t mix = 0xD16A100ull;
+        for (std::uint8_t slot : s.combat_hand)
+        { if (slot != 0) { mix ^= 0x9E3779B97F4A7C15ull * static_cast<std::uint64_t>(slot); } }
+        fold(mix);
+    }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
     fold(static_cast<std::uint64_t>(s.vial_target_mv));

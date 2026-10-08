@@ -681,6 +681,14 @@ struct GameState
     // post-combat site of every deck -- so a deck without one never pays its battlefield scan.
     // Lives in the padding after the two bools above, so sizeof(GameState) does not move.
     bool                     deck_has_attack_untap = false;
+    // Does the deck run an attack-triggered dig that puts a card into HAND (Adaptive Omnitool:
+    // CardParams::attack_dig_hand_count)? DECK CONSTANT, stamped by StampDeckTraits. Short-circuits
+    // DigSecondMainLive -- which is read at every post-combat site of every deck, exactly like
+    // UntapSecondMainLive above -- so a deck without such a card never pays for the restricted
+    // second main, not even the turn-guard comparison. Lives in the bool padding, so
+    // sizeof(GameState) does not move. Default FALSE: an unstamped state opens no second main,
+    // which is the conservative direction (the pre-existing behaviour).
+    bool                     deck_has_attack_dig_hand = false;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.
@@ -703,6 +711,53 @@ struct GameState
     std::array<int, kM1HandCap>   m1_hand{};
     std::uint8_t                  m1_hand_n    = 0;
     int                           m1_hand_turn = -1;
+    // COMBAT HAND ARRIVALS -- card numbers that entered the active player's hand DURING COMBAT this
+    // turn (today: Adaptive Omnitool's attack_dig_hand_count, fired at declare-attackers). These are
+    // the only cards a goldfish's post-combat main can legitimately consider, and that is the whole
+    // justification for the restricted second main: USER 2026-10-08, "to consider just the new card
+    // in the second main and only when it matters" -- "if it's an equipment, and a bit more
+    // complexity if we have not played our land drop and get an Ancient Den".
+    //
+    // WHY A FIELD AND NOT A DERIVATION. Two existing mechanisms look like they already answer
+    // "which card is new" and neither does:
+    //   * m1_hand (above) answers it by SUBTRACTION -- anything in hand post-combat that was not in
+    //     the m1 snapshot arrived since. Correct, but StampM1Hand walks the hand pool on every
+    //     rollout turn and measured +14-16% compute on AntiLifegain (DecisionProviders.cpp, the
+    //     CondemnsPassedMainPhase note). This deck is the branchiest in the suite; that is the wrong
+    //     trade for a phase that fires on a minority of turns.
+    //   * g_hand_entry_seq (HandEntry.h) is a thread_local monotone COUNTER, deliberately off-state
+    //     so it is "immune to speculation" -- it can say something arrived, never which card.
+    // So the arrival is recorded where it happens, at the dig itself: written ONLY when a dig puts a
+    // card in hand, which is zero cost on every other turn and in every other deck.
+    //
+    // Same economy as m1_hand and for the same reason (GameState deep-copy is a measured hotspot):
+    // POD array, allocation-free, and combat_hand_turn guards staleness so NO clearing pass is
+    // needed anywhere -- a reader honours the record only when it was stamped THIS turn. Overflow
+    // past the cap is dropped, which narrows the admitted set rather than widening it (the safe
+    // direction: a missed second-main option costs one deferred turn, an unsound one costs a line
+    // the search never evaluated). The cap is 4 because the record only ever holds one entry per
+    // attacking Equipment carrying the param.
+    //
+    // FOLDED INTO THE SIM / PLAN KEY ONLY WHEN NONZERO (the day_night and hone_counters precedent):
+    // two states differing in what arrived in combat have different legal option sets in the second
+    // main, so they must not transpose onto each other -- but a deck that never digs must stay
+    // byte-identical, which a nonzero gate gives for free.
+    // SIZED TO FIT, because sizeof(GameState) is guarded (Dominance.h) and deep-copy is a measured
+    // hotspot: card numbers are 1-60 (Card::m_number, "per-copy stable ID"), so uint8 holds one with
+    // room to spare, and 0 is a free EMPTY SENTINEL that removes the need for a separate count.
+    // The turn stamp is int16 -- turn numbers never approach 32k and max_turns is 8 on every screen
+    // and suite cell. MEASURED COST: sizeof(GameState) 864 -> 872, i.e. +8 including this struct's
+    // deck-constant bool above. The first version used int[4] plus a separate uint8 count and cost
+    // +24; the sentinel plus the narrow turn stamp is what removed two thirds of that. Wedging the
+    // four bytes into the padding gap after m1_hand_n was TRIED AND MEASURED AT THE SAME 872, so the
+    // declaration stays here with its comment rather than being scattered for a saving that does not
+    // exist. Cap 2: one entry per attacking Equipment carrying the param, and the arms that run this
+    // card run one copy; a third simultaneous arrival is dropped, which NARROWS the admitted set
+    // (safe direction -- a missed second-main option costs one deferred turn, an unsound one costs a
+    // line the search never evaluated).
+    static constexpr int             kCombatHandCap = 2;
+    std::array<std::uint8_t, kCombatHandCap> combat_hand{};   // card numbers; 0 = empty slot
+    std::int16_t                     combat_hand_turn = -1;
     // CARD-DEPENDENCY-MAP pulls (GoldFishRunner::DeriveDependencyPulls, stamped by SetupGame; see
     // docs/design/card-dependency-map.md). Closure over the deck's dependency edges: an ENABLER
     // (lifegain_to_loss) must be considerable in the phase of its opponent-lifegain payloads, and a

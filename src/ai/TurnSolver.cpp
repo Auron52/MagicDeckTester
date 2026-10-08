@@ -27627,6 +27627,75 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }), actions.end());
     }
 
+    // RESTRICTED DIG SECOND MAIN -- admit ONLY the card that arrived during combat.
+    // USER 2026-10-08: "to consider just the new card in the second main and only when it matters."
+    // Independent of the condemnation filter above and deliberately so: condemnation asks "did the m1
+    // SEARCH see this and pass?" (and pays StampM1Hand's per-rollout pool walk to answer it, measured
+    // +14-16% on AntiLifegain). This asks the structurally cheaper question "did this card exist in
+    // main 1 at all?", answered by a record the dig itself stamped -- so it costs nothing on any turn
+    // no dig fired, and nothing at all in any other deck (DigSecondMainLive's deck constant is first).
+    //
+    // It is an ADMIT list, not a condemn list, which is why it needs no notion of "affordable at m1":
+    // everything in hand before combat was castable in main 1 and casting it there is WEAKLY BETTER
+    // in a goldfish, so re-offering it post-combat is duplicated search, not a found line (full
+    // argument + the phase-2 caveat: DigSecondMainLive in SpellEffects.h).
+    //
+    // WHY EQUIPS ARE FILTERED TOO, and it is the cost-critical half rather than a tidiness point:
+    // this deck's heaviest frames ARE the equip powerset (12-group frames at odo=4096, per the
+    // ZERO_POWER_EQUIP_FREE_ONLY measurement), so a post-combat main that re-opened the whole equip
+    // axis would hand back everything the gate saves and more. An Equip names its Equipment in
+    // sac_source_id, so "only the arrival" is exact here. Attaching an already-controlled Equipment
+    // post-combat is pure deferral anyway -- the benefit lands in combat, and next turn's main 1
+    // precedes next combat -- so nothing is lost. AttachAllEquipment (Balan) is dropped for the same
+    // reason: it is a MASS attach of old Equipment, definitionally not the arrival.
+    //
+    // CASE 2 IS THE CARVE-OUT: an arriving LAND with the drop still open admits the UNRESTRICTED plan
+    // space ("a bit more complexity if we have not played our land drop and get an Ancient Den"),
+    // because the land drop is the one genuinely use-it-or-lose-it per-turn resource and the mana it
+    // adds is mana main 1 provably could not spend. DigSecondMainLive returns true for that case, and
+    // the `land_arrival_open` test below then skips the filter entirely rather than narrowing it.
+    //
+    // Other activation kinds are left ALONE. The fold would cover them (they were available in main 1
+    // too), but they are not where this deck's cost is, and an admit list that deletes an activation
+    // nobody audited is the kind of silent narrowing that is expensive to be wrong about.
+    if (!is_pre_combat && !actions.empty() && DigSecondMainLive(state))
+    {
+        const Player& ap = state.ActivePlayer();
+        auto arrived = [&](int num) {
+            if (num <= 0 || num > 0xFF) { return false; }
+            for (std::uint8_t slot : state.combat_hand)
+            { if (slot != 0 && static_cast<int>(slot) == num) { return true; } }
+            return false;
+        };
+        bool land_arrival_open = false;
+        if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            for (std::uint8_t slot : state.combat_hand)
+            {
+                if (slot == 0) { continue; }
+                for (const Card& c : ap.hand)
+                { if (c.m_number == static_cast<int>(slot) && c.IsLand()) { land_arrival_open = true; break; } }
+                if (land_arrival_open) { break; }
+            }
+        }
+        if (!land_arrival_open)
+        {
+            actions.erase(std::remove_if(actions.begin(), actions.end(),
+                [&](const Action& a)
+                {
+                    if (a.kind == Action::Kind::CastFromHand)
+                    {
+                        if (a.hand_index < 0
+                            || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
+                        return !arrived(ap.hand[a.hand_index].m_number);
+                    }
+                    if (a.kind == Action::Kind::Equip) { return !arrived(a.sac_source_id); }
+                    if (a.kind == Action::Kind::AttachAllEquipment) { return true; }
+                    return false;
+                }), actions.end());
+        }
+    }
+
     // PHYREXIAN post-pass ({G/P}: pay the pip with 2 life instead -- CR 107.4f; Birthing Pod,
     // user-directed 2026-09-05). Mana-vs-life is a REAL search branch, not a payment preference:
     // paying 2 life FREES A SOURCE for the rest of the turn (the seed-1 T3 line: {3}+2 life to
@@ -52144,6 +52213,23 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // DAY / NIGHT (CR 726, Brutal Cathar): which face every daybound permanent shows and whether a
     // transform trigger fires next turn. Nonzero-gated -> every other deck keeps its exact key.
     if (state.day_night != 0) { Fold(k, 0xDA1A0); Fold(k, static_cast<uint64_t>(state.day_night)); }
+    // COMBAT HAND ARRIVALS (Adaptive Omnitool's attack dig): which cards the restricted second main
+    // is allowed to consider. THIS IS NOT IMPLIED BY THE ZONE CONTENTS, which is exactly why it has
+    // to be folded -- two states can hold the IDENTICAL hand and still differ here, one having dug
+    // the card during combat and the other having held it since main 1, and only the first may cast
+    // it post-combat. Without the fold the second transposes onto the first and plays an option the
+    // restriction forbids. Deck-gated AND nonzero-gated AND turn-gated, so every other deck, and
+    // every turn no dig fired, keeps its exact prior key. Order-independent (XOR of the members)
+    // because the record's order is trigger order, which is not a property of the position.
+    if (state.deck_has_attack_dig_hand && state.combat_hand[0] != 0
+        && state.combat_hand_turn == static_cast<std::int16_t>(state.turn_number))
+    {
+        Fold(k, 0xD16A1);
+        uint64_t mix = 0;
+        for (std::uint8_t slot : state.combat_hand)
+        { if (slot != 0) { mix ^= 0x9E3779B97F4A7C15ull * static_cast<uint64_t>(slot); } }
+        Fold(k, mix);
+    }
     // MV-cast accumulator (Call Forth the Tempest's damage clause): future-determining for the
     // same reason as the storm count -- two identical-zone states can differ in it (retrace /
     // copy casts). Deck-gated (deck_reads_mv_cast): an unconditional fold would shift every
@@ -53055,7 +53141,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // goldfish combat creates no new resources, so everything was castable in
         // the first main, and modelling a second main the real game skips would let
         // the search optimise against plays that never happen. See AIEngine::TakeTurn.
-        if (second_main || UntapSecondMainLive(state))   // per-turn: Jorn
+        if (second_main || UntapSecondMainLive(state)       // per-turn: Jorn
+            || DigSecondMainLive(state))                   // per-turn: the Omnitool's attack dig
         {
             TurnSolver::Plan post_plan;
             if (g_honest_teacher && depth > 0)
@@ -55394,7 +55481,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
-    if (second_main || UntapSecondMainLive(state))   // per-turn: Jorn
+    if (second_main || UntapSecondMainLive(state)   // per-turn: Jorn
+        || DigSecondMainLive(state))                // per-turn: the Omnitool's attack dig
     {
         // "STUCK -- PASS THE TURN", the second-main half. At `turn == cutoff` the post-combat main
         // is the last thing in the horizon: every plan here either kills now or hands to FSLineWin
@@ -57197,7 +57285,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // was always going to be told. `min(cutoff, best.win_turn) <= cutoff` keeps the argument
     // intact for the B&B-tightened cutoff the calls actually pass. Answer- and budget-identical:
     // the elided path consumes no work units before returning. See winlesscert::EdgeTailElideOn.
-    const bool edge_tail_elide = !(second_main || UntapSecondMainLive(state)) && g_unbounded_label_search > 0
+    // NOTE the NEGATION: this elides a tail precisely BECAUSE there is no second main to play, so a
+    // per-turn second-main predicate must be inside the parentheses or the elision would throw away
+    // the very turn the restricted main exists to search.
+    const bool edge_tail_elide = !(second_main || UntapSecondMainLive(state)
+                                   || DigSecondMainLive(state)) && g_unbounded_label_search > 0
                                  && state.turn_number >= cutoff
                                  && winlesscert::EdgeTailElideOn();
     // GO-OFF DOMINANCE WIDTH (see winlesscert::GoffDomOn). A residual node scores its first W
