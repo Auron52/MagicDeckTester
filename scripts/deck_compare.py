@@ -559,6 +559,16 @@ class Spec:
         #
         # It does NOT fix the caveat above (the apparatus is still fitted at one format) -- it makes
         # the asymmetry impossible to forget, because both formats are in one output.
+        # Per-arm heurarm levers (see job()). Validated here rather than at use: an unknown
+        # TAG is a silent no-op otherwise, which reads as "the lever arm was measured" while
+        # the job actually ran the baseline -- the same corruption BatchRunner throws on for an
+        # unknown FLAG NAME. The flag names themselves are checked by the engine.
+        self.arm_flags = s.get("arm_flags") or {}
+        if not isinstance(self.arm_flags, dict):
+            raise SystemExit("\"arm_flags\" must be an object of tag -> {ENV_NAME: bool}")
+        for t, f in self.arm_flags.items():
+            if not isinstance(f, dict) or any(not isinstance(v, bool) for v in f.values()):
+                raise SystemExit(f"arm_flags[{t!r}]: must be an object of ENV_NAME -> bool")
         self.formats = s.get("formats")
         if self.formats:
             if self.starting_life is not None or self.opponent_heads is not None:
@@ -626,6 +636,14 @@ class Spec:
             self.arms[tag] = {k: v for k, v in c.items() if v > 0}
         # Cards no arm's base holds -- everything the introduced-card pre-flight is about.
         self.introduced = sorted({c for a in self.arms.values() for c in a} - set(self.counts))
+        # arm_flags tags are checked HERE, where the combination names are finally known. An unknown
+        # tag would otherwise be a silent no-op, which reads as "the lever arm was measured" while
+        # that job actually ran the baseline -- exactly the corruption BatchRunner throws on for an
+        # unknown flag NAME, so the tag side gets the same treatment.
+        unknown = sorted(set(self.arm_flags) - set(self.arms))
+        if unknown:
+            raise SystemExit(f"arm_flags names no such combination: {', '.join(unknown)}\n"
+                             f"  known: {', '.join(sorted(self.arms))}")
         # Optional per-arm {removed card: added card}. Only the numbering reads it; it never changes
         # what a combination IS (that is the counts), only which slots the new copies inherit.
         self.replace = s.get("replace", {})
@@ -722,10 +740,26 @@ class Spec:
         single-format spec's manifest, logs and `--confirm` bookkeeping are unchanged."""
         return tag if not fmt else f"{fmt}::{tag}"
 
-    def job(self, name, deck, numbering, profile, seed=None, fmt=""):
+    def job(self, name, deck, numbering, profile, seed=None, fmt="", tag=None):
         j = {"name": name, "deck": deck, "deck_numbering": numbering,
              "games": self.games, "seed": self.seed if seed is None else seed,
              "max_turns": self.maxturn}
+        # PER-ARM HEURARM LEVERS: "arm_flags": {"<tag>": {"MTG_X": true, ...}}. BatchRunner already
+        # accepts a per-job "flags" object (ParseJob -> heurarm::SlotOf, and an unknown name THROWS
+        # rather than being ignored), so this is plumbing an existing engine capability through the
+        # driver rather than a new mechanism.
+        #
+        # WHY IT EXISTS: without it an engine-lever A/B cannot share a batch with a decklist screen,
+        # because run_batch's `env` is process-wide -- so pricing a lever meant a SECOND pooled run,
+        # i.e. a second load-imbalance tail and a second apparatus build, which is the shape
+        # CLAUDE.md's pooling rule exists to prevent. With it, "does this lever change the card's
+        # value" and "which card wins this slot" answer in ONE queue against ONE base.
+        #
+        # Two arms MAY carry identical card counts and differ only in flags (that is the point: the
+        # lever's effect on one decklist is the difference of their two deltas against the shared
+        # base). Each still gets its own scratch directory and its own numbering, so nothing collides.
+        if tag is not None and self.arm_flags.get(tag):
+            j["flags"] = dict(self.arm_flags[tag])
         # The format's keys. With one (unnamed) format these are the spec-level values and land on
         # every job identically, as before; with several, each job carries its own -- which is the
         # only per-arm asymmetry the driver permits, and it is declared, not inferred.
@@ -1284,7 +1318,8 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
         decks[tag] = (dp, np_)
         for fmt in spec.formats:
-            jobs.append(spec.job(spec.jname(fmt, tag), dp, np_, profile, seed=seed, fmt=fmt))
+            jobs.append(spec.job(spec.jname(fmt, tag), dp, np_, profile, seed=seed,
+                                 fmt=fmt, tag=tag))
     # --with-floor: the bracket's SHARED cells are the screen's own arms, so run the bracket's own
     # cells in the SAME batch instead of re-running base and the variant in a second invocation. That
     # is not an approximation -- a separate --floor produced per-job digests identical to the screen's
@@ -1323,7 +1358,8 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                     jobs.append(spec.job(f"{d}__{key}", decks[d][0], decks[d][1], own_app[key],
                                          seed=seed))
         fmeta = (ftags, route, per_arm, base_key, R, cell_name)
-    json.dump({"arms": spec.arms, "games": spec.games, "depth": spec.depth,
+    json.dump({"arms": spec.arms, "arm_flags": spec.arm_flags,
+               "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
                # What actually decides play is the BINARY; the commit beside it is
                # metadata (two commits touching only this driver produce identical games,
