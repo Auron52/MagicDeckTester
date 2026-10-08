@@ -16082,6 +16082,27 @@ static bool BrunaArmoryFullWidth()
     return heurarm::Flag(heurarm::ARMORY_FULL_WIDTH, env);
 }
 
+// VEXING SHUSHER MEASUREMENT ARMS (USER 2026-10-07: "Shusher I'm not totally sold on unconditionally. Can
+// we figure out when it does well?"). Both default OFF -- the shipped rule is the USER's ("leave out Vexing
+// Shusher"); these exist so ONE pooled batch can measure him against it, per job (heurarm).
+//   MTG_WISH_SHUSHER_ANY  -- round 4's role: the CHEAPEST wishable body beside Linvala whenever the body
+//                            role is live (no carrier, Bruna not castable next turn).
+//   MTG_WISH_SHUSHER_COND -- the same, only under the condition derived from the games he wins/loses
+//                            (see `shusher_cond` in BrunaWishCandidates and the design doc).
+static bool BrunaWishShusherAny()
+{
+    static const bool env = EnvOn("MTG_WISH_SHUSHER_ANY");    // default OFF (measurement arm)
+    return heurarm::Flag(heurarm::WISH_SHUSHER_ANY, env);
+}
+static bool BrunaWishShusherCond()
+{
+    static const bool env = EnvOn("MTG_WISH_SHUSHER_COND");   // default OFF (measurement arm)
+    return heurarm::Flag(heurarm::WISH_SHUSHER_COND, env);
+}
+// The state features of the last BrunaWishCandidates call on this thread (filled only while the
+// `wishproof` trace is on -- diagnostic, never read by play). Appended to the [wishproof] line.
+static thread_local std::string g_wish_features;
+
 static bool IsMulticolorWish(const CardParams& pp)
 {
     return pp.wish_from_sideboard && pp.wish_requires_multicolored;
@@ -16347,6 +16368,8 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     const std::string* primary = nullptr; const CardDefinition* primary_d = nullptr; int primary_pw = 0;
     const std::string* cheap = nullptr;   int cheap_pw = 0;
     const std::string* body = nullptr;    const CardDefinition* body_d = nullptr; int body_mv = 0, body_pw = 0;
+    // The CHEAPEST wishable body (Vexing Shusher) -- read only by the two measurement arms above.
+    const std::string* body2 = nullptr;   const CardDefinition* body2_d = nullptr; int body2_mv = 0, body2_pw = 0;
     const std::string* regrowth = nullptr;                                  // returns a swap Aura
     for (const std::string& n : legal)
     {
@@ -16371,6 +16394,8 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
             const int mv = d->card.m_mana_cost.ManaValue(), pw = d->card.m_power.value_or(0);
             if (!legend_dup && mv <= 3 && (body == nullptr || pw > body_pw || (pw == body_pw && mv < body_mv)))
             { body = &n; body_d = d; body_mv = mv; body_pw = pw; }
+            if (!legend_dup && mv <= 3 && (body2 == nullptr || mv < body2_mv || (mv == body2_mv && pw > body2_pw)))
+            { body2 = &n; body2_d = d; body2_mv = mv; body2_pw = pw; }
             continue;
         }
         if (p.tutor_from_graveyard)
@@ -16387,6 +16412,9 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // VEXING SHUSHER IS OUT ENTIRELY (USER 2026-10-07). The body role is the POOL's hardest hitter only:
     // once she (Linvala) has left the sideboard -- in hand, on our battlefield or in the graveyard -- a
     // weaker body (Shusher) does not inherit the role. (2 of 11666 committed round-5 wishes took Shusher.)
+    const CardDefinition* const pool_body_d = body_d;   // (trace only: the pool's hardest hitter)
+    const CardDefinition* const pool_body2_d = body2_d; // (trace only: the pool's cheapest body)
+    if (body2 == body) { body2 = nullptr; body2_d = nullptr; }   // the cheapest body IS the hardest hitter
     if (body != nullptr)
     {
         int best_elsewhere = std::numeric_limits<int>::min();
@@ -16539,6 +16567,21 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // "if I have the choice to cast bruna or Linvala next turn then we should definitely cast Bruna."
     const bool need_body = !body_bf && !cheap_body_hand && !bruna_next;
     if (body != nullptr && need_body)                       { out.push_back(*body); }
+    // VEXING SHUSHER -- measurement arms only (the shipped rule leaves him out, USER 2026-10-07). He is
+    // offered BESIDE Linvala (after her in the order) when the body role is live: always under
+    // MTG_WISH_SHUSHER_ANY, only under `shusher_cond` with MTG_WISH_SHUSHER_COND.
+    const bool shusher_live = body2 != nullptr && need_body;
+    // THE CONDITION (MTG_WISH_SHUSHER_COND), derived from the round-4 role's games (docs/design/glittering-
+    // wish-heuristic.md, "Vexing Shusher: when does he do well?"): in every game his offer won, he was the
+    // CHEAP EARLY CARRIER of an Aura that needs a body soon -- an Aura-swap Aura (Arcanum Wings) in hand,
+    // a host-tapping payload Aura (Colossification: it taps the creature it enters on, so it wants a body
+    // that is not Bruna), or Linvala not castable next turn (her {1}{W}{U} -- mana or colours -- while his
+    // hybrid {R/G}{R/G} is). Params, not names: aura_swap_cost, aura_etb_tap_host, the pool's hardest hitter.
+    bool tap_aura_hand = false;
+    for (const CardDefinition* a : hand_auras) { if (a->params.aura_etb_tap_host) { tap_aura_hand = true; break; } }
+    const bool shusher_cond = swap_hand_mv >= 0 || tap_aura_hand || !castable_next(pool_body_d);
+    if (shusher_live && (BrunaWishShusherAny() || (shusher_cond && BrunaWishShusherCond())))
+    { out.push_back(*body2); }
     if (troyan != nullptr && short_mana)                    { out.push_back(*troyan); }
     // LETHAL NOW (2026-10-06, held-out s7007 d3 gi933): a cheat path delivers the primary NEXT turn at the
     // earliest; when this turn's ready attackers fall short of the opponent's life by no more than the
@@ -16570,6 +16613,33 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         TRACE("wishcands", "T%d n=%zu supply=%d+%d need=%d/%d cheat=%d short=%d body=%d lethal=%d/%d :: %s", s.turn_number,
               out.size(), supply_any, supply_cre, need_nc, need_cr, cheat ? 1 : 0, short_mana ? 1 : 0,
               need_body ? 1 : 0, lethal_on_board ? 1 : 0, lethal_reach ? 1 : 0, l.c_str());
+    }
+    if (TRACE_ON("wishproof"))   // the state features the [wishproof] line carries (diagnostic only)
+    {
+        const ManaPool now = AvailableManaPool(s);
+        int ndork = 0, lands = 0, tapaura = 0;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            if (q.card.IsLand()) { ++lands; continue; }
+            const CardDefinition* d = db.LookupCached(q.card);
+            if (d != nullptr && q.card.IsCreature() && d->tmpl == CardTemplate::ManaDork) { ++ndork; }
+        }
+        for (const CardDefinition* a : hand_auras) { if (a->params.aura_etb_tap_host) { ++tapaura; } }
+        auto can_now = [&](const CardDefinition* d) { return d != nullptr && now.CanPay(d->card.m_mana_cost) ? 1 : 0; };
+        char buf[512];
+        std::snprintf(buf, sizeof buf,
+            "ph=%d sup=%d+%d col=%02x/%02x now=%d lnow=%d snow=%d lnext=%d snext=%d short=%d cheat=%d nbody=%d "
+            "bodybf=%d cheapbh=%d crebf=%d ndork=%d payload=%zu tapaura=%d swaph=%d swapbf=%d brh=%d bnext=%d brw=%d "
+            "lethal=%d/%d lands=%d shu=%d",
+            static_cast<int>(s.phase), supply_any, supply_cre, col_any, col_cre, now.Total(),
+            can_now(pool_body_d), can_now(pool_body2_d),
+            castable_next(pool_body_d) ? 1 : 0, castable_next(pool_body2_d) ? 1 : 0,
+            short_mana ? 1 : 0, cheat ? 1 : 0, need_body ? 1 : 0, body_bf ? 1 : 0, cheap_body_hand ? 1 : 0,
+            creature_bf ? 1 : 0, ndork, hand_auras.size(), tapaura, swap_hand_mv >= 0 ? 1 : 0, swap_bf ? 1 : 0,
+            gatherer_hand_mv >= 0 ? 1 : 0, bruna_next ? 1 : 0, bruna != nullptr ? 1 : 0,
+            lethal_on_board ? 1 : 0, lethal_reach ? 1 : 0, lands, shusher_live ? 1 : 0);
+        g_wish_features = buf;
     }
     return out;
 }
@@ -16705,10 +16775,12 @@ BrunaProvider::TutorCandidates(const GameState& s, int controller, const CardPar
         const bool full = wish ? BrunaWishFullWidth() : BrunaArmoryFullWidth();
         const char arm = full ? 'C' : 'R';   // which arm printed it (pooled proof batches)
         g_tutor_proof_set = std::string(1, arm) + "{" + l + "}";
+        if (wish)   // the state features + the game's seed, so a pooled batch's fetch is attributable per game
+        { g_tutor_proof_set += " feat{" + g_wish_features + " gs=" + std::to_string(s.game_seed) + "}"; }
         if (wish)
         {
-            TRACE("wishproof", "T%d arm=%c n=%zu legal=%zu rule={%s} bf=[%s] hand=[%s]", s.turn_number, arm, h.size(),
-                  legal.size(), l.c_str(), bf.c_str(), hand.c_str());
+            TRACE("wishproof", "T%d arm=%c n=%zu legal=%zu rule={%s} bf=[%s] hand=[%s] feat{%s}", s.turn_number, arm, h.size(),
+                  legal.size(), l.c_str(), bf.c_str(), hand.c_str(), g_wish_features.c_str());
         }
         else
         {

@@ -1146,3 +1146,38 @@ TEST_CASE("Attack hold: the cheapest sufficient set -- an unneeded Pilgrim still
     CHECK(pilgrim_attacks);
     CHECK_FALSE(birds_attacks);
 }
+
+// ---- THE USER's "Bruna gets all auras anyway when she attacks" (2026-10-07), as the shipped key prices it ----
+// With Bruna ready to attack this turn, a FLAT power Aura is worth the same on any host -- her attack trigger
+// gathers it -- so the key TIES across hosts and the choice costs no branching. It is NOT host-free for a
+// host-TAPPING Aura (Colossification taps the creature it enters on, before Bruna's attack: never on Bruna) or for
+// a BASE SETTER (Almost Perfect sets 9/4: +9 on a 1-power Mother who attacks beside Bruna, +4 on Bruna) -- which is
+// why the key keeps the "gather all but the base-setters" variant.
+TEST_CASE("Aura host ranking: with Bruna attacking, a flat Aura ties across hosts; a tapping Aura or a base setter does not")
+{
+    auto key_on = [](const std::string& aura, bool on_bruna)
+    {
+        BoardBs b;
+        const int bruna  = b.Put("Bruna, Light of Alabaster");
+        const int mother = b.Put("Mother of Runes");
+        Permanent a;
+        a.card = CardBs(aura, 77); a.controller_index = 0; a.owner_index = 0; a.entered_this_turn = true;
+        a.aura_attached_to = on_bruna ? bruna : mother;
+        b.s.battlefield.push_back(a);
+        ResolveAuraEnterTapHost(b.s, static_cast<int>(b.s.battlefield.size()) - 1, /*respond_window=*/true);
+        return AuraHostBoardKey(b.s, 0, /*attack_window=*/true);
+    };
+    {   // flat grant: identical either way (Bruna gathers it)
+        const AuraHostKey kb = key_on("Mythic Proportions", true), km = key_on("Mythic Proportions", false);
+        CHECK(kb.dmg == km.dmg);
+        CHECK(kb.now == km.now);
+        CHECK_FALSE(AuraHostKeyBetter(kb, km));
+        CHECK_FALSE(AuraHostKeyBetter(km, kb));
+    }
+    {   // Colossification on Bruna taps her: she cannot attack -- the key strictly prefers Mother
+        CHECK(AuraHostKeyBetter(key_on("Colossification", false), key_on("Colossification", true)));
+    }
+    {   // a base setter is worth more on the low-power creature that attacks beside Bruna
+        CHECK(AuraHostKeyBetter(key_on("Almost Perfect", false), key_on("Almost Perfect", true)));
+    }
+}

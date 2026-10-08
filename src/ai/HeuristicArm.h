@@ -325,6 +325,10 @@ enum Slot : int
     BOUNCE_UNTAPPED_FIRST,    // MTG_BOUNCE_UNTAPPED_FIRST  Karoo TAP-IN-RESPONSE + the USER's bounce order, jointly (KarooTapInResponseOn, EngineFlags.h): an untapped side-effect-free land a Karoo returns is first tapped for mana into the float (CR 605.3a / 106.4), and with that loss gone the provider returns a land that RE-ENTERS UNTAPPED ahead of a tapped one that re-enters tapped. USER 2026-10-06: "Generally the Orchard is better to bounce because the monastery will come into play tapped again." / "I recommend modelling tapping the land in response." Measurement lever, default OFF
     WISH_FULL_WIDTH,          // MTG_WISH_FULL_WIDTH        PROOF CONTROL ARM: Bruna's Glittering Wish offers its whole multicolored sideboard (GenericProvider::TutorCandidates, sideboard order) instead of BrunaProvider's narrowed candidate set (Bruna / the highest-power Aura / a cheap body when none can carry the Auras / Troyan when mana is short / a cheap second Aura without a cheat path). Default OFF; =1 is byte-identical to e1171a1d
     ARMORY_FULL_WIDTH,        // MTG_ARMORY_FULL_WIDTH      PROOF CONTROL ARM: Bruna's Open the Armory offers every library Aura / Equipment name (GenericProvider::TutorCandidates, library order) instead of BrunaProvider's conditional four (USER 2026-10-07: Colossification unless owned, Arcanum Wings unless owned, Wild Growth when mana is short, Lightning Greaves when a creature that would attack at once is coming). Default OFF; =1 is byte-identical to the pre-rule engine on the Armory axis
+    WISH_SHUSHER_ANY,         // MTG_WISH_SHUSHER_ANY       MEASUREMENT ARM (Bruna, USER question 2026-10-07 "when does Shusher do well?"): Glittering Wish offers the CHEAPEST wishable body (Vexing Shusher) beside Linvala whenever the body role is live -- round 4's role, the arm the USER's "leave out Shusher" was measured against. Default OFF (the USER's rule: Shusher out)
+    WISH_SHUSHER_COND,        // MTG_WISH_SHUSHER_COND      MEASUREMENT ARM: Shusher beside Linvala only under the CONDITION derived from the games he wins (see BrunaWishCandidates). Default OFF; the USER decides adoption
+    AURA_HOST_USER,           // MTG_AURA_HOST_USER         MEASUREMENT ARM (USER 2026-10-07 host idea): the creature-Aura host is chosen by the USER's ordering -- a non-dork that can attack, any non-dork, then the least useful dork; a host-TAPPING Aura (Colossification) onto the least useful creature (neither attacking nor tapping for mana) -- instead of the shipped damage key (AuraPlanHostKey). Default OFF; the USER decides
+    AURA_HOST_USER_BASE,      // MTG_AURA_HOST_USER_BASE    MEASUREMENT ARM (with MTG_AURA_HOST_USER): a BASE-SETTER Aura (Almost Perfect) goes on the attack-capable creature with the LOWEST base power (it gains set - base) instead of the best non-dork attacker. Default OFF
     COUNT
 };
 
@@ -611,6 +615,10 @@ inline const char* Name(int slot)
         "MTG_BOUNCE_UNTAPPED_FIRST",
         "MTG_WISH_FULL_WIDTH",
         "MTG_ARMORY_FULL_WIDTH",
+        "MTG_WISH_SHUSHER_ANY",
+        "MTG_WISH_SHUSHER_COND",
+        "MTG_AURA_HOST_USER",
+        "MTG_AURA_HOST_USER_BASE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

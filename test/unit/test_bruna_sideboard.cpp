@@ -1045,6 +1045,65 @@ TEST_CASE("Glittering Wish rule: VEXING SHUSHER is out entirely -- not even once
     }
 }
 
+// ---- VEXING SHUSHER MEASUREMENT ARMS (USER question 2026-10-07: "when does it do well?") ------------
+// Both default OFF (the shipped rule is the USER's: Shusher out). MTG_WISH_SHUSHER_ANY = round 4's role
+// (beside Linvala whenever the body role is live); MTG_WISH_SHUSHER_COND = only when an Aura needs a cheap
+// early carrier: Arcanum Wings or a host-tapping Aura (Colossification) in hand, or Linvala not castable
+// next turn.
+namespace
+{
+struct SlotArm
+{
+    heurarm::Slot slot; std::int8_t prev;
+    SlotArm(heurarm::Slot s, bool on) : slot(s), prev(heurarm::t_arm[s]) { heurarm::t_arm[s] = on ? 1 : 0; }
+    ~SlotArm() { heurarm::t_arm[slot] = prev; }
+};
+// No creature, Bruna six mana away, Plains + Island + a land in hand: Linvala ({1}{W}{U}) IS castable next
+// turn, so the body role is live and only the hand decides the COND arm.
+BoardSb ShusherBoard(const char* aura, bool blue)
+{
+    BoardSb b;
+    for (const std::string& n : kNewSideboard) { b.Side(n); }
+    b.Put("Plains");
+    b.Put(blue ? "Island" : "Forest");
+    b.Hand("Forest");
+    if (aura != nullptr) { b.Hand(aura); }
+    return b;
+}
+}   // namespace
+
+TEST_CASE("Glittering Wish rule: the Vexing Shusher measurement arms (ANY = round 4's role; COND = the derived condition)")
+{
+    WishFullWidthArm off(false);
+    {   // default: never (the USER's rule)
+        const std::vector<std::string> c = WishCands(ShusherBoard("Colossification", true));
+        CHECK(Has(c, "Linvala, Shield of Sea Gate"));
+        CHECK_FALSE(Has(c, "Vexing Shusher"));
+    }
+    {   // ANY: beside Linvala, after her in the order
+        SlotArm any(heurarm::WISH_SHUSHER_ANY, true);
+        const std::vector<std::string> c = WishCands(ShusherBoard("Mythic Proportions", true));
+        REQUIRE(Has(c, "Vexing Shusher"));
+        const auto li = std::find(c.begin(), c.end(), "Linvala, Shield of Sea Gate");
+        const auto sh = std::find(c.begin(), c.end(), "Vexing Shusher");
+        CHECK(li < sh);
+    }
+    {   // ANY: never without the body role (a non-dork creature on the battlefield carries)
+        SlotArm any(heurarm::WISH_SHUSHER_ANY, true);
+        BoardSb b = ShusherBoard("Colossification", true);
+        b.Put("Mother of Runes");
+        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+    }
+    SlotArm cond(heurarm::WISH_SHUSHER_COND, true);
+    // COND: a host-tapping Aura in hand -> yes; Arcanum Wings in hand -> yes
+    CHECK(Has(WishCands(ShusherBoard("Colossification", true)), "Vexing Shusher"));
+    CHECK(Has(WishCands(ShusherBoard("Arcanum Wings", true)), "Vexing Shusher"));
+    // COND: a non-tapping payload Aura only, and Linvala castable next turn -> no
+    CHECK_FALSE(Has(WishCands(ShusherBoard("Mythic Proportions", true)), "Vexing Shusher"));
+    // COND: the same hand with no blue source -> Linvala is not castable next turn -> yes
+    CHECK(Has(WishCands(ShusherBoard("Mythic Proportions", false)), "Vexing Shusher"));
+}
+
 // ---- OPEN THE ARMORY CANDIDATE RULE (USER spec 2026-10-07) ----------------------------------------
 // At most four roles, each conditional: Colossification unless one is owned, Arcanum Wings unless one is
 // owned, Wild Growth only when mana is short (the Troyan test), Lightning Greaves when a creature that
