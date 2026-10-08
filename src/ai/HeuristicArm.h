@@ -329,6 +329,8 @@ enum Slot : int
     WISH_SHUSHER_COND,        // MTG_WISH_SHUSHER_COND      MEASUREMENT ARM: Shusher beside Linvala only under the CONDITION derived from the games he wins (see BrunaWishCandidates). Default OFF; the USER decides adoption
     AURA_HOST_USER,           // MTG_AURA_HOST_USER         MEASUREMENT ARM (USER 2026-10-07 host idea): the creature-Aura host is chosen by the USER's ordering -- a non-dork that can attack, any non-dork, then the least useful dork; a host-TAPPING Aura (Colossification) onto the least useful creature (neither attacking nor tapping for mana) -- instead of the shipped damage key (AuraPlanHostKey). Default OFF; the USER decides
     AURA_HOST_USER_BASE,      // MTG_AURA_HOST_USER_BASE    MEASUREMENT ARM (with MTG_AURA_HOST_USER): a BASE-SETTER Aura (Almost Perfect) goes on the attack-capable creature with the LOWEST base power (it gains set - base) instead of the best non-dork attacker. Default OFF
+    AURA_COPY_FOLD,           // MTG_AURA_COPY_FOLD         SOUND identity fold (USER 2026-10-07 "We should do the duplicate-copy fold"): identical hand copies of one creature Aura with identical (host, cost) option lists are ONE odometer class (digits non-increasing in group order, the Equipment-copy canonical form). Default ON; =0 restores the unfolded walk
+    AURA_HOST_FOLD,           // MTG_AURA_HOST_FOLD         SOUND identity fold (the host half of the USER-approved duplicate-copy fold): identical creature-Aura HOSTS (same card, same state, plain, not a payer-tappable mana dork, not named by another candidate) keep only the first k of their class (k = creature-Aura hand slots). Default ON; =0 restores every host
     COUNT
 };
 
@@ -619,6 +621,8 @@ inline const char* Name(int slot)
         "MTG_WISH_SHUSHER_COND",
         "MTG_AURA_HOST_USER",
         "MTG_AURA_HOST_USER_BASE",
+        "MTG_AURA_COPY_FOLD",
+        "MTG_AURA_HOST_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

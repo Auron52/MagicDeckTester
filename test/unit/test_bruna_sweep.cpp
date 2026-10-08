@@ -1147,6 +1147,97 @@ TEST_CASE("Attack hold: the cheapest sufficient set -- an unneeded Pilgrim still
     CHECK_FALSE(birds_attacks);
 }
 
+// ---- THE DUPLICATE-COPY FOLD (USER 2026-10-07: "We should do the duplicate-copy fold") -------------------
+// Two halves, both SOUND identity folds, default ON: identical hand copies of one creature Aura are one
+// odometer class (MTG_AURA_COPY_FOLD), and identical creature HOSTS keep only the first k of their class
+// (MTG_AURA_HOST_FOLD, k = creature-Aura hand slots). Neither may change the plan list the search sees:
+// each case compares the folded enumeration with the unfolded one, plan for plan, and Solve's pick.
+namespace
+{
+struct FoldArms
+{
+    std::int8_t pc, ph;
+    explicit FoldArms(bool on) : pc(heurarm::t_arm[heurarm::AURA_COPY_FOLD]), ph(heurarm::t_arm[heurarm::AURA_HOST_FOLD])
+    { heurarm::t_arm[heurarm::AURA_COPY_FOLD] = on ? 1 : 0; heurarm::t_arm[heurarm::AURA_HOST_FOLD] = on ? 1 : 0; }
+    ~FoldArms() { heurarm::t_arm[heurarm::AURA_COPY_FOLD] = pc; heurarm::t_arm[heurarm::AURA_HOST_FOLD] = ph; }
+};
+// Every plan as "name>host" per cast, in order (the comparison the byte-identity claim makes).
+std::vector<std::string> PlanShapes(const std::vector<TurnSolver::Plan>& plans)
+{
+    std::vector<std::string> out;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        std::string k;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            k += a.card_name.str() + ">" + std::to_string(a.enchant_target) + ";";
+        }
+        out.push_back(k);
+    }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Duplicate-copy fold: two identical Aura copies over several hosts -- the same plans, folded or not")
+{
+    BoardBs b;
+    b.Put("Mother of Runes");
+    b.Put("Avacyn's Pilgrim", /*tapped=*/false, /*sick=*/true);
+    b.Put("Birds of Paradise", /*tapped=*/true);
+    for (int k = 0; k < 15; ++k) { b.Put("Forest"); }
+    b.Hand("Colossification");
+    b.Hand("Colossification");
+    b.Hand("Mythic Proportions");
+    b.s.players[0].lands_played_this_turn = 1;
+    std::vector<std::string> on, off;
+    int solve_on = 0, solve_off = 0;
+    { FoldArms a(true);  on  = PlanShapes(TurnSolver::EnumerateMainPlans(b.s, true)); solve_on  = SolveHostOf(b.s, "Colossification"); }
+    { FoldArms a(false); off = PlanShapes(TurnSolver::EnumerateMainPlans(b.s, true)); solve_off = SolveHostOf(b.s, "Colossification"); }
+    CHECK(on.size() > 1);
+    CHECK(on == off);
+    CHECK(solve_on == solve_off);
+}
+
+TEST_CASE("Duplicate-copy fold: three identical hosts, one Aura -- the same plans, and a payer-tappable dork is never folded")
+{
+    // Three ready Mothers (identical, plain, not mana sources) and one Aura: one host class, k = 1.
+    BoardBs b;
+    b.Put("Mother of Runes");
+    b.Put("Mother of Runes");
+    b.Put("Mother of Runes");
+    for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
+    b.Hand("Mythic Proportions");
+    b.s.players[0].lands_played_this_turn = 1;
+    std::vector<std::string> on, off;
+    { FoldArms a(true);  on  = PlanShapes(TurnSolver::EnumerateMainPlans(b.s, true)); }
+    { FoldArms a(false); off = PlanShapes(TurnSolver::EnumerateMainPlans(b.s, true)); }
+    CHECK(on == off);
+    // Two untapped, ready Pilgrims: the real payer taps them by ORDER and never reads the Aura's target, so
+    // "the Aura on the Pilgrim that paid" and "on the one that did not" are different lines -- both stay.
+    BoardBs d;
+    const int p1 = d.Put("Avacyn's Pilgrim");
+    const int p2 = d.Put("Avacyn's Pilgrim");
+    for (int k = 0; k < 6; ++k) { d.Put("Forest"); }
+    d.Hand("Unflinching Courage");
+    d.s.players[0].lands_played_this_turn = 1;
+    FoldArms a(true);
+    BranchArm br;   // every host its own plan, so the enumerated hosts are visible
+    bool h1 = false, h2 = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(d.s, true))
+    {
+        for (const Action& x : p.actions)
+        {
+            if (x.kind != Action::Kind::CastFromHand || x.card_name.str() != "Unflinching Courage") { continue; }
+            h1 = h1 || x.enchant_target == p1;
+            h2 = h2 || x.enchant_target == p2;
+        }
+    }
+    CHECK(h1);
+    CHECK(h2);
+}
+
+
 // ---- THE USER's "Bruna gets all auras anyway when she attacks" (2026-10-07), as the shipped key prices it ----
 // With Bruna ready to attack this turn, a FLAT power Aura is worth the same on any host -- her attack trigger
 // gathers it -- so the key TIES across hosts and the choice costs no branching. It is NOT host-free for a
