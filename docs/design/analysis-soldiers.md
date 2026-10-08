@@ -1344,8 +1344,9 @@ the C.5 risk gate. Phase D: crossover `1->1 2->1 3->1 4->2 5->6 6->6 7->6 8->6`;
 **Phase F (run with the leaf LIVE, so the setting is measured under it):** `mull_gen_depth=1`,
 `mull_gen_budget_ms=3` (rank fidelity 0.9934 >= 0.990 floor vs the d5/b20 play reference, 0.49x the
 play cost; d2/b3 0.9965 at 0.68x, d5/b20 = 1.0). **K = 19** recorded in `value_play.expected_buckets`
--- the first recorded value, which the USER is asked to confirm. (Phase F refuses on a first leaf until
-the sidecar is live, which is why adoption came first.)
+-- the first recorded value. **USER 2026-10-08: "Let's leave Soldiers at 19 for now. I'll probably want
+to change it in a modified finalized list."** (Phase F refuses on a first leaf until the sidecar is live,
+which is why adoption came first.)
 
 **Suite (all three tiers, `--deck=soldiers,soldiers2hg`, PGO+LTO):** 0 slower games anywhere.
 
