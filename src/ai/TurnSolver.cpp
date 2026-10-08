@@ -46149,6 +46149,23 @@ static bool PutBodyGainsCards(const CardParams& p)
 // does casting this card put a permanent with an activation onto the battlefield? The apply-time
 // gate (PostEntryActivationPending) adds the affordability / tap-state test; this only decides
 // which base plans wave 0 fans out, so it must be the SUPERSET of what the gate can accept.
+//
+// MTG_POST_ENTRY_PING_ALL (DEFAULT ON; =0 restores the pre-2026-10-08 predicate, per-job via
+// heurarm::POST_ENTRY_PING_ALL). PingAll (Pyrohemia, ping_all_cost) was appended to
+// CollectActivationKeys' mode table -- so the apply-time gate ACCEPTED a just-cast Pyrohemia's {R} --
+// but never added here, so no fan-out (wave 0 / the wave walker, both read PlanOpensBreakpoint)
+// ever gave a Pyrohemia-casting plan a bp_choice, and site 9 is SEARCHED-ONLY: a base plan applies
+// no continuation there. "Cast Pyrohemia, then ping in the same main" was therefore inexpressible
+// at any depth or budget. Found by the PD claude-play sweep (seed 61003, T5: City of Brass +
+// Pyrohemia + one {R} ping under Tamanoa + Vito is exact lethal; the search played Dina and won T6,
+// at --depth 8 --budget-ms 0 too, yet pinged and won T5 one frame later with Pyrohemia already out).
+// Fixture: test/scenarios/pd_pyrohemia_cast_then_ping.json. Only Pyrohemia holds ping_all_cost, so
+// every other deck is byte-identical either way.
+static bool PostEntryPingAllClauseOn()
+{
+    static const bool on = EnvOn("MTG_POST_ENTRY_PING_ALL", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::POST_ENTRY_PING_ALL, on);
+}
 static bool CardHasPostEntryActivation(const CardParams& pp)
 {
     if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()) { return true; }
@@ -46178,6 +46195,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // test/scenarios/fungusb_slimefoot_token_same_turn.json.
     if (pp.activated_dig_cost.has_value()) { return true; }
     if (pp.pay_token_cost.has_value()) { return true; }
+    // Pyrohemia: {R} with no {T}, so a copy cast this main can ping in the same phase (see
+    // PostEntryPingAllClauseOn above for why this clause was missing and what it cost).
+    if (pp.ping_all_cost.has_value() && PostEntryPingAllClauseOn()) { return true; }
     return false;
 }
 

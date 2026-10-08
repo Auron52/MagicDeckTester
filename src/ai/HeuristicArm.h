@@ -337,6 +337,7 @@ enum Slot : int
     HINATA_BOUNCE_RULE,       // MTG_HINATA_BOUNCE_RULE     the USER's Hinata Karoo rule (HinataProvider::BounceUserRulePick): among re-enter-untapped returnable lands, fewest colours, then most copies, then the colour the deck needs less (pip counts), then the base order
     PD_BESEECH_USEFUL,        // MTG_PD_BESEECH_USEFUL      Prevent Damage: the AUTONOMOUS search offers Beseech the Queen only the cards with an engine ROLE (read off params): the gain / drain / amp creatures, the damage sources (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia), the creature tutors (Living Wish, Green Sun's Zenith), Ancient Tomb-shaped lands, the FUEL land (most self-damage per tap: Tarnished Citadel) and, while colours or next turn's land are short, ONE TEMPO land (most missing colours fixed, then most colours, untapped, least pain). Drops another Beseech and the redundant lands. The Wish doctrine's shape applied to Beseech -- a DRAFT for the USER's review, measurement lever, default OFF; human play keeps every name
     GSZ_SHUFFLE_COPY_ID,      // MTG_GSZ_SHUFFLE_COPY_ID    Green Sun's Zenith's self-shuffle in the APPLY path (search lookahead / human-play apply) puts the CAST COPY (its m_number) into the library instead of the definition's template (m_number 0): Library::ShuffleByKey ranks cards by m_number, so the template landed at a different depth than the executor's real copy and shifted every predicted draw past it (claude-play sweep s61005, 2026-10-08). A lockstep fix, DEFAULT ON; =0 = the template
+    POST_ENTRY_PING_ALL,      // MTG_POST_ENTRY_PING_ALL    breakpoint site 9's fan-out predicate (CardHasPostEntryActivation, TurnSolver.cpp) covers a PingAll source (Pyrohemia, ping_all_cost): a plan that CASTS one gets bp_choice variants, so "cast Pyrohemia, then {R}: ping in the same main" is a searched continuation. Without it the apply-time gate accepted the key but nothing ever fanned the plan, so the continuation was unreachable at any depth/budget (PD claude-play sweep s61003 T5, 2026-10-08). DEFAULT ON; =0 restores the old predicate
     COUNT
 };
 
@@ -635,6 +636,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_BOUNCE_RULE",
         "MTG_PD_BESEECH_USEFUL",
         "MTG_GSZ_SHUFFLE_COPY_ID",
+        "MTG_POST_ENTRY_PING_ALL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

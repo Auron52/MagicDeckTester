@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-10-08, claude-play sweep seed 61003 T5). BREAKPOINT SITE 9 for a PingAll",
+    "source: a Pyrohemia CAST this main can activate {R} in the same phase. The T5 pre-combat frame",
+    "of that game (resumed at main 1, land drop unused): Tamanoa + Vito out and able to attack, four",
+    "lands, City of Brass + Pyrohemia in hand, us 16, opponent 15. Exact lethal T5: City of Brass,",
+    "cast Pyrohemia off the painful sources (each pain hit -> Tamanoa gain -> Vito drain), then ONE",
+    "{R} ping off the last land (1 to Tamanoa, Vito, us and the opponent = 4 dealt by a noncreature",
+    "source -> Tamanoa gains 4 -> Vito drains 4, plus the 1 direct), then Tamanoa 2 + Vito 1 attack.",
+    "The ping is reachable ONLY as a site-9 continuation (activations are enumerated against the",
+    "battlefield the plan started from, and site 9 is searched-only), so it needs PlanOpensBreakpoint",
+    "to fan out the Pyrohemia-casting plan -- CardHasPostEntryActivation's ping_all_cost clause.",
+    "CONTROL: MTG_POST_ENTRY_PING_ALL=0 (the pre-fix predicate) plays Dina + pain drains and wins T6,",
+    "at --depth 8 --budget-ms 0 too. Settings = the deck's shipped play settings (d5 b20)."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 5, "on_the_play": false, "active_life": 16, "opponent_life": 15,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Battlefield Forge" },
+    { "name": "Brushland" },
+    { "name": "Grand Coliseum" },
+    { "name": "Tamanoa" },
+    { "name": "Tarnished Citadel" },
+    { "name": "Vito, Thorn of the Dusk Rose" }
+  ],
+  "hand": [ "City of Brass", "Dina, Soul Steeper", "Green Sun's Zenith", "Green Sun's Zenith",
+            "Pyrohemia", "Rhox Faithmender" ],
+  "library_top": [ "Ancient Tomb", "Ancient Tomb", "Reflecting Pool", "Grand Coliseum",
+                   "Rolling Earthquake", "Reflecting Pool" ],
+  "library_filler": "Swords to Plowshares", "library_size": 40,
+  "depth": 5, "budget_ms": 20, "max_turns": 8,
+  "expect_win_turn": 5
+}
