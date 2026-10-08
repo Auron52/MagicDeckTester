@@ -690,9 +690,9 @@ TEST_CASE("Glittering Wish rule: the regrowths keep GenericProvider's list; the 
 TEST_CASE("Glittering Wish rule: the BODY is Linvala only, when nothing can carry the Auras and Bruna cannot come down next turn")
 {
     WishFullWidthArm off(false);
-    // USER 2026-10-07: "I would leave out Vexing Shusher" -- never offered.
-    // No creature at all, Colossification in hand, two lands (Bruna is six mana away): Linvala joins --
-    // and the cheap Aura does NOT (nothing to wear it).
+    // No creature at all, Colossification in hand, two lands (Bruna is six mana away): Linvala joins -- and
+    // the cheap Aura does NOT (nothing to wear it). Vexing Shusher joins too: a host-tapping Aura in hand is
+    // the CHEAP-BODY condition (adopted 2026-10-08; its own test is below).
     {
         BoardSb b;
         for (const std::string& n : kNewSideboard) { b.Side(n); }
@@ -701,17 +701,18 @@ TEST_CASE("Glittering Wish rule: the BODY is Linvala only, when nothing can carr
         b.Hand("Colossification");
         const std::vector<std::string> c = WishCands(b);
         CHECK(Has(c, "Linvala, Shield of Sea Gate"));
-        CHECK_FALSE(Has(c, "Vexing Shusher"));
+        CHECK(Has(c, "Vexing Shusher"));
         CHECK_FALSE(Has(c, "Unflinching Courage"));
     }
-    // Only mana dorks out (they tap for mana, they do not carry): still Linvala.
+    // Only mana dorks out (they tap for mana, they do not carry): still Linvala. Two mana next turn cannot
+    // cast her {1}{W}{U}, which is the cheap-body condition -> Shusher beside her.
     {
         BoardSb b;
         for (const std::string& n : kNewSideboard) { b.Side(n); }
         b.Put("Forest");
         b.Put("Avacyn's Pilgrim");
         CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
-        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+        CHECK(Has(WishCands(b), "Vexing Shusher"));
     }
     // A non-dork creature on the battlefield (Mother of Runes): no body.
     {
@@ -1013,7 +1014,7 @@ TEST_CASE("Glittering Wish rule: a host-tapping Aura CAST on a host is not letha
     CHECK(Has(c, "Bruna, Light of Alabaster"));
 }
 
-TEST_CASE("Glittering Wish rule: VEXING SHUSHER is out entirely -- not even once Linvala has left the sideboard")
+TEST_CASE("Glittering Wish rule: VEXING SHUSHER never inherits Linvala's role once she has left the sideboard")
 {
     WishFullWidthArm off(false);
     // No body anywhere, two Forests, Colossification in hand: Linvala is the body.
@@ -1029,7 +1030,7 @@ TEST_CASE("Glittering Wish rule: VEXING SHUSHER is out entirely -- not even once
     {
         BoardSb b = shape();
         CHECK(Has(WishCands(b), "Linvala, Shield of Sea Gate"));
-        CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
+        CHECK(Has(WishCands(b), "Vexing Shusher"));   // beside her: Colossification in hand
     }
     // Linvala already wished and now in the graveyard (gone from the sideboard): the body role does NOT
     // pass to Shusher (round 5 offered him here: 2 of 11666 committed wishes took him).
@@ -1045,11 +1046,9 @@ TEST_CASE("Glittering Wish rule: VEXING SHUSHER is out entirely -- not even once
     }
 }
 
-// ---- VEXING SHUSHER MEASUREMENT ARMS (USER question 2026-10-07: "when does it do well?") ------------
-// Both default OFF (the shipped rule is the USER's: Shusher out). MTG_WISH_SHUSHER_ANY = round 4's role
-// (beside Linvala whenever the body role is live); MTG_WISH_SHUSHER_COND = only when an Aura needs a cheap
-// early carrier: Arcanum Wings or a host-tapping Aura (Colossification) in hand, or Linvala not castable
-// next turn.
+// ---- THE CHEAP-BODY ROLE: Vexing Shusher (ADOPTED 2026-10-08, MTG_WISH_SHUSHER_COND default ON) ------------
+// Beside Linvala, when the body role is live and an Aura needs a cheap early carrier: Arcanum Wings or a
+// host-tapping Aura (Colossification) in hand, or Linvala not castable next turn. =0 restores "Shusher out".
 namespace
 {
 struct SlotArm
@@ -1058,8 +1057,8 @@ struct SlotArm
     SlotArm(heurarm::Slot s, bool on) : slot(s), prev(heurarm::t_arm[s]) { heurarm::t_arm[s] = on ? 1 : 0; }
     ~SlotArm() { heurarm::t_arm[slot] = prev; }
 };
-// No creature, Bruna six mana away, Plains + Island + a land in hand: Linvala ({1}{W}{U}) IS castable next
-// turn, so the body role is live and only the hand decides the COND arm.
+// No creature, Bruna six mana away, Plains + Island/Forest + a land in hand: with blue, Linvala ({1}{W}{U}) IS
+// castable next turn, so the body role is live and only the hand decides the condition.
 BoardSb ShusherBoard(const char* aura, bool blue)
 {
     BoardSb b;
@@ -1072,36 +1071,32 @@ BoardSb ShusherBoard(const char* aura, bool blue)
 }
 }   // namespace
 
-TEST_CASE("Glittering Wish rule: the Vexing Shusher measurement arms (ANY = round 4's role; COND = the derived condition)")
+TEST_CASE("Glittering Wish rule: the CHEAP BODY (Vexing Shusher) -- beside Linvala, only when an Aura needs an early carrier")
 {
     WishFullWidthArm off(false);
-    {   // default: never (the USER's rule)
+    {   // beside Linvala, after her in the order
         const std::vector<std::string> c = WishCands(ShusherBoard("Colossification", true));
-        CHECK(Has(c, "Linvala, Shield of Sea Gate"));
-        CHECK_FALSE(Has(c, "Vexing Shusher"));
-    }
-    {   // ANY: beside Linvala, after her in the order
-        SlotArm any(heurarm::WISH_SHUSHER_ANY, true);
-        const std::vector<std::string> c = WishCands(ShusherBoard("Mythic Proportions", true));
         REQUIRE(Has(c, "Vexing Shusher"));
         const auto li = std::find(c.begin(), c.end(), "Linvala, Shield of Sea Gate");
         const auto sh = std::find(c.begin(), c.end(), "Vexing Shusher");
         CHECK(li < sh);
     }
-    {   // ANY: never without the body role (a non-dork creature on the battlefield carries)
-        SlotArm any(heurarm::WISH_SHUSHER_ANY, true);
+    {   // never without the body role (a non-dork creature on the battlefield carries)
         BoardSb b = ShusherBoard("Colossification", true);
         b.Put("Mother of Runes");
         CHECK_FALSE(Has(WishCands(b), "Vexing Shusher"));
     }
-    SlotArm cond(heurarm::WISH_SHUSHER_COND, true);
-    // COND: a host-tapping Aura in hand -> yes; Arcanum Wings in hand -> yes
+    // a host-tapping Aura in hand -> yes; Arcanum Wings in hand -> yes
     CHECK(Has(WishCands(ShusherBoard("Colossification", true)), "Vexing Shusher"));
     CHECK(Has(WishCands(ShusherBoard("Arcanum Wings", true)), "Vexing Shusher"));
-    // COND: a non-tapping payload Aura only, and Linvala castable next turn -> no
+    // a non-tapping payload Aura only, and Linvala castable next turn -> no
     CHECK_FALSE(Has(WishCands(ShusherBoard("Mythic Proportions", true)), "Vexing Shusher"));
-    // COND: the same hand with no blue source -> Linvala is not castable next turn -> yes
+    // the same hand with no blue source -> Linvala is not castable next turn -> yes
     CHECK(Has(WishCands(ShusherBoard("Mythic Proportions", false)), "Vexing Shusher"));
+    {   // the hatch: =0 restores "Shusher out entirely"
+        SlotArm hatch(heurarm::WISH_SHUSHER_COND, false);
+        CHECK_FALSE(Has(WishCands(ShusherBoard("Colossification", true)), "Vexing Shusher"));
+    }
 }
 
 // ---- OPEN THE ARMORY CANDIDATE RULE (USER spec 2026-10-07) ----------------------------------------

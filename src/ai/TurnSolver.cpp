@@ -9306,86 +9306,6 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
     return key;
 }
 
-// ---- MTG_AURA_HOST_USER: the USER's host ordering, as a MEASUREMENT ARM (default OFF) ----------------
-// USER 2026-10-07: "maybe we should also have a heuristic for hosts. Taking any non-dork first and the least
-// useful dorks second. Though if one is summoning sick it makes sense to put it on the one that can attack.
-// Bruna gets all auras anyway when she attacks." Measured against the shipped ranking (AuraPlanHostKey, the
-// damage key above) and the fully-branched control (MTG_AURA_HOST_BRANCH=1); the USER decides adoption.
-// It REPLACES the key at the same two sites (EnumeratePlans' dedup survivor, Solve's re-point), choosing among
-// the SAME enumerated hosts, so the arms differ only in which host the ranking picks. Per host, on the
-// plan's host-independent base (AuraPlanHostBase: the plan's creatures cast, its equips attached, the real
-// payer's mana taps applied), lower is better:
-//   a non-tapping Aura (power grant, base setter, Arcanum Wings):
-//     0 a non-dork that can attack THIS turn (pre-combat; CanAttackFull -- sickness, haste, the payer's taps)
-//     1 a non-dork that cannot (summoning sick, cast this turn, tapped)
-//     2 a mana dork that can attack this turn, 3 one that cannot;  within 2/3 the LEAST USEFUL dork first
-//       (lowest mana yield, then not creature-mana-only)
-//   a HOST-TAPPING Aura (Colossification taps the creature it enters on): the least useful creature --
-//     0 one that would neither attack nor tap for mana this turn (sick, or already tapped), non-dork first
-//     1 a mana dork (it taps for mana in response to the trigger: keeps its mana, loses only its swing)
-//     2 a non-dork that could attack this turn (the tap costs that attack)
-// A plan's rank is the sum over its creature Auras; ties keep the first enumerated (the historical order).
-static bool AuraHostUserOn()
-{
-    static const bool env = EnvOn("MTG_AURA_HOST_USER");   // default OFF (measurement arm; the USER decides)
-    return heurarm::Flag(heurarm::AURA_HOST_USER, env);
-}
-
-// MTG_AURA_HOST_USER_BASE (with MTG_AURA_HOST_USER; default OFF): the amendment the user ordering's first
-// measured losses asked for -- a BASE SETTER (Almost Perfect: base 9/4) gains (9 - base), so it goes on the
-// attack-capable creature with the LOWEST base power (a 0-power dork: +9) rather than on the best non-dork
-// attacker (Bruna: +4); Bruna still gathers every other Aura. (batch P, s4004 d5 gi377 / gi410.)
-static bool AuraHostUserBaseOn()
-{
-    static const bool env = EnvOn("MTG_AURA_HOST_USER_BASE");   // default OFF (measurement arm)
-    return heurarm::Flag(heurarm::AURA_HOST_USER_BASE, env);
-}
-
-static long AuraPlanUserRank(const std::vector<Permanent>& base_bf, const GameState& s, bool is_pre_combat,
-                             const std::vector<Action>& acts)
-{
-    const int me = s.active_player_index;
-    long total = 0;
-    for (const Action& a : acts)
-    {
-        if (!IsCreatureAuraCast(a)) { continue; }
-        const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        const bool taps_host = ad != nullptr && ad->params.aura_etb_tap_host;
-        const Permanent* h = nullptr;
-        for (const Permanent& q : base_bf) { if (q.card.m_number == a.enchant_target) { h = &q; break; } }
-        if (h == nullptr) { total += 1000; continue; }   // not on the base (unexpected): rank last
-        const bool dork = AuraHostIsManaCreature(*h);
-        const bool atk  = is_pre_combat && CanAttackFull(*h, base_bf, me);
-        long r = 0;
-        if (!taps_host && ad != nullptr && ad->params.aura_set_base_power >= 0 && AuraHostUserBaseOn())
-        {
-            r = (atk ? 0 : 100) + std::min(std::max(0, h->card.m_power.value_or(0)), 50);
-        }
-        else if (!taps_host)
-        {
-            r = dork ? (atk ? 2 : 3) : (atk ? 0 : 1);
-            if (dork)
-            {
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h->card);
-                int y = hd ? PermanentManaYield(s, *h, *hd) : 0;
-                if (y <= 0 && hd) { y = ManaProducedPerTap(*hd); }
-                const bool cre_only = hd != nullptr && hd->params.creature_mana_only;
-                r = r * 100 + std::min(y, 9) * 2 + (cre_only ? 1 : 0);
-            }
-            else { r *= 100; }
-        }
-        else
-        {
-            const bool can_mana = dork && !h->tapped && CanTapNow(*h, base_bf);
-            if (!atk && !can_mana) { r = dork ? 1 : 0; }    // tier 0, non-dork first
-            else if (dork)         { r = 100; }             // tier 1
-            else                   { r = 200; }             // tier 2
-        }
-        total += r;
-    }
-    return total;
-}
-
 // A host-independent fingerprint of a plan (every action field the base reads; a creature Aura's
 // target left out), so the dedup builds one base per distinct plan-modulo-hosts.
 static std::string AuraPlanBaseFingerprint(const std::vector<Action>& acts)
@@ -9487,11 +9407,7 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
     std::vector<Action> trial = acts;
     GameState work = AuraPlanHostBase(state, acts);
     const std::vector<Permanent> base_bf = work.battlefield;
-    const bool user = AuraHostUserOn();   // MTG_AURA_HOST_USER measurement arm (see AuraPlanUserRank)
-    AuraHostKey best_key;
-    long best_user = 0;
-    if (user) { best_user = AuraPlanUserRank(base_bf, state, is_pre_combat, acts); }
-    else      { best_key = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, acts); }
+    AuraHostKey best_key = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, acts);
     for (;;)
     {
         std::size_t d = 0;
@@ -9500,12 +9416,6 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
         for (std::size_t q = 0; q < pos.size(); ++q)
         { trial[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(pick[q])]; }
         if (ActsHaveShroudBlockedAura(state, trial)) { continue; }
-        if (user)
-        {
-            const long u = AuraPlanUserRank(base_bf, state, is_pre_combat, trial);
-            if (u < best_user) { best_user = u; best_pick = pick; }
-            continue;
-        }
         const AuraHostKey k = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, trial);
         if (AuraHostKeyBetter(k, best_key)) { best_key = k; best_pick = pick; }
     }
@@ -45227,25 +45137,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
                 return it->second;
             };
-            const bool user_rank = AuraHostUserOn();
-            std::unordered_map<std::size_t, long> urank;
-            auto user_of = [&](std::size_t i) -> long
-            {
-                auto it = urank.find(i);
-                if (it != urank.end()) { return it->second; }
-                const std::vector<Action>& acts = plans[i].actions;
-                const std::string fp = AuraPlanBaseFingerprint(acts);
-                auto bt = bases.find(fp);
-                if (bt == bases.end())
-                {
-                    GameState w = AuraPlanHostBase(state, acts);
-                    std::vector<Permanent> b = w.battlefield;
-                    bt = bases.emplace(fp, std::make_pair(std::move(b), std::move(w))).first;
-                }
-                const long u = AuraPlanUserRank(bt->second.first, state, is_pre_combat, acts);
-                urank.emplace(i, u);
-                return u;
-            };
             for (std::size_t i = 0; i < plans.size(); ++i)
             {
                 sigs.push_back(plan_signature(plans[i]));
@@ -45254,11 +45145,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 bool aura = false;
                 for (const Action& a : plans[i].actions) { if (IsCreatureAuraCast(a)) { aura = true; break; } }
                 if (!aura) { continue; }
-                if (user_rank)   // MTG_AURA_HOST_USER measurement arm (see AuraPlanUserRank)
-                {
-                    if (user_of(i) < user_of(it->second)) { it->second = i; }
-                    continue;
-                }
                 if (AuraHostKeyBetter(key_of(i), key_of(it->second))) { it->second = i; }
             }
         }

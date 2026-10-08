@@ -16037,11 +16037,18 @@ const char* BrunaProvider::CastOrderTierName(int rank) const
 //     AND graveyard if H is a gatherer (her attack trigger, no mana), else the best subset of the hand's
 //     payload Auras whose mana values fit next turn's unrestricted supply (less H's own cost) and whose
 //     colours we make. Timing (haste for a fresh host) is not modelled.
-//   BODY (Linvala -- the hardest-hitting non-dork creature of mana value <= 3; Vexing Shusher is OUT,
-//     USER 2026-10-07): only when nothing can carry the Auras -- no non-dork creature and no Aura-wearer on
-//     our battlefield, none of mana value <= 3 in hand -- AND Bruna cannot come down next turn (in hand or
-//     fetchable, next turn's mana covering her {3}{W}{W}{U} with creature-only and big-spell-only mana
-//     counted, colours included).
+//   BODY (Linvala -- the hardest-hitting non-dork creature of mana value <= 3): only when nothing can carry
+//     the Auras -- no non-dork creature and no Aura-wearer on our battlefield, none of mana value <= 3 in
+//     hand -- AND Bruna cannot come down next turn (in hand or fetchable, next turn's mana covering her
+//     {3}{W}{W}{U} with creature-only and big-spell-only mana counted, colours included).
+//   CHEAP BODY (Vexing Shusher -- the CHEAPEST wishable body), beside Linvala, ADOPTED 2026-10-08 (USER:
+//     "your condition is probably okay to consider it in the search"; he had been "out entirely" since the
+//     USER's "I would leave out Vexing Shusher"): only when the body role is live AND an Aura needs a cheap
+//     early carrier -- an Aura-swap Aura (Arcanum Wings) in hand, a host-tapping payload Aura
+//     (Colossification) in hand, or Linvala not castable next turn. He won as that carrier (cast T3 off
+//     green; Colossification swapped onto him mid-combat by Wings). Measured (docs/design/glittering-wish-
+//     heuristic.md): vs leaving him out train -17, held-out -24 turns; vs offering him whenever the body
+//     role is live, the same benefit with a third fewer offers. MTG_WISH_SHUSHER_COND=0 is the hatch.
 //   TROYAN (mana_only_spell_min_mv: big-spell mana): only when MANA IS SHORT for something we actually
 //     mean to CAST -- next turn's supply (lands / rocks / unrestricted dorks at their yield, +1 for a land
 //     drop) is below the largest 5+ cost among the hand's creatures (Bruna, paid with creature-only mana
@@ -16057,9 +16064,9 @@ const char* BrunaProvider::CastOrderTierName(int rank) const
 //   REGROWTH (Auroral Procession / Reborn Hope): only when it RESTORES A CHEAT PATH -- it can target an
 //     Aura-swap Aura in our graveyard (its own filter: Reborn Hope's multicolored conjunct cannot reach
 //     mono-blue Wings), there is no cheat path otherwise, and a payload Aura is in hand to swap in.
-//   EVERYTHING ELSE (Detention Sphere, Vexing Shusher, any other regrowth, a non-top Aura) is excluded.
-//     Order (the base plan / rollout / d0 pick is the front): Bruna, primary Aura, Linvala, Troyan, cheap
-//     Aura, regrowth. NOTHING MISSING (an empty set): ONE name -- the primary as the default, else the
+//   EVERYTHING ELSE (Detention Sphere, any other regrowth, a non-top Aura) is excluded.
+//     Order (the base plan / rollout / d0 pick is the front): Bruna, primary Aura, Linvala, Shusher, Troyan,
+//     cheap Aura, regrowth. NOTHING MISSING (an empty set): ONE name -- the primary as the default, else the
 //     first legal name -- since the fetch cannot matter; never the whole pool.
 //
 // Every addition beyond the USER's spec was forced by a held-out game the full-width control won sooner
@@ -16082,21 +16089,11 @@ static bool BrunaArmoryFullWidth()
     return heurarm::Flag(heurarm::ARMORY_FULL_WIDTH, env);
 }
 
-// VEXING SHUSHER MEASUREMENT ARMS (USER 2026-10-07: "Shusher I'm not totally sold on unconditionally. Can
-// we figure out when it does well?"). Both default OFF -- the shipped rule is the USER's ("leave out Vexing
-// Shusher"); these exist so ONE pooled batch can measure him against it, per job (heurarm).
-//   MTG_WISH_SHUSHER_ANY  -- round 4's role: the CHEAPEST wishable body beside Linvala whenever the body
-//                            role is live (no carrier, Bruna not castable next turn).
-//   MTG_WISH_SHUSHER_COND -- the same, only under the condition derived from the games he wins/loses
-//                            (see `shusher_cond` in BrunaWishCandidates and the design doc).
-static bool BrunaWishShusherAny()
-{
-    static const bool env = EnvOn("MTG_WISH_SHUSHER_ANY");    // default OFF (measurement arm)
-    return heurarm::Flag(heurarm::WISH_SHUSHER_ANY, env);
-}
+// The CHEAP-BODY role's condition (Vexing Shusher; see the rule's comment below). ADOPTED 2026-10-08 on the
+// USER's word -- DEFAULT ON; =0 restores "Shusher out entirely". heurarm slot so one pooled batch runs both.
 static bool BrunaWishShusherCond()
 {
-    static const bool env = EnvOn("MTG_WISH_SHUSHER_COND");   // default OFF (measurement arm)
+    static const bool env = EnvOn("MTG_WISH_SHUSHER_COND", true);   // DEFAULT ON (adopted 2026-10-08); =0 hatch
     return heurarm::Flag(heurarm::WISH_SHUSHER_COND, env);
 }
 // The state features of the last BrunaWishCandidates call on this thread (filled only while the
@@ -16368,7 +16365,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     const std::string* primary = nullptr; const CardDefinition* primary_d = nullptr; int primary_pw = 0;
     const std::string* cheap = nullptr;   int cheap_pw = 0;
     const std::string* body = nullptr;    const CardDefinition* body_d = nullptr; int body_mv = 0, body_pw = 0;
-    // The CHEAPEST wishable body (Vexing Shusher) -- read only by the two measurement arms above.
+    // The CHEAPEST wishable body (Vexing Shusher): the CHEAP-BODY role.
     const std::string* body2 = nullptr;   const CardDefinition* body2_d = nullptr; int body2_mv = 0, body2_pw = 0;
     const std::string* regrowth = nullptr;                                  // returns a swap Aura
     for (const std::string& n : legal)
@@ -16389,8 +16386,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         }
         if (d->card.IsCreature() && d->tmpl != CardTemplate::ManaDork)
         {
-            // BODY: the HARDEST-HITTING creature of mana value <= 3 (Linvala). USER 2026-10-07: "I would
-            // leave out Vexing Shusher" -- the cheapest-body role is gone.
+            // BODY: the HARDEST-HITTING creature of mana value <= 3 (Linvala); CHEAP BODY: the cheapest (Shusher).
             const int mv = d->card.m_mana_cost.ManaValue(), pw = d->card.m_power.value_or(0);
             if (!legend_dup && mv <= 3 && (body == nullptr || pw > body_pw || (pw == body_pw && mv < body_mv)))
             { body = &n; body_d = d; body_mv = mv; body_pw = pw; }
@@ -16409,7 +16405,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         { if (pw > 0 && (cheap == nullptr || pw > cheap_pw)) { cheap = &n; cheap_pw = pw; } }
         else if (primary == nullptr || pw > primary_pw) { primary = &n; primary_d = d; primary_pw = pw; }
     }
-    // VEXING SHUSHER IS OUT ENTIRELY (USER 2026-10-07). The body role is the POOL's hardest hitter only:
+    // The BODY role is the POOL's hardest hitter only:
     // once she (Linvala) has left the sideboard -- in hand, on our battlefield or in the graveyard -- a
     // weaker body (Shusher) does not inherit the role. (2 of 11666 committed round-5 wishes took Shusher.)
     const CardDefinition* const pool_body_d = body_d;   // (trace only: the pool's hardest hitter)
@@ -16567,12 +16563,11 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // "if I have the choice to cast bruna or Linvala next turn then we should definitely cast Bruna."
     const bool need_body = !body_bf && !cheap_body_hand && !bruna_next;
     if (body != nullptr && need_body)                       { out.push_back(*body); }
-    // VEXING SHUSHER -- measurement arms only (the shipped rule leaves him out, USER 2026-10-07). He is
-    // offered BESIDE Linvala (after her in the order) when the body role is live: always under
-    // MTG_WISH_SHUSHER_ANY, only under `shusher_cond` with MTG_WISH_SHUSHER_COND.
+    // CHEAP BODY (Vexing Shusher), BESIDE Linvala (after her in the order), when the body role is live and
+    // `shusher_cond` holds -- see the rule's comment.
     const bool shusher_live = body2 != nullptr && need_body;
-    // THE CONDITION (MTG_WISH_SHUSHER_COND), derived from the round-4 role's games (docs/design/glittering-
-    // wish-heuristic.md, "Vexing Shusher: when does he do well?"): in every game his offer won, he was the
+    // THE CONDITION, derived from the games he won (docs/design/glittering-wish-heuristic.md, "Vexing Shusher:
+    // when does he do well?"): in every game his offer won, he was the
     // CHEAP EARLY CARRIER of an Aura that needs a body soon -- an Aura-swap Aura (Arcanum Wings) in hand,
     // a host-tapping payload Aura (Colossification: it taps the creature it enters on, so it wants a body
     // that is not Bruna), or Linvala not castable next turn (her {1}{W}{U} -- mana or colours -- while his
@@ -16580,7 +16575,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     bool tap_aura_hand = false;
     for (const CardDefinition* a : hand_auras) { if (a->params.aura_etb_tap_host) { tap_aura_hand = true; break; } }
     const bool shusher_cond = swap_hand_mv >= 0 || tap_aura_hand || !castable_next(pool_body_d);
-    if (shusher_live && (BrunaWishShusherAny() || (shusher_cond && BrunaWishShusherCond())))
+    if (shusher_live && shusher_cond && BrunaWishShusherCond())
     { out.push_back(*body2); }
     if (troyan != nullptr && short_mana)                    { out.push_back(*troyan); }
     // LETHAL NOW (2026-10-06, held-out s7007 d3 gi933): a cheat path delivers the primary NEXT turn at the
