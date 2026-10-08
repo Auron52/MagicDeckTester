@@ -1,6 +1,6 @@
-# Glittering Wish + Open the Armory candidate rules (Bruna) -- status 2026-10-07
+# Glittering Wish + Open the Armory candidate rules (Bruna) -- status 2026-10-08
 
-Branch `wish-finish` (local, NOT pushed), rebased onto `phase-1-2-deck-analyzer` @ `1caa094d` (2026-10-07). **NOT landed**: Bruna
+Branch `wish-finish` (local, NOT pushed), rebased onto `phase-1-2-deck-analyzer` @ `415c6ddf` (2026-10-08). **NOT landed**: Bruna
 is out of the regression suite (USER 2026-10-06, it failed the 3x suite-cost rule) and is not re-added here.
 This work exists to bring Bruna back under 3x (budget: 3 x FiveColour = **3100.38 ms/game**, per-game core-ms
 at the deck's worst searched regression case). Everything below can be picked up from this doc alone; the
@@ -14,6 +14,12 @@ raw logs are under `logs/wish/` (gitignored) in the `wish-finish` worktree.
 * The census: the tutor axis fell from 30.0% to 9.3% of scored plans, total units 0.725x; the mulligan-
   bottoming playouts are now 71% of Bruna's units -- the next lever, and a USER decision.
 * The final measurement on a NEW held-out seed set (pooled batch D) is DONE: searched play is neutral within noise (held-out +7 in 3,200 games), d0 much better, units 0.658x of full width; every held-out worse game is dispositioned (below). The cost re-measure is contended (provisional ~2.6x FiveColour, under 3x; the quiet-box number is owed).
+* 2026-10-08: the USER's three follow-ups are answered below (the doc is now edited directly; `logs/wish/assemble.py`
+  would overwrite these sections) -- **Vexing Shusher** (a condition that keeps his whole
+  benefit: held-out -24 vs the rule, -20 vs full width), the **duplicate-copy fold** (built, default ON, byte-identical;
+  work removed, wall flat), and the **USER's host order** (measured worse than the shipped key; root cause and a lead).
+  Branch rebased onto `415c6ddf` (the attack-hold fix): Bruna's searched train rows are digest-identical on the tip,
+  only its d0 rows moved (that commit's own effect). Logs: `logs/shusher/`, `logs/proof/`.
 
 ## The rules as they stand (`BrunaProvider::TutorCandidates`, src/ai/DecisionProviders.cpp)
 
@@ -441,13 +447,202 @@ not applied".
 | d0 horizon leaf (greedy_fallback) | 26.3% of real-game units | the permitted greedy beyond the horizon | a SETTINGS question (depth matrix / search_leaf_depth), not a search hack | -- |
 | breakpoint waves (la_bp_wave) | 6.2% of real-game units | -- | none proposed | -- |
 
+## Vexing Shusher: WHEN does he do well? (USER 2026-10-07: "Shusher I'm not totally sold on unconditionally. Can we figure out when it does well?")
+
+**Method.** The 45 games that differ between the rule and "Shusher back" (round 4's role: the cheapest body beside
+Linvala whenever the body role is live; b3: 38 better / 7 worse, -34 turns in 6,725 searched games) were replayed
+single-game in both arms with the proof traces, which now carry the wish's state FEATURES (`[tutor-chosen] ...
+feat{...}`: next turn's supply and colours, this turn's pool, whether Linvala / Shusher are castable now or next
+turn, mana short, cheat path, body role, payload / host-tapping / swap Auras in hand, Bruna in hand / fetchable,
+lands, dorks). The first 200 Shusher offers of an exploratory batch (E1, the same 21 rows) gave the offer/take
+statistics. Measurement arms (default OFF, per-job heurarm): `MTG_WISH_SHUSHER_ANY` (round 4's role) and
+`MTG_WISH_SHUSHER_COND` (the condition below). Logs: `logs/shusher/` (diag, diagF, E1), `logs/proof/` (batch P).
+
+**What happened in the 38 better games**
+
+| mechanism | games |
+|---|---|
+| the Shusher arm wished for Shusher and won sooner with him | 27 |
+| a different KEPT HAND: the bottoming playouts (clairvoyant full games) saw Shusher in the wish set and chose a better bottom | 10 |
+| Shusher never offered; a search/rollout difference | 1 |
+
+The 27 (all with the body role live -- no carrier on board or in hand, Bruna not castable next turn -- mana short and
+no cheat path; wish on T2-T4): Shusher was cast the turn after the wish for {R/G}{R/G} off the deck's green sources
+and became the CHEAP EARLY CARRIER of a payload Aura -- Colossification or Mythic Proportions via an Arcanum Wings
+swap mid-combat, or Almost Perfect / Umbra -- attacking for the kill 1-2 turns before the rule arm's line. At the same
+wish the rule arm took Bruna (11 of the decisive wishes; six mana, two turns away), Indrik Umbra (8; nothing to wear
+it yet) or Linvala (5; {1}{W}{U} needs W AND U and one more mana -- in gi219 she came down T5 where Shusher came down
+T3), and in 11 the rule arm did not wish that turn at all.
+
+**The 7 worse games**
+
+| mechanism | games |
+|---|---|
+| the T2 wish took Shusher / Indrik Umbra where the rule arm took TROYAN, whose 1/3 body + big-spell {G}{U} carried Colossification a turn sooner (s7007 d5 gi143, s4004 d5 gi5 / gi379) | 3 |
+| a T1/T2 play differs with Shusher never chosen (rollouts / bottoming see a different wish set: s4004 d3 gi49, s6006 d3+d5 gi135, s6006 d5 gi192) | 4 |
+
+None of the 7 is Shusher playing badly: 3 are an allocation between two early bodies (Troyan vs Shusher), 4 are
+search perturbation (which also produced 1 of the better games).
+
+**The condition** -- Shusher beside Linvala only when the body role is live AND an Aura needs a cheap early carrier:
+* **Arcanum Wings in hand** (the swap needs a body to start from), or
+* **a host-tapping payload Aura in hand** (Colossification taps the creature it enters on -- it wants a body that is
+  not Bruna), or
+* **Linvala not castable next turn** (her {1}{W}{U}: mana or colours, while his hybrid is castable off green).
+
+Params, not names (aura_swap_cost, aura_etb_tap_host, the pool's hardest-hitting body). On E1's 200 Shusher offers it
+keeps 112 (56%) and all 14 of the wishes that took him; on the 27 decisive better games it keeps 25 (it misses
+s7007 gi496 at d3 and d5: no Wings / Colossification in hand, Linvala castable -- Shusher carried an Almost Perfect
+wished later). It cannot separate the Troyan-allocation worse game s7007 d5 gi143 (Wings in hand).
+
+**Proof** -- pooled batches on one binary (P / P2 / P3, `logs/proof/`; the rule arm H and the full-width arm C are
+reused from b2 / abF / abG / D, which the current binary reproduces digest-for-digest on every shared cell checked).
+Train = the 21 removed suite rows (overnight cells subsampled to their first 500 / 250 games); held-out = batch D's
+new seeds (d3 subsampled to 500). Loss = 9; "better" = the first arm won sooner.
+
+| comparison | train searched | held-out searched | d0 (train / held-out) | units |
+|---|---|---|---|---|
+| **SHC (the condition) vs H (Shusher out)** | **20 better / 5 worse, -17** (3,975; 3.1 se) | **23 / 3, -24** (2,200; 3.8 se) | identical | 1.012x / 1.011x |
+| SHA (always, round 4) vs H | 38 / 7, -34 (6,725) | 23 / 6, -21 (2,200) | identical | 1.010x / 1.017x |
+| SHC vs SHA | 2 / 2, 0 | 3 / 0, -3 | identical | 1.006x / 0.994x |
+| **SHC vs C (full width)** | **81 / 60, -22** | **47 / 25, -20** (2.3 se) | -1,058 / -467 | 0.610x / 0.701x |
+| H vs C (for reference: the rule as shipped) | 141 / 147, +10 | 67 / 64, +7 | -1,058 / -467 | 0.649x / 0.658x |
+
+Per held-out cell, SHC vs H: d3 s12.50M 5 / 0 (-6), d3 s12.51M 6 / 1 (-5), d5 s12.52M 9 / 0 (-12), d5 s12.53M 3 / 1
+(-2), 2HG 0 / 1 (+1). Offers (committed wishes, held-out): SHC offers Shusher in 830 of the 1,215 body-role-live
+wishes (68%) where SHA offers him in all 1,217 -- and the search takes him 38 times vs 39. **The condition keeps the
+whole benefit with a third fewer offers, and it turns the rules from neutral against full width on held-out (+7) to
+clearly better (-20).**
+
+**Every SHC-worse game, root-caused** (8: 5 train, 3 held-out; replayed in both arms, `logs/proof/rc_SHC_H/`): none is
+Shusher played badly. 1 is the Troyan-vs-Shusher allocation (s7007 d5 gi143: both offered, the search took Shusher;
+Troyan's body + big-spell mana carried Colossification a turn sooner); 1 took Shusher after a T1 land divergence and
+lost a long 2HG game (s12.54M gi186: unwon by T8 vs T8); 6 diverge at a T1/T2 land or creature play, or at a later
+wish whose set is the SAME in both arms (s12.53M gi499 T6: Courage vs Bruna) -- the rollouts see a different wish set,
+which moves the search. Recommendation: **adopt MTG_WISH_SHUSHER_COND as the body role's second name** (USER's call).
+
+## The duplicate-copy fold (USER 2026-10-07: "We should do the duplicate-copy fold") -- SOUND, default ON
+
+Two halves, both identity folds (`src/ai/TurnSolver.cpp`), per-job heurarm, `=0` hatches:
+* **`MTG_AURA_COPY_FOLD` -- identical hand copies of one creature Aura.** Each copy was its own odometer group with one
+  option per host, so two Colossifications over s hosts walked (1+s)^2 positions for C(s+2,2) distinct boards. Now one
+  class with the Equipment-copy canonical form (digits non-increasing in group order; the existing radix skip jumps
+  the rejected ranges). Identity test: hand card CONTENT (HandCardContentHash) + the same side of the m1_hand order
+  snapshot + member-for-member equal option lists under ActionFoldSig (host, cost, flags -- everything but the hand
+  slot). The canonical position is the odometer's FIRST of its class, which is also what the plan dedup keeps on a tie.
+* **`MTG_AURA_HOST_FOLD` -- identical HOSTS.** With k creature-Aura hand slots, a class of identical creatures keeps its
+  first k members (entry order = enumeration order). "Identical in all state" is enforced: PermIsPlainForFold (no
+  damage, counters, attachments, temp effects...), the same card content and tapped / sick / control state, never a
+  creature mana source that can tap this turn (the real payer taps dorks BY ORDER and never reads the Aura's target, so
+  "the Aura on the dork that paid" and "on the one that did not" are different lines -- a +X Aura on the untapped one
+  can swing), never a creature another candidate names (an Equip's host, a sacrifice, a trick).
+* Not applied in human play or the un-pruned enumeration; the two-stage mana split's Stage B runs no group predicates,
+  so a class there is not folded (exactly the Equipment classes' situation) -- never mis-folded.
+
+**Byte identity:** smoke 114/114 and regression 160/160 configs unchanged, 0 play changes, viewer protocol 506
+references 0 drift; Bruna (not in the suite): every rule-arm cell of P / P2 / P3 that an older batch also ran (no fold)
+has the same digest (overnight d5 s4004 / s5005, the five regression rows, the train smoke rows), the fold-off arm F0
+of overnight d5 s4004 (500 games) is digest-identical to the rule arm, and a 60-game A/B (fold on vs off, d3 s1001, d3 s4004,
+d5 s2002): digests identical, units identical (10 units of 1.8M differ on d5, play identical). Unit tests:
+`test_bruna_sweep.cpp` "Duplicate-copy fold" (two Aura copies over several hosts; three identical hosts; a payer-tappable
+dork is never folded).
+
+**Work removed and CPU (Bruna, the 60-game A/B):** the fold fired in 437k enumerations (Aura-copy classes) and dropped
+46.7k host candidates; greedy `consider()` entries -4.0% (13.80M -> 13.24M), fully scored -2.6%, EnumeratePlans' emitted
+plans -0.8% (716k -> 711k; deduplicated plans identical, 589,332). **CPU: flat** (user time 214 vs 207 s and 129 vs 124 s
+on a contended box, i.e. within noise and if anything +3%: the fold's own bookkeeping -- class building, ActionFoldSig,
+the per-position check -- is ~1.5% of CPU in a profile, about what it saves). The census priced the fold at 2.27x-2.6x of
+the walk, but that walk is the odometer's SPACE: almost every one of those positions dies at the group mana bound before
+any evaluation (Bruna: 98M positions -> 0.71M emitted plans), so removing them is nearly free work removed. Kept ON per
+the collapse doctrine (sound, work removed, a cleaner census), with the honest note that it does not buy wall on Bruna.
+
+**Why "host choice is ~94% of plan-enumeration CPU" and a ranking already exists:** the census figure is a share of
+odometer POSITIONS, not of CPU. The shipped host ranking (AuraPlanHostKey) is applied AFTER the walk -- in EnumeratePlans'
+dedup (the plan signature keys a creature Aura by name, and the class survivor is the best-keyed member) and in Solve's
+re-point -- so the walk still visits every host combination; each surviving plan then pays a host-independent base
+(the real payer on a copy) and a key per member. In a profile (Release, Bruna d3/d5): all plan enumeration
+(CollectActions + the two walks + their per-position evaluation) is ~10% of CPU self time, the host-ranking machinery
+(AuraPlanHostBase + AuraPlanHostKeyOn + RetargetSolveAuraHosts) ~0.4%. The CPU is in the rollouts (ApplyPlanDirect,
+SimulateToEnd), state copies and hashing (GameState copy, BuildSimKey, operator new) and mana payment.
+
+## The USER's host heuristic (USER 2026-10-07: "Taking any non-dork first and the least useful dorks second...")
+
+**The existing ranking and how it relates.** One key decides every creature-Aura host (search plan classes, Solve, the
+resolution fallback), measured on the board with the Auras attached: (1) lethal this turn; (2) team damage this turn +
+next turn; (3) tie-breaks: more of it this turn, then fewer Auras on mana creatures. "Team" counts only creatures that
+can attack (summoning sickness, haste from a Greaves the plan moves, the real payer's mana taps, Colossification's ETB
+tap), and next turn leaves out the dorks the deck will need for mana; a gathering attacker (Bruna) takes the better of
+"gather everything" / "all but the base-setters" / "no gather". Proven against the fully-branched control
+(MTG_AURA_HOST_BRANCH, Bruna ledger). Relation to the USER's ordering:
+* "prefer one that can attack / a summoning-sick host is worse": **covered** -- a sick or payer-tapped host adds nothing
+  this turn, so the damage-now term and its tie-break prefer an attacker.
+* "non-dork first": **covered as a tie-break, not as a rule** -- the key prefers a non-dork when damage ties ("fewer
+  Auras on mana creatures") and leaves a dork the deck needs for mana next turn out of next turn's damage; it DOES put
+  an Aura on a dork when that dork deals more damage (e.g. it can attack now and the non-dork cannot).
+* "least useful dork": **partly** -- next turn's mana estimate taps the least powerful dorks first; there is no explicit
+  mana-yield ranking.
+* Colossification "on the least useful creature": **covered** -- its ETB tap is modelled, so a host that would attack
+  loses its swing and a sick / already-tapped one costs nothing; with a dork the respond window keeps its mana.
+* "Bruna gets all auras anyway when she attacks": **covered and priced exactly** -- for a flat power grant the gather
+  makes the key tie across hosts (no branching cost); it is NOT true for Colossification (its tap lands before Bruna's
+  attack -- never on Bruna herself) or for a BASE SETTER (Almost Perfect sets 9/4: +9 on a 0-power dork that attacks
+  beside Bruna, +4 on Bruna), which is why the key keeps an "all but the base-setters" gather variant.
+
+**Measured** (`MTG_AURA_HOST_USER`: the USER's order -- 0 a non-dork that can attack, 1 any other non-dork, 2/3 a dork
+that can / cannot attack, least useful = lowest mana yield first; a host-tapping Aura onto the creature that would
+neither attack nor tap for mana -- replaces the key at the same two sites, same enumerated hosts):
+
+| arm vs the shipped key (H) | train searched | held-out searched | d0 train / held-out |
+|---|---|---|---|
+| U (the USER's order) | 1 better / 8 worse, +7 (1,225) | 3 / 11, +9 (2,200) | 9 / 33, +28 (2,000) / 15 / 65, +62 (4,000) |
+| U2 (+ base setters onto the lowest-power attacker) | 1 / 1, 0 (725) | 2 / 5, +4 | 8 / 33, +29 / 15 / 64, +61 |
+| U2 vs U | 3 / 0, -3 | 6 / 1, -5 | 0 / 1 / 1 / 0 |
+
+(Provenance: U2's first run, in P2, silently ran as U -- `HeuristicArm.h` was edited while a build was compiling, so
+`TurnSolver.o` kept stale heurarm slot indices and the manifest flag landed on a different slot; the env-var path
+still worked, which is how it was caught. Quarantined to `logs/proof/P2_invalid/`, clean rebuild, re-run in P3. The
+SHC / SHA / U / B arms read slots whose indices did not move, verified by re-running U and U2 through both paths.)
+
+Against the fully-branched control (B, MTG_AURA_HOST_BRANCH; held-out d5 + 2HG, 1,200 games, plus overnight d5 s4004):
+H 4 better / 10 worse (+7; all +7 on d5 s12.52M), U 4 / 14 (+12), U2 4 / 11 (+9). Units: U and U2 1.00x of H; B 1.04x.
+
+**Every U-worse game, root-caused** (117 -- 19 searched, 98 d0 -- replayed in both arms, first divergence classified
+mechanically, `logs/proof/rc_U_H_all/`, `hostcls.py`):
+
+| first divergence | games |
+|---|---|
+| Colossification onto a different mana dork (Birds of Paradise vs Somberwald Sage, a second Pilgrim...) | 45 |
+| Colossification onto a mana dork where the key put it on a non-dork (Mother of Runes) | 18 |
+| Arcanum Wings onto a different dork / non-dork | 23 |
+| Almost Perfect onto Bruna / a non-dork where the key put it on a 0-1 power dork (BASE SETTER) | 5 |
+| another Aura / Greaves host (Conscription 4, Mythic 1, Prodigious 1, Greaves 2) | 8 |
+| a different line from an earlier, non-host decision (the rollouts rank hosts differently) | 18 |
+
+The USER's order is right about the CATEGORIES and wrong about one input, which is what "least useful" means: the
+deck's MANA NEEDS NEXT TURN. A creature that will be tapped for mana next turn never swings with the Aura on it, and
+"least useful dork" by mana yield picks the wrong one -- Birds of Paradise (1 mana of ANY colour) is the deck's most
+useful dork for an Aura deck, Somberwald Sage's 3 mana pays creature spells only, so Colossification belongs on the
+Sage (the key) not the Birds (yield order). Likewise Colossification on Mother rather than a Pilgrim when the Pilgrim's
+mana is needed next turn. The shipped key computes exactly that (next turn's most expensive card in hand, less what
+lands / rocks make, drawn from dorks least-powerful first; creature-only mana only for creature cards), so it wins the
+d0 games, where the host choice IS the play. U2 removes the base-setter losses (searched: 0 net on train, +4 held-out),
+but not the mana-needs ones. **Recommendation: keep the shipped key.** (USER's call.)
+
+**What the branched control says about the KEY ITSELF** (H-worse-than-B, 8 games, `logs/proof/rc_H_B/`): 2 are an
+Arcanum Wings host (s12.52M gi423 / gi453: the key put Wings on Birds, the control on a Pilgrim) and 6 diverge at an
+earlier non-host decision. Wings' value is the NEXT turn's swap, and the key prices Wings by its own effect (flying,
+no power), so its host is a key TIE broken by enumeration order. A ranking for Aura-swap Auras -- the creature that
+will carry the swapped-in payload and attack next turn, i.e. not a dork the deck needs for mana -- is the open lead
+(not built; the USER's "non-dork first, least useful dork" is the right shape for exactly this Aura).
+
 ## Open questions for the USER (none blocks anything; the default taken is stated)
 
-1. **Vexing Shusher.** "Leave out Shusher" costs 34 turns in 6,725 searched games (38 better / 7 worse for
-   putting him back; 4.6 se). Proposal: Shusher only in the need-a-carrier state, beside Linvala (+1 candidate
-   in ~a third of wishes, +1% units). USER 2026-10-07: *"Shusher I'm not totally sold on unconditionally. Can we
-   figure out when it does well?"* -- the characterisation and a derived condition are in progress (see the
-   Shusher section). **Default taken: your rule (Shusher out).**
+1. **Vexing Shusher.** Answered (section "Vexing Shusher: WHEN does he do well?"): he does well as the CHEAP EARLY
+   CARRIER when the body role is live and an Aura needs a body soon -- Arcanum Wings or Colossification in hand, or
+   Linvala not castable next turn. `MTG_WISH_SHUSHER_COND` vs your rule: train 20 better / 5 worse (-17), held-out
+   23 / 3 (-24); it keeps everything "Shusher always" bought (SHC vs SHA 2/2 and 3/0) with a third fewer offers, and
+   makes the rules -20 vs full width on held-out (your rule: +7). **Recommendation: adopt the condition. Default
+   taken: your rule (Shusher out), until you say so.**
 2. **Bruna over Linvala.** Neutral (11 / 8, -5). Recommendation: keep it. **Default: kept.**
 3. **The three Armory exclusions** (Eldrazi Conscription, Mythic Proportions, Prodigious Growth): none costs anything measurable on held-out (coupled: Conscription 7 better / 5 worse, Mythic 5/5, Prodigious 5/5; decoupled d5: putting each back is slightly worse).
    **Default taken: excluded (your list).**
@@ -458,10 +653,16 @@ not applied".
 5. **Mulligan-bottoming playouts are 71% of Bruna's units.** Options: (a) the keep/bottom table (needs Bruna in
    the suite first); (b) the Melira-precedent profile policy `bottom_eval_depth 0, bottom_eval_topk 5` --
    measured on held-out: 0.649x units of the rules, +17 turns in 3,800 games (4 better / 21 worse) -- a real quality cost. **Default: not adopted** (profile unchanged).
-6. **Interchangeable-copy fold** (a SOUND identity fold the census prices at 2.27x of the enumeration walk;
-   engine-wide, CPU not budget units). USER 2026-10-07: *"We should do the duplicate-copy fold"* -- being
-   implemented engine-wide, default ON once smoke and regression are byte-identical.
+6. **Interchangeable-copy fold** -- DONE on your say-so (`MTG_AURA_COPY_FOLD` + `MTG_AURA_HOST_FOLD`, default ON,
+   sound, byte-identical on smoke + regression + Bruna). It removes work (greedy consider() -4%) but not wall on Bruna:
+   the census's 2.27x was odometer SPACE that already died at the mana bound for free. Nothing to decide.
 7. **Re-adding Bruna to the suite** is gated on the 3x cost rule. Contended estimate ~2.6-2.7 s/game (~2.6x FiveColour: the rules cost 1.01x the old list in like-for-like ms, and the old list measured 2.55x quiet); the quiet-box number is owed. **Default: not re-added** (your call).
+8. **Your host heuristic** (`MTG_AURA_HOST_USER`, and `MTG_AURA_HOST_USER_BASE` = + base setters onto the lowest-power
+   attacker): measured worse than the shipped key -- searched held-out +9 (U) / +4 (U2), d0 +62 / +61 in 4,000 games.
+   Root cause: "least useful dork" must be judged by next turn's MANA NEEDS (which dork pays for what), which the key
+   already models; your categories are right for Arcanum Wings, whose host the key leaves to enumeration order (the
+   only place the branched control beats the key: 2 games). **Recommendation: keep the key; consider your order for
+   Arcanum Wings' host only (an open lead, not built). Default: the key.**
 
 ## History (rounds 1-5 of the Wish rule; logs under logs/wish/, gitignored)
 
