@@ -5591,7 +5591,6 @@ async function step() {
   const res=await post('/api/step', cfg());
   S.busy=false; $('undo').disabled = S.choices.length===0;
   if (res.kind==='decision') {
-    advanceTo(res.decision);
     // SERVER-TRUTH RESOLUTION: the engine reports which committed casts it could not pay (dropped, left
     // in hand) as decision.dropped_casts -- authoritative, replacing the old detectDropped board-diff
     // heuristic that false-positived on working lines (a self-sacrificing/redrawn cast read as dropped;
@@ -5600,8 +5599,17 @@ async function step() {
     // and only a main-phase decision/result carries the field -- so a sub-decision reply never sees a
     // premature drop. The stateless replay records the drop in the final segment after the last consumed
     // choice, so it surfaces at the next main-phase decision.
+    //
+    // CHECKED BEFORE advanceTo, never after (USER 2026-10-08: "it reverts my line ... the auto reverts
+    // with no explanation or error"). advanceTo is where "Commit turn" auto-passes the rest of the
+    // turn, and it fires its pass WITHOUT awaiting it -- so a dropped line committed with Commit turn
+    // used to (1) start an empty pass on the frame the drop arrived on, (2) roll the line back and show
+    // why, and then (3) let that pass land on top: the turn moved on and the explanation was gone,
+    // leaving only a line that had silently vanished (Bruna seed 13 T5, "Bruna, then Glittering Wish").
+    // A frame that reports a drop is never advanced to: the rollback owns it.
     const dropped=(res.decision||{}).dropped_casts||[];
     if (dropped.length) return rollbackLine(dropped);
+    advanceTo(res.decision);
   } else if (res.kind==='result') {
     const dropped=(res.result||{}).dropped_casts||[];
     if (dropped.length) return rollbackLine(dropped);

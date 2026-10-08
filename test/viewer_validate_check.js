@@ -357,6 +357,16 @@ function main() {
                                   blinkTarget: a.blink_target || 0, blinkCount: a.blink_count || 1 }]);
           return;
         }
+        // An Arcanum Wings AURA SWAP (Bruna) names the Aura coming IN, and that card IS in hand -- so
+        // without this branch it was rebuilt as `cast=Colossification`, a hardcast of a {5}{G}{G} the
+        // board never paid, and every swap line read as an illegal "regression" (s6, s11, s16, s17,
+        // s20 -- seven lines the USER played). The viewer queues it as an activation of the Wings
+        // carrying verb 'auraswap', which encodes as `auraswap=<Aura>`.
+        if (a && a.activate && a.verb === 'auraswap' && !vialFlag[i]) {
+          built = built.concat([{ name: nm, src: a.activate_source || 'Arcanum Wings', kind: 'activate',
+                                  verb: 'auraswap', inCombat: !!a.in_combat }]);
+          return;
+        }
         const hc = hand.find(c => c.name === nm);
         built = LB.queueCard(d, built, nm, vialFlag[i] ? 'vial' : hc.kind);
       });
@@ -426,7 +436,47 @@ function main() {
     console.log('  Without it the viewer cannot pin the human\'s declared order for a plan past the');
     console.log('  display cap (MTG_PLAY_PLANS_CAP) -- see docs/design/viewer-pass-guard.md.');
   }
-  return (regressions.length || contractGaps.length) ? 1 : 0;
+  const pinnedFails = runPinned();
+  return (regressions.length || contractGaps.length || pinnedFails) ? 1 : 0;
+}
+
+// PINNED VERDICTS -- hand-written lines with the verdict the USER has ruled on. The reference sweep
+// above can only ever show that PLAYED lines still validate; it cannot see a line that validates
+// when it must NOT, because no clean reference holds an illegal line. These can.
+//   * Bruna seed 13 gi12 T4 (USER 2026-10-08, logs/play/rejections/Bruna_cod_s13_gi12_t4.json):
+//     "land=Razorverge Thicket; Glittering Wish; Glittering Wish" on Azorius Chancery ({W}{U}),
+//     Forest, Somberwald Sage (creature-only mana) -- three useful pips for {G}{W}{G}{W}. It read
+//     "rules-legal ... a same-turn cost reducer makes it payable": the flat pool credited the
+//     Sage's restricted mana and the Chancery's {W}{U} as wild. "is actually an illegal line and
+//     shouldn't be marked as Rules-legal." Control: ONE Wish is payable.
+//   * the same game's T5 one-step line (USER: "if I cast Bruna and Glittering Wish in one step it
+//     reverts my line"): payable -- the Wish's Chancery {U} floats into Bruna -- in either click order.
+const PINNED = [
+  { deck: 'Bruna', seed: 13, gi: 12, choices: [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1],
+    line: 'land=Razorverge Thicket;cast=Glittering Wish;cast=Glittering Wish', want: ['illegal'] },
+  { deck: 'Bruna', seed: 13, gi: 12, choices: [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1],
+    line: 'land=Razorverge Thicket;cast=Glittering Wish', want: ['accept', 'choose'] },
+  { deck: 'Bruna', seed: 13, gi: 12, choices: [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1,0,0,1,-1,-1],
+    line: 'land=Razorverge Thicket;cast=Glittering Wish;cast=Bruna, Light of Alabaster', want: ['accept', 'choose'] },
+  { deck: 'Bruna', seed: 13, gi: 12, choices: [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1,0,0,1,-1,-1],
+    line: 'land=Razorverge Thicket;cast=Bruna, Light of Alabaster;cast=Glittering Wish', want: ['accept', 'choose'] },
+];
+function runPinned() {
+  let bad = 0, ran = 0;
+  for (const c of PINNED) {
+    if (FILTER.length && !FILTER.some(f => c.deck.includes(f))) { continue; }
+    const dk = resolveDeck(c.deck);
+    if (!dk) { console.log(`  PINNED SKIP ${c.deck}: deck not found`); continue; }
+    const v = runValidate(dk, c.seed, c.gi, 8, c.choices, c.line, [], null, null);
+    ++ran;
+    if (!c.want.includes(v.verdict)) {
+      ++bad;
+      console.log(`  PINNED FAIL ${c.deck} s${c.seed} gi${c.gi} | ${c.line} -> ${v.verdict}`
+                  + ` (want ${c.want.join('/')})` + (v.reason ? `  (${v.reason})` : ''));
+    }
+  }
+  console.log(`Pinned verdicts: ${ran - bad}/${ran} as ruled`);
+  return bad;
 }
 
 process.exit(main());

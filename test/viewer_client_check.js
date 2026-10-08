@@ -1798,6 +1798,81 @@ async function testKarooFloatWildGrowth() {
   return fails;
 }
 
+// A COMMITTED LINE IS NEVER REVERTED SILENTLY (USER 2026-10-08, Bruna seed 13 gi12 T5: "This line
+// works, but if I cast Bruna and Glittering Wish in one step it reverts my line ... the auto reverts
+// with no explanation or error"). Board: two Azorius Chanceries ({W}{U} each), Somberwald Sage
+// (creature-only), Razorverge Thicket played. Wish {G}{W} first floats a Chancery's {U} into Bruna
+// {3}{W}{W}{U}; Bruna first leaves the Wish without a {W}.
+//   A. Queued "Bruna, then Glittering Wish" (the click order the user used): the engine plays the
+//      order that pays (the cast-order fallback, AIEngine) and the history says so -- no rollback.
+//   B. A line that DOES drop a cast, committed with "Commit turn": the rollback must keep the screen
+//      -- the reason shown, no auto-pass landing on top of it. step() used to call advanceTo (which
+//      fires Commit turn's un-awaited pass) BEFORE checking dropped_casts, so the pass moved the game
+//      on and hid the reason.
+const BRUNA13_T5 = [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1,0,0,1,-1,-1];
+async function brunaT5(win) {
+  const $ = (id) => win.document.getElementById(id);
+  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'Bruna');
+  if (!opt) return null;
+  $('deck').value = opt.value; win.fillVersions(); $('seed').value = '13';
+  const st = S(win);
+  st.choices = BRUNA13_T5.slice(); st.steps = BRUNA13_T5.map(() => ({ n: 1 }));
+  await win.step(); await settle(win);
+  const d = st.decision;
+  return (d && d.type === 'main_phase' && d.turn === 5 && d.phase === 'pre_main') ? d : null;
+}
+async function testOneStepLineNoSilentRevert() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  // A. the user's click order commits, in the order that pays, and says so.
+  {
+    const win = buildDom(); await settle(win);
+    const d0 = await brunaT5(win);
+    if (!d0) { console.log('  SKIP one-step line: Bruna s13 no longer reaches T5 pre_main at this prefix'); return fails; }
+    const st = S(win), n0 = st.choices.length;
+    st.plan = [];
+    win.queueCard('Razorverge Thicket', 'land');
+    win.queueCard('Bruna, Light of Alabaster', 'permanent');
+    win.queueCard('Glittering Wish', 'nonpermanent');
+    await win.commitLine(); await settle(win);
+    for (let i = 0; i < 4 && st.decision && st.decision.type === 'tutor_etb'; i++) {
+      const d = st.decision;
+      const k = Math.max(0, (d.candidates || []).findIndex(c => c.name === 'Indrik Umbra'));
+      win.pushChoice(d, k, 'Glittering Wish: Indrik Umbra'); await settle(win);
+    }
+    const d = st.decision || {};
+    const bf = ((d.me || {}).battlefield || []).map(p => p.name);
+    chk(st.choices.length > n0, 'the one-step line was rolled back (no choice survived the commit)');
+    chk(bf.includes('Bruna, Light of Alabaster'),
+        `Bruna is not on the battlefield after "Thicket; Bruna; Glittering Wish" (bf: ${bf.join(', ')})`);
+    const said = (st.history || []).some(h => /cast order/.test(h.label || ''));
+    chk(said, 'the history does not say the line was cast in a different order than queued');
+  }
+  // B. a real drop under Commit turn keeps its explanation on screen.
+  {
+    const win = buildDom(); await settle(win);
+    const d0 = await brunaT5(win);
+    if (!d0) return fails;
+    const st = S(win), n0 = st.choices.length;
+    const p0 = (d0.plans || []).find(p => p.drops && p.drops.length);
+    if (!p0) { console.log('  SKIP no-silent-revert B: T5 no longer offers a plan that drops a cast'); return fails; }
+    st.commitTurn = d0.turn; st.commitTurnPasses = 0;      // the Commit-turn button's arming
+    st.plan = [];
+    win.__co.apply(p0.index, p0.summary); await settle(win);
+    const d = st.decision || {};
+    chk(st.choices.length === n0,
+        `the dropping line left ${JSON.stringify(st.choices.slice(n0))} committed -- the rollback did not hold`
+        + ' (an auto-pass landed on top of it)');
+    chk(d.type === 'main_phase' && d.turn === 5 && d.phase === 'pre_main',
+        `after the rollback the game must wait on T5 pre_main, got ${d.type} T${d.turn} ${d.phase}`);
+    const ve = win.document.getElementById('verdict');
+    chk(ve && ve.style.display === 'block' && /rolled back/.test(ve.textContent || ''),
+        'the rollback reason is not on screen (the revert was silent)');
+    chk(st.commitTurn == null, 'a rolled-back line must disarm Commit turn');
+  }
+  return fails;
+}
+
 async function testColorlessFirstTapOrder() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -2116,6 +2191,14 @@ async function testColorlessFirstTapOrder() {
     catch (e) { console.error(`✗ karoo float: harness error: ${e.stack || e}`); process.exit(2); }
     if (kfFails.length) { anyFail = true; console.log(`✗ karoo float: ${kfFails.length} fail`); kfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ karoo float (Bruna s18 T3: Azorius Chancery returns the Forest, tapped for {G} in response -> Wild Growth on the Chancery)'); }
+  }
+  // A committed line is never reverted silently (Bruna s13 T5 one-step "Bruna + Glittering Wish").
+  {
+    let nsFails;
+    try { nsFails = await testOneStepLineNoSilentRevert(); }
+    catch (e) { console.error(`✗ no silent revert: harness error: ${e.stack || e}`); process.exit(2); }
+    if (nsFails.length) { anyFail = true; console.log(`✗ no silent revert: ${nsFails.length} fail`); nsFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ no silent revert (Bruna s13 T5: "Bruna, Glittering Wish" commits in the order that pays and says so; a dropped line under Commit turn keeps its reason on screen)'); }
   }
   for (const sc of SCENARIOS) {
     let res;

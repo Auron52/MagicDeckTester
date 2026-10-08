@@ -66721,6 +66721,89 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         }
     }
 
+    // ---- THE REAL PAYMENT, as the final word on every "legal" verdict -------------------------
+    // Both walks below price the line against AvailableManaPool, and that pool is FLAT and
+    // OPTIMISTIC by design (it is the enumerator's upper bound; the real payer refuses what it
+    // over-counts). Two of its approximations make a line read payable that no payment can execute:
+    //   * restricted mana is credited to every spell -- Somberwald Sage's "three mana of any one
+    //     colour, spend this mana only to cast creature spells" paid a Glittering Wish;
+    //   * a Karoo bundle is credited as WILD -- Azorius Chancery's fixed {W}{U} counted as two
+    //     mana of any colour, i.e. as a {G}.
+    // USER, Bruna seed 13 gi12 T4 (logs/play/rejections/Bruna_cod_s13_gi12_t4.json): Chancery,
+    // Forest, Sage + the Razorverge Thicket being played, line "Glittering Wish; Glittering Wish"
+    // ({G}{W} twice). The usable mana is W+U, G and one G-or-W: three useful pips for four. The
+    // declared-order walk said "rules-legal ... a same-turn cost reducer makes it payable" -- there
+    // is no reducer; it was the flat pool. "is actually an illegal line and shouldn't be marked as
+    // Rules-legal."
+    // So a flat walk's YES is confirmed by the payer itself before it becomes a verdict: the same
+    // casts, at the same (discounted / spectacle) costs, in the walk's order, each paid by
+    // TapForCostDirect on a copy -- the spell in scope, so every source restriction applies exactly
+    // as in the real cast; a bundle's surplus floats to the next cast exactly as in the real
+    // apply; the line's remaining demand rides LineUnpaidCostScope so the payer reserves scarce
+    // colours for later casts, as SubsetPayableSequential's walk does. Rocks enter untapped,
+    // rituals float their mana, an ETB land-untapper untaps, a "{cost},{T}" activation taps its own
+    // source first. A board with a sacrifice-for-mana source the payer does not model (`sac_wild`)
+    // keeps the flat answer -- the only case this cannot judge. Viewer-only (CheckLine), GT-neutral.
+    std::size_t real_fail_k = static_cast<std::size_t>(-1);
+    ManaCost    real_fail_cost{};
+    auto real_pays = [&](const std::vector<std::size_t>& order, const std::vector<ManaCost>& costs) -> bool
+    {
+        if (sac_wild > 0) { return true; }
+        GameState cp = s;
+        RevealLogPause quiet;
+        ManaCost line_total{};
+        for (std::size_t k : order) { if (!pending[k].alt_free) { AddManaCost(line_total, costs[k]); } }
+        LineUnpaidCostScope _luc(line_total);
+        std::vector<int> act_src;   // battlefield number of each board activation, in pending order
+        for (const BoardActivation& ba : board_acts) { act_src.push_back(ba.src ? ba.src->card.m_number : 0); }
+        std::size_t first_act = pending.size() - board_acts.size();
+        for (std::size_t k : order)
+        {
+            const PendingCast& pc = pending[k];
+            const ManaCost& cost = costs[k];
+            if (pc.board_act && k >= first_act && act_src[k - first_act] > 0)
+            { SetPermTapped(cp, cp.active_player_index, act_src[k - first_act], true); }
+            const bool for_creature = pc.def && !pc.board_act && pc.def->card.IsCreature();
+            SpellSubtypePayScope _ssps((pc.def && !pc.board_act) ? &pc.def->card : nullptr);
+            const bool ok = pc.alt_free || cost.ManaValue() == 0 || TapForCostDirect(cp, cost, for_creature);
+            if (!ok) { real_fail_k = k; real_fail_cost = cost; return false; }
+            SubManaCost(g_line_unpaid_cost, cost);
+            if (!pc.def || pc.board_act) { continue; }
+            if (pc.rock)
+            {
+                Permanent perm;
+                perm.card             = pc.def->card;
+                perm.controller_index = cp.active_player_index;
+                perm.owner_index      = cp.active_player_index;
+                cp.battlefield.push_back(perm);
+            }
+            else if (IsManaRitual(*pc.def))
+            {
+                const std::string& col = pc.def->params.ritual_float_color;
+                const int amt = RitualFloatAmount(s, *pc.def, /*chosen_x=*/0);
+                ManaPool& fl = cp.floating_mana;
+                if      (col == "W") { fl.white     += amt; }
+                else if (col == "U") { fl.blue      += amt; }
+                else if (col == "B") { fl.black     += amt; }
+                else if (col == "R") { fl.red       += amt; }
+                else if (col == "G") { fl.green     += amt; }
+                else if (col == "C") { fl.colorless += amt; }
+                else                 { fl.wild      += amt; }
+            }
+            if (pc.def->params.etb_untap_lands > 0)
+            { EtbUntapLands(cp, cp.active_player_index, pc.def->params.etb_untap_lands, /*log_ledger=*/false); }
+        }
+        return true;
+    };
+    auto real_fail_reason = [&]() -> std::string
+    {
+        const std::string nm = real_fail_k < pending.size() ? pending[real_fail_k].name : std::string("?");
+        return "can't pay " + real_fail_cost.ToString() + " for '" + nm + "' with the mana left after "
+               "the casts before it -- the real payment cannot stretch the board that far (restricted "
+               "mana, e.g. a creature-only source, cannot pay it, and a two-mana land such as a Karoo "
+               "makes only its own two colours)";
+    };
+
     // RESTRICTED-MANA gate: reject a line whose spell cannot be paid even when it is handed EVERY
     // source it may legally spend, plus all of this line's own ramp.
     //
@@ -66811,6 +66894,17 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             ManaPool flat = AvailableManaPool(s);
             flat.AddPool(ramp); flat.wild += sac_wild;
             if (!flat.CanPay(pc.full_cost)) { continue; }
+            // ...and only when the REAL payment agrees. `usable` is built from AddSourceToPool
+            // per source, which is no more exact than the flat pool it is compared with (a source
+            // this upper bound under-credits made the gate refuse lines the payer pays -- Bruna
+            // s16 T4 "Remote Farm; Prodigious Growth", s20 T4 "Colossification", lines the USER
+            // played). The payer holds the restrictions exactly, so it is the tie-breaker.
+            {
+                std::vector<std::size_t> one{ static_cast<std::size_t>(&pc - pending.data()) };
+                std::vector<ManaCost> one_cost(pending.size());
+                one_cost[one[0]] = pc.full_cost;
+                if (real_pays(one, one_cost)) { continue; }
+            }
             out.verdict = V::Illegal; out.failed_action = "cast=" + pc.name;
             out.reason = "can't pay for '" + pc.name + "': the mana is there, but some of it is "
                          "restricted and '" + pc.name + "' may not spend it (a source like Giada, "
@@ -66905,6 +66999,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             if (vd) { line_tax += vd->params.noncreature_spell_tax; }
         }
         bool ok = true;
+        std::vector<ManaCost> decl_costs(pending.size());
         for (const PendingCast& pc : pending)
         {
             ManaCost cost = pc.alt_free ? ManaCost{}
@@ -66948,6 +67043,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 }
             }
             if (!p.CanPay(cost)) { ok = false; break; }
+            decl_costs[static_cast<std::size_t>(&pc - pending.data())] = cost;
             DeductPayable(p, cost);
             if (pc.def && !pc.board_act) { line_tax += pc.def->params.noncreature_spell_tax; }
             if (pc.rock && pc.def) { AddSourceToPool(p, s, *pc.def); }
@@ -66971,16 +67067,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             }
             if (pc.def && deals_opponent_damage(*pc.def)) { spec = true; }
         }
-        if (ok)
+        std::vector<std::size_t> decl_order(pending.size());
+        for (std::size_t k = 0; k < pending.size(); ++k) { decl_order[k] = k; }
+        if (ok && real_pays(decl_order, decl_costs))
         {
             out.verdict = V::LegalNotEnumerated;
-            out.reason  = "rules-legal in your cast order (a same-turn cost reducer makes it "
-                          "payable), but the search never enumerated this line";
+            out.reason  = "rules-legal in your cast order (the real payment pays every cast in turn), "
+                          "but the search never enumerated this line";
             return out;
         }
     }
 
     std::vector<bool> done(pending.size(), false);
+    std::vector<std::size_t> greedy_order;
+    std::vector<ManaCost>    greedy_costs(pending.size());
     size_t remaining = pending.size();
     bool progress = true;
     while (remaining > 0 && progress)
@@ -66994,6 +67094,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 if (done[k] || is_producer(pending[k]) != want_producer) { continue; }
                 const ManaCost cost = cur_cost(pending[k]);
                 if (!avail.CanPay(cost)) { continue; }
+                greedy_order.push_back(k); greedy_costs[k] = cost;
                 DeductPayable(avail, cost);
                 if (pending[k].rock) { AddSourceToPool(avail, s, *pending[k].def); }
                 else if (IsManaRitual(*pending[k].def))    // ritual floats mana ON resolution (issue #8)
@@ -67004,6 +67105,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 if (deals_opponent_damage(*pending[k].def)) { spectacle_on = true; }  // enable later spectacle
                 done[k] = true; --remaining; progress = true; break;
             }
+        }
+    }
+
+    // The flat greedy's YES is confirmed by the real payment too (see real_pays): first in the order
+    // the greedy completed the casts, then in the human's own order. A NO here sends the line to
+    // the real-payment retry below where it applies, and otherwise to an ILLEGAL verdict that says
+    // which cast the board could not stretch to.
+    bool real_refused = false;
+    if (remaining == 0)
+    {
+        std::vector<std::size_t> decl(pending.size());
+        for (std::size_t k = 0; k < pending.size(); ++k) { decl[k] = k; }
+        std::vector<ManaCost> decl_cur(pending.size());
+        for (std::size_t k = 0; k < pending.size(); ++k) { decl_cur[k] = cur_cost(pending[k]); }
+        if (!real_pays(greedy_order, greedy_costs))
+        {
+            const std::size_t fk = real_fail_k; const ManaCost fc = real_fail_cost;
+            if (!real_pays(decl, decl_cur)) { real_fail_k = fk; real_fail_cost = fc; real_refused = true; }
         }
     }
 
@@ -67047,8 +67166,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { pending_etb_untap = true; break; }
         }
     }
-    if (remaining > 0 && (AnyUntappedFilterSource(s) || PendingLandAuraColorMask(s) != 0
-                          || pending_etb_untap))
+    if ((remaining > 0 || real_refused) && (AnyUntappedFilterSource(s) || PendingLandAuraColorMask(s) != 0
+                                            || pending_etb_untap))
     {
         // WHICH LAND CARRIES THE AURA IS PART OF THE LINE, and this simulation used to guess it --
         // "the first untapped land" -- which is how a legal line came back as ILLEGAL rather than
@@ -67376,12 +67495,36 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         }
     }
 
+    if (remaining == 0 && real_refused)
+    {
+        out.verdict = V::Illegal;
+        out.failed_action = "cast=" + (real_fail_k < pending.size() ? pending[real_fail_k].name : std::string("?"));
+        out.reason = real_fail_reason();
+        return out;
+    }
     if (remaining == 0)
     {
         out.verdict = V::LegalNotEnumerated;
         out.reason  = "rules-legal (an affordability simulation can execute it), but the "
                       "search never enumerated this line";
         return out;
+    }
+    // The flat walks said NO; the payer has the last word here too. The flat pool under-credits some
+    // sources the payer taps exactly (Bruna s11 T5 / s6 T3 "Colossification" {5}{G}{G}, lines the USER
+    // played, read "can't pay ... with the mana available this phase"), so a line the real payment
+    // executes -- in the human's order -- is legal, merely un-enumerated.
+    if (remaining > 0 && !real_refused)
+    {
+        std::vector<std::size_t> decl(pending.size());
+        std::vector<ManaCost> decl_cur(pending.size());
+        for (std::size_t k = 0; k < pending.size(); ++k) { decl[k] = k; decl_cur[k] = cur_cost(pending[k]); }
+        if (sac_wild == 0 && real_pays(decl, decl_cur))
+        {
+            out.verdict = V::LegalNotEnumerated;
+            out.reason  = "rules-legal in your cast order (the real payment pays every cast in turn), "
+                          "but the search never enumerated this line";
+            return out;
+        }
     }
     for (size_t k = 0; k < pending.size(); ++k)
     {

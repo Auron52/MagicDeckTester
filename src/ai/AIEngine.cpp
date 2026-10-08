@@ -2884,7 +2884,69 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (g_play_cast_order_chooser && this_main_ordinal >= 0)
             {
                 std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
-                ReorderPlanCasts(chosen, ord);
+                TurnSolver::Plan pinned = chosen;
+                ReorderPlanCasts(pinned, ord);
+                // AN ORDER THAT CANNOT PAY FOR THE LINE IS NOT HONOURED AT THE COST OF THE LINE
+                // (USER 2026-10-08, Bruna seed 13 T5: "if I cast Bruna and Glittering Wish in one
+                // step it reverts my line"). The viewer pins the human's queued order; queued as
+                // "Bruna, then Glittering Wish", Bruna's {3}{W}{W}{U} eats the second Azorius
+                // Chancery's {W} and the Wish's {G}{W} is left unpayable -- the Wish was dropped and
+                // the whole line rolled back. Cast Wish first and Chancery #1's surplus {U} floats
+                // into Bruna, which then pays: the SAME casts are payable, just not in the clicked
+                // order. So: when the pinned order would leave a cast unpaid and the plan's own
+                // order pays every one, play the plan's order and say so in the history. Never in
+                // the other direction (a pin that pays is always honoured), and never when the pin
+                // carries the human's own manual taps (`tap=`), which are a payment the human chose.
+                // Trial applies on copies, quiet, choosers nulled -- like the COMBO OFF trial.
+                bool manual_taps = false;
+                for (const std::string& t : ord) { if (t.rfind("tap=", 0) == 0) { manual_taps = true; break; } }
+                bool fallback = false;
+                if (!ord.empty() && !manual_taps)
+                {
+                    auto trial_drops = [&](const TurnSolver::Plan& pl) -> std::size_t
+                    {
+                        GameState g = state;
+                        TurnSolver::Plan t = pl;
+                        std::vector<std::string> drops;
+                        std::vector<std::string>* const prev_sink = g_play_dropped_cast_sink;
+                        {
+                            ComboOffApplyPause co_quiet;
+                            RevealLogPause quiet;
+                            g_play_dropped_cast_sink = &drops;
+                            if (is_pre_combat_main) { TurnSolver::DeferHumanAuraSwapToCombat(g, t, nullptr); }
+                            TurnSolver::ApplyPlan(g, t, is_pre_combat_main);
+                            g_play_dropped_cast_sink = nullptr;
+                        }
+                        g_play_dropped_cast_sink = prev_sink;
+                        return drops.size();
+                    };
+                    const std::size_t pinned_drops = trial_drops(pinned);
+                    if (pinned_drops > 0 && trial_drops(chosen) == 0) { fallback = true; }
+                }
+                if (fallback)
+                {
+                    auto names_of = [](const TurnSolver::Plan& pl) {
+                        std::string out;
+                        for (const Action& a : pl.actions)
+                        {
+                            if (a.kind != Action::Kind::CastFromHand) { continue; }
+                            if (!out.empty()) { out += ", "; }
+                            out += a.card_name.str();
+                        }
+                        return out;
+                    };
+                    auto canon_of = [&](const TurnSolver::Plan& pl) {
+                        std::string out;
+                        for (const std::string& n : TurnSolver::RealisedNonSacCastOrder(state, pl))
+                        { if (!out.empty()) { out += ", "; } out += n; }
+                        return out.empty() ? names_of(pl) : out;
+                    };
+                    EmitPlayEvent(state.turn_number, "cast_order",
+                                  "your cast order (" + canon_of(pinned) + ") cannot pay for every spell in "
+                                  "the line, so it was cast in the order " + canon_of(chosen) + ", which "
+                                  "pays them all");
+                }
+                else { chosen = std::move(pinned); }
             }
             // HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: "it should be automatically applied in the
             // attack phase rather than the 1st main"). A committed main-phase Arcanum Wings swap that
