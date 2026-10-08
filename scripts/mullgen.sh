@@ -96,25 +96,20 @@ DIS=$DECKDIR/$STEM.keepmodel.exhaustive.profile.DISABLED.json
 KEY=$(printf '%s' "${DECKDIR#decks/}" | tr -c 'A-Za-z0-9._-' '_')
 OUT=logs/${KEY}_mullgen; mkdir -p "$OUT"
 REPORT=$OUT/VALIDATION.txt
-BIN=build/Release/mtg-analyze
-# MTG_GEN_PGO=1 (opt-in): generate with the PGO+LTO binary from `./build.sh pgo decks/<Deck>`
-# (build/PGO/) -- ~1.3x faster per rollout on SelesnyaLifegain, results byte-identical to Release
-# (same rollout digest, same play digest; docs/design/selesnya-keepgen-bulk-cost.md). The binary
-# is used ONLY if its SRC_TREE stamp equals the checked-out `HEAD:src` and src/ is clean, so a
-# stale PGO build can never generate on an engine other than this one. Validation (the A/Bs and
-# the suite) still runs build/Release -- only the generation step switches.
+# THE ENGINE: PGO+LTO for the whole run -- generation, both A/Bs and the suite (user, 2026-10-08:
+# "we should be using PGO+LTO for everything except maybe quick development cycles"). `run` and
+# `validate` first make build/PGO fresh (harness_pgo_ensure: ./build.sh pgo, trained on the whole suite,
+# when it was not built from this HEAD:src); every step then resolves through test/lib/harness.sh, which
+# uses build/PGO only while its SRC_TREE stamp equals HEAD:src with a clean src/, so a stale PGO build can
+# never generate on another engine. ~1.3x faster per rollout on SelesnyaLifegain and byte-identical to
+# Release (same rollout digest, same play digest; docs/design/selesnya-keepgen-bulk-cost.md). A dirty
+# src/ runs on Release. MTG_PGO=0 pins Release; the old opt-in MTG_GEN_PGO is now the default, and
+# MTG_GEN_PGO=0 is read as MTG_PGO=0.
+. test/lib/harness.sh
+[ "${MTG_GEN_PGO:-}" = 0 ] && export MTG_PGO=0
+case "$CMD" in run|validate) harness_pgo_ensure ;; esac
+BIN=$(harness_analyze_bin) || exit 1
 GEN_BIN=$BIN
-if [ "${MTG_GEN_PGO:-0}" != 0 ]; then
-  GEN_BIN=build/PGO/mtg-analyze
-  [ -x "$GEN_BIN" ] || { echo "MTG_GEN_PGO=1 but $GEN_BIN is missing -- run ./build.sh pgo $DECKDIR"; exit 1; }
-  pgo_tree=$(cat build/PGO/SRC_TREE 2>/dev/null || true)
-  head_tree=$(git rev-parse HEAD:src)
-  if [ "$pgo_tree" != "$head_tree" ] || [ -n "$(git status --porcelain --untracked-files=no -- src)" ]; then
-    echo "MTG_GEN_PGO=1 but build/PGO is STALE (built from src tree ${pgo_tree:-?}, HEAD:src is $head_tree"
-    echo "  or src/ is dirty) -- rebuild it: ./build.sh pgo $DECKDIR"
-    exit 1
-  fi
-fi
 
 # Memory caps (2026-09-06): PRECAUTIONARY, not a fix for an observed failure -- this driver's
 # history is OOM-free (user), because its decisions run budgeted and its games are lighter than
@@ -366,7 +361,7 @@ validate_preflight(){
   [ -e "$RAW" ]  || { [ -e "$RAW.gz" ]  && RAW=$RAW.gz; }
   [ -e "$PROF" ] || { echo "no profile to validate: $PROF (nor $PROF.gz)"; exit 1; }
   [ -e "$BASE" ] || { echo "missing base/static profile: $BASE"; exit 1; }
-  [ -x build/Release/mtg ] || { echo "build/Release/mtg missing -- run ./build.sh"; exit 1; }
+  harness_bin >/dev/null || exit 1
 }
 
 validate(){
@@ -626,7 +621,7 @@ PREFLIGHT
     # The env PREFIX below must sit on the SAME command as the generator. 0ec772c9 put the log line
     # between them, so the prefix applied to `[` and the generator ran with NO work ceiling -- a
     # different rollout config from every journal banked at X=1000 (resume refused -> a fresh start).
-    [ "$GEN_BIN" != "$BIN" ] && log "generation binary: $GEN_BIN (PGO+LTO, src tree $(cat build/PGO/SRC_TREE))"
+    log "generation binary: $GEN_BIN ($(harness_bin_kind "$GEN_BIN"); src tree $(git rev-parse HEAD:src))"
     MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}" \
     "$GEN_BIN" "$DECK" --cards-json src/cards/data/cards.json --gen-mulligan "$RECIPE" \
       >> "$OUT/gen.log" 2>&1 || { log "GENERATION FAILED -- see $OUT/gen.log"; exit 1; }

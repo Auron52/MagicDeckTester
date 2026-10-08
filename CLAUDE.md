@@ -14,7 +14,20 @@ Build with the repo-root script, which produces an **optimized** binary every ti
 ./build.sh                 # Release (-O3)  -> build/Release          (DEFAULT; use this for almost everything)
 ./build.sh relwithdebinfo  # -O2 + symbols  -> build/RelWithDebInfo   (debugging a crash with a faithful stack)
 ./build.sh profile         # -O3 + symbols  -> build/Profile          (faithful profiling: Release codegen + symbols)
+./build.sh pgo             # -O3 + PGO+LTO  -> build/PGO              (~1.3x faster, byte-identical; Linux only)
 ```
+
+**PGO+LTO is the engine for every LONG run** (user, 2026-10-08: *"we should be using PGO+LTO for
+everything except maybe quick development cycles. It would also be good for screening changes."*).
+`./build.sh pgo` trains on the whole regression suite in one pooled batch (~10-15 min) and stamps
+`build/PGO/SRC_TREE` with `HEAD:src`. Its games are byte-identical to Release (no `-ffast-math`, no
+`-march`), so ground truth does not care which one ran. **You rarely call it yourself:** the binary is
+chosen in ONE place, `test/lib/harness.sh` (`harness_bin`; `scripts/engine_bin.py` for Python). It uses
+`build/PGO` whenever the stamp matches `HEAD:src` with a clean `src/`, and otherwise `build/Release`, so
+a development cycle (dirty or freshly committed src) never waits on a PGO build. The long runners --
+`mullgen.sh`, `valueleaf.sh`, `deck_compare.py`, the overnight tier -- call `harness_pgo_ensure` first
+and build it when stale. `MTG_PGO=0` pins Release; **set it on BOTH arms of any wall-clock
+comparison**, since PGO against Release measures the compiler, not the change.
 
 **Do NOT run `cmake` directly.** A bare `cmake -S . -B build/Release` leaves `CMAKE_BUILD_TYPE`
 empty, which compiles with **no optimization (`-O0`) — a silent ~10x slowdown** (it once turned a

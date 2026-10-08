@@ -33,15 +33,52 @@ _MTG_HARNESS_LIB=1
 
 # ---- binary resolution ---------------------------------------------------------------------
 # One place that knows where the engine lives. Honours $MTG_BIN (used by the regression harness
-# to drive a SNAPSHOT copy of the binary, so a rebuild mid-run cannot swap it), then the
-# multi-config layout: build/Release/mtg.exe on Windows/MSVC, build/Release/mtg elsewhere.
-# Prints the path; returns 1 and explains itself if nothing is built.
+# to drive a SNAPSHOT copy of the binary, so a rebuild mid-run cannot swap it), then the PGO+LTO build
+# when it is FRESH, then the multi-config layout: build/Release/mtg.exe on Windows/MSVC,
+# build/Release/mtg elsewhere. Prints the path; returns 1 and explains itself if nothing is built.
+#
+# PGO+LTO FOR EVERYTHING EXCEPT QUICK DEVELOPMENT CYCLES (user, 2026-10-08). build/PGO (./build.sh pgo,
+# scripts/build_pgo.sh) is ~1.3x faster per game and byte-identical to Release -- same games, same
+# digests (no -ffast-math, no -march) -- so it is used whenever it was built from exactly the checked-out
+# engine: its SRC_TREE stamp equals HEAD:src and src/ has no uncommitted change. A development cycle
+# (dirty src, or new commits since the last PGO build) gets build/Release with no build delay; a LONG run
+# calls harness_pgo_ensure first, so it rebuilds PGO instead. MTG_PGO=0 pins Release everywhere -- use
+# it on BOTH arms of any wall-clock comparison, since a PGO arm against a Release arm measures the
+# compiler, not the change.
+harness_pgo_fresh() {
+    [ "${MTG_PGO:-1}" != 0 ] || return 1
+    [ -f build/PGO/SRC_TREE ] && [ -x build/PGO/mtg ] && [ -x build/PGO/mtg-analyze ] || return 1
+    [ "$(cat build/PGO/SRC_TREE)" = "$(git rev-parse HEAD:src 2>/dev/null)" ] || return 1
+    [ -z "$(git status --porcelain --untracked-files=no -- src 2>/dev/null)" ]
+}
+
+# For a LONG run (generation, a screen, the overnight tier): make build/PGO fresh, building it (~10-15
+# min, the whole suite as training) when it is not. Never fatal: a dirty src/, a non-Linux host or a
+# failed build leaves the run on build/Release, said so on stderr. Stdout stays clean for callers that
+# capture a path. MTG_PGO=0 skips it.
+harness_pgo_ensure() {
+    [ "${MTG_PGO:-1}" != 0 ] || return 0
+    harness_pgo_fresh && return 0
+    case "$(uname -s)" in Linux|Darwin) ;; *) return 0 ;; esac
+    if [ -n "$(git status --porcelain --untracked-files=no -- src 2>/dev/null)" ]; then
+        echo "harness: src/ has uncommitted changes -- running on build/Release (PGO builds only a committed tree)" >&2
+        return 0
+    fi
+    echo "harness: build/PGO is not built from HEAD:src -- building it now (./build.sh pgo; MTG_PGO=0 skips)" >&2
+    ./build.sh pgo >&2 || echo "harness: ./build.sh pgo FAILED -- running on build/Release" >&2
+    return 0
+}
+
+# harness_bin_kind <path> -> "PGO+LTO" or "Release", for logs.
+harness_bin_kind() { case "$1" in *build/PGO/*) echo "PGO+LTO" ;; *) echo "Release" ;; esac; }
+
 harness_bin() {
     local b
     if [ -n "${MTG_BIN:-}" ]; then
         if [ -x "$MTG_BIN" ] || [ -f "$MTG_BIN" ]; then printf '%s\n' "$MTG_BIN"; return 0; fi
         echo "harness: MTG_BIN=$MTG_BIN does not exist" >&2; return 1
     fi
+    harness_pgo_fresh && { printf '%s\n' ./build/PGO/mtg; return 0; }
     for b in ./build/Release/mtg ./build/Release/mtg.exe; do
         [ -f "$b" ] && { printf '%s\n' "$b"; return 0; }
     done
@@ -53,6 +90,7 @@ harness_bin() {
 # Same, for the analyzer.
 harness_analyze_bin() {
     local b
+    harness_pgo_fresh && { printf '%s\n' ./build/PGO/mtg-analyze; return 0; }
     for b in ./build/Release/mtg-analyze ./build/Release/mtg-analyze.exe; do
         [ -f "$b" ] && { printf '%s\n' "$b"; return 0; }
     done

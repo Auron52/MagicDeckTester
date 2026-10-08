@@ -42,6 +42,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from engine_bin import engine_bin  # PGO+LTO when fresh, else Release (user, 2026-10-08)
+
 BIN_CANDIDATES = ["build/Release/mtg-analyze", "build/Profile/mtg-analyze"]
 
 
@@ -212,7 +215,7 @@ def main():
     args = ap.parse_args()
 
     deck = pathlib.Path(args.deck)
-    binary = next((b for b in BIN_CANDIDATES if os.path.exists(b)), None)
+    binary = next((b for b in [engine_bin("mtg-analyze")] + BIN_CANDIDATES if os.path.exists(b)), None)
     if binary is None:
         raise SystemExit("no mtg-analyze binary; run ./build.sh first")
 

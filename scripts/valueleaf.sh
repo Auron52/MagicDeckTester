@@ -617,7 +617,7 @@ deck_play_probe() {
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         mkdir -p "$tmp/$key"
-        ./build/Release/mtg "$(deck_file "$dir" "$stem")" --profile "$dir/$stem.profile.json" \
+        "$(harness_bin)" "$(deck_file "$dir" "$stem")" --profile "$dir/$stem.profile.json" \
             --ignore-play-profile --depth 3 --budget-ms 10 \
             --games 24 --seed "$base" --threads 0 --log-dir "$tmp/$key" \
             >/dev/null 2>&1 || { rm -rf "$tmp"; return 1; }
@@ -789,7 +789,7 @@ phase_rows() {
     # transient scales with concurrent monster games, so fewer workers is the safe lever on a small
     # box until the enumeration transient itself is bounded engine-side.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
-        ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads "${MTG_VLQ_ROWS_THREADS:-0}" \
+        "$(harness_bin)" --batch "$ALL_ROWS.manifest.json" --threads "${MTG_VLQ_ROWS_THREADS:-0}" \
         > "$VLQ/rows.batch.log" 2>&1 \
         || { local rc=$?
              log "PHASE A: batch FAILED (exit $rc -- 137=SIGKILL, think OOM). Rows on disk are"
@@ -1041,7 +1041,7 @@ PY
     log "PHASE E: $(grep -c '"name"' "$VLQ/measure.manifest.json") jobs (A/B + sweeps, every deck) in ONE queue"
     # Exit status gates the phase, same as phase A (2026-09-05 OOM lesson): a killed batch must not
     # let truncated measurements read as an A/B verdict.
-    ./build/Release/mtg --batch "$VLQ/measure.manifest.json" > "$VLQ/measure.log" 2> "$VLQ/measure.err" \
+    "$(harness_bin)" --batch "$VLQ/measure.manifest.json" > "$VLQ/measure.log" 2> "$VLQ/measure.err" \
         || { local rc=$?
              log "PHASE E: batch FAILED (exit $rc -- 137=SIGKILL, think OOM); NOT interpreting the"
              log "  partial measure.log. Re-run to redo the phase."
@@ -1128,7 +1128,12 @@ finish|run)
         log "FINISH: accepting $n rows as final and running phases B..E on them"
         mark A_rows
     fi
+    # THE ENGINE: PGO+LTO (user, 2026-10-08). Build it from HEAD:src first if it is not; every phase's
+    # games then resolve through harness_bin (and scripts/engine_bin.py for the matrix), which uses
+    # build/PGO only while it matches HEAD:src exactly -- byte-identical to Release, ~1.3x faster.
+    harness_pgo_ensure
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
+    _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_matrix phase_riskgate \
               phase_meta phase_measure phase_mullgen; do
         check_freeze || exit 1

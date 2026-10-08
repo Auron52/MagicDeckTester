@@ -39,6 +39,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from engine_bin import engine_bin  # PGO+LTO when fresh, else Release (user, 2026-10-08)
+
 
 def discover_k(deck, cards_json, binary, timeout_note=True, play=None):
     """Run equivalence discovery only, and return the bucket count it finds.
@@ -76,7 +79,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("deck", help="path to the decklist (.txt/.cod)")
     ap.add_argument("--cards-json", default="src/cards/data/cards.json")
-    ap.add_argument("--binary", default="build/Release/mtg-analyze")
+    ap.add_argument("--binary", default=engine_bin("mtg-analyze"))
     ap.add_argument("--hands", type=int, default=48)
     ap.add_argument("-R", type=int, default=24)
     ap.add_argument("--floor-rho", type=float, default=0.99)

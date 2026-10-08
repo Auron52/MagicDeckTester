@@ -237,6 +237,16 @@ if [ "$ACCEPT" = 1 ]; then
 fi
 
 # ---- run a mode and compare ----------------------------------------------
+# THE ENGINE (user, 2026-10-08: PGO+LTO "for everything except maybe quick development cycles").
+# harness_bin above already takes build/PGO when it was built from exactly this HEAD:src with a clean
+# src/ (byte-identical to Release, ~1.3x faster), so smoke and regression use it for free and otherwise
+# run Release with no build delay. The OVERNIGHT tier is long enough that it builds a stale PGO first.
+# MTG_PGO=0 pins Release (and an explicit MTG_BIN always wins).
+if [ "$MODE" = overnight ] && [ -z "${MTG_BIN:-}" ]; then
+  harness_pgo_ensure
+  BIN=$(harness_bin) || exit 1
+fi
+BIN_KIND=$(harness_bin_kind "$BIN")
 if [ ! -f "$BIN" ]; then
   echo "ERROR: $BIN not found. Run cmake --build build --config Release first." >&2
   exit 1
@@ -259,6 +269,7 @@ cp -f "$BIN" "$BIN_SNAPSHOT"
     echo "diff=mtg.run.diff"
   fi
   echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "binary_kind=$BIN_KIND"
 } > "$BIN_SNAPSHOT.meta" 2>/dev/null || true
 BIN="$BIN_SNAPSHOT"
 
@@ -271,7 +282,7 @@ log() { echo "$1"; echo "$1" >> "$OUT"; }
 : > "$OUT"
 : > "$RESULTS"
 log "=== REGRESSION ($MODE) $(date) ==="
-log "(threads=$THREADS; binary=$BIN; logs in $LOGDIR)"
+log "(threads=$THREADS; binary=$BIN [$BIN_KIND]; logs in $LOGDIR)"
 
 # Scenario sanity gate: hand-built board fixtures (test/scenarios/*.json) that assert a specific
 # interaction still plays correctly. Cheap (seconds) and deck-agnostic, so run them up front on the

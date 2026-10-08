@@ -23,7 +23,10 @@ See learned-d0-policy.md.
 import argparse, glob, json, os, re, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
-MTG = "build/Release/mtg"
+# The engine: build/PGO when it matches HEAD:src exactly, else build/Release -- scripts/engine_bin.py
+# (PGO+LTO for every long run, user 2026-10-08; byte-identical either way). Resolved below, after the
+# scripts/ import path is set.
+MTG = None
 
 # Deck locations come from scripts/deck_registry.py -- pure discovery of decks/*/, no list to maintain.
 # There used to be two hand-written dicts here (DECKS and PROFILES) plus an auto-discovery pass that
@@ -36,6 +39,8 @@ MTG = "build/Release/mtg"
 # MTG_VALUE_MODEL=0, so a staged key's H cells are byte-identical to the plain key's; only V moves.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import deck_registry
+from engine_bin import engine_bin
+MTG = engine_bin("mtg")
 
 _REG = deck_registry.discover()
 # key -> (decklist, value-model path, max_turns).  PROFILES is the same keys -> the deck profile.

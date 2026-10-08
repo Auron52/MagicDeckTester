@@ -33,7 +33,9 @@
 #   KM_DECK=decks/<name>/<name>.txt KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-BIN=./build/Release/mtg
+# PGO+LTO when it matches HEAD:src, else Release -- test/lib/harness.sh (user, 2026-10-08).
+. test/lib/harness.sh
+BIN=$(harness_bin) || exit 1
 DECK=${KM_DECK:?set KM_DECK=decks/<name>/<name>.(txt|cod)}
 MODE=${KM_MODE:-keep}
 STEM=$(basename "$DECK"); STEM=${STEM%.*}

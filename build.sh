@@ -12,8 +12,10 @@
 #   release          -O3            -> build/Release/          (DEFAULT; use this for almost everything)
 #   relwithdebinfo   -O2 + symbols  -> build/RelWithDebInfo/   (debugging a crash with a faithful stack)
 #   profile          -O3 + symbols  -> build/Profile/          (faithful profiling: same codegen as Release + symbols)
-#   pgo <deck-dir>.. -O3 + PGO+LTO  -> build/PGO/              (~1.3x faster, byte-identical results; Linux only;
-#                                                               trained on the named decks -- scripts/build_pgo.sh)
+#   pgo [deck-dir..] -O3 + PGO+LTO  -> build/PGO/              (~1.3x faster, byte-identical results; Linux only;
+#                                                               trained on the whole suite, or on the named decks --
+#                                                               scripts/build_pgo.sh. The engine for every LONG run:
+#                                                               test/lib/harness.sh picks it while it matches HEAD:src)
 #
 # There is deliberately NO debug (-O0) mode here: an unoptimized build must be a separate,
 # deliberate route (e.g. `cmake --build build --config Debug`), never the default.
@@ -26,7 +28,8 @@
 #   ./build.sh release
 #   ./build.sh relwithdebinfo
 #   ./build.sh profile
-#   ./build.sh pgo decks/<Deck>          # PGO+LTO, trained on that deck -> build/PGO
+#   ./build.sh pgo                       # PGO+LTO, trained on the whole regression suite -> build/PGO
+#   ./build.sh pgo decks/<Deck>          # PGO+LTO, trained on that deck only
 #   ./build.sh <mode> -- --target mtg     # forward extra args to the build step
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -43,7 +46,7 @@ case "$mode" in
     sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *)
     echo "build.sh: unknown mode '$mode'" >&2
-    echo "  allowed (optimized only): release (default), relwithdebinfo, profile, pgo <deck-dir>..." >&2
+    echo "  allowed (optimized only): release (default), relwithdebinfo, profile, pgo [deck-dir...]" >&2
     echo "  most tasks just need:  ./build.sh" >&2
     exit 2 ;;
 esac

@@ -115,6 +115,10 @@ CARDS_JSON = os.path.join(ROOT, "src", "cards", "data", "cards.json")
 # scan would drift. analyze_deck.py does nothing at import (its work is behind Main()).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyze_deck import LoadDeckCounts, LoadImplementedNames, CheckExistingCoverage  # noqa: E402
+# The engine: PGO+LTO for screens (user, 2026-10-08: "It would also be good for screening changes."),
+# built first by pgo_ensure() in main(); engine_bin() falls back to build/Release on a dirty src/.
+# Byte-identical games either way, ~1.3x faster. MTG_PGO=0 pins Release.
+from engine_bin import engine_bin, pgo_ensure, kind as engine_kind  # noqa: E402
 
 
 def read_decklist(path, board="main"):
@@ -414,7 +418,7 @@ def run_batch(jobs, outdir, name, threads, env=None, pin_deck=None):
     if pin_deck:
         benv["MTG_PROVIDER_DECK"] = os.path.abspath(pin_deck)
     with open(err, "w") as e, open(os.path.join(outdir, f"{name}.out"), "w") as o:
-        p = subprocess.Popen([os.path.join(ROOT, "build/Release/mtg"), "--batch", man,
+        p = subprocess.Popen([engine_bin("mtg"), "--batch", man,
                               "--threads", str(threads or os.cpu_count())],
                              stdout=o, stderr=subprocess.PIPE, text=True, cwd=ROOT,
                              env=benv)
@@ -976,7 +980,7 @@ def pool_profile(spec, unscored):
     print(f"  deriving card scores for {', '.join(unscored)} over the {sum(union.values())}-card union"
           f"\n  (one mtg-analyze run, log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
-        res = subprocess.run([os.path.join(ROOT, "build/Release/mtg-analyze"), deck,
+        res = subprocess.run([engine_bin("mtg-analyze"), deck,
                               "--cards-json", CARDS_JSON,
                               "--seed", str(spec.raw.get("pool_seed", 66000001))],
                              stdout=subprocess.PIPE, stderr=f, text=True, cwd=ROOT,
@@ -1058,7 +1062,7 @@ def pool_table(spec, why, dry=False):
           f" -> {os.path.relpath(out, ROOT)}\n"
           f"                 (one-time per pool; log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
-        subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck,
+        subprocess.check_call([engine_bin("mtg-analyze"), deck,
                                "--seed", str(spec.raw.get("pool_table_seed", 55000001))],
                               stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
                               # Gen ROLLOUTS play games too: without the pin a union whose edit
@@ -1325,7 +1329,7 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                # metadata (two commits touching only this driver produce identical games,
                # and --confirm refused a comparison across exactly that pair).
                "engine_commit": head_commit(),
-               "engine": stamp(os.path.join(ROOT, "build/Release/mtg")),
+               "engine": stamp(engine_bin("mtg")),
                "profile": stamp(profile), "table": stamp(table_src or (tpath if use_table else None)),
                "value_profile": stamp(spec.value_profile),
                # The FORMAT is part of the apparatus: a --confirm whose held-out block ran at a
@@ -1657,7 +1661,7 @@ def reweight_table(spec, tag, deck_path, src_raw):
     print(f"  {tag}: reweighting {os.path.relpath(src_raw, ROOT)} onto this arm's counts "
           f"(zero rollouts; log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
-        subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck_path],
+        subprocess.check_call([engine_bin("mtg-analyze"), deck_path],
                               stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
                               # A reweight plays no games, but the pin keeps every subprocess of a
                               # spec under one identity -- uniformity is the guarantee here.
@@ -1713,7 +1717,7 @@ def gen_table(spec, tag, deck_path, R, dry=False):
     log = os.path.join(spec.out, f"keepgen_{tag}.log")
     print(f"  {tag}: generating R={R} keep table -> {os.path.relpath(out, ROOT)}  (log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
-        subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck_path,
+        subprocess.check_call([engine_bin("mtg-analyze"), deck_path,
                                "--seed", str(spec.raw.get("floor_seed", 78000001))],
                               stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
                               # An arm's OWN bracket table is still generated under the base deck's
@@ -2238,6 +2242,9 @@ def main():
     if args.floor and args.confirm:
         raise SystemExit("--floor and --confirm answer different questions (apparatus bias vs "
                          "selection bias); run them separately")
+    if not args.dry_run:
+        pgo_ensure()
+    print(f"engine: {engine_bin('mtg')} ({engine_kind(engine_bin('mtg'))})", flush=True)
     with DeckLock(spec.out):
         if args.floor:
             return floor(spec, args.floor, args.dry_run)
