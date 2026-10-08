@@ -1360,6 +1360,65 @@ IDENTICAL -> a clean like-for-like LINE change" at the same win turn -- the new 
 equal line. Viewer references: 556, 0 play-drift / 0 board-diverged / 0 enum-gap / 0 mull-drift.
 Accepted; `check_gt_logs.py` 659 consistent.
 
+## Mulligan profile (keep table) -- generated, validated, ADOPTED 2026-10-08
+
+**Generation.** Scout (`--gen-mulligan recommend`, 16:20-16:38Z, 739 rollouts/s): K=19, 260,417 size-7
+cells; projected `complete` ~11.4 h (upper bound) vs `fast` ~5.7 h -> `fast` (R=30), the recipe that fits
+the 8 h window. `scripts/mullgen.sh run decks/Soldiers fast` on PGO+LTO at `60db0d8c`, rollouts d1/b3
+from the leaf's `value_play` (phase F, measured under the live leaf), the scout's r=0 chunk carried
+(757,782 cell-sides). Generation 16:38-20:29Z (~700 rollouts/s); artifact check OK (K=19, 260,417
+entries, `bottoming_enabled=true`, 236,948 sub-cells).
+
+**Validation (`mullgen.sh`, play profile, early stop on):**
+
+| A/B | delta | seeds | paired t |
+|---|---|---|---|
+| keep: exhaustive vs static (bottoming held identical) | **-0.1768 t** | 4/4 better (stopped early at 4 pairs) | -14.7 |
+| bottoming: blind exhaustive vs lookahead (confounded) | **-0.0197 t** | 11/11 better (stopped early at 11 pairs) | -9.1 |
+
+**Suite (all three tiers, `--deck=soldiers,soldiers2hg`, on the committed `.gz` artifacts):** every
+case faster -- 21/21.
+
+| tier | cases | mean delta | changed games | different mulligan count | different bottom | bottom ORDER only | unexplained |
+|---|---|---|---|---|---|---|---|
+| smoke (soldiers) | 3 | -0.0916 | 674 / 1,225 | 560 | 109 | 5 | 0 |
+| smoke (soldiers2hg) | 1 | -0.0400 | 30 / 50 | 28 | 2 | 0 | 0 |
+| regression | 5 | -0.1307 | 794 / 1,450 | 679 | 110 | 5 | 0 |
+| overnight | 12 | -0.1350 | 7,671 / 14,000 | 6,578 | 1,055 | 38 | 0 |
+
+Per-game attribution by `test/keep_adoption_attribution.py` (table off vs on, the run's own `mtg.run`):
+the off replay reproduces the committed GT and the on replay reproduces the run on every case, and every
+changed game -- including every slower one -- is explained by a different kept hand or bottom, i.e. the
+new keep policy, not play. The tiers also ran ~10x faster: with a keep table, mulligan decisions no longer
+fall through to lookahead-bottoming rollouts. Viewer references 556: 0 drift. Uncompressed profile/raw
+and the journal backups are kept in `logs/durable/soldiers_profile_adopted_2026-10-08/`.
+
+**DEFERRED (USER 2026-10-08) -- a bucket ruling for the lands, after the deck is screened further.**
+Discovery merged five lands into ONE 18-card bucket: Plains x4, Fortified Beachhead x4, Unclaimed
+Territory x4, Secluded Courtyard x4, Cavern of Souls x2 (Silent Clearing stayed apart). USER: *"That merge
+is kind of suspect, particularly Fortified Beachhead and Plains"*; *"The main problem is that Plains and
+Fortified cannot tap for B or G and Plains can't tap for U"*; *"I would consider making that 2 buckets if
+we do a modified version. Plains + Fortified and the rest in the second."*; then *"Let's stick with this
+for this version and perhaps fix it when we have screened the deck more."* and *"I think the manabase is
+good enough that it mitigates any issue with getting the colours we need. Hence the risk of the merge is
+notably lessened."* -- ten of the eighteen merged lands (and both Silent Clearings, for {B}) cast every
+off-colour card, and Aether Vial puts any of them in with no mana at all.
+* The off-colour pips are all creature spells: {B} General Kudro of Drannith x2 + Jirina, Dauntless
+  General x1, {G} King Darien XLVIII x1, {U} Harbin, Vanguard Aviator x2 -- six cards. The three
+  creature-type lands pay all of them; Fortified Beachhead (W/U) pays only Harbin; Plains pays none. Plains
+  and Beachhead also have UNRESTRICTED {W} (e.g. Recruitment Officer's activated ability, which Cavern's /
+  Unclaimed Territory's coloured mana cannot pay), and Beachhead enters tapped without a Soldier.
+* Why discovery cannot see it: it clusters on mean |delta win-turn| per probe at whole-turn granularity
+  (0.01 = at most 4 of 400 probes; `src/analyzer/BucketPolicy.h`), and these differences only bite in hands
+  holding one of the six cards and lacking another source.
+* How to apply it when the time comes: `decks/Soldiers/soldiers.buckets.json` with `merge` groups
+  [Plains, Fortified Beachhead] and [Cavern of Souls, Unclaimed Territory, Secluded Courtyard] plus six
+  two-card `keep_apart` pairs across them (a single keep_apart group would also split each merge group),
+  `value_play.expected_buckets` 19 -> 20, then `mullgen.sh run decks/Soldiers fast` as a regeneration
+  (it A/Bs new vs incumbent and keeps the incumbent unless the new table is not worse).
+* Cost: K=20 -> 378,892 size-7 cells (1.46x; ~5.5-6 h `fast` at tonight's rate). Splitting Plains off
+  too (K=21) -> 538,380 cells (2.07x, ~8 h).
+
 ## Stage 4/5 status + OPEN USER QUESTIONS (2026-10-04; none blocked the run -- default taken for each)
 Status: Stage 4 + 5a/5b/5c/5c2/5e/5f/5g/5h/5i + 4-bis DONE; 5d claude-play sweep RUN (see
 "## Claude-play sweep"; flags resolved 2026-10-05). verify_deck after this run: the only

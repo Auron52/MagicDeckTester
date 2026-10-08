@@ -1,8 +1,11 @@
-# Regression ground truth -- commit 751d4778  date 2026-10-08
+# Regression ground truth -- commit ae6b4c64  date 2026-10-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
 # accepted-with-regressions (overnight, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): full tier, only the 9 Karoo decks move, every deck net faster (-2692 turns; Hinata incl. its 2HG rows -412, the 2HG rows alone +6 = 6 budget-churn games); searched 32 faster / 31 slower, all 31 converge (30 at --depth <win turn> --budget-ms 100, hinata d3 s5005 gi68 at --depth 8 --budget-ms 0); d0 to-unwon 99 vs from-unwon 204. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 8396 = 6325 mulligan count + 1996 bottom + 75 bottom-order-only, 0 unexplained; all 12 cases faster
+# accepted-with-regressions (smoke, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
+# accepted-with-regressions (regression, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
+# accepted-with-regressions (overnight, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -102,7 +105,7 @@ breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
 melira2hg_smoke_d3_s1001=4.8400/15182cf23a0ec013
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
-soldiers2hg_smoke_d3_s1001=5.0600/dc96452253e4d0cb
+soldiers2hg_smoke_d3_s1001=5.0200/17792659b430d2f9
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.5400/fe8f95f9362334e7
 fluctuator_smoke_d5_s1001=3.5067/7b3eeadf188dfa29
@@ -115,9 +118,9 @@ pirates_smoke_d5_s1001=4.3467/abc848d90f53225a
 selesnya_smoke_d0_s1001=5.9280/197b9d7d95146555
 selesnya_smoke_d3_s1001=5.2267/10218e0402108fbd
 selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
-soldiers_smoke_d0_s1001=4.6000/0611c83ed8bc5a10
-soldiers_smoke_d3_s1001=4.3333/98cf0632c8c00549
-soldiers_smoke_d5_s1001=4.3467/6db3750a481a9bcb
+soldiers_smoke_d0_s1001=4.4320/0c7926df614c90b5
+soldiers_smoke_d3_s1001=4.2800/50e56ed79872f3b3
+soldiers_smoke_d5_s1001=4.2933/abf388e9f9e0a413
 snow_smoke_d0_s1001=6.4660/ae25442a03503915
 snow_smoke_d3_s1001=6.0000/13ce3a7e1c79588b
 snow_smoke_d5_s1001=6.0000/d90c911f6a435617
@@ -273,11 +276,11 @@ selesnya_regression_d3_s2002=5.0667/577dc8a479f1e857
 selesnya_regression_d3_s3003=5.1600/e8acc4e7d1b892e7
 selesnya_regression_d5_s2002=5.0000/92efa990471a9cd1
 selesnya_regression_d5_s3003=5.2000/902ac9d162a2e71c
-soldiers_regression_d0_s2002=4.6100/55f673f4b21fb0fa
-soldiers_regression_d3_s2002=4.3800/7a38baf2467bb6d3
-soldiers_regression_d3_s3003=4.3467/69af91ede396562f
-soldiers_regression_d5_s2002=4.3733/3bf10dece669c7c7
-soldiers_regression_d5_s3003=4.3867/4bf62b16c476a108
+soldiers_regression_d0_s2002=4.4230/5fc2ea3369b3787e
+soldiers_regression_d3_s2002=4.2400/557e65914a556944
+soldiers_regression_d3_s3003=4.2600/a3977f7005460030
+soldiers_regression_d5_s2002=4.2400/3b4c36f18f7cf84c
+soldiers_regression_d5_s3003=4.2800/cc9dbdf77c219ad0
 snow_regression_d0_s2002=6.4410/db2a18d6a341b2e9
 snow_regression_d3_s2002=6.0000/7bc7feadd0c2313a
 snow_regression_d3_s3003=5.8167/5f24e959ffddfd0c
@@ -585,18 +588,18 @@ selesnya_overnight_d5_s4004=5.1200/5b53a38ff9b29277
 selesnya_overnight_d5_s5005=5.1160/9a982861113fb7ab
 selesnya_overnight_d5_s6006=5.1680/8e09309e2d0f0be7
 selesnya_overnight_d5_s7007=5.1780/88f2eebf3260ee26
-soldiers_overnight_d0_s4004=4.5960/1408751e4aafb7d3
-soldiers_overnight_d0_s6006=4.6135/10e8f9cfa632f9a3
-soldiers_overnight_d0_s8008=4.5860/0e2154ae2c07e80a
-soldiers_overnight_d0_s10010=4.6210/31ee247f948ad0ef
-soldiers_overnight_d3_s4004=4.3840/1286c9ad28c5003a
-soldiers_overnight_d3_s5005=4.3620/b137572827111d87
-soldiers_overnight_d3_s6006=4.4110/e424287e78665696
-soldiers_overnight_d3_s7007=4.3700/9bf7742a8eee4dfe
-soldiers_overnight_d5_s4004=4.3780/9d74dc4ce45f674b
-soldiers_overnight_d5_s5005=4.3700/10838c0564644609
-soldiers_overnight_d5_s6006=4.3980/392e04e9e0ef070c
-soldiers_overnight_d5_s7007=4.3740/8e985dbe790d2386
+soldiers_overnight_d0_s4004=4.4565/655bab1b816deca9
+soldiers_overnight_d0_s6006=4.4610/5a6cb55ddb5316f3
+soldiers_overnight_d0_s8008=4.4310/5fa89aa9f9ce396d
+soldiers_overnight_d0_s10010=4.4780/f9c40227263c3dae
+soldiers_overnight_d3_s4004=4.2470/43c8872075199e7e
+soldiers_overnight_d3_s5005=4.2470/74454b69b0cb8216
+soldiers_overnight_d3_s6006=4.2470/2d4fd9e291d043aa
+soldiers_overnight_d3_s7007=4.2720/25cb4330d4191e71
+soldiers_overnight_d5_s4004=4.2400/8176740359fd349a
+soldiers_overnight_d5_s5005=4.2440/1dec09d137ee5490
+soldiers_overnight_d5_s6006=4.2420/8ca5b88ccf73d32a
+soldiers_overnight_d5_s7007=4.2780/37698003de31ea44
 giants_overnight_d0_s4004=6.0765/2ef74be2b70bf355
 giants_overnight_d0_s6006=6.0790/cf2bf7092289312e
 giants_overnight_d0_s8008=6.0740/48f6ab21086490b3
