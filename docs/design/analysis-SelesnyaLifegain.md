@@ -738,6 +738,45 @@ Also unexercised: Verdant Sun's Avatar, Feed the Clan's ferocious gate, Blossomi
 Selesnya Sanctuary Karoo bounce. **If round 2 does not reach them, a few targeted seeds are worth
 more than more games.**
 
+## Mulligan profile (keep table) — generated, validated, ADOPTED 2026-10-08
+
+**Generation.** `scripts/mullgen.sh run decks/SelesnyaLifegain fast` (R=30, K=19 buckets, depth 2 /
+budget 3 ms from `value_play`, PGO+LTO generation binary), resumed from its journal across the
+2026-10-06 cancel and the 2026-10-07 mount failure without losing a completed cell. Finished
+2026-10-08 ~09:05Z: 703,422 size-7 cell-sides, 5.43M size-7 rollouts in the last leg alone; artifact
+check OK (351,711 entries, `bottoming_enabled=true`). The cost story (the tail and the residual mana
+blow-ups, both fixed as sound prunes) is in `selesnya-keepgen-tail.md` and
+`selesnya-keepgen-bulk-cost.md`.
+
+**Validation (`mullgen.sh`, 16 seeds x 1000 games per arm, play profile):**
+
+| check | delta | seeds | verdict |
+|---|---|---|---|
+| keep: exhaustive vs static | **−0.2345 t** (5.293 → 5.061) | 16/16 better | ok |
+| bottoming: blind vs lookahead, CONFOUNDED | **−0.0641 t** (se 0.0031, t −20.7) | 16/16 better | ok |
+
+**The suite move, per game.** All three tiers re-run with the table live, and every changed game
+attributed by `test/keep_adoption_attribution.py` (replays each case with the tier's own binary, table
+off and on; the off side reproduces the committed GT and the on side reproduces the run, game for game,
+so the table is the only difference):
+
+| tier | cases | games | changed | different mulligan count | different bottom | bottom ORDER only (play identical) | unexplained | avg win turn |
+|---|---|---|---|---|---|---|---|---|
+| smoke | 3 | 1225 | 781 | 597 | 177 | 7 | **0** | all faster (−0.04 … −0.32) |
+| regression | 5 | 1450 | 851 | 636 | 206 | 9 | **0** | all faster (−0.05 … −0.25) |
+| overnight | 12 | 14000 | 8396 | 6325 | 1996 | 75 | **0** | all faster (−0.11 … −0.32) |
+
+The "order only" games keep the same hands and bottom the same cards; only the order the bottomed cards
+go under the library differs, which the play digest records — every turn is identical. Accepted with
+`--accept-with-regressions` notes in `test/regression_gt.txt`.
+
+(The validation report's own regression line said "net slower (faster=290 slower=619)". That was the
+audit counting 129 stale `.wins` files other decks' runs had left in `test/logs/regression/wins/`;
+Selesnya's five cases were 87 faster / 44 slower. Fixed: the audit now judges only the run's manifest.)
+
 ## Open questions for the user
 
 (carried to the closing report; none blocked any work)
+
+- **Search leaf depth 0 for Selesnya** (from `selesnya-keepgen-bulk-cost.md`): 2.10x cheaper per
+  rollout at +0.040 t. A play-quality trade, so the user's call.

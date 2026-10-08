@@ -1,5 +1,8 @@
-# Regression ground truth -- commit 5811d859  date 2026-10-07
+# Regression ground truth -- commit 1caa094d  date 2026-10-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (smoke, 2026-10-08): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
+# accepted-with-regressions (regression, 2026-10-08): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
+# accepted-with-regressions (overnight, 2026-10-08): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 8396 = 6325 mulligan count + 1996 bottom + 75 bottom-order-only, 0 unexplained; all 12 cases faster
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -109,9 +112,9 @@ giants_smoke_d5_s1001=5.6933/5712e4c4259ec792
 pirates_smoke_d0_s1001=4.7390/1c7cce78ee5347b7
 pirates_smoke_d3_s1001=4.3533/dd56b9e90294338c
 pirates_smoke_d5_s1001=4.3467/abc848d90f53225a
-selesnya_smoke_d0_s1001=6.2760/9ec6bc35db96e6e8
-selesnya_smoke_d3_s1001=5.4267/4067858d4eb1db88
-selesnya_smoke_d5_s1001=5.3067/706e6d60ef51cb7e
+selesnya_smoke_d0_s1001=5.9550/7025f705ac10440a
+selesnya_smoke_d3_s1001=5.2267/f79ca7dfd950d31f
+selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
 soldiers_smoke_d0_s1001=4.6000/0611c83ed8bc5a10
 soldiers_smoke_d3_s1001=4.3333/98cf0632c8c00549
 soldiers_smoke_d5_s1001=4.3600/107c876c54356824
@@ -265,11 +268,11 @@ pirates_regression_d3_s2002=4.3533/c9cae872131e3167
 pirates_regression_d3_s3003=4.4267/af26c0ad2293b00a
 pirates_regression_d5_s2002=4.4000/654fb7d77c1e3797
 pirates_regression_d5_s3003=4.4133/6fa339523b9a475f
-selesnya_regression_d0_s2002=6.2390/1c4dcd7e6788cb84
-selesnya_regression_d3_s2002=5.1667/68baba1f422547b4
-selesnya_regression_d3_s3003=5.4133/1f9b5fe6c4d7df9d
-selesnya_regression_d5_s2002=5.0533/46854c03a9d9e68c
-selesnya_regression_d5_s3003=5.4133/eebd8c0f10e5e025
+selesnya_regression_d0_s2002=6.0000/efe46393a284cb30
+selesnya_regression_d3_s2002=5.0667/b98448cd2f94b16c
+selesnya_regression_d3_s3003=5.1600/e8acc4e7d1b892e7
+selesnya_regression_d5_s2002=5.0000/75eccda635e92604
+selesnya_regression_d5_s3003=5.2000/902ac9d162a2e71c
 soldiers_regression_d0_s2002=4.6100/55f673f4b21fb0fa
 soldiers_regression_d3_s2002=4.3800/7a38baf2467bb6d3
 soldiers_regression_d3_s3003=4.3600/e79a3fe0168d5b3a
@@ -570,18 +573,18 @@ pirates_overnight_d5_s4004=4.3700/045c8b40c7bce7a7
 pirates_overnight_d5_s5005=4.3720/2da82f653cc90e0f
 pirates_overnight_d5_s6006=4.3820/62499753f589ef0f
 pirates_overnight_d5_s7007=4.3120/580b3b3d905d421b
-selesnya_overnight_d0_s4004=6.2595/76677f11c784a78b
-selesnya_overnight_d0_s6006=6.2895/25f55757ba2239c6
-selesnya_overnight_d0_s8008=6.2645/b5f76dd87c058002
-selesnya_overnight_d0_s10010=6.2890/dbcb7dae1927f058
-selesnya_overnight_d3_s4004=5.2630/3aa1f8086566cf26
-selesnya_overnight_d3_s5005=5.3250/abf55c9b613977c8
-selesnya_overnight_d3_s6006=5.3220/47eb78d5d89c5647
-selesnya_overnight_d3_s7007=5.3110/11e4f972cf8a5dbb
-selesnya_overnight_d5_s4004=5.2720/fae51776a5e3f8bf
-selesnya_overnight_d5_s5005=5.3300/6160673e9becf9c6
-selesnya_overnight_d5_s6006=5.3340/534323566ddca01b
-selesnya_overnight_d5_s7007=5.2840/56692dc034673827
+selesnya_overnight_d0_s4004=5.9390/1669a3cdb34c91e5
+selesnya_overnight_d0_s6006=5.9675/e209285a25281c86
+selesnya_overnight_d0_s8008=5.9420/d17dba60d22dce9e
+selesnya_overnight_d0_s10010=5.9695/3c3eeeaf5cfd612f
+selesnya_overnight_d3_s4004=5.1370/94c07ae4d4bb9e6f
+selesnya_overnight_d3_s5005=5.1540/c51e3992975ed2e1
+selesnya_overnight_d3_s6006=5.1760/2866ff3e561ac0bf
+selesnya_overnight_d3_s7007=5.1790/3953b9a2f580000c
+selesnya_overnight_d5_s4004=5.1200/d1ef72ce312ebb1e
+selesnya_overnight_d5_s5005=5.1160/495cca734693cba0
+selesnya_overnight_d5_s6006=5.1680/f896e871c5776f1b
+selesnya_overnight_d5_s7007=5.1780/0d850a606a20ae03
 soldiers_overnight_d0_s4004=4.5960/1408751e4aafb7d3
 soldiers_overnight_d0_s6006=4.6135/10e8f9cfa632f9a3
 soldiers_overnight_d0_s8008=4.5860/0e2154ae2c07e80a
