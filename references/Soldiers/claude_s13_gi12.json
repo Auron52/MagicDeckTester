@@ -1,0 +1,250 @@
+{
+  "seed": 13, "game_index": 12, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 9, "name": "Champion of the Parish" }, { "num": 35, "name": "Plains" }, { "num": 39, "name": "Ranger-Captain of Eos" }, { "num": 21, "name": "Field Marshal" }, { "num": 41, "name": "Recruitment Officer" }, { "num": 43, "name": "Rick, Steadfast Leader" }, { "num": 10, "name": "Champion of the Parish" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Thalia, Guardian of Thraben" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Recruitment Officer", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Recruitment Officer", "land": "Plains", "casts": ["Recruitment Officer"], "actions": [{ "card": "Recruitment Officer" }] },
+    { "index": 1, "summary": "land=Plains; cast: Champion of the Parish", "land": "Plains", "casts": ["Champion of the Parish"], "actions": [{ "card": "Champion of the Parish" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Recruitment Officer", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Recruitment Officer", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Champion of the Parish", "Recruitment Officer"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Unclaimed Territory" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Recruitment Officer", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Champion of the Parish, Recruitment Officer", "land": "Unclaimed Territory", "casts": ["Champion of the Parish", "Recruitment Officer"], "cast_order_canonical": ["Champion of the Parish", "Recruitment Officer"], "actions": [{ "card": "Champion of the Parish" }, { "card": "Recruitment Officer" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Recruitment Officer, Champion of the Parish", "land": "Unclaimed Territory", "casts": ["Recruitment Officer", "Champion of the Parish"], "cast_order_canonical": ["Recruitment Officer", "Champion of the Parish"], "actions": [{ "card": "Recruitment Officer" }, { "card": "Champion of the Parish" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Recruitment Officer", "land": "Unclaimed Territory", "casts": ["Recruitment Officer"], "actions": [{ "card": "Recruitment Officer" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Thalia, Guardian of Thraben", "land": "Unclaimed Territory", "casts": ["Thalia, Guardian of Thraben"], "actions": [{ "card": "Thalia, Guardian of Thraben" }] },
+    { "index": 4, "summary": "land=none; cast: Recruitment Officer", "land": null, "casts": ["Recruitment Officer"], "actions": [{ "card": "Recruitment Officer" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Champion of the Parish", "land": "Unclaimed Territory", "casts": ["Champion of the Parish"], "actions": [{ "card": "Champion of the Parish" }] },
+    { "index": 6, "summary": "land=none; cast: Champion of the Parish", "land": null, "casts": ["Champion of the Parish"], "actions": [{ "card": "Champion of the Parish" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 2, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 2, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Champion of the Parish (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Plains", "idx": 2, "num": 35, "is_land": true, "taps": "W" }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 21, "name": "Field Marshal", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Ranger-Captain of Eos → Champion of the Parish", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Champion of the Parish" }] },
+    { "index": 1, "summary": "land=Plains; cast: Ranger-Captain of Eos → Esper Sentinel", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Esper Sentinel" }] },
+    { "index": 2, "summary": "land=Plains; cast: Ranger-Captain of Eos → Recruitment Officer", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Recruitment Officer" }] },
+    { "index": 3, "summary": "land=Plains; cast: Field Marshal", "land": "Plains", "casts": ["Field Marshal"], "actions": [{ "card": "Field Marshal" }] },
+    { "index": 4, "summary": "land=Plains; cast: Thalia, Guardian of Thraben", "land": "Plains", "casts": ["Thalia, Guardian of Thraben"], "actions": [{ "card": "Thalia, Guardian of Thraben" }] },
+    { "index": 5, "summary": "land=none; cast: Thalia, Guardian of Thraben", "land": null, "casts": ["Thalia, Guardian of Thraben"], "actions": [{ "card": "Thalia, Guardian of Thraben" }] },
+    { "index": 6, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 3, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Field Marshal", "idx": 12, "num": 21, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 11, "num": 36, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Champion of the Parish (5), Champion of the Parish (4), Recruitment Officer (3) — 12 to opponent (17→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Field Marshal", "idx": 12, "num": 21, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 11, "num": 36, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "tapped": true, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Coppercoat Vanguard" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Field Marshal", "idx": 12, "num": 21, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 11, "num": 36, "is_land": true, "taps": "W" }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos → Champion of the Parish", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Champion of the Parish" }] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos → Esper Sentinel", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Esper Sentinel" }] },
+    { "index": 2, "summary": "land=none; cast: Ranger-Captain of Eos → Recruitment Officer", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Recruitment Officer" }] },
+    { "index": 3, "summary": "land=none; cast: Thalia, Guardian of Thraben", "land": null, "casts": ["Thalia, Guardian of Thraben"], "actions": [{ "card": "Thalia, Guardian of Thraben" }] },
+    { "index": 4, "summary": "land=none; cast: Coppercoat Vanguard", "land": null, "casts": ["Coppercoat Vanguard"], "actions": [{ "card": "Coppercoat Vanguard" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 4, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 3, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Champion of the Parish", "idx": 7, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Coppercoat Vanguard", "idx": 13, "num": 13, "is_land": false }, { "name": "Field Marshal", "idx": 12, "num": 21, "is_land": false }, { "name": "Plains", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 11, "num": 36, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 8, "num": 41, "is_land": false }, { "name": "Unclaimed Territory", "idx": 6, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rick, Steadfast Leader", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Thalia, Guardian of Thraben", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Champion of the Parish (7), Champion of the Parish (6), Recruitment Officer (4), Field Marshal (3) — 20 to opponent (5→-15)" }
+  ]
+}
