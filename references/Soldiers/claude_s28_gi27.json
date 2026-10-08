@@ -1,0 +1,294 @@
+{
+  "seed": 28, "game_index": 27, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [3, 50] }, "combat_swap_timing": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 25, "name": "Fortified Beachhead" }, { "num": 21, "name": "Field Marshal" }, { "num": 17, "name": "Esper Sentinel" }, { "num": 22, "name": "Field Marshal" }, { "num": 18, "name": "Esper Sentinel" }, { "num": 35, "name": "Plains" }, { "num": 33, "name": "Jirina, Dauntless General" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 24, "name": "Field Marshal" }, { "num": 30, "name": "General Kudro of Drannith" }, { "num": 47, "name": "Secluded Courtyard" }, { "num": 5, "name": "Brutal Cathar" }, { "num": 23, "name": "Field Marshal" }, { "num": 36, "name": "Plains" }, { "num": 49, "name": "Silent Clearing" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 10, "name": "Champion of the Parish" }, { "num": 50, "name": "Silent Clearing" }, { "num": 59, "name": "Unclaimed Territory" }, { "num": 51, "name": "Thalia's Lieutenant" }, { "num": 3, "name": "Aether Vial" }, { "num": 28, "name": "Fortified Beachhead" }, { "num": 16, "name": "Coppercoat Vanguard" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 10, "name": "Champion of the Parish", "win_optimal": true }, { "num": 50, "name": "Silent Clearing", "win_optimal": true }, { "num": 59, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 51, "name": "Thalia's Lieutenant", "win_optimal": true }, { "num": 3, "name": "Aether Vial", "win_optimal": true }, { "num": 28, "name": "Fortified Beachhead", "win_optimal": true }, { "num": 16, "name": "Coppercoat Vanguard", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 50, "name": "Silent Clearing" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 10, "name": "Champion of the Parish", "win_optimal": true }, { "num": 50, "name": "Silent Clearing", "win_optimal": true }, { "num": 59, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 51, "name": "Thalia's Lieutenant", "win_optimal": true }, { "num": 28, "name": "Fortified Beachhead", "win_optimal": true }, { "num": 16, "name": "Coppercoat Vanguard", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 50, "name": "Silent Clearing" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 10, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Fortified Beachhead", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Thalia's Lieutenant", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Champion of the Parish", "land": "Unclaimed Territory", "casts": ["Champion of the Parish"], "actions": [{ "card": "Champion of the Parish" }] },
+    { "index": 1, "summary": "land=Fortified Beachhead; cast: Champion of the Parish", "land": "Fortified Beachhead", "casts": ["Champion of the Parish"], "actions": [{ "card": "Champion of the Parish" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Fortified Beachhead; cast: (nothing)", "land": "Fortified Beachhead", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Fortified Beachhead", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Thalia's Lieutenant", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Fortified Beachhead", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Thalia's Lieutenant", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Esper Sentinel" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Esper Sentinel", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Fortified Beachhead", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Thalia's Lieutenant", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Fortified Beachhead; cast: Coppercoat Vanguard", "land": "Fortified Beachhead", "casts": ["Coppercoat Vanguard"], "actions": [{ "card": "Coppercoat Vanguard" }] },
+    { "index": 1, "summary": "land=Fortified Beachhead; cast: Thalia's Lieutenant", "land": "Fortified Beachhead", "casts": ["Thalia's Lieutenant"], "actions": [{ "card": "Thalia's Lieutenant" }] },
+    { "index": 2, "summary": "land=Fortified Beachhead; cast: Esper Sentinel", "land": "Fortified Beachhead", "casts": ["Esper Sentinel"], "actions": [{ "card": "Esper Sentinel" }] },
+    { "index": 3, "summary": "land=none; cast: Esper Sentinel", "land": null, "casts": ["Esper Sentinel"], "actions": [{ "card": "Esper Sentinel" }] },
+    { "index": 4, "summary": "land=Fortified Beachhead; cast: (nothing)", "land": "Fortified Beachhead", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 2, "kind": "ability", "text": "Thalia's Lieutenant: +1/+1 counter on each other Human (1)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Esper Sentinel", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Champion of the Parish (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Esper Sentinel", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Champion of the Parish", "Esper Sentinel"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Champion of the Parish" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "is_land": true, "taps": "WU" }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Esper Sentinel", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Coppercoat Vanguard", "land": null, "casts": ["Coppercoat Vanguard"], "actions": [{ "card": "Coppercoat Vanguard" }] },
+    { "index": 1, "summary": "land=none; cast: Champion of the Parish, Esper Sentinel", "land": null, "casts": ["Champion of the Parish", "Esper Sentinel"], "cast_order_canonical": ["Champion of the Parish", "Esper Sentinel"], "actions": [{ "card": "Champion of the Parish" }, { "card": "Esper Sentinel" }] },
+    { "index": 2, "summary": "land=none; cast: Esper Sentinel, Champion of the Parish", "land": null, "casts": ["Esper Sentinel", "Champion of the Parish"], "cast_order_canonical": ["Esper Sentinel", "Champion of the Parish"], "actions": [{ "card": "Esper Sentinel" }, { "card": "Champion of the Parish" }] },
+    { "index": 3, "summary": "land=none; cast: Esper Sentinel", "land": null, "casts": ["Esper Sentinel"], "actions": [{ "card": "Esper Sentinel" }] },
+    { "index": 4, "summary": "land=none; cast: Champion of the Parish", "land": null, "casts": ["Champion of the Parish"], "actions": [{ "card": "Champion of the Parish" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 3, "kind": "ability", "text": "➕ Thalia's Lieutenant: +1/+1 counter (Human entered)" }, { "turn": 3, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 3, "kind": "ability", "text": "➕ Thalia's Lieutenant: +1/+1 counter (Human entered)" }, { "turn": 3, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Champion of the Parish", "idx": 5, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Esper Sentinel", "idx": 6, "num": 20, "is_land": false }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Champion of the Parish (5), Thalia's Lieutenant (3) — 8 to opponent (17→9)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Champion of the Parish", "idx": 5, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Esper Sentinel", "idx": 6, "num": 20, "is_land": false }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Harbin, Vanguard Aviator" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Champion of the Parish", "idx": 5, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Esper Sentinel", "idx": 6, "num": 20, "is_land": false }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "is_land": true, "taps": "WU" }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Coppercoat Vanguard", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Harbin, Vanguard Aviator", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Harbin, Vanguard Aviator", "land": null, "casts": ["Harbin, Vanguard Aviator"], "actions": [{ "card": "Harbin, Vanguard Aviator" }] },
+    { "index": 1, "summary": "land=none; cast: Coppercoat Vanguard", "land": null, "casts": ["Coppercoat Vanguard"], "actions": [{ "card": "Coppercoat Vanguard" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }, { "turn": 4, "kind": "ability", "text": "➕ Thalia's Lieutenant: +1/+1 counter (Human entered)" }, { "turn": 4, "kind": "ability", "text": "➕ Champion of the Parish: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Champion of the Parish", "idx": 1, "num": 10, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 5 }] }, { "name": "Champion of the Parish", "idx": 5, "num": 9, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Coppercoat Vanguard", "idx": 7, "num": 16, "is_land": false }, { "name": "Esper Sentinel", "idx": 6, "num": 20, "is_land": false }, { "name": "Fortified Beachhead", "idx": 2, "num": 28, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 3, "num": 51, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Unclaimed Territory", "idx": 0, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Harbin, Vanguard Aviator", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Champion of the Parish (7), Thalia's Lieutenant (5), Champion of the Parish (4), Esper Sentinel (2) — 18 to opponent (9→-9)" }
+  ]
+}
