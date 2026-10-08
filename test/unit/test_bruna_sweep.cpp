@@ -1272,3 +1272,23 @@ TEST_CASE("Aura host ranking: with Bruna attacking, a flat Aura ties across host
         CHECK(AuraHostKeyBetter(key_on("Almost Perfect", false), key_on("Almost Perfect", true)));
     }
 }
+
+// ---- ARCANUM WINGS' HOST: the USER's order as the key's last tie-break (MTG_WINGS_HOST_ORDER) -----------------
+// Wings grants no power, so the damage key ties across hosts; the USER's order picks the LEAST USEFUL dork --
+// Avacyn's Pilgrim ({W}) over Birds of Paradise (any colour) -- where enumeration order picked the Birds.
+TEST_CASE("Aura host ranking: Arcanum Wings goes on the least useful dork (Pilgrim before Birds); =0 is the hatch")
+{
+    BoardBs b;
+    const int birds   = b.Put("Birds of Paradise", /*tapped=*/true);
+    const int pilgrim = b.Put("Avacyn's Pilgrim", /*tapped=*/false, /*sick=*/true);
+    b.Put("Island");
+    b.Put("Island");
+    b.Put("Forest");
+    b.Hand("Arcanum Wings");
+    b.s.players[0].lands_played_this_turn = 1;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Arcanum Wings") == pilgrim);
+    CHECK(SolveHostOf(b.s, "Arcanum Wings") == pilgrim);
+    heurarm::t_arm[heurarm::WINGS_HOST_ORDER] = 0;
+    CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Arcanum Wings") == birds);
+    heurarm::t_arm[heurarm::WINGS_HOST_ORDER] = -1;
+}

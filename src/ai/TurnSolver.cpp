@@ -9186,6 +9186,45 @@ static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>&
     return t;
 }
 
+// MTG_WINGS_HOST_ORDER (heurarm WINGS_HOST_ORDER): the USER's host order for an AURA-SWAP Aura (Arcanum Wings),
+// as the key's last tie-break (AuraHostKey::swap_rank, see AuraHostKeyBetter). USER 2026-10-07/08: "Taking any
+// non-dork first and the least useful dorks second. Though if one is summoning sick it makes sense to put it
+// on the one that can attack." Lower is better: 0 a non-dork that can attack this turn (pre-combat), 100 any
+// other non-dork, 200 a mana dork that can attack, 300 one that cannot; within the dorks the LEAST USEFUL
+// first -- fewest colours of mana (Avacyn's Pilgrim's {W} before Birds of Paradise's any colour), then lowest
+// yield. The host carries the payload the swap brings in, so it should be a creature that swings rather than
+// the deck's flexible mana. Measured: docs/design/glittering-wish-heuristic.md.
+static bool WingsHostOrderOn()
+{
+    static const bool env = EnvOn("MTG_WINGS_HOST_ORDER", true);   // DEFAULT ON; =0 restores enumeration order
+    return heurarm::Flag(heurarm::WINGS_HOST_ORDER, env);
+}
+
+static int WingsHostRank(const GameState& t, int me, const Permanent& h, bool is_pre_combat)
+{
+    const bool dork = AuraHostIsManaCreature(h);
+    const bool atk  = is_pre_combat && CanAttackFull(h, t.battlefield, me);
+    if (!dork) { return atk ? 0 : 100; }
+    int colours = 0, yield = 0;
+    if (const CardDefinition* d = CardDatabase::Instance().LookupCached(h.card))
+    {
+        unsigned bits = 0;
+        for (Color c : d->params.produces)
+        {
+            switch (c)
+            {
+                case Color::White: bits |= 1u; break;  case Color::Blue:  bits |= 2u;  break;
+                case Color::Black: bits |= 4u; break;  case Color::Red:   bits |= 8u;  break;
+                case Color::Green: bits |= 16u; break; default: break;
+            }
+        }
+        for (unsigned b = bits; b != 0; b &= b - 1) { ++colours; }
+        yield = PermanentManaYield(t, h, *d);
+        if (yield <= 0) { yield = ManaProducedPerTap(*d); }
+    }
+    return (atk ? 200 : 300) + std::min(colours, 5) * 10 + std::min(std::max(yield, 0), 9);
+}
+
 // The host-DEPENDENT half (step 4 + the key) on `work`, a scratch copy of `base` (AuraPlanHostBase of
 // the same plan) that the caller made ONCE: step 4 only appends Auras to the battlefield and taps
 // hosts, so each evaluation resets just the battlefield instead of copying the whole state (perf).
@@ -9297,11 +9336,20 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
         }
     }
     AuraHostKey key = AuraHostBoardKey(t, me, is_pre_combat, &mana_tapped);
+    const bool swap_order = WingsHostOrderOn();
     for (const Action& a : acts)
     {
         if (!IsCreatureAuraCast(a)) { continue; }
         for (const Permanent& h : t.battlefield)
-        { if (h.card.m_number == a.enchant_target) { key.dork_hosts += AuraHostIsManaCreature(h) ? 1 : 0; break; } }
+        {
+            if (h.card.m_number != a.enchant_target) { continue; }
+            const bool dork = AuraHostIsManaCreature(h);
+            key.dork_hosts += dork ? 1 : 0;
+            const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (swap_order && ad != nullptr && ad->params.aura_swap_cost.has_value())
+            { key.swap_rank += WingsHostRank(t, me, h, is_pre_combat); }
+            break;
+        }
     }
     return key;
 }

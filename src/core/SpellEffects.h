@@ -29630,6 +29630,7 @@ struct AuraHostKey
     int  dmg        = -1;
     int  now        = 0;    // tie-break 1: this turn's share of `dmg` (damage sooner is never worse)
     int  dork_hosts = 0;    // tie-break 2: Auras placed on creature MANA sources (fewer is better)
+    int  swap_rank  = 0;    // tie-break 3 (MTG_WINGS_HOST_ORDER): an Aura-SWAP Aura's host by the USER's order
 };
 
 // Tie-breaks. (1) The same two-turn total with more of it THIS turn. (2) (Bruna proof run 1, gi49)
@@ -29642,7 +29643,13 @@ inline bool AuraHostKeyBetter(const AuraHostKey& a, const AuraHostKey& b)
     if (a.lethal != b.lethal) { return a.lethal; }
     if (a.dmg != b.dmg) { return a.dmg > b.dmg; }
     if (a.now != b.now) { return a.now > b.now; }
-    return a.dork_hosts < b.dork_hosts;
+    if (a.dork_hosts != b.dork_hosts) { return a.dork_hosts < b.dork_hosts; }
+    // (3) ARCANUM WINGS (USER 2026-10-08, "non-dork first, the least useful dorks second"). An Aura-swap
+    // Aura's value is NEXT turn's swap -- the payload it brings in -- which the damage key cannot see (Wings
+    // itself grants no power), so its host was a key TIE resolved by enumeration order; the fully-branched
+    // control beat that on held-out (Wings on a tapped Birds of Paradise vs on a fresh Avacyn's Pilgrim).
+    // 0 when off or for any other Aura, so every other comparison is unchanged.
+    return a.swap_rank < b.swap_rank;
 }
 
 // Is this creature a mana source the deck taps (the tie-break above)?
