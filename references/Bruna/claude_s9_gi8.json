@@ -1,0 +1,469 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [36] }, "combat_swap_timing": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 12, "name": "Botanical Sanctum" }, { "num": 46, "name": "Razorverge Thicket" }, { "num": 45, "name": "Prodigious Growth" }, { "num": 23, "name": "Eldrazi Conscription" }, { "num": 47, "name": "Razorverge Thicket" }, { "num": 19, "name": "Colossification" }, { "num": 27, "name": "Forest" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 2, "name": "Arcanum Wings" }, { "num": 31, "name": "Forest" }, { "num": 57, "name": "Somberwald Sage" }, { "num": 36, "name": "Lightning Greaves" }, { "num": 38, "name": "Lightning Greaves" }, { "num": 54, "name": "Skycloud Expanse" }, { "num": 8, "name": "Azorius Chancery" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 2, "name": "Arcanum Wings", "win_optimal": true }, { "num": 31, "name": "Forest", "win_optimal": true }, { "num": 57, "name": "Somberwald Sage", "win_optimal": true }, { "num": 36, "name": "Lightning Greaves", "win_optimal": true }, { "num": 38, "name": "Lightning Greaves", "win_optimal": true }, { "num": 54, "name": "Skycloud Expanse", "win_optimal": true }, { "num": 8, "name": "Azorius Chancery", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 31, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Bruna, Light of Alabaster" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Azorius Chancery; cast: (nothing)", "land": "Azorius Chancery", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Skycloud Expanse; cast: (nothing)", "land": "Skycloud Expanse", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 31, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 31, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 12, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Glittering Wish" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 31, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Skycloud Expanse; cast: Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 1, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Skycloud Expanse", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 12, "summary": "land=Azorius Chancery; cast: (nothing)", "land": "Azorius Chancery", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Skycloud Expanse; cast: (nothing)", "land": "Skycloud Expanse", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "bounce",
+  "source": "Azorius Chancery",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 31, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 0, "tapped": false, "name": "Forest", "label": "Forest" }, { "index": 1, "perm_index": 1, "tapped": true, "name": "Azorius Chancery", "label": "Azorius Chancery" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Eldrazi Conscription" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "is_land": true, "taps": "WU" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 31, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Somberwald Sage", "land": "Forest", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=Skycloud Expanse; cast: Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 2, "summary": "land=Forest; cast: Lightning Greaves", "land": "Forest", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 3, "summary": "land=Forest; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 14, "summary": "land=none; cast: Lightning Greaves", "land": null, "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 15, "summary": "land=Skycloud Expanse; cast: (nothing)", "land": "Skycloud Expanse", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Mother of Runes", "Bruna, Light of Alabaster"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Mother of Runes" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "is_land": true, "taps": "WU" }, { "name": "Forest", "idx": 3, "num": 31, "is_land": true, "taps": "G" }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 39, "name": "Mother of Runes", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Skycloud Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Skycloud Expanse; cast: Bruna, Light of Alabaster, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Bruna, Light of Alabaster", "Mother of Runes"], "cast_order_canonical": ["Bruna, Light of Alabaster", "Mother of Runes"], "actions": [{ "card": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }] },
+    { "index": 1, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Bruna, Light of Alabaster", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Bruna, Light of Alabaster"], "cast_order_canonical": ["Mother of Runes", "Bruna, Light of Alabaster"], "actions": [{ "card": "Mother of Runes" }, { "card": "Bruna, Light of Alabaster" }] },
+    { "index": 2, "summary": "land=Skycloud Expanse; cast: Bruna, Light of Alabaster", "land": "Skycloud Expanse", "casts": ["Bruna, Light of Alabaster"], "actions": [{ "card": "Bruna, Light of Alabaster" }] },
+    { "index": 3, "summary": "land=none; cast: Bruna, Light of Alabaster", "land": null, "casts": ["Bruna, Light of Alabaster"], "actions": [{ "card": "Bruna, Light of Alabaster" }] },
+    { "index": 4, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 5, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Mother of Runes, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 6, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Arcanum Wings", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 7, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 8, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Somberwald Sage, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 9, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 10, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 11, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Mother of Runes, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 12, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 13, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 14, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Mother of Runes, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 35, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 36, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Mother of Runes, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 37, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Arcanum Wings", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 38, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 39, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Somberwald Sage, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 40, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 41, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 42, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Mother of Runes, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 43, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 44, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 45, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Mother of Runes, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 66, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Lightning Greaves", "Mother of Runes"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Mother of Runes" }] },
+    { "index": 67, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Mother of Runes, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Mother of Runes", "Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves" }] },
+    { "index": 68, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Arcanum Wings", "Mother of Runes"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }] },
+    { "index": 69, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, Arcanum Wings → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 70, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Somberwald Sage, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }] },
+    { "index": 71, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, Arcanum Wings → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 72, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, Arcanum Wings → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 73, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Mother of Runes, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }] },
+    { "index": 74, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, Arcanum Wings → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 75, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Glittering Wish → Bruna, Light of Alabaster, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Glittering Wish", "Mother of Runes"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish", "Mother of Runes"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }] },
+    { "index": 76, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Mother of Runes, Arcanum Wings → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Glittering Wish", "Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 78, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Lightning Greaves", "Mother of Runes"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Mother of Runes" }] },
+    { "index": 79, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Mother of Runes, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Mother of Runes", "Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves" }] },
+    { "index": 130, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 131, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 132, "summary": "land=none; cast: Lightning Greaves, Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 133, "summary": "land=none; cast: Mother of Runes, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 134, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 135, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 136, "summary": "land=none; cast: Lightning Greaves, Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves", "Mother of Runes"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 137, "summary": "land=none; cast: Mother of Runes, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Mother of Runes", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 138, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Mother of Runes"], "cast_order_canonical": ["Arcanum Wings", "Mother of Runes"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }] },
+    { "index": 139, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 140, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Arcanum Wings → Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 141, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Mother of Runes"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }] },
+    { "index": 142, "summary": "land=Skycloud Expanse; cast: Mother of Runes, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Mother of Runes", "Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }] },
+    { "index": 143, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Mother of Runes", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Mother of Runes"], "cast_order_canonical": ["Glittering Wish", "Mother of Runes"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }] },
+    { "index": 154, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage, Mother of Runes", "land": null, "casts": ["Arcanum Wings", "Mother of Runes"], "cast_order_canonical": ["Arcanum Wings", "Mother of Runes"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Mother of Runes" }] },
+    { "index": 155, "summary": "land=none; cast: Mother of Runes, Arcanum Wings → Somberwald Sage", "land": null, "casts": ["Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 156, "summary": "land=none; cast: Mother of Runes, Arcanum Wings → Mother of Runes", "land": null, "casts": ["Mother of Runes", "Arcanum Wings"], "cast_order_canonical": ["Mother of Runes", "Arcanum Wings"], "actions": [{ "card": "Mother of Runes" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 157, "summary": "land=none; cast: Lightning Greaves, Mother of Runes", "land": null, "casts": ["Lightning Greaves", "Mother of Runes"], "cast_order_canonical": ["Lightning Greaves", "Mother of Runes"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Mother of Runes" }] },
+    { "index": 158, "summary": "land=none; cast: Mother of Runes, Lightning Greaves", "land": null, "casts": ["Mother of Runes", "Lightning Greaves"], "cast_order_canonical": ["Mother of Runes", "Lightning Greaves"], "actions": [{ "card": "Mother of Runes" }, { "card": "Lightning Greaves" }] },
+    { "index": 159, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Mother of Runes", "land": null, "casts": ["Glittering Wish", "Mother of Runes"], "cast_order_canonical": ["Glittering Wish", "Mother of Runes"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Mother of Runes" }] },
+    { "index": 170, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 171, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 172, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 183, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }] },
+    { "index": 184, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves", "Arcanum Wings"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 185, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage, Glittering Wish → Bruna, Light of Alabaster", "land": "Skycloud Expanse", "casts": ["Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 186, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Glittering Wish", "Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }] },
+    { "index": 207, "summary": "land=Skycloud Expanse; cast: Mother of Runes", "land": "Skycloud Expanse", "casts": ["Mother of Runes"], "actions": [{ "card": "Mother of Runes" }] },
+    { "index": 208, "summary": "land=none; cast: Mother of Runes", "land": null, "casts": ["Mother of Runes"], "actions": [{ "card": "Mother of Runes" }] },
+    { "index": 209, "summary": "land=Skycloud Expanse; cast: Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 210, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 211, "summary": "land=Skycloud Expanse; cast: Arcanum Wings → Somberwald Sage", "land": "Skycloud Expanse", "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 212, "summary": "land=Skycloud Expanse; cast: Lightning Greaves", "land": "Skycloud Expanse", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 213, "summary": "land=Skycloud Expanse; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Skycloud Expanse", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 224, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 225, "summary": "land=none; cast: Lightning Greaves", "land": null, "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 226, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 237, "summary": "land=Skycloud Expanse; cast: (nothing)", "land": "Skycloud Expanse", "casts": [], "actions": [] },
+    { "index": 238, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_total": 335,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Bruna, Light of Alabaster", "idx": 7, "num": 17, "is_land": false }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mother of Runes", "idx": 6, "num": 39, "is_land": false }, { "name": "Skycloud Expanse", "idx": 5, "num": 54, "tapped": true, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Bruna, Light of Alabaster", "idx": 7, "num": 17, "is_land": false }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mother of Runes", "idx": 6, "num": 39, "is_land": false }, { "name": "Skycloud Expanse", "idx": 5, "num": 54, "tapped": true, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 108, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Prodigious Growth" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "is_land": true, "taps": "WU" }, { "name": "Bruna, Light of Alabaster", "idx": 7, "num": 17, "is_land": false }, { "name": "Forest", "idx": 3, "num": 31, "is_land": true, "taps": "G" }, { "name": "Mother of Runes", "idx": 6, "num": 39, "is_land": false }, { "name": "Skycloud Expanse", "idx": 5, "num": 54, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 33, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 2, "summary": "land=none; cast: Arcanum Wings → Mother of Runes, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 3, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 4, "summary": "land=none; cast: Arcanum Wings → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 5, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Bruna, Light of Alabaster, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 6, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Glittering Wish", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 17, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 18, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 19, "summary": "land=none; cast: Arcanum Wings → Mother of Runes, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 20, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 21, "summary": "land=none; cast: Arcanum Wings → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 22, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Bruna, Light of Alabaster, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 23, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Glittering Wish", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 34, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 35, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 36, "summary": "land=none; cast: Arcanum Wings → Mother of Runes, Lightning Greaves, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 37, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Mother of Runes, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 38, "summary": "land=none; cast: Arcanum Wings → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 39, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Bruna, Light of Alabaster, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 40, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish", "Lightning Greaves"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 51, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage, Lightning Greaves", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Lightning Greaves" }] },
+    { "index": 52, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Somberwald Sage", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 53, "summary": "land=none; cast: Arcanum Wings → Mother of Runes, Lightning Greaves", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }, { "card": "Lightning Greaves" }] },
+    { "index": 54, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Mother of Runes", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 55, "summary": "land=none; cast: Arcanum Wings → Bruna, Light of Alabaster, Lightning Greaves", "land": null, "casts": ["Arcanum Wings", "Lightning Greaves"], "cast_order_canonical": ["Arcanum Wings", "Lightning Greaves"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }] },
+    { "index": 56, "summary": "land=none; cast: Lightning Greaves, Arcanum Wings → Bruna, Light of Alabaster", "land": null, "casts": ["Lightning Greaves", "Arcanum Wings"], "cast_order_canonical": ["Lightning Greaves", "Arcanum Wings"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 57, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage, Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings", "Glittering Wish"], "cast_order_canonical": ["Arcanum Wings", "Glittering Wish"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }, { "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 60, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster, Lightning Greaves", "land": null, "casts": ["Glittering Wish", "Lightning Greaves"], "cast_order_canonical": ["Glittering Wish", "Lightning Greaves"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }, { "card": "Lightning Greaves" }] },
+    { "index": 101, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 102, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 103, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 104, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 105, "summary": "land=none; cast: Arcanum Wings → Mother of Runes", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 106, "summary": "land=none; cast: Arcanum Wings → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 107, "summary": "land=none; cast: Lightning Greaves", "land": null, "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 108, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 119, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_total": 216,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 17,
+  "type": "tutor_etb",
+  "source": "Glittering Wish",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Bruna, Light of Alabaster", "idx": 7, "num": 17, "is_land": false }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mother of Runes", "idx": 6, "num": 39, "is_land": false }, { "name": "Skycloud Expanse", "idx": 5, "num": 54, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1, "floating_mana": {"U": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Bruna, Light of Alabaster" }, { "index": 1, "name": "Indrik Umbra" }, { "index": 2, "name": "Almost Perfect" }, { "index": 3, "name": "Unflinching Courage" }, { "index": 4, "name": "Linvala, Shield of Sea Gate" }, { "index": 5, "name": "Troyan, Gutsy Explorer" }, { "index": 6, "name": "Detention Sphere" }, { "index": 7, "name": "Steel of the Godhead" }, { "index": 8, "name": "Vexing Shusher" }, { "index": 9, "name": "Auroral Procession" }, { "index": 10, "name": "Reborn Hope" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 5, "source": "Glittering Wish (searched)", "cards": [{ "name": "Almost Perfect", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Bruna, Light of Alabaster", "idx": 7, "num": 17, "is_land": false }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mother of Runes", "idx": 6, "num": 39, "is_land": false }, { "name": "Skycloud Expanse", "idx": 5, "num": 54, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 200002, "name": "Almost Perfect", "cost": "{4}{W}{G}", "mv": 6, "kind": "permanent" }, { "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1, "floating_mana": {"U": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Somberwald Sage", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Somberwald Sage", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Mother of Runes", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 39, "equip_host_name": "Mother of Runes", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 2, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Bruna, Light of Alabaster", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 38, "activate": true, "verb": "equip", "equip_host": 17, "equip_host_name": "Bruna, Light of Alabaster", "equip_src": 38, "equip_cost": 0 }] },
+    { "index": 3, "summary": "land=none; cast: Arcanum Wings → Somberwald Sage", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 57, "enchant_target_name": "Somberwald Sage" }] },
+    { "index": 4, "summary": "land=none; cast: Arcanum Wings → Mother of Runes", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 39, "enchant_target_name": "Mother of Runes" }] },
+    { "index": 5, "summary": "land=none; cast: Arcanum Wings → Bruna, Light of Alabaster", "land": null, "casts": ["Arcanum Wings"], "actions": [{ "card": "Arcanum Wings", "enchant_target": 17, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 6, "summary": "land=none; cast: Lightning Greaves", "land": null, "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": [1, 1, 1, 1], "decision": {
+  "decision_index": 19,
+  "type": "dragon",
+  "source": "Bruna, Light of Alabaster — put Aura cards from your hand",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Azorius Chancery", "idx": 0, "num": 8, "tapped": true, "is_land": true }, { "name": "Bruna, Light of Alabaster", "idx": 7, "num": 17, "is_land": false }, { "name": "Forest", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mother of Runes", "idx": 6, "num": 39, "is_land": false }, { "name": "Skycloud Expanse", "idx": 5, "num": 54, "is_land": true }, { "name": "Somberwald Sage", "idx": 4, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 200002, "name": "Almost Perfect", "cost": "{4}{W}{G}", "mv": 6, "kind": "permanent" }, { "num": 2, "name": "Arcanum Wings", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 24, "name": "Eldrazi Conscription", "cost": "{8}", "mv": 8, "kind": "permanent" }, { "num": 38, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 45, "name": "Prodigious Growth", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 500000, "is_land": false }] },
+  "max_puts": 4,
+  "ai_set": [0, 1, 2, 3],
+  "candidates": [{ "index": 0, "def": true, "name": "Arcanum Wings" }, { "index": 1, "def": true, "name": "Eldrazi Conscription" }, { "index": 2, "def": true, "name": "Prodigious Growth" }, { "index": 3, "def": true, "name": "Almost Perfect" }],
+  "note": "reply one int per candidate (1 = put this card onto the battlefield), up to max_puts total. The engine keeps the rule's play order. Default = the AI's pick."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "trigger", "text": "Bruna, Light of Alabaster: puts Arcanum Wings (from hand), Eldrazi Conscription (from hand), Prodigious Growth (from hand), Almost Perfect (from hand) onto it" },
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Mother of Runes (1), Bruna, Light of Alabaster (26) — 27 to opponent (20→-7)" }
+  ]
+}
