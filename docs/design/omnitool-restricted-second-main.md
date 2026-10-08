@@ -1,11 +1,16 @@
 # Adaptive Omnitool: a RESTRICTED second main phase
 
-**Status: DESIGNED, NOT BUILT. Parked behind round 5 of the kitty v2 swap screen and behind a user
-ruling.** Nothing in this document is adopted. The Omnitool currently ships with **no** second main,
-which is a disclosed cost decision recorded in its `cards.json` bracket note and which **biases the
-screening measurement against the card** (its attack-dig card is effectively delayed a turn).
+**Status: BUILT 2026-10-08 behind `MTG_OMNITOOL_M2`, DEFAULT OFF, NOT ADOPTED** (commits 370b012a,
+d4fc069e, a3f6311a). The user asked for it directly — *"Can we fix the omnitool issue? I gave you
+rules for how to do that cheaply"* — and the case table below is implemented unchanged. Reachability
+and inertness are measured (see the section at the end); the quality/cost A/B and the **adoption
+decision** are not done.
 
-Owner of the decision: the USER. This document is input to that decision, not the decision.
+Until adoption the Omnitool still ships with **no** second main, so every screening arm that plays
+it — including round 8's `omnitool_for_kite3`, which ran before this existed — remains a **LOWER
+BOUND** on the card.
+
+Owner of the adoption decision: the USER. This document is input to that decision, not the decision.
 
 ## The card and the problem
 
