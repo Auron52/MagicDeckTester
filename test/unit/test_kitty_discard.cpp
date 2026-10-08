@@ -428,3 +428,157 @@ TEST_CASE("kitty discard: with no double striker, Kemba is the second creature")
     CHECK(ShedPos(s, order, "Kemba, Kha Regent") > ShedPos(s, order, "Stoneforge Mystic"));
     CHECK(ShedPos(s, order, "Kemba, Kha Regent") > ShedPos(s, order, "Armored Skyhunter"));
 }
+
+// ---------------------------------------------------------------------------------------------
+// THE PURESTEEL/SRAM LIST (v3). USER RULING 2026-10-08, MTG_KE_BUCKET_V3 default ON.
+//
+// These exist because the bug they pin was invisible to every A/B we ran: the v1 role tables named
+// no card the v3 list plays except Puresteel, so 4x Sram -- the DRAW ENGINE -- plus Adelbert, Dwalin
+// and Sigarda's Aid all fell through to `unbucketed` and were shed FIRST, ahead of a surplus Bone
+// Saw. A rule that fires once per ~120 games in play cannot be caught by a win-turn average; it is
+// caught here, or not at all. See docs/design/kitty-discard-buckets-are-stale-for-v3.md.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("kitty discard v3: Sram is an ENABLER, not the first thing pitched")
+{
+    // THE REGRESSION TEST FOR THE ORIGINAL DEFECT. Before the fix Sram was unbucketed and led the
+    // shed order; now the surplus {0} shield goes first and Sram is kept.
+    const std::vector<std::string> hand = {
+        "Sram, Senior Edificer", "Bone Saw", "Kite Shield", "Kite Shield",
+        "Cathar's Shield", "Plains", "Plains", "Plains"
+    };
+    GameState s = MakeHandBoard(hand, {});
+    const std::vector<int> order = Rank(s);
+    const int sram    = ShedPos(s, order, "Sram, Senior Edificer");
+    const int surplus = ShedPos(s, order, "Cathar's Shield");
+    REQUIRE(sram >= 0);
+    REQUIRE(surplus >= 0);
+    CHECK(surplus == 0);        // the surplus {0} equipment is shed first...
+    CHECK(sram > surplus);      // ...and Sram is NOT (it used to be position 0)
+}
+
+TEST_CASE("kitty discard v3: Puresteel outranks Sram -- Sram is shed first of the two")
+{
+    // USER: "Puresteel is better, so Sram is shed first." Two Puresteels and a Sram fill both
+    // enabler slots with Puresteels; the draw trigger stacks per copy, only metalcraft is redundant.
+    const std::vector<std::string> hand = {
+        "Puresteel Paladin", "Puresteel Paladin", "Sram, Senior Edificer",
+        "Bone Saw", "Kite Shield", "Plains", "Plains", "Plains"
+    };
+    GameState s = MakeHandBoard(hand, {});
+    const std::vector<int> order = Rank(s);
+    const int sram = ShedPos(s, order, "Sram, Senior Edificer");
+    const std::vector<int> pures = ShedPositions(s, order, "Puresteel Paladin");
+    REQUIRE(sram >= 0);
+    REQUIRE(pures.size() == 2);
+    CHECK(sram < pures[0]);     // Sram is pitched before EITHER Puresteel
+}
+
+TEST_CASE("kitty discard v3: only ONE Sram is useful -- the second is surplus")
+{
+    // USER: "only 1 Sram is useful so extras would be shed."
+    const std::vector<std::string> hand = {
+        "Sram, Senior Edificer", "Sram, Senior Edificer", "Bone Saw",
+        "Kite Shield", "Kite Shield", "Plains", "Plains", "Plains"
+    };
+    GameState s = MakeHandBoard(hand, {});
+    const std::vector<int> order = Rank(s);
+    const std::vector<int> srams = ShedPositions(s, order, "Sram, Senior Edificer");
+    REQUIRE(srams.size() == 2);
+    // One Sram sits late (kept); the other is shed ahead of it -- they are not both kept.
+    CHECK(srams[0] < srams[1]);
+}
+
+TEST_CASE("kitty discard v3: Sigarda's Aid is kept IFF there is no Puresteel")
+{
+    // USER: "Sigarda's aid should be kept IFF we don't have Puresteel. In that case it takes the
+    // second spot with Sram." Sigarda's Aid is an ENCHANTMENT, so is_equipment is false and it used
+    // to fall through to `unbucketed` and shed first in BOTH cases.
+    SUBCASE("no Puresteel: it takes the second spot beside Sram")
+    {
+        const std::vector<std::string> hand = {
+            "Sram, Senior Edificer", "Sigarda's Aid", "Bone Saw", "Kite Shield",
+            "Cathar's Shield", "Plains", "Plains", "Plains"
+        };
+        GameState s = MakeHandBoard(hand, {});
+        const std::vector<int> order = Rank(s);
+        const int aid     = ShedPos(s, order, "Sigarda's Aid");
+        const int surplus = ShedPos(s, order, "Cathar's Shield");
+        REQUIRE(aid >= 0);
+        REQUIRE(surplus >= 0);
+        CHECK(aid > surplus);   // kept: it sits later than the pitched equipment
+    }
+    SUBCASE("Puresteel present: the Aid loses the slot to it")
+    {
+        const std::vector<std::string> hand = {
+            "Puresteel Paladin", "Sram, Senior Edificer", "Sigarda's Aid",
+            "Bone Saw", "Kite Shield", "Plains", "Plains", "Plains"
+        };
+        GameState s = MakeHandBoard(hand, {});
+        const std::vector<int> order = Rank(s);
+        const int aid  = ShedPos(s, order, "Sigarda's Aid");
+        const int pure = ShedPos(s, order, "Puresteel Paladin");
+        REQUIRE(aid >= 0);
+        REQUIRE(pure >= 0);
+        CHECK(aid < pure);      // the Aid goes before Puresteel, i.e. it did not earn the slot
+    }
+}
+
+TEST_CASE("kitty discard v3: Bone Saw leads the {0} tier")
+{
+    // USER: "...prioritizing bone saw".
+    //
+    // THE TEST HAS TO BE DECISIVE, and the obvious version is not: asserting Bone Saw sheds later
+    // than every other {0} shield fails even on a correct implementation, because the ones that are
+    // KEPT are appended by the base ranking in an order this rule does not control. So instead Bone
+    // Saw is placed LAST in hand order, where a rank that did nothing would leave it tied on rank
+    // and pitched first by index. Exactly one {0} shield is surplus here, and the question is which.
+    const std::vector<std::string> hand = {
+        "Puresteel Paladin", "Kite Shield", "Cathar's Shield", "Accorder's Shield",
+        "Bone Saw", "Plains", "Plains", "Plains"
+    };
+    GameState s = MakeHandBoard(hand, {});
+    const std::vector<int> order = Rank(s);
+    const int saw      = ShedPos(s, order, "Bone Saw");
+    const int accorder = ShedPos(s, order, "Accorder's Shield");
+    REQUIRE(saw >= 0);
+    REQUIRE(accorder >= 0);
+    // Without the Bone Saw rank all four tie and the LAST-indexed one is pitched -- which is the Saw.
+    CHECK(accorder == 0);     // the surplus {0} is the last-ranked shield, not the Saw
+    CHECK(saw > accorder);    // ...and the Saw is kept
+}
+
+TEST_CASE("kitty discard v3: Adelbert vs Dwalin turns on AUTO-EQUIP")
+{
+    // USER: "Adelbert Steiner would be prioritized over Dwalin if we have no way to auto equip.
+    // Otherwise Dwalin is probably a bit better." Which is how the cards read -- Adelbert's +1/+1
+    // counts Equipment you CONTROL, so he needs no attach; Dwalin's hone counters need one carried.
+    SUBCASE("no auto-equip: Adelbert is preferred")
+    {
+        const std::vector<std::string> hand = {
+            "Adelbert Steiner", "Dwalin, Weaponmaster", "Bone Saw", "Kite Shield",
+            "Cathar's Shield", "Plains", "Plains", "Plains"
+        };
+        GameState s = MakeHandBoard(hand, {});
+        const std::vector<int> order = Rank(s);
+        const int ad = ShedPos(s, order, "Adelbert Steiner");
+        const int dw = ShedPos(s, order, "Dwalin, Weaponmaster");
+        REQUIRE(ad >= 0);
+        REQUIRE(dw >= 0);
+        CHECK(dw < ad);         // Dwalin is pitched first, Adelbert is the one kept
+    }
+    SUBCASE("Puresteel on board supplies auto-equip: Dwalin is preferred")
+    {
+        const std::vector<std::string> hand = {
+            "Adelbert Steiner", "Dwalin, Weaponmaster", "Bone Saw", "Kite Shield",
+            "Cathar's Shield", "Plains", "Plains", "Plains"
+        };
+        GameState s = MakeHandBoard(hand, { "Puresteel Paladin", "Bone Saw", "Kite Shield", "Cathar's Shield" });
+        const std::vector<int> order = Rank(s);
+        const int ad = ShedPos(s, order, "Adelbert Steiner");
+        const int dw = ShedPos(s, order, "Dwalin, Weaponmaster");
+        REQUIRE(ad >= 0);
+        REQUIRE(dw >= 0);
+        CHECK(ad < dw);         // the order flips
+    }
+}

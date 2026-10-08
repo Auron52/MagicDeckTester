@@ -19357,6 +19357,29 @@ static bool KittyDiscardResidualEnabled()
     return heurarm::Flag(heurarm::KE_DISCARD_RESIDUAL, env);
 }
 
+// THE ROLE TABLES COVER THE PURESTEEL/SRAM LIST, NOT JUST v1's (USER RULING 2026-10-08).
+// Default ON; =0 restores the v1-only tables as the A/B arm. Full finding and the user's wording:
+// docs/design/kitty-discard-buckets-are-stale-for-v3.md.
+//
+// WHY IT WAS NEEDED: this function sheds everything `unbucketed` FIRST, and the v1 tables name no
+// card the v3 list plays except Puresteel Paladin -- so 4x Sram (the deck's DRAW ENGINE on a list
+// with 33 Equipment), Adelbert Steiner, Dwalin and Sigarda's Aid all fell through and were discarded
+// ahead of a surplus Bone Saw. The striker bucket was structurally empty too (neither Kor Duelist nor
+// Balan is on the list), so the creature bucket could only ever hold ONE card against the user's own
+// "You keep 1 of each".
+//
+// INERT ON v1 BY CARD PRESENCE, which is the property that let this ship without moving v1's GT:
+// v1 runs ZERO {0}-cost Equipment (its cheapest is Bonesplitter {1}) and none of Sram, Sigarda's Aid,
+// Adelbert, Dwalin or Golem-Skin Gauntlets. Every clause below keys on one of those, and v1's named
+// equipment ranks keep their relative order (they are renumbered with gaps, not reordered). The two
+// lists overlap only on Colossus Hammer and Shadowspear, and the Hammer's v1 behaviour -- dead
+// without a cost bypass -- is preserved explicitly. Claim verified by digest, not by this argument.
+static bool KittyBucketV3Enabled()
+{
+    static const bool env = EnvOn("MTG_KE_BUCKET_V3", true);
+    return heurarm::Flag(heurarm::KE_BUCKET_V3, env);
+}
+
 std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -19373,11 +19396,43 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
     // Stoneforge)" without ordering the alternatives. Ordered here by CASTABILITY, because the hands
     // that reach a discard at all are the land-light ones: Stoneforge {1}{W} < Kemba {1}{W}{W} <
     // Skyhunter {3}{W}. Flagged as a judgement call the spec did not settle.
-    auto enabler_rank = [](const std::string& nm) -> int {
+    const bool v3 = KittyBucketV3Enabled();
+    // Sram joins the enabler bucket BEHIND Puresteel. USER: "Sram should be in an enabler bucket with
+    // Puresteel. Puresteel is better, so Sram is shed first." Its rank sits between Puresteel and the
+    // v1 names; that interleaving is UNREACHABLE on either shipped list (v1 has no Sram, v3 has no
+    // Stoneforge / Kemba / Skyhunter), so it commits to nothing measurable.
+    auto enabler_rank = [v3](const std::string& nm) -> int {
         if (nm == "Puresteel Paladin")  { return 0; }
-        if (nm == "Stoneforge Mystic")  { return 1; }
-        if (nm == "Kemba, Kha Regent")  { return 2; }
-        if (nm == "Armored Skyhunter")  { return 3; }
+        if (v3 && nm == "Sram, Senior Edificer") { return 1; }
+        if (nm == "Stoneforge Mystic")  { return 2; }
+        if (nm == "Kemba, Kha Regent")  { return 3; }
+        if (nm == "Armored Skyhunter")  { return 4; }
+        return -1;
+    };
+    // "only 1 Sram is useful so extras would be shed" -- a second copy adds no draw trigger worth a
+    // slot, so Sram is capped at one in the creature bucket regardless of how many are in hand.
+    auto is_sram = [v3](const std::string& nm)
+    { return v3 && nm == "Sram, Senior Edificer"; };
+    // AUTO-EQUIP, read off params rather than names: Sigarda's Aid attaches an Equipment as it enters
+    // (attach_equipment_on_etb) and Puresteel's metalcraft makes equip {0} at three artifacts
+    // (metalcraft_equip_zero_artifacts). This is the condition the user's two conditional rules turn
+    // on -- how many Colossus Hammers are worth keeping, and whether Adelbert or Dwalin is better.
+    auto grants_auto_equip = [](const CardDefinition& d)
+    { return d.params.attach_equipment_on_etb || d.params.metalcraft_equip_zero_artifacts > 0; };
+    // A DRAW ENGINE is what makes a fistful of {0} Equipment worth keeping: Puresteel draws on an
+    // Equipment entering, Sram draws on casting one.
+    auto is_draw_engine = [](const CardDefinition& d)
+    { return d.params.draw_on_equipment_etb || !d.params.draw_on_cast_subtypes.empty(); };
+    // The two bodies that are NOT enablers and NOT equipment. USER: "I would keep at maximum one of
+    // Adelbert Steiner or Dwalin, but not if we have useful equipment filling the other spots", and
+    // on their order: "Adelbert Steiner would be prioritized over Dwalin if we have no way to auto
+    // equip. Otherwise Dwalin is probably a bit better." Which is exactly how the cards read --
+    // Adelbert's +1/+1 counts EQUIPMENT YOU CONTROL, so he needs no attach at all, while Dwalin's
+    // hone counters only pay off on Equipment that actually gets carried.
+    auto body_rank = [v3](const std::string& nm, bool auto_equip) -> int {
+        if (!v3) { return -1; }
+        if (nm == "Adelbert Steiner")     { return auto_equip ? 1 : 0; }
+        if (nm == "Dwalin, Weaponmaster") { return auto_equip ? 0 : 1; }
         return -1;
     };
     // Double strikers, cheapest first: Kor Duelist {W} (double_strike_while_equipped) then Balan
@@ -19396,6 +19451,10 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
     // ---- What the BOARD already supplies. A role filled on board needs no hand copy. ------------
     int  board_mana = 0, board_white = 0, board_lands = 0;
     bool board_enabler = false, board_ds = false, board_kemba = false, board_cheat = false;
+    // "We only need 2 between hand and board" -- so the board's own enablers count against the quota,
+    // and auto-equip / draw-engine presence on board answers the two conditional rules as well.
+    int  board_enablers_n = 0;
+    bool board_auto_equip = false, board_draw_engine = false, board_body = false;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != s.active_player_index) { continue; }
@@ -19411,16 +19470,23 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
             if (ProducesWhite(*d)) { ++board_white; }
             if (d->card.IsLand())  { ++board_lands; }   // what a Karoo's ETB can bounce
         }
-        if (enabler_rank(nm) >= 0)   { board_enabler = true; }
+        if (enabler_rank(nm) >= 0)   { board_enabler = true; ++board_enablers_n; }
         if (ds_rank(nm) >= 0)        { board_ds = true; }
         if (nm == "Kemba, Kha Regent") { board_kemba = true; }
         if (is_cheat_equipper(nm))   { board_cheat = true; }
+        if (v3)
+        {
+            if (grants_auto_equip(*d)) { board_auto_equip = true; }
+            if (is_draw_engine(*d))    { board_draw_engine = true; }
+            if (body_rank(nm, false) >= 0) { board_body = true; }
+        }
     }
 
     // ---- Hand census ---------------------------------------------------------------------------
     struct Ent { int idx; int rank; };
-    std::vector<Ent> enablers, strikers, kembas, sources, equipment;
-    std::vector<int> unbucketed, sol_rings;
+    std::vector<Ent> enablers, strikers, kembas, sources, equipment, bodies;
+    std::vector<int> unbucketed, sol_rings, sigardas;
+    bool hand_auto_equip = false, hand_puresteel = false;
     for (int i = 0; i < n; ++i)
     {
         const Card& c = ap.hand[i];
@@ -19431,14 +19497,29 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
         if (nm == "Sol Ring")            { sol_rings.push_back(i); continue; }   // never shed
         if (d->card.IsLand())            { sources.push_back({ i, nm == "Plains" ? 0 : 1 }); continue; }
         if (d->params.mana_rock)         { sources.push_back({ i, 1 }); continue; }
+        if (nm == "Puresteel Paladin")   { hand_puresteel = true; }
+        if (v3 && grants_auto_equip(*d)) { hand_auto_equip = true; }
         const int er = enabler_rank(nm), dr = ds_rank(nm);
         if (er >= 0)                     { enablers.push_back({ i, er }); }
         if (dr >= 0)                     { strikers.push_back({ i, dr }); }
         if (nm == "Kemba, Kha Regent")   { kembas.push_back({ i, 0 }); }
         if (er >= 0 || dr >= 0)          { continue; }
+        // Sigarda's Aid is an ENCHANTMENT, so is_equipment is false and it used to fall straight to
+        // `unbucketed` and shed first -- despite being a free-attach engine. It is held separately
+        // because its keep rule is CONDITIONAL: USER, "Sigarda's aid should be kept IFF we don't have
+        // Puresteel. In that case it takes the second spot with Sram."
+        if (v3 && d->params.attach_equipment_on_etb) { sigardas.push_back(i); continue; }
         if (d->params.is_equipment)      { equipment.push_back({ i, 0 }); continue; }
+        if (v3 && body_rank(nm, false) >= 0) { bodies.push_back({ i, 0 }); continue; }
         unbucketed.push_back(i);         // removal (Swords / Unexpectedly Absent): no bucket
     }
+    // Resolved AFTER the census so it sees the whole hand plus the board, not a prefix of the hand.
+    const bool auto_equip_avail = board_auto_equip || hand_auto_equip;
+    const bool puresteel_avail  = board_cheat || hand_puresteel;
+    for (Ent& e : bodies) { e.rank = body_rank(ap.hand[e.idx].m_name.str(), auto_equip_avail); }
+    std::stable_sort(bodies.begin(), bodies.end(),
+                     [](const Ent& a, const Ent& b)
+                     { return a.rank != b.rank ? a.rank < b.rank : a.idx < b.idx; });
     auto by_rank = [](const Ent& a, const Ent& b)
     { return a.rank != b.rank ? a.rank < b.rank : a.idx < b.idx; };
     std::stable_sort(enablers.begin(), enablers.end(), by_rank);
@@ -19516,6 +19597,36 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
         // "...or Kemba if none are available": the fallback is a Kemba, not a second enabler.
         if (pick < 0 && !board_kemba)
         { for (const Ent& e : kembas) { if (!kept[e.idx]) { pick = e.idx; break; } } }
+        // THE SECOND SPOT ON THE PURESTEEL/SRAM LIST. USER: "We only need 2 between hand and board."
+        // v1 fills this slot with a double striker (or a Kemba) and is untouched -- both fallbacks
+        // below need a card v1 does not run. On v3 the striker bucket is empty by construction, so
+        // the slot goes to the next enabler, which is Sram, or to Sigarda's Aid when there is no
+        // Puresteel anywhere ("kept IFF we don't have Puresteel. In that case it takes the second
+        // spot with Sram"). Capped at ONE Sram: a second copy adds no draw trigger worth a slot.
+        if (pick < 0 && v3 && board_enablers_n + creatures_kept < 2)
+        {
+            // Sigarda's Aid takes this slot ONLY when there is no Puresteel anywhere -- "kept IFF we
+            // don't have Puresteel. In that case it takes the second spot with Sram."
+            if (!puresteel_avail)
+            { for (int i : sigardas) { if (!kept[i]) { pick = i; break; } } }
+            // Otherwise the slot goes to the BEST remaining enabler by rank, not specifically to
+            // Sram. That ordering is the user's: "Puresteel is better, so Sram is shed first" -- so a
+            // hand holding two Puresteels and a Sram keeps both Puresteels (the draw trigger stacks
+            // per copy; only metalcraft is redundant) and sheds the Sram. Capped at ONE Sram either
+            // way, since "only 1 Sram is useful".
+            if (pick < 0)
+            {
+                const bool sram_held = kept_enabler >= 0
+                                    && is_sram(ap.hand[kept_enabler].m_name.str());
+                for (const Ent& e : enablers)
+                {
+                    if (kept[e.idx]) { continue; }
+                    if (sram_held && is_sram(ap.hand[e.idx].m_name.str())) { continue; }
+                    pick = e.idx;
+                    break;
+                }
+            }
+        }
         if (pick >= 0) { kept[pick] = 1; ++creatures_kept; }
     }
 
@@ -19527,18 +19638,60 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
         || [&] { for (int i = 0; i < n; ++i)
                  { if (kept[i] && is_cheat_equipper(ap.hand[i].m_name.str())) { return true; } }
                  return false; }();
-    auto equip_rank = [&](const std::string& nm) -> int {
-        if (nm == "Colossus Hammer") { return cheat_secured ? 0 : 99; }   // +10/+10 or a dead card
-        if (nm == "Bonesplitter")    { return 1; }   // {1} cast, {1} equip -- the cheap default
-        if (nm == "O-Naginata")      { return 2; }   // {1} cast, {2} equip, needs a power-3 host
-        if (nm == "Shadowspear")     { return 3; }
-        if (nm == "Umezawa's Jitte") { return 4; }
-        if (nm == "Lightning Greaves") { return 5; }
-        if (nm == "Grafted Wargear") { return 6; }
-        if (nm == "Loxodon Warhammer") { return 7; }
-        return 8;
+    // A DRAW ENGINE kept in hand (or already on board) is the signal two rules below depend on:
+    // whether a Colossus Hammer is worth a slot at all, and whether a fistful of {0} Equipment is.
+    // Computed AFTER the creature bucket so "kept" is meaningful -- a Sram we are about to shed is
+    // not an engine.
+    const bool draw_engine_avail = v3 && (board_draw_engine || [&] {
+        for (int i = 0; i < n; ++i)
+        {
+            if (!kept[i]) { continue; }
+            const CardDefinition* dd = def_of(ap.hand[i]);
+            if (dd != nullptr && is_draw_engine(*dd)) { return true; }
+        }
+        return false; }());
+
+    // RANKS ARE RENUMBERED WITH GAPS, NOT REORDERED: v1's names keep their relative order exactly
+    // (Hammer < Bonesplitter < O-Naginata < Shadowspear < Jitte < Greaves < Wargear < Warhammer <
+    // default), so v1's shed order is unchanged. The new tiers slot in below and above them, and
+    // every new tier needs a card v1 does not run -- v1 has NO {0}-cost Equipment at all.
+    //
+    // USER's order for the v3 list: "we should keep multiple 0-mana equipment if we have draw engine
+    // cards (and only 1 or 2 if we don't) prioritizing bone saw and the remaining spots should go to
+    // cards like Colossus Hammer (keep more than one only if we have free equip) and Gauntlets...
+    // The other equipments are relatively low impact, but can be kept if we have nothing else."
+    auto equip_rank = [&](const std::string& nm, const CardDefinition* d) -> int {
+        if (v3)
+        {
+            if (nm == "Bone Saw")             { return 0; }   // the named head of the {0} tier
+            if (d != nullptr && d->card.m_mana_cost.ManaValue() == 0) { return 1; }   // the other {0} shields
+        }
+        // The Hammer is +10/+10 with a bypass and a dead card without one.
+        //
+        // THE CONDITION IS A DRAW ENGINE, NOT THE FLAG, and getting that wrong is what two v1 unit
+        // tests caught: keying the relaxation on `v3` made it global, so v1's "Armored Skyhunter does
+        // NOT make Colossus Hammer keepable" and "no bypass anywhere: the Hammer is the dead card"
+        // both broke. The real distinction is whether anything will FIND the bypass: with a Puresteel
+        // or a Sram kept (or on board) the Hammer is one or two draws from live, which is the v3
+        // situation the user is describing; with neither it is dead weight on any list and sheds
+        // first of all equipment, which is v1's reading and stays intact. `cheat_secured` already
+        // covers a secured Puresteel/Balan, so the case this clause actually adds is SRAM WITHOUT A
+        // PURESTEEL -- draw engine, no bypass yet. "More than one only if we have free equip" is then
+        // enforced by hammer_cap below, not by this rank.
+        if (nm == "Colossus Hammer")
+        { return (cheat_secured || (v3 && draw_engine_avail)) ? 2 : 99; }
+        if (v3 && nm == "Golem-Skin Gauntlets") { return 3; }
+        if (nm == "Bonesplitter")    { return 10; }  // {1} cast, {1} equip -- the cheap default
+        if (nm == "O-Naginata")      { return 11; }  // {1} cast, {2} equip, needs a power-3 host
+        if (nm == "Shadowspear")     { return 12; }
+        if (nm == "Umezawa's Jitte") { return 13; }
+        if (nm == "Lightning Greaves") { return 14; }
+        if (nm == "Grafted Wargear") { return 15; }
+        if (nm == "Loxodon Warhammer") { return 16; }
+        return 20;                                   // "relatively low impact... if we have nothing else"
     };
-    for (Ent& e : equipment) { e.rank = equip_rank(ap.hand[e.idx].m_name.str()); }
+    for (Ent& e : equipment)
+    { e.rank = equip_rank(ap.hand[e.idx].m_name.str(), def_of(ap.hand[e.idx])); }
     std::stable_sort(equipment.begin(), equipment.end(), by_rank);
     // The residual: whatever the seven-card hand has left once the other two buckets have taken what
     // they need, never fewer than the two the spec asks for outright. With the residual disabled the
@@ -19547,10 +19700,43 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
     int equip_budget = KittyDiscardResidualEnabled()
                      ? std::max(2, kHandTarget - creatures_kept - sources_kept)
                      : 3;
+    // THE TWO CAPS ARE WHAT LEAVE ROOM FOR A BODY, and that is the point of them. The user wants
+    // equipment to have priority but also "at maximum one of Adelbert Steiner or Dwalin... if spots
+    // remain" -- with an uncapped residual, equipment would always take every slot and the body
+    // clause would be dead code. So:
+    //   * {0}-cost tier: "multiple ... if we have draw engine cards (and only 1 or 2 if we don't)".
+    //     With a draw engine (Puresteel or Sram, hand or board) it is uncapped and the residual
+    //     decides; without one it is capped at 2.
+    //   * Colossus Hammer: "keep more than one only if we have free equip" -> 1, or uncapped when an
+    //     auto-equip source is available.
+    // Both caps are v3-only and gated on `v3`; v1 keeps the plain residual fill it had.
+    const int zero_cap   = (!v3 || draw_engine_avail) ? INT_MAX : 2;
+    const int hammer_cap = (!v3 || auto_equip_avail) ? INT_MAX : 1;
+    int zero_kept = 0, hammer_kept = 0;
     for (const Ent& e : equipment)
     {
         if (equip_budget <= 0) { break; }
+        const std::string& enm = ap.hand[e.idx].m_name.str();
+        const CardDefinition* ed = def_of(ap.hand[e.idx]);
+        const bool is_zero   = v3 && ed != nullptr && ed->card.m_mana_cost.ManaValue() == 0;
+        const bool is_hammer = enm == "Colossus Hammer";
+        if (is_zero   && zero_kept   >= zero_cap)   { continue; }
+        if (v3 && is_hammer && hammer_kept >= hammer_cap) { continue; }
         kept[e.idx] = 1; --equip_budget;
+        if (is_zero)   { ++zero_kept; }
+        if (is_hammer) { ++hammer_kept; }
+    }
+
+    // ---- Bucket 4: ONE of Adelbert / Dwalin, and only if a spot is left over -------------------
+    // USER: "Once those spots are filled we can keep one of Adelbert Steiner or Dwalin if spots
+    // remain", and "not if we have useful equipment filling the other spots". So this is strictly
+    // last among the keeps, takes at most one card, and takes none when the board already has one.
+    // `bodies` is already ordered by the auto-equip rule (Adelbert first without an auto-equipper,
+    // Dwalin first with one).
+    if (v3 && !board_body && equip_budget > 0)
+    {
+        for (const Ent& e : bodies)
+        { if (!kept[e.idx]) { kept[e.idx] = 1; --equip_budget; break; } }
     }
 
     // ---- Shed order: everything not kept, worst first -------------------------------------------
@@ -19560,6 +19746,17 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
     // of an Equipment it cannot equip.
     std::vector<int> shed;
     for (int i : unbucketed) { if (!kept[i]) { shed.push_back(i); } }
+    // A surplus BODY and an unwanted Sigarda's Aid shed just after the genuinely unbucketed cards and
+    // ahead of surplus equipment: both are cards the allocation above actively declined to keep (a
+    // second Adelbert/Dwalin, or Sigarda's Aid while a Puresteel is available -- "kept IFF we don't
+    // have Puresteel"). They deliberately do NOT lead the shed order the way they used to, because
+    // that is the defect this change exists to fix.
+    if (v3)
+    {
+        for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+        { if (!kept[it->idx]) { shed.push_back(it->idx); } }
+        for (int i : sigardas) { if (!kept[i]) { shed.push_back(i); } }
+    }
     for (auto it = equipment.rbegin(); it != equipment.rend(); ++it)
     { if (!kept[it->idx]) { shed.push_back(it->idx); } }
     for (auto it = enablers.rbegin(); it != enablers.rend(); ++it)
