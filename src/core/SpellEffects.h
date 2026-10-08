@@ -27569,6 +27569,14 @@ struct ScriptedBounceChoice
     bool saved_site;
 };
 
+// BOUNCE-FOLD PROBE (MTG_BOUNCE_FOLD, EngineFlags.h). A candidate loop ARMS it for one top-level apply
+// (armed_depth = the ApplyPlanDirect nesting level that apply runs at); that apply's deferred Karoo play
+// makes it LIVE for exactly its own bounce; BounceKarooLand records the narrowed width on the bounce
+// state and the index it resolved to (0 = the front). Nested applies run at another depth and cannot
+// touch it. Read back by the loop right after the apply.
+struct BounceProbe { int armed_depth = -1; bool live = false; int width = -1; int index = -1; };
+inline thread_local BounceProbe g_bounce_probe;
+
 // MTG_BOUNCE_STATS=1 -- the Karoo bounce candidate-count census (DIAGNOSTIC ONLY, printed at exit):
 // how wide BounceSearchCandidates was at each bounce, split REAL game vs the search's hypotheticals
 // (g_real_resolution), which rule decided a one-candidate bounce, and how wide the enumeration's fan
@@ -27577,7 +27585,8 @@ namespace bouncestats
 {
 inline bool Enabled() { static const bool on = EnvOn("MTG_BOUNCE_STATS"); return on; }
 inline std::atomic<unsigned long long> g_real[5]{}, g_search[5]{}, g_rule_real[8]{}, g_rule_search[8]{},
-                                       g_emit[5]{}, g_pinned{0}, g_clamped{0};
+                                       g_emit[5]{}, g_pinned{0}, g_clamped{0},
+                                       g_folded{0}, g_fold_ok{0}, g_fold_bad{0};
 inline void Record(std::size_t n, int rule, bool real)
 {
     const std::size_t b = n >= 4 ? 4 : n;
@@ -27607,6 +27616,8 @@ struct Dump
                      g_emit[1].load(), g_emit[2].load(), g_emit[3].load(), g_emit[4].load());
         std::fprintf(stderr, "[bounce-stats] pinned bounces=%llu, of which clamped (index past the "
                      "resolution set: an inert variant)=%llu\n", g_pinned.load(), g_clamped.load());
+        std::fprintf(stderr, "[bounce-stats] folded before apply (MTG_BOUNCE_FOLD)=%llu; verify ok=%llu bad=%llu\n",
+                     g_folded.load(), g_fold_ok.load(), g_fold_bad.load());
     }
 };
 inline Dump g_dump;

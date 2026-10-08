@@ -1,4 +1,4 @@
-# Regression ground truth -- commit af64f59b  date 2026-10-08
+# Regression ground truth -- commit 751d4778  date 2026-10-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -93,7 +93,7 @@ burn2hg_smoke_d3_s1001=5.8200/4a946825f080a85c
 th2hg_smoke_d3_s1001=4.4600/5d7370fcdbce1701
 dragonstorm2hg_smoke_d3_s1001=4.7800/c22bc71141e5b7b2
 auras2hg_smoke_d3_s1001=4.5200/2343755c3023f3ee
-creature_giving2hg_smoke_d3_s1001=5.0000/5e55c46ec8344dd6
+creature_giving2hg_smoke_d3_s1001=5.0000/04503e7d09c41110
 mirrorwing2hg_smoke_d3_s1001=4.6400/e914c344dee148ae
 stompy2hg_smoke_d3_s1001=4.3200/a47e6abc19857614
 kitty2hg_smoke_d3_s1001=4.8400/3d6fd15d9263c670
@@ -437,7 +437,7 @@ mirrorwing_overnight_d3_s4004=4.1650/739501c1379a7f31
 mirrorwing_overnight_d3_s5005=4.1750/654a3f6525a5be40
 mirrorwing_overnight_d3_s6006=4.1850/e2c1d9071cde4a8e
 mirrorwing_overnight_d3_s7007=4.2400/a19a6c6ec5c06573
-mirrorwing_overnight_d5_s4004=4.1900/825ea14db6843029
+mirrorwing_overnight_d5_s4004=4.1900/ce22b216e9b66599
 mirrorwing_overnight_d5_s5005=4.1700/cd7c1bca59303e57
 mirrorwing_overnight_d5_s6006=4.1833/e8254cff1087490c
 mirrorwing_overnight_d5_s7007=4.2133/124fb01b19884ba1
@@ -547,7 +547,7 @@ melira_overnight_d3_s6006=4.7250/4077d1e72770ad7b
 melira_overnight_d3_s7007=4.7100/f53283286b6b971a
 melira_overnight_d5_s4004=4.8000/6b835d503c378763
 melira_overnight_d5_s5005=4.6467/1a3cb9fc0f897f51
-melira_overnight_d5_s6006=4.6933/6d1a82a0bd64fe4e
+melira_overnight_d5_s6006=4.6933/56d1510d9ba443ce
 melira_overnight_d5_s7007=4.7533/c30e416e0415fef5
 angels_overnight_d0_s4004=5.2840/34504888eaa834df
 angels_overnight_d0_s6006=5.2680/768954da509889c7
@@ -580,7 +580,7 @@ selesnya_overnight_d0_s10010=5.9435/4228a2cd1a8cb93e
 selesnya_overnight_d3_s4004=5.1370/5736400d1a93effb
 selesnya_overnight_d3_s5005=5.1530/64977b4c5c3fda05
 selesnya_overnight_d3_s6006=5.1770/9dddb3800e935e4c
-selesnya_overnight_d3_s7007=5.1790/60b57d826fcf49b4
+selesnya_overnight_d3_s7007=5.1790/a38c335577c487da
 selesnya_overnight_d5_s4004=5.1200/5b53a38ff9b29277
 selesnya_overnight_d5_s5005=5.1160/9a982861113fb7ab
 selesnya_overnight_d5_s6006=5.1680/8e09309e2d0f0be7

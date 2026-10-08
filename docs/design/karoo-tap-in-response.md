@@ -359,13 +359,54 @@ In HUMAN play the replay gate for old recordings (`--legacy-karoo-float`, no `ka
 also turns the lever's order off, so a reference recorded before today replays with the default it was
 played under.
 
+## The bounce fold: the duplicate bounce branches are declined before they are applied (MTG_BOUNCE_FOLD, 2026-10-08)
+
+COLLAPSE WASTED SEARCH (CLAUDE.md): the enumeration can only bound how many candidates a plan's bounce
+will offer, so about half of its bounce variants resolved, on the bounce state, to a candidate a
+sibling had already applied, and cost a unit plus an apply before the post-apply dedup dropped them.
+
+**What was built.** `Plan::bounce_group` (metadata stamped on a fanned base plan and its clones; in no
+key) and `BounceFoldMemo` in the two main candidate loops (FullSearchLine's pre-combat loop and
+SolveWithLookahead's candidate loop). The first member of a fan the loop applies arms a probe
+(`BounceProbe`, read only by that apply's own deferred Karoo play -- `g_apd_depth` keeps nested applies
+out) that records the narrowed width on the bounce state and the index it resolved to. A later variant
+whose index clamps -- `min(bounce_choice, width - 1)` -- to an index a sibling already applied is
+declined BEFORE its unit charge and its apply, leaving exactly what the post-apply dedup's skip left
+(the overrun guard's candidate count, the probe's no-win value, the beam refund, the walker's
+no-breakpoint memo copied from the sibling). Base plans are never declined (the dedup never skipped
+them either). It is an IDENTITY fold: the variant is a clone of that sibling differing only in
+`bounce_choice`, both resolve the bounce to the same land on the same state, so the apply is the same
+apply. Not a narrowing -- every line the search scored before, it still scores.
+
+**Proof.**
+
+* `MTG_BOUNCE_FOLD_VERIFY=1` applies every variant the fold would decline and compares its post-apply
+  key with the sibling's: over every searched Karoo cell of all three tiers (143 cells, 50,730 games),
+  **1,748,520 checked, 0 mismatches**, and play byte-identical to ground truth on all 143 cells.
+* Shipped (fold on): the freed units are re-spent by the search, so play may only move through budget.
+  Smoke 113/114 PASS -- one game, creature_giving2hg d3 gi34, changes its line at the same T4 (it now
+  plays the line the pre-adoption engine played); regression 160/160 PASS byte-identical; viewer
+  protocol --strict 556 refs 0 drift. Overnight Karoo rows 113/116 PASS --
+  three games change line at the same win turn (mirrorwing d5 s4004 gi224 T5, melira d5 s6006 gi149 T4,
+  selesnya d3 s7007 gi445 T5). Across all tiers: 4 games change line, 0 change win turn. The 4 cells
+  are accepted (`--deck`-scoped, every note kept).
+
+**Work removed** (searched Karoo cells, all three tiers, MTG_BOUNCE_STATS): 4,340,764 pinned bounce
+applies, of which 2,244,071 (51.7%) were duplicates; the fold declines **1,748,520 = 77.9% of them**
+before the apply and the unit charge. The duplicate rate of the pinned applies that remain is
+**19.1%** (495,551 / 2,592,244) -- the rest happen outside the two loops (the wave walker's continuation
+slots, the group-wave and second-main loops), where a sibling's width is not the variant's: a
+continuation that spends more lands changes the bounce state. Totals barely move (Karoo units -0.08%
+per tier) because a budgeted search spends what it saves -- 1.7M units now go to lines instead of
+duplicates.
+
 ## Open for the USER
 
 * ~~Adopt?~~ Adopted with the searched bounce (above).
 * The Hinata 2HG rows alone net +6 over 400 held-out games (all budget churn); Hinata as a deck nets
   -412. Counted as one deck here, as run #1 did -- say if 2HG should be judged as its own deck.
-* The sizing still over-emits: 53% of pinned bounces clamp onto a sibling (one apply each, +1.5% work
-  units). A tighter bound needs the payer's tapped set before the apply; left as is.
+* The sizing's duplicates are now folded before the apply (MTG_BOUNCE_FOLD, above); 19.1% of the
+  remaining pinned applies are still duplicates, all outside the two main candidate loops.
 * Tie-break choice made here: among lands that both re-enter untapped and cost nothing this phase, a
   TAPPED one is returned before an untapped floatable one (keeps the untapped land for main 2). Your
   rule did not cover that case; say if you want it the other way.

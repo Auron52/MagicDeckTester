@@ -1986,13 +1986,21 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
         if (KarooBounceSearchOn() && !ranked.empty())
         {
             const bool census = bouncestats::Enabled() && g_bounce_searched_site;
-            const bool want   = g_scripted_bounce_choice >= 1 || census;
+            const bool probe  = g_bounce_probe.live;
+            const bool want   = g_scripted_bounce_choice >= 1 || census || probe;
             if (want)
             {
                 int why = -1;
                 const std::vector<int> cands = ResolveProvider(state).BounceSearchCandidates(
                     state, controller, self_index, legal, &why);
                 if (census) { bouncestats::Record(cands.size(), why, g_real_resolution); }
+                if (probe && !cands.empty())
+                {
+                    g_bounce_probe.width = static_cast<int>(cands.size());
+                    g_bounce_probe.index = g_scripted_bounce_choice >= 1
+                        ? std::min(g_scripted_bounce_choice, static_cast<int>(cands.size()) - 1) : 0;
+                    g_bounce_probe.live  = false;   // this apply's own bounce only
+                }
                 if (g_scripted_bounce_choice >= 1 && !cands.empty())
                 {
                     if (bouncestats::Enabled())

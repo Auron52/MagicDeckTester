@@ -1009,6 +1009,11 @@ public:
         // worlds install it around the Karoo play (ScriptedBounceChoice). Parallels scry_choice /
         // tutor_choice: a resolution-time pick bound by index, clamped at resolution.
         int bounce_choice = -1;
+        // ...and which BASE plan a bounce variant was cloned from (0 = not part of a bounce fan). The
+        // base and its variants share it. METADATA for the bounce fold (MTG_BOUNCE_FOLD): never read by
+        // an apply, in no dedup key -- it lets a candidate loop recognise siblings without a content
+        // comparison, which is exact because a variant is a clone differing only in bounce_choice.
+        int bounce_group = 0;
 
         // ETB-dig pick (Acclaimed Contender's "look at the top 5, put a Knight into your hand"):
         // which candidate of the provider's ranked EtbDigCandidates the dig takes. -1 (default) ==

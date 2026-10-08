@@ -169,6 +169,26 @@ inline bool KarooTapInResponseOn()
 // both apply worlds pin it (ScriptedBounceChoice). The d0 runner and the playout beyond the horizon
 // keep the front pick (they carry no pin). Read by the enumeration and BounceKarooLand; heurarm slot
 // so a pooled batch carries both arms.
+// MTG_BOUNCE_FOLD -- DEFAULT ON; =0 restores the post-apply-only dedup. The searched bounce's
+// enumeration can only BOUND how many candidates a plan's bounce will offer (which lands are spent is
+// known to the apply), so it emits variants whose index the bounce state then clamps onto a sibling's
+// candidate (53% of them on the held-out run). The candidate loops learn the real width from the first
+// sibling they apply (BounceProbe, SpellEffects.h) and decline every later variant that resolves to a
+// candidate a sibling already applied -- BEFORE its unit charge and its apply, exactly as the wave-0
+// stillborn / collapse skips do. SOUND by identity: the variant is a clone of that sibling differing
+// only in bounce_choice, both resolve the bounce to the same land on the same state, so the apply is
+// the same apply. MTG_BOUNCE_FOLD_VERIFY applies the variant anyway and checks the post-apply key.
+inline bool BounceFoldOn()
+{
+    static const bool env_on = EnvOn("MTG_BOUNCE_FOLD", true);
+    return heurarm::Flag(heurarm::BOUNCE_FOLD, env_on);
+}
+inline bool BounceFoldVerifyOn()
+{
+    static const bool on = EnvOn("MTG_BOUNCE_FOLD_VERIFY");
+    return on;
+}
+
 inline bool KarooBounceSearchOn()
 {
     static const bool env_on = EnvOn("MTG_BOUNCE_SEARCH", true);   // DEFAULT ON; =0 = the front() pick

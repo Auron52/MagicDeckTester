@@ -46,13 +46,28 @@ def read_units(path):
     return out
 
 
+# Above this many moved games the exact tail switches to the normal approximation (with continuity
+# correction): the exact sum is O(k) big-integer combs of ~n bits each, and at that size the two
+# agree to far better than the 3 decimals the table prints.
+SIGN_TEST_EXACT_MAX_N = 20000
+
+
 def sign_test(better, worse):
-    """Two-sided exact binomial p for `worse` successes in `better+worse` trials at p=0.5."""
+    """Two-sided binomial p for `worse` successes in `better+worse` trials at p=0.5.
+
+    EXACT in integer arithmetic up to SIGN_TEST_EXACT_MAX_N: the tail is sum(C(n, i)) / 2**n with
+    both sides as Python ints, whose true division is correctly rounded at any size. The old form
+    divided by the FLOAT 2.0 ** n, which overflows past n = 1023 moved games (OverflowError on the
+    112,800-game Karoo held-out table, 3,709 moved). Beyond the exact range, a normal approximation."""
     n = better + worse
     if n == 0:
         return 1.0
     k = min(better, worse)
-    tail = sum(math.comb(n, i) for i in range(0, k + 1)) / (2.0 ** n)
+    if n <= SIGN_TEST_EXACT_MAX_N:
+        tail = sum(math.comb(n, i) for i in range(0, k + 1)) / (1 << n)
+    else:
+        z = (k + 0.5 - n / 2.0) / math.sqrt(n / 4.0)
+        tail = 0.5 * math.erfc(-z / math.sqrt(2.0))
     return min(1.0, 2.0 * tail)
 
 

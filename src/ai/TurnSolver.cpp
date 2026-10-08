@@ -14351,6 +14351,10 @@ struct BpPrefixSnap;
 // thread. Written at entry, read by the canon audit. Not part of any key, digest, or decision --
 // see the caller_line note on the declaration below.
 static thread_local int g_apply_caller_line = 0;
+// ApplyPlanDirect NESTING on this thread (0 = no apply running). The bounce-fold probe is armed for
+// "the apply the candidate loop is about to make", i.e. depth g_apd_depth + 1, so a nested apply (a
+// breakpoint continuation's trial, a payability probe) can never answer for it. See BounceProbe.
+static thread_local int g_apd_depth = 0;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr,
                             BpPrefixSnap* bp_capture = nullptr,
@@ -15713,6 +15717,71 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
 }
 // SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
 static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
+
+// ---- THE BOUNCE FOLD (MTG_BOUNCE_FOLD; see BounceFoldOn) --------------------------------------
+// One candidate loop's memo of each bounce fan (Plan::bounce_group): the bounce width its first
+// applied member MEASURED on the bounce state (BounceProbe), and which candidate (by its index into
+// the loop's list) first applied each resolved bounce index. A later variant whose index resolves --
+// min(bounce_choice, width - 1), the clamp BounceKarooLand applies -- to an index already applied is
+// that sibling's apply exactly, so the loop declines it before the unit charge, leaving behind what
+// the post-apply dedup's skip would have left. Base plans (-1) are never declined: the post-apply
+// dedup never skipped them either.
+struct BounceFoldMemo
+{
+    struct Group
+    {
+        int width = -1;
+        std::array<int, DecisionProvider::kBounceSearchWidth> first{};   // cand index per resolved index
+        std::array<TranspositionTable::Key, DecisionProvider::kBounceSearchWidth> key{};   // verify only
+        Group() { first.fill(-1); }
+    };
+    std::unordered_map<int, Group> groups;
+    bool on = false;
+    bool verify = false;
+    // The sibling whose apply this candidate would repeat, or -1.
+    int SiblingOf(const TurnSolver::Plan& p) const
+    {
+        if (!on || p.bounce_group == 0 || p.bounce_choice < 1 || p.bp_choice >= 0) { return -1; }
+        const auto it = groups.find(p.bounce_group);
+        if (it == groups.end() || it->second.width <= 0) { return -1; }
+        const int e = std::min(p.bounce_choice, it->second.width - 1);
+        if (e < 0 || e >= static_cast<int>(DecisionProvider::kBounceSearchWidth)) { return -1; }
+        return it->second.first[static_cast<std::size_t>(e)];
+    }
+    const TranspositionTable::Key* KeyOf(const TurnSolver::Plan& p) const
+    {
+        const auto it = groups.find(p.bounce_group);
+        const int e = std::min(p.bounce_choice, it->second.width - 1);
+        return &it->second.key[static_cast<std::size_t>(e)];
+    }
+    // Arm the probe for the apply the loop is about to make (grouped plans only).
+    void Arm(const TurnSolver::Plan& p) const
+    {
+        if (!on || p.bounce_group == 0) { return; }
+        g_bounce_probe = BounceProbe{};
+        g_bounce_probe.armed_depth = g_apd_depth + 1;
+    }
+    // Read the probe back after that apply (`complete` = the apply ran to the end, not a pending
+    // node), recording the width and this candidate as the first to apply its resolved index.
+    template <class KeyFn>
+    void Record(const TurnSolver::Plan& p, int cand, bool complete, KeyFn key_of)
+    {
+        if (!on || p.bounce_group == 0) { return; }
+        const BounceProbe pr = g_bounce_probe;
+        g_bounce_probe = BounceProbe{};
+        if (!complete || pr.width <= 0 || pr.index < 0
+            || pr.index >= static_cast<int>(DecisionProvider::kBounceSearchWidth)) { return; }
+        Group& g = groups[p.bounce_group];
+        if (g.width < 0) { g.width = pr.width; }
+        if (g.first[static_cast<std::size_t>(pr.index)] < 0)
+        {
+            g.first[static_cast<std::size_t>(pr.index)] = cand;
+            if (verify) { g.key[static_cast<std::size_t>(pr.index)] = key_of(); }
+        }
+    }
+    static void CountVerify(bool ok)
+    { (ok ? bouncestats::g_fold_ok : bouncestats::g_fold_bad).fetch_add(1, std::memory_order_relaxed); }
+};
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
 // cands list contains an apply-empty entry, so the host's explicit EMPTY arm (kBpEmptyChoice)
 // would reach a state that cands child's apply already reached -- the post-apply dedup kills it
@@ -35485,6 +35554,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             int caller_line)
 {
     g_apply_caller_line = caller_line;
+    struct ApdDepth { ApdDepth() { ++g_apd_depth; } ~ApdDepth() { --g_apd_depth; } } _apd_depth;
     // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
     // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
     dmgev::BackstopFlush(state, "ApplyPlanDirect");
@@ -40271,7 +40341,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // set on THIS state, the one the casts above just paid from. -1 = the front. Lockstep
             // with AIEngine::TakeTurn's deferred Karoo play.
             ScriptedBounceChoice _sbc(plan.bounce_choice);
+            // The bounce-fold probe, when the candidate loop armed it for THIS apply (see BounceProbe).
+            const bool probe_here = g_bounce_probe.armed_depth == g_apd_depth;
+            if (probe_here) { g_bounce_probe.live = true; }
             PlayLandByName(state, karoo_land_name, karoo_fetch);
+            if (probe_here) { g_bounce_probe.live = false; }
         }
         // ...then the land Auras that named it (Bruna sweep D): cast now, on the karoo.
         std::vector<std::pair<std::string, int>> held;
@@ -49468,9 +49542,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (ld == nullptr || !ld->params.etb_bounce_land) { continue; }
             const std::size_t width = width_of(p, size_for(p.land_to_play));
             if (bouncestats::Enabled()) { bouncestats::RecordEmit(width); }
+            if (width <= 1) { continue; }
+            // The fan's sibling identity (Plan::bounce_group), stamped on the base plan and every
+            // clone, for the candidate loops' bounce fold. Never 0 for a fanned plan.
+            static thread_local int s_bounce_group = 0;
+            if (++s_bounce_group <= 0) { s_bounce_group = 1; }
+            all[i].bounce_group = s_bounce_group;
             for (std::size_t k = 1; k < width; ++k)
             {
-                TurnSolver::Plan v = p;
+                TurnSolver::Plan v = all[i];
                 v.bounce_choice = static_cast<int>(k);
                 extra.push_back(std::move(v));
             }
@@ -49744,7 +49824,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             const TurnSolver::Plan& pl = all[i];
             add(pl.land_decided); adds(pl.land_to_play); adds(pl.fetch_target); adds(pl.land_face);
             add(pl.rad_mode);     add(pl.scry_choice);   add(pl.etbdig_choice);
-            add(pl.bounce_choice);
+            add(pl.bounce_choice); add(pl.bounce_group);
             add(pl.tutor_choice); add(pl.tapmode_choice); add(pl.freshmode_choice);
             add(pl.lackey_choice); add(pl.fling_victim_choice);
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
@@ -56251,6 +56331,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool bp_variants_here = false;
     for (const TurnSolver::Plan& p : pre) { if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+    // The bounce fold (see BounceFoldMemo). Only where the post-apply dedup it replaces runs.
+    BounceFoldMemo bounce_fold;
+    bounce_fold.on     = bp_variants_here && BounceFoldOn();
+    bounce_fold.verify = bounce_fold.on && BounceFoldVerifyOn();
     // MTG_BP_WAVE_PROBE only: which wave SLOT first reached each key, for the dup_self/dup_cross
     // split. Left empty (never inserted into) when the probe is off.
     std::unordered_map<TranspositionTable::Key, uint64_t, TranspositionTable::KeyHash> wave_key_slot;
@@ -56493,6 +56577,24 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 continue;
             }
         }
+        // ---- THE BOUNCE FOLD (MTG_BOUNCE_FOLD) -----------------------------------------------------
+        // A bounce variant whose resolved index a sibling already applied IS that sibling's apply;
+        // declined before ConsumeAt, leaving what the post-apply dedup's skip below would leave: the
+        // probe's no-win value and the beam refund (its key is already in bp_seen_states, put there
+        // by the sibling). MTG_BOUNCE_FOLD_VERIFY applies it instead and checks the key.
+        const TranspositionTable::Key* bounce_expect = nullptr;
+        if (bounce_fold.SiblingOf(p) >= 0)
+        {
+            if (bounce_fold.verify) { bounce_expect = bounce_fold.KeyOf(p); }
+            else
+            {
+                bouncestats::g_folded.fetch_add(1, std::memory_order_relaxed);
+                if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                FswDeclinedTrace(state, depth, p, "bounce-fold", {}, state, -1, best.win_turn);
+                continue;
+            }
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -56528,7 +56630,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const std::uint64_t any_before     = g_bp_any_last;
         const std::uint64_t latent9_before = g_bp_latent9_last;
         const std::uint64_t truncasym_before = g_bp_truncasym_last;
+        bounce_fold.Arm(p);
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        bounce_fold.Record(p, static_cast<int>(&p - pre.data()), !node_snap.pending,
+                           [&] { return BuildDedupKey(s); });
+        if (bounce_expect != nullptr) { BounceFoldMemo::CountVerify(BuildDedupKey(s) == *bounce_expect); }
         if (fsw_w0_here)
         {
             w0collapse::Record(fsw_w0, p, static_cast<int>(&p - pre.data()),
@@ -61572,6 +61678,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool bp_variants_here = false;
         for (const Plan& p : candidates) { if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+        // The bounce fold (see BounceFoldMemo), wherever the post-apply dedup it replaces runs.
+        BounceFoldMemo bounce_fold;
+        bounce_fold.on     = bp_variants_here && BounceFoldOn();
+        bounce_fold.verify = bounce_fold.on && BounceFoldVerifyOn();
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
         // runs every rollout turn and is where the doc says the searched-breakpoint gain actually
@@ -61758,6 +61868,27 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 continue;
             }
 
+            // THE BOUNCE FOLD (MTG_BOUNCE_FOLD; see BounceFoldMemo). Before the unit charge and the
+            // copy, like the collapses above. What the post-apply dedup's skip would have left: the
+            // candidate counted for the overrun guard, and the no-breakpoint memo its apply would
+            // have written for the walker (bp_nobp) -- the sibling's, since it is the same apply.
+            const TranspositionTable::Key* bounce_expect = nullptr;
+            {
+                const int sib = bounce_fold.SiblingOf(plan);
+                if (sib >= 0)
+                {
+                    if (bounce_fold.verify) { bounce_expect = bounce_fold.KeyOf(plan); }
+                    else
+                    {
+                        bouncestats::g_folded.fetch_add(1, std::memory_order_relaxed);
+                        if (bp_nobp.count(static_cast<std::size_t>(sib)) != 0)
+                        { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
+                        ++candidates_done;
+                        continue;
+                    }
+                }
+            }
+
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
             ConsumeAt(budget, unitsite::kLookaheadCand);
@@ -61794,7 +61925,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
             if (is_pre_combat)
             {
+                bounce_fold.Arm(plan);
                 ApplyPlanDirect(copy, plan, true);
+                bounce_fold.Record(plan, static_cast<int>(cand_index), true,
+                                   [&] { return BuildDedupKey(copy); });
+                if (bounce_expect != nullptr)
+                { BounceFoldMemo::CountVerify(BuildDedupKey(copy) == *bounce_expect); }
                 w0len_record(plan);
                 if (candcensus::On())
                 {
@@ -61970,7 +62106,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Top-level post-combat (second) main decision: combat already
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
+                bounce_fold.Arm(plan);
                 ApplyPlanDirect(copy, plan, false);
+                bounce_fold.Record(plan, static_cast<int>(cand_index), true,
+                                   [&] { return BuildDedupKey(copy); });
+                if (bounce_expect != nullptr)
+                { BounceFoldMemo::CountVerify(BuildDedupKey(copy) == *bounce_expect); }
                 w0len_record(plan);
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 if (candcensus::On())
