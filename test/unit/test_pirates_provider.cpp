@@ -148,6 +148,14 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // attack_gather_auras) routes at the TOP -- Open the Armory's and Glittering Wish's
         // tutor_to_hand would otherwise route it to AntiLifegain (a greedy shuffle-order tutor pick).
         {"Bruna", "Bruna"},
+        // Hydras (committed as-is 2026-10-08, USER: "We can commit Hydras as-is for now" / "I want it
+        // to be the same") -- the SAME treatment as Mill and Unpredictable Cyclone above: an
+        // unprofiled, not-fully-modelled list whose routing is PINNED FROM A MEASUREMENT rather than
+        // decided. Probed on this binary: Generic. That is the informative value here -- a green-field
+        // ramp list (Kalonian/Primordial/Voracious Hydra, Gargos, Vernal Bloom, Gauntlet of Power,
+        // Nature's Lore / Three Visits / Search for Tomorrow) trips NO archetype signature today, so
+        // this pin is what will catch the first future signature broad enough to capture it.
+        {"Hydras", "Generic"},
     };
 
     namespace fs = std::filesystem;
