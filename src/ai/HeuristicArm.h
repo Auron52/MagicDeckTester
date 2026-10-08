@@ -329,6 +329,7 @@ enum Slot : int
     AURA_COPY_FOLD,           // MTG_AURA_COPY_FOLD         SOUND identity fold (USER 2026-10-07 "We should do the duplicate-copy fold"): identical hand copies of one creature Aura with identical (host, cost) option lists are ONE odometer class (digits non-increasing in group order, the Equipment-copy canonical form). Default ON; =0 restores the unfolded walk
     AURA_HOST_FOLD,           // MTG_AURA_HOST_FOLD         SOUND identity fold (the host half of the USER-approved duplicate-copy fold): identical creature-Aura HOSTS (same card, same state, plain, not a payer-tappable mana dork, not named by another candidate) keep only the first k of their class (k = creature-Aura hand slots). Default ON; =0 restores every host
     WINGS_HOST_ORDER,         // MTG_WINGS_HOST_ORDER       the USER's host order for an AURA-SWAP Aura (Arcanum Wings) as the shipped key's LAST tie-break: a non-dork that can attack, any non-dork, then the least useful mana dork (fewest colours, lowest yield). Wings' value is next turn's swap, which the damage key cannot see, so its host was a key tie left to enumeration order
+    COLOSS_RESPOND,           // MTG_COLOSS_RESPOND         Colossification's ETB "tap enchanted creature" is RESPONDED to by tapping an untapped, able mana-dork host for mana (a deferred tap: its mana stays usable this phase, restrictions honoured; it cannot attack). Modelled since 21f9db09; DEFAULT ON, =0 = the host just taps (measurement hatch)
     COUNT
 };
 
@@ -619,6 +620,7 @@ inline const char* Name(int slot)
         "MTG_AURA_COPY_FOLD",
         "MTG_AURA_HOST_FOLD",
         "MTG_WINGS_HOST_ORDER",
+        "MTG_COLOSS_RESPOND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

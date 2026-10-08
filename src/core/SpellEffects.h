@@ -4847,6 +4847,17 @@ inline bool CanAttackFull(
 // respond to the trigger by tapping the host for mana (CR 605.3a) -- modelled as a deferred tap
 // (Permanent::etb_tap_pending, see there) for an untapped mana dork that can tap now; anything else
 // is tapped immediately. A tapped host is a no-op. Emits a sink-guarded play event.
+// MTG_COLOSS_RESPOND (heurarm COLOSS_RESPOND) -- DEFAULT ON. The respond window below: an untapped mana
+// dork host that can tap now is tapped for mana IN RESPONSE to the ETB tap trigger (USER 2026-10-08: "We
+// should tap any source we put colossification on in response") -- free mana, so always taken. =0 is the
+// measurement hatch (the host just taps); the respond model itself has been the shipped behaviour since the
+// card landed (21f9db09).
+inline bool ColossRespondOn()
+{
+    static const bool env = EnvOn("MTG_COLOSS_RESPOND", true);
+    return heurarm::Flag(heurarm::COLOSS_RESPOND, env);
+}
+
 inline void ResolveAuraEnterTapHost(GameState& state, int aura_slot, bool respond_window)
 {
     if (aura_slot < 0 || aura_slot >= static_cast<int>(state.battlefield.size())) { return; }
@@ -4861,7 +4872,7 @@ inline void ResolveAuraEnterTapHost(GameState& state, int aura_slot, bool respon
         if (h.card.m_number != a.aura_attached_to) { continue; }
         if (h.tapped || h.etb_tap_pending) { return; }
         bool deferred = false;
-        if (respond_window && h.controller_index == aura_ctrl && !h.def_absent)
+        if (respond_window && h.controller_index == aura_ctrl && !h.def_absent && ColossRespondOn())
         {
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
             if (hd != nullptr && hd->tmpl == CardTemplate::ManaDork && CanTapNow(h, state.battlefield))

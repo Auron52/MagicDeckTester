@@ -236,6 +236,47 @@ TEST_CASE("Bruna: a main-phase Colossification cast on a ready attacker stops it
     CHECK(b.ByNum(birds)->tapped);
 }
 
+// USER 2026-10-08: "We should tap any source we put colossification on in response." The responded-to tap
+// is FREE MANA: the host's mana stays usable for the rest of the phase -- and keeps its restriction.
+TEST_CASE("Bruna: Colossification's ETB tap is answered by tapping the host for mana -- usable, and restriction kept")
+{
+    auto coloss_on = [](BoardBr& b, int host)
+    {
+        Permanent aura;
+        aura.card = CardBr("Colossification", 60);
+        aura.controller_index = 0; aura.owner_index = 0; aura.entered_this_turn = true;
+        aura.aura_attached_to = host;
+        b.s.battlefield.push_back(aura);
+        ResolveAuraEnterTapHost(b.s, static_cast<int>(b.s.battlefield.size()) - 1, /*respond_window=*/true);
+    };
+    {   // Avacyn's Pilgrim (ready): its {W} pays a later spell this phase; it never attacks.
+        BoardBr b;
+        const int pilgrim = b.Put("Avacyn's Pilgrim");
+        coloss_on(b, pilgrim);
+        CHECK(b.ByNum(pilgrim)->etb_tap_pending);
+        ManaCost w; w.white = 1;
+        CHECK(TapForCostShared(b.s, w, /*for_creature=*/false, nullptr, true));
+        CHECK(b.ByNum(pilgrim)->tapped);
+        CHECK_FALSE(CanAttackFull(*b.ByNum(pilgrim), b.s.battlefield, 0));
+    }
+    {   // Somberwald Sage: its three are still CREATURE-ONLY -- a noncreature cost cannot use them.
+        BoardBr b;
+        const int sage = b.Put("Somberwald Sage");
+        coloss_on(b, sage);
+        CHECK(b.ByNum(sage)->etb_tap_pending);
+        ManaCost g; g.green = 1;
+        CHECK_FALSE(TapForCostShared(b.s, g, /*for_creature=*/false, nullptr, true));
+        CHECK(TapForCostShared(b.s, g, /*for_creature=*/true, nullptr, true));
+    }
+    {   // A summoning-sick host cannot tap for mana: the ETB tap simply taps it (nothing to respond with).
+        BoardBr b;
+        const int birds = b.Put("Birds of Paradise", /*tapped=*/false, /*sick=*/true);
+        coloss_on(b, birds);
+        CHECK(b.ByNum(birds)->tapped);
+        CHECK_FALSE(b.ByNum(birds)->etb_tap_pending);
+    }
+}
+
 TEST_CASE("Bruna: Arcanum Wings' swap -- simultaneous exchange, damage-max pick, no-op when illegal")
 {
     BoardBr b;

@@ -1292,3 +1292,24 @@ TEST_CASE("Aura host ranking: Arcanum Wings goes on the least useful dork (Pilgr
     CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Arcanum Wings") == birds);
     heurarm::t_arm[heurarm::WINGS_HOST_ORDER] = -1;
 }
+
+// USER 2026-10-08: "a hardcast colossification can be put on something with summoning sickness." It cannot
+// attack or tap for mana this turn anyway, so the ETB tap costs nothing: with a ready Mother of Runes on the
+// board, the plan that casts a Somberwald Sage AND Colossification puts the Aura on the fresh Sage.
+TEST_CASE("Aura host ranking: a hardcast Colossification goes on the creature cast this turn, not the ready attacker")
+{
+    BoardBs b;
+    b.Put("Mother of Runes");
+    for (int k = 0; k < 10; ++k) { b.Put("Forest"); }
+    const int sage = b.Hand("Somberwald Sage");
+    b.Hand("Colossification");
+    b.s.players[0].lands_played_this_turn = 1;
+    bool both = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(b.s, true))
+    {
+        if (!PlanCasts(p, "Somberwald Sage") || !PlanCasts(p, "Colossification")) { continue; }
+        for (const Action& a : p.actions)
+        { if (a.card_name.str() == "Colossification") { CHECK(a.enchant_target == sage); both = true; } }
+    }
+    CHECK(both);
+}
