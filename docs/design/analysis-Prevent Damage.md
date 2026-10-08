@@ -1764,3 +1764,79 @@ every arm equally):
 **USER QUESTION (non-blocking, default taken = strict ceiling over ALL our creatures):** should
 Tamanoa count toward the ceiling only while a Vito or Dina is out (on the board or cast this plan)?
 Both real counterexamples are drainer-less boards. The refinement is one more arm to measure.
+
+## Pain deferral (USER report 2026-10-08, `references/Prevent_Damage/claude_s11_gi10.json` T5) -- `MTG_PD_PAIN_DEFER`, default ON, PROVISIONAL
+
+**The report.** *"See references/Prevent_Damage/claude_s11_gi10.json for an example of suboptimal mana
+tapping. I had to use the manual-tap option ... My line was strictly better because the opponent lost 3
+more life."* T5 (decision 15): Tamanoa + Vito out, 16 life vs 15, Rhox Faithmender ({3}{W}) cast off
+Brushland x2, Grand Coliseum, Tarnished Citadel, Reflecting Pool.
+
+**Reproduced (replay of the reference prefix, `MTG_TAPDBG`), not theorised.**
+
+| payment | taps (`[tapdbg]`) | pain at x1 | opp after the cast | opp at T6 start | our life at T6 |
+|---|---|---|---|---|---|
+| auto (pain-first payer) | Brushland {W}, Brushland {G}, Coliseum {W}, Citadel {W} | 6 | 9 | 6 | 16 |
+| user's manual taps | Pool {W}, Coliseum {W}, Brushland {W}, Brushland {W} | 3 | 12 | **3** | **19** |
+
+**Root cause -- NOT pain avoidance.** The useful-mode payer (`PainAwarePay`, damaging mode first) already
+took every painful mode it could: it spent MORE pain than the user. What it got wrong is WHEN: it spent the
+Citadel's 3 before Rhox resolved (drains 3) and left the painless Pool, which the end-of-main-1 pain sweep
+(`TapPainSourcesIfUseful`) can do nothing with. The user kept the Citadel; the sweep tapped it after Rhox:
+3 damage -> Tamanoa gains 3 -> doubled to 6 -> Vito drains 6. This also answers open question 3 above:
+a "painful source for a COLOURED pip" preference is moot while the sweep follows (every land is tapped
+exactly once this main phase -- by a payment or by the sweep -- so which one pays changes only the timing),
+and "schedule lands after Manabarbs" is the same timing question.
+
+**The fix (`dmgev::DeferredPainPay` + `PaymentDeferralDP` + `PainDeferQuery`; full argument at the block in
+`src/core/DamageEvents.h`).** Every damage event's value is monotone in the damage->lifegain->drain chain
+read off params (`noncreature_damage_lifegain`, `prevent_noncombat_to_self_gain`, `lifegain_plus`,
+`lifegain_multiplier`, `lifegain_target_opp_loses_that_much`, `lifegain_each_opp_loses`,
+`land_tap_damage_each_player`). When the spell(s) a pain-useful payment funds will ADD to that chain (the
+per-cast `PayingSpellCard`, or the whole-turn batch's casts), the payment minimises, over the sources it
+taps, `Later - Now` (the sweep's value of the source on the post-resolution chain minus its value tapped
+now), via an exact DP on the simple board, and holds the rest. Taken ONLY if, on the REALISED taps, it is
+>= the pain-first payment in both the opponent's loss and our life (one strictly), its leftovers can make
+everything the pain-first leftovers could (colour-superset matching), the whole board's pain potential
+cannot kill us, the payment is in the pre-combat main of a deck with no second main (the sweep follows),
+and the plan does nothing that can hit our own board first (`PlanTraits::own_board_hazard`). Otherwise the
+historical payment, byte-identical. Not extended: harmful mode (the FIRST Tamanoa -- there the old payment's
+lower pain is a real trade, not a dominance), Purity boards, non-simple boards.
+- **Manabarbs (the user's second ask).** "Tap a land rather than a non-land source" is NOT a preference
+  while the sweep follows: it taps every untapped land for its barbs anyway, so the choice is neutral.
+  Under a PENDING Manabarbs (with a gain engine out) the same `Later - Now` makes held lands worth their
+  post-resolution barbs, so the DP pays with the fewest land taps -- it falls out, but no list here has a
+  non-land mana source, so the land-vs-non-land half is unreachable in this deck.
+- **Own life.** Nothing in the list pays life; our life only matters as fuel (Spellshock, the Quake X
+  ceiling, Bilbo's 111) and as the loss condition. With a gain engine out every hit nets >= 0 after its
+  triggers, the Pareto check never takes less life, and the safety gate keeps every later payment and
+  sweep tap survivable.
+
+**Tests.** `test/unit/test_prevent_damage.cpp` "pain deferral" x6: the exact s11 board (lever off = 6/16,
+on = Citadel held, opp -3 more, +3 life), no Vito (opp unchanged, +3 life), no amplifier (tap-for-tap
+identical), post-combat (no sweep -> identical), own-board hazard (identical), casting Vito (strictly
+better). Scenario `test/scenarios/pd_rhox_keeps_citadel_for_sweep.json` (19/6; lever off reproduces 16/9).
+
+**Measurement (one pooled `--batch` per sample, both arms as a heurarm slot, same binary; held-out seeds).**
+
+| cell | paired games | faster | slower | same-turn play changed | net turns | delta/game |
+|---|---|---|---|---|---|---|
+| d0 (s62001 x1000 + s82001 x4000) | 5,000 | 23 | **0** | 194 | **-29** | -0.0058 |
+| d5/b20 = play settings (s52001 x1000 + s72001 x2000) | 3,000 | 12 | 7 | 151 | **-5** | -0.0017 |
+
+Cost: d5 units/game 101,566 -> 101,387 (-0.2%). Every slower d5 game was re-run at b200 and b1000: six of
+seven recover (equal turns, most with identical digests across arms -- budget line-shifts of a starved
+search). The seventh, **s72434 gi433** (T5 -> T6 at b20/b200/b1000), is search-side: with the deferral in
+the executor only it wins T5, with it in the search only T6; the search predicts T6 for its line and
+realises T6 (no lockstep gap), it just ranks the T2 options differently under the new payment values and
+misses the Wish -> Tamanoa -> Pyrohemia -> Vito + 2 pings line; from the T5 position both arms play
+identically. d0 (no search) has no slower game in 5,000.
+
+**Replay.** New recordings carry `"pain_defer": 1`; an unstamped reference replays with
+`--legacy-pain-pay` (`test/viewer_protocol_check.py recording_rule_args`). All 11 Prevent_Damage
+references replay with 0 drift/diverged/gap both WITH and WITHOUT the legacy flag; the full set (556) is
+clean under the regression tier. The s11 reference's own manual taps pin its payment either way; the
+auto-tapped replay of the same plan now reproduces the user's line (opp 3 / us 19 at T6).
+
+**USER DECISION (surfaced, default taken = ON):** keep `MTG_PD_PAIN_DEFER` on. It is a payment rule (the
+standing mana-payment exemption), dominant per payment by construction, net faster on both cells.

@@ -33927,10 +33927,23 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
                 if (!dup) { t.act_src_nums[t.act_src_count++] = a.sac_source_id; }
             }
         }
+        // Own-board hazard (PlanTraits::own_board_hazard): every kind but a plain cast, a land, a
+        // Vial put or a pump can reach our own permanents (a ping, a sac outlet, a fling, ...).
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+            && a.kind != Action::Kind::PlayLand && a.kind != Action::Kind::ActivateVial
+            && a.kind != Action::Kind::ActivatePump)
+        { t.own_board_hazard = true; }
         if (a.kind != Action::Kind::CastFromHand
             && a.kind != Action::Kind::CastFromGraveyard) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        if (!d) { continue; }
+        if (!d) { t.own_board_hazard = true; continue; }
+        // ...and a cast that hits the board: a damage-each-creature sorcery (Rolling Earthquake), an
+        // ETB destroy (Shriekmaw / Acidic Slime -- either may be pointed at our side), a creature
+        // sacrificed as an additional cost.
+        if (d->params.x_damage_each_creature_and_player || d->params.etb_destroy_nonartifact_nonblack
+            || d->params.etb_destroy_artifact_enchantment_land
+            || !d->params.sac_additional_creature_color.empty())
+        { t.own_board_hazard = true; }
         // Scarce-colour rank-tier gate: a mint opens the deferred breakpoint, a flood engine
         // draws new castables -- either can add a cast this plan's lists cannot see.
         // MTG_MINT_CREDIT_EXACT: a Treasure-only payload opens NO breakpoint (the base line already
@@ -34307,6 +34320,21 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
+    // PREVENT DAMAGE PAIN DEFERRAL: every cast of this batch resolves after the batch payment and
+    // before the end-of-main sweep, so each is a candidate pending amplifier for the joint payment
+    // (dmgev::PendingCasts, read by PainDeferQuery). Armed boards only; a scope, so it covers every
+    // solve below and nothing after the prepay.
+    dmgev::PendingCasts _pd_pending;
+    if (state.dmg_events_armed)
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d != nullptr && _pd_pending.n < 8) { _pd_pending.d[_pd_pending.n++] = d; }
+        }
+    }
+    dmgev::PendingCastsScope _pd_pending_scope(state.dmg_events_armed ? &_pd_pending : nullptr);
 
     // BIG-SPELL-ONLY MANA (Troyan, Gutsy Explorer: spend only on spells of MV 5+ or with {X}). The
     // joint solve pays the whole batch out of ONE pool, so it can honour a per-spell restriction only

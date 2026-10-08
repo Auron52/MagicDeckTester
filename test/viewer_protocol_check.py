@@ -386,10 +386,19 @@ def recording_rule_args(ref):
     `karoo_float` (2026-10-08, USER on Bruna seed 18: "You just need to float the Green."): from then
     on, in human play, a land a Karoo returns is tapped for mana in response when it can be
     (HumanKarooFloatOn). A recording made before carries no key and was played without that mana, so
-    it is replayed with --legacy-karoo-float. Inert on every deck without a Karoo."""
+    it is replayed with --legacy-karoo-float. Inert on every deck without a Karoo.
+
+    `pain_defer` (2026-10-08, USER report on Prevent_Damage/claude_s11_gi10: "I had to use the
+    manual-tap option"): from then on an auto-tapped payment that funds a lifegain amplifier (Rhox
+    Faithmender, Vito, ...) keeps the painful lands for the end-of-main sweep (dmgev::PainDeferEnabled).
+    A recording made before carries no key, so its auto-tapped payments are replayed with
+    --legacy-pain-pay -- the payment it was actually played with. Inert on every deck without the
+    armed damage-event model."""
     args = [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
+    if not ref.get("pain_defer"):
+        args.append("--legacy-pain-pay")
     return args
 
 

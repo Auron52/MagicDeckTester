@@ -663,7 +663,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         if (have_tot < need_tot) { return 0; }
         for (int c = 0; c < 5; ++c) { if (have[c] < need[c]) { return 0; } }
         return 1;
-    });
+    },
+    // PAIN DEFERRAL (useful mode): the pending amplifiers, timing gates and the DP over the sources
+    // THIS attempt may tap (the rung's reservation excluded) -- see DamageEvents.h.
+    [&](dmgev::DeferPlan& q)
+    { PainDeferQuery(state, cost_in, state.floating_mana, reserved_mask, q); });
 }
 
 static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,

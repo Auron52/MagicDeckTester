@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Prevent Damage PAIN DEFERRAL (USER report 2026-10-08, references/Prevent_Damage/claude_s11_gi10.json",
+    "T5). Tamanoa + Vito out (sick: no combat, so only the payment and the sweep move life), 16 life vs",
+    "15, hand = Rhox Faithmender {3}{W}, lands Grand Coliseum, Brushland x2, Tarnished Citadel, Reflecting",
+    "Pool. The pain-first payer spends Brushland + Brushland + Coliseum + Citadel (6 pain at x1, Vito",
+    "drains 6) and leaves the painless Pool for the sweep: 16 / 9. The deferral pays with Pool + Coliseum",
+    "+ both Brushlands (3 drained) and keeps the Citadel for the end-of-main sweep AFTER Rhox resolves:",
+    "3 damage -> Tamanoa gains 3, doubled to 6 -> Vito drains 6. Us 16 -3 +3 -3 +6 = 19, opponent",
+    "15 -3 -6 = 6 -- the user's hand-tapped line. MTG_PD_PAIN_DEFER=0 reproduces 16 / 9."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 5, "on_the_play": false, "active_life": 16, "opponent_life": 15,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Grand Coliseum" },
+    { "name": "Brushland" },
+    { "name": "Brushland" },
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Tarnished Citadel" },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Reflecting Pool" }
+  ],
+  "hand": ["Rhox Faithmender"],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 5,
+  "expect_active_life": 19,
+  "expect_opponent_life": 6
+}

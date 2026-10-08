@@ -4626,7 +4626,9 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     [&](bool barbs, int barb_total) -> dmgev::PayFloor
     { return PaymentDamageFloor(state, cost, floating, barbs, barb_total, reserved_mask); },
     // The whole-turn prepay already pays the whole line in one assignment.
-    [](bool) -> int { return -1; });
+    [](bool) -> int { return -1; },
+    // PAIN DEFERRAL (useful mode): the batch's casts are the pending amplifiers (PendingCastsScope).
+    [&](dmgev::DeferPlan& q) { PainDeferQuery(state, cost, floating, reserved_mask, q); });
     if (ok)
     {
         if (out_leftover)  { *out_leftover = leftover_best; }

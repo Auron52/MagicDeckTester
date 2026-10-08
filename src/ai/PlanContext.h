@@ -153,6 +153,13 @@ struct PlanTraits
     // demotion unconditionally and churned slivers/antilife/dragonstorm trains wholesale
     // (uniform 4->5 blocks) by reordering every payment including rollout interiors.
     bool mid_turn_casts        = false;
+    // The plan does something that can damage, destroy or sacrifice one of OUR permanents before the
+    // end-of-main-1 sweep: any action that is not a plain cast / land / Vial put / pump (a Pyrohemia
+    // ping, a sac outlet, ...), or a cast whose card hits the board (Rolling Earthquake's X, an ETB
+    // destroy, a creature-sacrifice additional cost). Read by the Prevent Damage PAIN DEFERRAL
+    // (PainDeferQuery, SpellEffects.h): it moves pain past the plan's casts on the premise that the
+    // damage->lifegain->drain chain only GROWS until the sweep, and such an action could shrink it.
+    bool own_board_hazard      = false;
 };
 
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).

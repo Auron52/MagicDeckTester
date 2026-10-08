@@ -500,3 +500,162 @@ TEST_CASE("Prevent Damage pain-aware payment: among equal damage, the WIDEST sou
     }
     CHECK(untapped_rainbow >= 1);   // a {R} is still there for the Quake
 }
+
+// ---- PAIN DEFERRAL (dmgev::DeferredPainPay, MTG_PD_PAIN_DEFER; USER report 2026-10-08) ----------
+// references/Prevent_Damage/claude_s11_gi10.json, T5 (decision 15): Tamanoa + Vito out, 16 life vs
+// 15, Rhox Faithmender ({3}{W}) cast off Brushland x2, Grand Coliseum, Reflecting Pool and Tarnished
+// Citadel. The pain-first payer tapped Brushland {W} + Brushland {G} + Coliseum + Citadel (6 pain at
+// x1, Vito drains 6) and left the painless Pool; the user kept the Citadel for after Rhox resolved
+// (the end-of-main sweep: 3 damage -> Tamanoa gains 3, doubled -> 6 -> Vito drains 6).
+namespace
+{
+struct PainDeferArm
+{
+    std::int8_t prev;
+    explicit PainDeferArm(bool on) : prev(heurarm::t_arm[heurarm::PD_PAIN_DEFER])
+    { heurarm::t_arm[heurarm::PD_PAIN_DEFER] = on ? 1 : 0; }
+    ~PainDeferArm() { heurarm::t_arm[heurarm::PD_PAIN_DEFER] = prev; }
+};
+
+GameState S11T5Board(bool vito = true)
+{
+    GameState s = Board();
+    s.turn_number = 5;
+    s.phase = Phase::PreCombatMain;   // the sweep that realises a held land follows (end of main 1)
+    s.players[0].life = 16;
+    s.players[1].life = 15;
+    Put(s, "Grand Coliseum");         // the recorded battlefield order
+    Put(s, "Brushland");
+    Put(s, "Brushland");
+    Put(s, "Tamanoa");
+    Put(s, "Tarnished Citadel");
+    if (vito) { Put(s, "Vito, Thorn of the Dusk Rose"); }
+    Put(s, "Reflecting Pool");
+    return s;
+}
+
+bool TappedNamed(const GameState& s, const std::string& n)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == n && p.tapped) { return true; } }
+    return false;
+}
+
+// Pay Rhox's {3}{W} as the cast sites do (the paying spell in scope), resolve it onto the battlefield,
+// then end main 1 (the pain sweep). `as_rhox` false pays the same cost for no spell in particular.
+void CastRhoxAndEndMain1(GameState& s, bool as_rhox = true)
+{
+    const CardDefinition* rhox = CardDatabase::Instance().Lookup("Rhox Faithmender");
+    REQUIRE(rhox != nullptr);
+    {
+        SpellSubtypePayScope scope(as_rhox ? &rhox->card : nullptr);
+        REQUIRE(Pay(s, Cost(3, /*w=*/1)));
+    }
+    Put(s, "Rhox Faithmender");
+    TapPainSourcesIfUseful(s, 0);
+}
+}   // namespace
+
+TEST_CASE("Prevent Damage pain deferral: Rhox Faithmender keeps the Citadel for after it resolves (s11 gi10 T5)")
+{
+    // CONTROL ARM (the lever off): the pain-first payment the user reported -- the Citadel is spent
+    // at x1 and the painless Pool is what is left for the sweep.
+    {
+        PainDeferArm off(false);
+        GameState s = S11T5Board();
+        CastRhoxAndEndMain1(s);
+        CHECK(TappedNamed(s, "Tarnished Citadel"));
+        CHECK(Opp(s) == 15 - 6);         // 1+1+1+3 pain, each drained once
+        CHECK(Me(s) == 16);
+    }
+    // The fix: Pool + Coliseum + both Brushlands pay (3 pain at x1: the opponent loses 3), the Citadel
+    // is held, and the sweep taps it AFTER Rhox: 3 damage, Tamanoa gains 3, doubled to 6, Vito drains 6.
+    PainDeferArm on(true);
+    GameState s = S11T5Board();
+    const CardDefinition* rhox = CardDatabase::Instance().Lookup("Rhox Faithmender");
+    {
+        SpellSubtypePayScope scope(&rhox->card);
+        REQUIRE(Pay(s, Cost(3, 1)));
+    }
+    CHECK_FALSE(TappedNamed(s, "Tarnished Citadel"));
+    CHECK(TappedNamed(s, "Reflecting Pool"));
+    CHECK(Opp(s) == 15 - 3);
+    Put(s, "Rhox Faithmender");
+    TapPainSourcesIfUseful(s, 0);
+    CHECK(TappedNamed(s, "Tarnished Citadel"));
+    CHECK(Opp(s) == 15 - 3 - 6);         // 3 MORE than the control arm -- the user's line
+    CHECK(Me(s) == 16 + 3);              // and our life is up 3 (the swept Citadel's gain is doubled)
+}
+
+TEST_CASE("Prevent Damage pain deferral: without Vito the opponent is untouched either way (control)")
+{
+    // No drain watcher: the payment cannot move the opponent, so neither arm does. The deferral still
+    // keeps the Citadel -- the swept 3 is gained back x2 under Rhox -- so our life ends 3 higher.
+    GameState off_s = S11T5Board(/*vito=*/false), on_s = S11T5Board(false);
+    { PainDeferArm off(false); CastRhoxAndEndMain1(off_s); }
+    { PainDeferArm on(true);   CastRhoxAndEndMain1(on_s); }
+    CHECK(Opp(off_s) == 15);
+    CHECK(Opp(on_s) == 15);
+    CHECK(Me(on_s) == Me(off_s) + 3);
+}
+
+TEST_CASE("Prevent Damage pain deferral: a payment funding NO amplifier is the pain-first payment, tap for tap")
+{
+    // The same {3}{W} with no chain-growing spell pending (e.g. a plain creature): nothing to defer
+    // to, so the lever must not move a single tap.
+    GameState off_s = S11T5Board(), on_s = S11T5Board();
+    { PainDeferArm off(false); CastRhoxAndEndMain1(off_s, /*as_rhox=*/false); }
+    { PainDeferArm on(true);   CastRhoxAndEndMain1(on_s, false); }
+    REQUIRE(off_s.battlefield.size() == on_s.battlefield.size());
+    for (std::size_t i = 0; i < off_s.battlefield.size(); ++i)
+    { CHECK(off_s.battlefield[i].tapped == on_s.battlefield[i].tapped); }
+    CHECK(Opp(on_s) == Opp(off_s));
+    CHECK(Me(on_s) == Me(off_s));
+}
+
+TEST_CASE("Prevent Damage pain deferral: no sweep follows a POST-combat payment, so nothing is held")
+{
+    // Main 2 has no pain sweep: a held land would never be tapped, so the deferral must not fire.
+    GameState off_s = S11T5Board(), on_s = S11T5Board();
+    off_s.phase = on_s.phase = Phase::PostCombatMain;
+    const CardDefinition* rhox = CardDatabase::Instance().Lookup("Rhox Faithmender");
+    { PainDeferArm off(false); SpellSubtypePayScope sc(&rhox->card); REQUIRE(Pay(off_s, Cost(3, 1))); }
+    { PainDeferArm on(true);   SpellSubtypePayScope sc(&rhox->card); REQUIRE(Pay(on_s, Cost(3, 1))); }
+    for (std::size_t i = 0; i < off_s.battlefield.size(); ++i)
+    { CHECK(off_s.battlefield[i].tapped == on_s.battlefield[i].tapped); }
+    CHECK(Opp(on_s) == Opp(off_s));
+}
+
+TEST_CASE("Prevent Damage pain deferral: a plan that can hit our own board before the sweep defers nothing")
+{
+    // PlanTraits::own_board_hazard (a Pyrohemia ping, a Rolling Earthquake, a sac outlet in the same
+    // plan) could shrink the chain between the payment and the sweep: the pain-first payment stands.
+    PlanTraits t;
+    t.own_board_hazard = true;
+    PlanTraitsScope ts(&t);
+    GameState off_s = S11T5Board(), on_s = S11T5Board();
+    const CardDefinition* rhox = CardDatabase::Instance().Lookup("Rhox Faithmender");
+    { PainDeferArm off(false); SpellSubtypePayScope sc(&rhox->card); REQUIRE(Pay(off_s, Cost(3, 1))); }
+    { PainDeferArm on(true);   SpellSubtypePayScope sc(&rhox->card); REQUIRE(Pay(on_s, Cost(3, 1))); }
+    for (std::size_t i = 0; i < off_s.battlefield.size(); ++i)
+    { CHECK(off_s.battlefield[i].tapped == on_s.battlefield[i].tapped); }
+}
+
+TEST_CASE("Prevent Damage pain deferral: casting Vito holds the painful lands too (the drain is what is pending)")
+{
+    // Tamanoa out, NO Vito yet: every pain point before Vito resolves drains nothing. Paying Vito's
+    // {2}{B} off Pool + Brushland + Coliseum + Citadel: pain-first spends Citadel/Coliseum/Brushland
+    // (drains 0); the deferral pays with the least future value and sweeps the rest after Vito.
+    GameState off_s = S11T5Board(/*vito=*/false), on_s = S11T5Board(false);
+    const CardDefinition* vito = CardDatabase::Instance().Lookup("Vito, Thorn of the Dusk Rose");
+    auto cast = [&](GameState& s)
+    {
+        { SpellSubtypePayScope sc(&vito->card); REQUIRE(Pay(s, Cost(2, 0, /*b=*/1))); }
+        Put(s, "Vito, Thorn of the Dusk Rose");
+        TapPainSourcesIfUseful(s, 0);
+    };
+    { PainDeferArm off(false); cast(off_s); }
+    { PainDeferArm on(true);   cast(on_s); }
+    CHECK(Opp(on_s) <= Opp(off_s));     // never worse...
+    CHECK(Me(on_s) >= Me(off_s));
+    CHECK(Opp(on_s) < Opp(off_s));      // ...and here strictly better: the Citadel's 3 drains after Vito
+}

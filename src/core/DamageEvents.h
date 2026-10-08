@@ -601,7 +601,8 @@ namespace paystats
 {
 inline bool On() { static const bool v = EnvOn("MTG_PD_PAY_STATS"); return v; }
 enum { kPolicy, kUseful, kUsefulSkip, kUsefulFail, kHarm, kHarmFirstOk, kHarmAtFloor, kExactRetry,
-       kExactRetryFail, kDescRetry, kDescFail, kN };
+       kExactRetryFail, kDescRetry, kDescFail, kDeferLive, kDeferSame, kDeferTried, kDeferKept,
+       kDeferRejected, kN };
 inline std::atomic<std::uint64_t>* C()
 {
     static std::atomic<std::uint64_t> c[kN];
@@ -612,7 +613,8 @@ inline std::atomic<std::uint64_t>* C()
             if (!On()) { return; }
             static const char* names[kN] = { "policy", "useful", "useful_skip(lethal floor)",
                 "useful_capped_fail", "harmful", "harm_first_ok", "harm_at_floor", "exact_retry",
-                "exact_retry_fail", "desc_retry", "desc_fail" };
+                "exact_retry_fail", "desc_retry", "desc_fail", "defer_live", "defer_same",
+                "defer_tried", "defer_kept", "defer_rejected" };
             std::fprintf(stderr, "[pd-pay-stats]");
             for (int i = 0; i < kN; ++i)
             { std::fprintf(stderr, " %s=%llu", names[i], (unsigned long long)C()[i].load()); }
@@ -624,6 +626,287 @@ inline std::atomic<std::uint64_t>* C()
 inline void Inc(int k) { if (On()) { C()[k].fetch_add(1, std::memory_order_relaxed); } }
 }   // namespace paystats
 
+// ---- PAIN DEFERRAL (MTG_PD_PAIN_DEFER, default ON; USER report 2026-10-08) ------------------------
+//
+// THE DEFECT. references/Prevent_Damage/claude_s11_gi10.json, T5: Tamanoa + Vito out, Rhox Faithmender
+// ({3}{W}) cast off Brushland x2, Grand Coliseum, Tarnished Citadel and Reflecting Pool. The useful-mode
+// payer (damaging mode first, above) tapped Brushland {W} + Brushland {G} + Coliseum {W} + Citadel {W}
+// (1+1+1+3 = 6 pain, Vito drains 6) and left the painless Reflecting Pool -- which the end-of-main-1
+// sweep (TapPainSourcesIfUseful) can do nothing with. The user tapped Pool + Coliseum + both Brushlands
+// (3 pain, drains 3) and kept the Citadel, which the sweep then tapped AFTER Rhox had resolved: 3 damage
+// -> Tamanoa gains 3, doubled to 6 -> Vito drains 6. 9 against 6. The payer was not avoiding pain; it
+// spent the biggest pain BEFORE the lifegain doubler it was paying for could double it.
+//
+// THE RULE. Every land we control is tapped exactly once this main phase -- by a payment, or by the
+// sweep at the end of main 1 (which taps every untapped land whose tap is worth anything) -- so the
+// payment does not decide WHETHER a land's pain (and its Manabarbs hits) happens, only WHEN. Everything
+// a damage event is worth is monotone in the damage->lifegain->drain chain on the board (Tamanoa count,
+// Purity, Faithmender doubling, Bilbo's +1, Vito's "that much", Dina's per-event drain, Manabarbs
+// instances: GainChain below). So when the spell(s) a payment funds will ADD to that chain on
+// resolution, a land's events are worth at least as much after it as before, and the best payment is
+// the one that spends least of that future value now: minimise, over the sources it taps,
+// Later(source) - Now(source, mode), where Later is the sweep tap's value on the post-resolution chain
+// and Now the tap's value on the current one. An exact DP on a simple board (PaymentDeferralDP,
+// SpellEffects.h) proposes that assignment; the payer realises it by holding every other source.
+//
+// WHY IT IS SAFE TO TAKE (and when it is not taken). It is adopted only if it is no worse than the
+// pain-first payment in EVERY respect we can measure, checked on the REALISED taps of both:
+//   * VALUE: the opponent's total life loss AND our own life total, each summed over this payment's
+//     taps (Now) plus the sweep of what it leaves (Later), are both >= the pain-first payment's, one
+//     strictly. Nothing is traded: a strictly worse opponent total, or less life, keeps the old payment.
+//   * PAYABILITY: what the deferred payment leaves untapped can produce everything the pain-first
+//     payment's leftovers could (a colour-superset matching, CapabilityCovers) -- so no later cast of
+//     the line, and no payability probe of the enumerator, loses a payment it had.
+//   * SAFETY: only when the whole board's pain potential cannot take us to 0 (PaymentPainSafe -- the
+//     branch this lives in), so every later payment and every sweep tap of a held land is survivable.
+//   * TIMING (PainDeferQuery's gates): the sweep that realises Later must follow -- the PRE-combat main of
+//     a deck with no second main (PD's default; a searched second main has no sweep after it) -- and the
+//     plan must not damage, destroy or sacrifice our own permanents before it (PlanTraits::
+//     own_board_hazard: a Pyrohemia ping, a Rolling Earthquake, a sac outlet could shrink the chain
+//     between the payment and the sweep, and then Later is not guaranteed).
+// A pending amplifier comes from the spell being paid for (PayingSpellCard, the per-cast payer) or
+// from the whole-turn batch's casts (PendingCastsScope, BatchPrepayMainCasts). Nothing pending, or a
+// board the DP cannot solve exactly, is the historical payment, byte-identical.
+// SCOPE: the USEFUL branch only (a gain engine already out). Casting the FIRST Tamanoa (harmful mode,
+// minimum damage) has the same timing question for its generic pips, but there the old payment's
+// lower pain is a real trade against later value, not a dominance -- not extended.
+// MANABARBS: "tap a land rather than a non-land source" is NOT a preference this rule (or any) should
+// add while a sweep follows: the sweep taps every untapped land for its Manabarbs hits anyway, so
+// which source pays changes nothing -- except under a PENDING Manabarbs, where the post-resolution hits
+// make every held land worth more, and the DP then pays with the fewest land taps (an Ancient Tomb's
+// {C}{C} over two lands, a non-land source over a land). That falls out of the same Later - Now.
+// REPLAY: references recorded before this rule carry no `pain_defer` stamp and replay with
+// --legacy-pain-pay (g_play_legacy_pain_pay, GameLogger.h).
+inline bool PainDeferEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_PAIN_DEFER", true);   // DEFAULT ON; =0 = the pain-first payer
+    return heurarm::Flag(heurarm::PD_PAIN_DEFER, v) && !g_play_legacy_pain_pay;
+}
+
+// The board's damage -> lifegain -> drain chain, read off card params (never names).
+struct GainChain
+{
+    int       tam    = 0;      // noncreature_damage_lifegain (Tamanoa): one gain trigger per damage event each
+    bool      purity = false;  // prevent_noncombat_to_self_gain: our noncombat damage is prevented and gained
+    long long plus   = 0;      // lifegain_plus (Bilbo), applied before the doubling (CR 616.1, see above)
+    long long mult   = 1;      // lifegain_multiplier product (Rhox Faithmender)
+    int       vito   = 0;      // lifegain_target_opp_loses_that_much watchers ("that much", per gain event)
+    int       dina   = 0;      // lifegain_each_opp_loses x opponent heads (per gain event)
+    int       nbarb  = 0;      // land_tap_damage_each_player instances (Manabarbs; ANY controller)
+    int       barb[8] = {};
+    bool operator==(const GainChain& o) const
+    {
+        if (tam != o.tam || purity != o.purity || plus != o.plus || mult != o.mult || vito != o.vito
+            || dina != o.dina || nbarb != o.nbarb) { return false; }
+        for (int i = 0; i < nbarb; ++i) { if (barb[i] != o.barb[i]) { return false; } }
+        return true;
+    }
+};
+
+// Fold one permanent's params into the chain (`ours`: controlled by the gaining player).
+inline void ChainAdd(GainChain& c, const CardParams& p, bool ours)
+{
+    if (ours)
+    {
+        if (p.noncreature_damage_lifegain)    { ++c.tam; }
+        if (p.prevent_noncombat_to_self_gain) { c.purity = true; }
+        c.plus += p.lifegain_plus;
+        if (p.lifegain_multiplier > 1) { c.mult = std::min<long long>(c.mult * p.lifegain_multiplier, 1 << 20); }
+        if (p.lifegain_target_opp_loses_that_much) { ++c.vito; }
+        if (p.lifegain_each_opp_loses > 0)
+        { c.dina += p.lifegain_each_opp_loses * std::max(1, gamesetup::OpponentHeads()); }
+    }
+    if (p.land_tap_damage_each_player > 0 && c.nbarb < 8) { c.barb[c.nbarb++] = p.land_tap_damage_each_player; }
+}
+
+inline GainChain ReadGainChain(const GameState& s, int ctrl)
+{
+    GainChain c;
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = Def(p);
+        if (d) { ChainAdd(c, d->params, p.controller_index == ctrl); }
+    }
+    return c;
+}
+
+// What a damage EVENT dealing `a` to us from a noncreature source we control is worth, on chain `c`:
+// the opponent's life loss and our NET life change once every trigger it causes has resolved. Mirrors
+// FlushDamageEvents / DealDamageEvent -> GainLife -> ApplyLifegainReplacements -> FireLifegainWatchers.
+struct ChainV
+{
+    long long opp = 0, life = 0;
+    ChainV& operator+=(const ChainV& o) { opp += o.opp; life += o.life; return *this; }
+};
+inline ChainV DamageEventValue(const GainChain& c, int a)
+{
+    ChainV v;
+    if (a <= 0) { return v; }
+    const long long g = std::min<long long>((a + c.plus) * c.mult, 1 << 24);   // one gain event, replaced
+    if (c.purity) { v.life = g; v.opp = c.vito * g + c.dina; return v; }      // prevented, gained once
+    v.life = c.tam * g - a;
+    v.opp  = c.tam * (c.vito * g + c.dina);
+    return v;
+}
+// One mana tap: its own pain event, plus one Manabarbs event per instance when it is a LAND.
+inline ChainV TapEventsValue(const GainChain& c, int pain, bool land)
+{
+    ChainV v = DamageEventValue(c, pain);
+    if (land) { for (int k = 0; k < c.nbarb; ++k) { v += DamageEventValue(c, c.barb[k]); } }
+    return v;
+}
+
+// The whole-turn batch's casts (BatchPrepayMainCasts): every one resolves after the batch payment and
+// before the end-of-main sweep, so any of them can be the pending amplifier. Null outside the batch.
+struct PendingCasts { const CardDefinition* d[8] = {}; int n = 0; };
+inline thread_local const PendingCasts* t_pending_casts = nullptr;
+struct PendingCastsScope
+{
+    const PendingCasts* prev;
+    explicit PendingCastsScope(const PendingCasts* p) : prev(t_pending_casts) { t_pending_casts = p; }
+    ~PendingCastsScope() { t_pending_casts = prev; }
+    PendingCastsScope(const PendingCastsScope&) = delete;
+    PendingCastsScope& operator=(const PendingCastsScope&) = delete;
+};
+
+// What the call site's `defer` callback (PainDeferQuery, SpellEffects.h) hands the policy.
+struct DeferPlan
+{
+    bool          live  = false;   // a pending amplifier, and every timing gate holds
+    bool          exact = false;   // the DP solved this board exactly
+    std::uint64_t hold  = 0;       // the DP assignment: every modelled source it does NOT tap
+    ChainV        pred;            // that assignment's predicted value (Now of its taps + Later of the rest)
+    GainChain     now, after;      // the chain at this payment's flush / after the pending casts resolve
+    // Per battlefield slot (< 64), read on the PRE-payment board: which slots are our modelled mana
+    // sources, what each can make (a WUBRG + C bitmask), its yield, whether it is a land, and the pain
+    // the sweep's tap of it would deal.
+    std::uint64_t src  = 0;
+    std::uint8_t  cols[64] = {};
+    std::int8_t   yield[64] = {};
+    std::int8_t   sweep_pain[64] = {};
+    std::uint64_t land = 0;
+};
+
+// The value of a REALISED payment: Now of every source it tapped (its recorded pain, read off the mark
+// delta against the pre-payment board) plus Later of every modelled source it left untapped (lands
+// only -- the sweep never taps a non-land). False when the board does not line up slot for slot with
+// the pre-payment copy (nothing is compared then; the caller keeps the pain-first payment).
+inline bool RealisedPaymentValue(const GameState& s, const std::vector<Permanent>& pre_bf,
+                                 const DeferPlan& q, ChainV& out, std::uint64_t& untapped)
+{
+    out = ChainV{}; untapped = 0;
+    if (s.battlefield.size() != pre_bf.size()) { return false; }
+    for (int i = 0; i < 64 && i < static_cast<int>(pre_bf.size()); ++i)
+    {
+        if (!(q.src & (1ull << i))) { continue; }
+        const Permanent& a = pre_bf[static_cast<std::size_t>(i)];
+        const Permanent& b = s.battlefield[static_cast<std::size_t>(i)];
+        if (a.card.m_number != b.card.m_number) { return false; }
+        const bool land = (q.land >> i) & 1ull;
+        if (b.tapped)
+        {
+            const int pain = (b.mana_tap_mark >> kMarkPainShift) - (a.mana_tap_mark >> kMarkPainShift);
+            out += TapEventsValue(q.now, std::max(0, pain), land);
+        }
+        else
+        {
+            untapped |= (1ull << i);
+            if (land) { out += TapEventsValue(q.after, q.sweep_pain[i], true); }
+        }
+    }
+    return true;
+}
+
+// Can the sources in `have` make everything the sources in `need` could? A source in both covers itself;
+// each remaining `need` source must be matched to a DISTINCT remaining `have` source that makes a
+// superset of its colours with at least its yield (Kuhn's augmenting paths; both sides are tiny).
+inline bool CapabilityCovers(std::uint64_t have, std::uint64_t need, const DeferPlan& q)
+{
+    const std::uint64_t common = have & need;
+    have &= ~common; need &= ~common;
+    int hv[64], nd[64], nh = 0, nn = 0;
+    for (int i = 0; i < 64; ++i)
+    {
+        if (have & (1ull << i)) { hv[nh++] = i; }
+        if (need & (1ull << i)) { nd[nn++] = i; }
+    }
+    if (nn > nh) { return false; }
+    int match_of_have[64];
+    for (int k = 0; k < nh; ++k) { match_of_have[k] = -1; }
+    auto ok = [&](int ni, int hi) -> bool
+    {
+        const int a = nd[ni], b = hv[hi];
+        return (q.cols[a] & ~q.cols[b]) == 0 && q.yield[b] >= q.yield[a];
+    };
+    for (int ni = 0; ni < nn; ++ni)
+    {
+        bool seen[64] = {};
+        auto augment = [&](auto&& self, int x) -> bool
+        {
+            for (int hi = 0; hi < nh; ++hi)
+            {
+                if (seen[hi] || !ok(x, hi)) { continue; }
+                seen[hi] = true;
+                if (match_of_have[hi] < 0 || self(self, match_of_have[hi])) { match_of_have[hi] = x; return true; }
+            }
+            return false;
+        };
+        if (!augment(augment, ni)) { return false; }
+    }
+    return true;
+}
+
+struct PayHoldScope
+{
+    std::uint64_t prev;
+    explicit PayHoldScope(std::uint64_t h) : prev(t_pay_hold) { t_pay_hold = h; }
+    ~PayHoldScope() { t_pay_hold = prev; }
+    PayHoldScope(const PayHoldScope&) = delete;
+    PayHoldScope& operator=(const PayHoldScope&) = delete;
+};
+
+// The deferral itself (see the block comment). `attempt` is the policy's payment attempt with the
+// useful-mode cap already installed; `q` the call site's answer. Leaves the state of the LAST
+// successful attempt (the batch caller's outputs are captured per success), returns payable.
+template <class Attempt>
+inline bool DeferredPainPay(GameState& s, ManaPool* available, Attempt&& attempt, const DeferPlan& q)
+{
+    paystats::Inc(paystats::kDeferLive);
+    PayAttemptSnap pre;
+    pre.Take(s, available);
+    if (!attempt()) { return false; }                        // unpayable either way
+    ChainV base; std::uint64_t base_up = 0;
+    if (!RealisedPaymentValue(s, pre.bf, q, base, base_up)) { return true; }
+    const std::uint64_t dp_up = q.hold & q.src;
+    if (dp_up == base_up) { paystats::Inc(paystats::kDeferSame); return true; }   // same sources: nothing to gain
+    // Predicted no better in either term, or it would strand a later payment: keep the pain-first payment.
+    if (!(q.pred.opp >= base.opp && q.pred.life >= base.life
+          && (q.pred.opp > base.opp || q.pred.life > base.life))
+        || !CapabilityCovers(dp_up, base_up, q))
+    { return true; }
+    const ManaPool base_float = s.floating_mana;
+    paystats::Inc(paystats::kDeferTried);
+    pre.Restore(s, available);
+    bool ok;
+    { PayHoldScope hs(t_pay_hold | q.hold); ok = attempt(); }
+    if (ok)
+    {
+        ChainV got; std::uint64_t up = 0;
+        const ManaPool& f = s.floating_mana;
+        if (RealisedPaymentValue(s, pre.bf, q, got, up)
+            && got.opp >= base.opp && got.life >= base.life && (got.opp > base.opp || got.life > base.life)
+            && CapabilityCovers(up, base_up, q)
+            && f.white >= base_float.white && f.blue >= base_float.blue && f.black >= base_float.black
+            && f.red >= base_float.red && f.green >= base_float.green
+            && f.colorless >= base_float.colorless && f.wild >= base_float.wild)
+        { paystats::Inc(paystats::kDeferKept); return true; }
+    }
+    // Not realised as predicted: the pain-first payment, run again so it is the last success.
+    paystats::Inc(paystats::kDeferRejected);
+    pre.Restore(s, available);
+    return attempt();
+}
+
 // `line_ok` (harmful mode, per-cast only): after a minimum-damage payment, can the REST of the
 // line being applied still be paid? nullopt-style contract: returns 1 = yes, 0 = no, -1 = no line
 // is being applied (never asked twice). A minimum-damage assignment is chosen per cast, blind to the
@@ -632,9 +915,11 @@ inline void Inc(int k) { if (On()) { C()[k].fetch_add(1, std::memory_order_relax
 // leaving only Ancient Tomb for the Rolling Earthquake's {R}). When it does, the historical
 // assignment is taken instead if IT keeps the line payable and survives; otherwise the minimum
 // stands. So the line-aware check can only move a payment back toward the old payer's choice.
-template <class Attempt, class LowerBound, class LineOk>
+// `defer` (useful mode only): fills a DeferPlan for this payment (PainDeferQuery, SpellEffects.h) --
+// see PAIN DEFERRAL above. Asked only when the deferral is enabled and the payment is pain-safe.
+template <class Attempt, class LowerBound, class LineOk, class Defer>
 inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, Attempt&& attempt,
-                         LowerBound&& lower_bound, LineOk&& line_ok)
+                         LowerBound&& lower_bound, LineOk&& line_ok, Defer&& defer)
 {
     if (!s.dmg_events_armed || t_pay_cap.live || !PainPayEnabled()) { return attempt(); }
     const int ctrl = s.active_player_index;
@@ -667,6 +952,14 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
         if (PaymentPainSafe(s, ctrl))
         {
             t_pay_cap = { true, kNoCap, barbs, /*pain_first=*/true, barb_total };
+            // PAIN DEFERRAL: when what this payment funds will grow the chain, keep the painful lands
+            // for the sweep (see the block above DeferredPainPay). Not live -> the historical attempt.
+            if (PainDeferEnabled())
+            {
+                DeferPlan q;
+                defer(q);
+                if (q.live && q.exact) { return DeferredPainPay(s, available, attempt, q); }
+            }
             return attempt();
         }
         const ManaPool av0 = available ? *available : ManaPool{};

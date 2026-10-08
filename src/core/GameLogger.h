@@ -1319,6 +1319,14 @@ inline bool HumanKarooFloatOn()       // ...and whether it applies HERE (human p
     return HumanKarooFloatRuleOn() && HumanPlayActive();
 }
 
+// PREVENT DAMAGE PAIN DEFERRAL -- the replay half of its recording stamp (the payment rule itself is
+// dmgev::PainDeferEnabled, DamageEvents.h). `--legacy-pain-pay` turns the deferral off for a replay:
+// a reference recorded before the rule carries no `pain_defer` key, and its replayer
+// (test/viewer_protocol_check.py) passes the flag so an auto-tapped payment replays exactly as it was
+// played -- an OLD recording must never be invalidated by a NEW payment rule. Process-global like
+// the flag above (a replay is one game in one process).
+inline bool g_play_legacy_pain_pay = false;
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit

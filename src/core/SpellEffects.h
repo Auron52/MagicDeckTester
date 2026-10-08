@@ -29228,6 +29228,218 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
     return { cur[0] / kDmgW, true, hold };
 }
 
+// PREVENT DAMAGE PAIN DEFERRAL: the exact assignment the deferral proposes (dmgev::DeferredPainPay;
+// the rule and its soundness argument are in DamageEvents.h, "PAIN DEFERRAL"). The board model is
+// PaymentDamageFloor's SIMPLE board, source for source -- the twin of the filter above, kept here
+// rather than shared so the floor (a hot per-payment path) is untouched; a model the payer cannot
+// realise is caught anyway, since the policy re-checks the REALISED payment before keeping it. The DP
+// is the same mixed-radix one over the remaining demand; only the price of a mode differs:
+//     Later(source) - Now(source, mode)
+// packed lexicographically as (opponent life loss, our life, flexibility), where Now is the tap's
+// value on the current chain (q.now) and Later the end-of-main sweep's tap of it on the chain after the
+// pending casts resolve (q.after; lands only -- the sweep never taps a non-land). Fills q.exact,
+// q.hold, q.pred and the per-slot source facts; leaves q.exact false on any board it cannot solve.
+inline void PaymentDeferralDP(const GameState& state, const ManaCost& cost, const ManaPool& floating,
+                              std::uint64_t reserved_mask, dmgev::DeferPlan& q)
+{
+    q.exact = false;
+    if (floating.Total() > 0 || cost.hybrid_count > 0) { return; }
+    const int ctrl = state.active_player_index;
+    if (LiveManaGrant(state, ctrl).valid()) { return; }
+    struct Mode { int col, y; long long cost; dmgev::ChainV now; };
+    struct Src  { int bi; dmgev::ChainV later; std::vector<Mode> modes; };
+    static thread_local std::vector<Src> s_srcs;
+    std::vector<Src>& srcs = s_srcs;
+    std::size_t nsrc = 0;
+    // (Δopp, Δlife, flex) packed so the sum over <= 24 sources keeps the lexicographic order.
+    constexpr long long kOpp = 1ll << 26, kLife = 1ll << 10;
+    q.src = 0; q.land = 0;
+    const int nbf = static_cast<int>(state.battlefield.size());
+    for (int bi = 0; bi < nbf; ++bi)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(bi)];
+        if (p.controller_index != ctrl || p.tapped || p.def_absent) { continue; }
+        if (bi < 64 && (reserved_mask & (1ull << bi))) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        const bool land = p.card.IsLand();
+        const bool dork = d->tmpl == CardTemplate::ManaDork;
+        if (!land && !dork && !pp.mana_rock && !IsPaySacSource(*d)) { continue; }
+        if (dork && !CanTapNow(p, state.battlefield)) { continue; }
+        if (land && d->tmpl != CardTemplate::BasicLand) { continue; }
+        if (pp.mana_rock || IsPaySacSource(*d) || pp.is_filter || pp.ramp_filter
+            || pp.any_color_filter || pp.storage_land || pp.domain_mana || IsScaledManaDork(*d)
+            || IsScaledManaLand(*d) || pp.untap_creature_cost.has_value()
+            || pp.energy_per_colored_tap > 0 || pp.colored_creature_only || pp.creature_mana_only
+            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana
+            || pp.enters_tapped_with_depletion > 0 || pp.etb_choose_color
+            || LandAuraBonus(state, p) > 0)
+        { return; }
+        const std::vector<Color> prod = EffectiveProducesFor(state, ctrl, *d, &p);   // a COPY (thread_local buffer)
+        if (prod.empty()) { continue; }
+        const int y = ManaProducedPerTap(*d);
+        if (y > 1 && prod.size() > 1) { return; }
+        if (bi >= 64 || nsrc >= 24) { return; }
+        bool has_c = false;
+        int flex = 0;
+        std::uint8_t cols = 0;
+        Color sweep_col = Color::Colorless;
+        bool sweep_set = false;
+        for (Color c : prod)
+        {
+            const int ci = static_cast<int>(c);
+            if (c == Color::Colorless) { has_c = true; cols |= (1u << 5); }
+            else
+            {
+                ++flex;
+                if (ci >= 0 && ci < 5) { cols |= static_cast<std::uint8_t>(1u << ci); }
+                if (!sweep_set) { sweep_col = c; sweep_set = true; }   // the sweep's damaging mode
+            }
+        }
+        // TapPainSourcesIfUseful's mode on a pain-useful board: the first coloured mode, else {C}.
+        const int sp = dmgev::PainForTap(*d, sweep_col, has_c);
+        q.src |= (1ull << bi);
+        if (land) { q.land |= (1ull << bi); }
+        q.cols[bi] = cols;
+        q.yield[bi] = static_cast<std::int8_t>(std::min(y, 127));
+        q.sweep_pain[bi] = static_cast<std::int8_t>(std::min(sp, 127));
+        if (srcs.size() <= nsrc) { srcs.emplace_back(); }
+        Src& src = srcs[nsrc++];
+        src.bi = bi;
+        src.later = land ? dmgev::TapEventsValue(q.after, sp, true) : dmgev::ChainV{};
+        src.modes.clear();
+        for (Color c : prod)
+        {
+            const dmgev::ChainV now = dmgev::TapEventsValue(q.now, dmgev::PainForTap(*d, c, has_c), land);
+            const long long pack = (src.later.opp - now.opp) * kOpp + (src.later.life - now.life) * kLife + flex;
+            src.modes.push_back({ static_cast<int>(c), y, pack, now });
+        }
+    }
+    const int dem[7] = { cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless, cost.generic };
+    int rad[7], stride[7], n_states = 1;
+    for (int k = 0; k < 7; ++k)
+    {
+        if (dem[k] < 0) { return; }
+        rad[k] = dem[k] + 1; stride[k] = n_states; n_states *= rad[k];
+        if (n_states > 4096) { return; }
+    }
+    constexpr long long kInf = 1ll << 60;
+    static thread_local std::vector<long long> s_cur, s_nxt;
+    static thread_local std::vector<int> s_pred, s_dec;
+    std::vector<long long>& cur = s_cur;
+    std::vector<long long>& nxt = s_nxt;
+    cur.assign(static_cast<std::size_t>(n_states), kInf);
+    s_pred.assign(nsrc * static_cast<std::size_t>(n_states), -1);
+    int full = 0;
+    for (int k = 0; k < 7; ++k) { full += dem[k] * stride[k]; }
+    cur[static_cast<std::size_t>(full)] = 0;
+    s_dec.resize(static_cast<std::size_t>(n_states) * 7);
+    for (int st = 0; st < n_states; ++st)
+    {
+        int* dd = s_dec.data() + static_cast<std::size_t>(st) * 7;
+        for (int k = 0; k < 7; ++k) { dd[k] = (st / stride[k]) % rad[k]; }
+    }
+    for (std::size_t si = 0; si < nsrc; ++si)
+    {
+        const std::vector<Mode>& modes = srcs[si].modes;
+        int* pred = s_pred.data() + si * static_cast<std::size_t>(n_states);
+        nxt = cur;   // skip this source
+        for (int st = 0; st < n_states; ++st)
+        { if (cur[static_cast<std::size_t>(st)] < kInf) { pred[st] = (st << 5); } }
+        for (int st = 0; st < n_states; ++st)
+        {
+            if (cur[static_cast<std::size_t>(st)] >= kInf) { continue; }
+            const int* rem = s_dec.data() + static_cast<std::size_t>(st) * 7;
+            for (std::size_t mi = 0; mi < modes.size() && mi < 30; ++mi)
+            {
+                const Mode& m = modes[mi];
+                int y = m.y;
+                const int own = (m.col >= 0 && m.col < 5) ? m.col : 5;
+                const int take = std::min(y, rem[own]);
+                y -= take;
+                const int g = std::min(y, rem[6]);
+                const int idx = st - take * stride[own] - g * stride[6];
+                if (idx == st) { continue; }
+                const long long v = cur[static_cast<std::size_t>(st)] + m.cost;
+                if (v < nxt[static_cast<std::size_t>(idx)])
+                {
+                    nxt[static_cast<std::size_t>(idx)] = v;
+                    pred[idx] = (st << 5) | static_cast<int>(mi + 1);
+                }
+            }
+        }
+        cur.swap(nxt);
+    }
+    if (cur[0] >= kInf) { return; }
+    // Reconstruct: which sources the assignment taps and in which mode; the rest are held.
+    std::uint64_t used = 0;
+    dmgev::ChainV pred_v;
+    int st = 0;
+    for (std::size_t si = nsrc; si-- > 0; )
+    {
+        const int pv = s_pred[si * static_cast<std::size_t>(n_states) + static_cast<std::size_t>(st)];
+        if (pv < 0) { return; }
+        const int mi = pv & 31;
+        if (mi != 0)
+        {
+            used |= (1ull << srcs[si].bi);
+            pred_v += srcs[si].modes[static_cast<std::size_t>(mi - 1)].now;
+        }
+        else { pred_v += srcs[si].later; }
+        st = pv >> 5;
+    }
+    q.hold  = q.src & ~used;
+    q.pred  = pred_v;
+    q.exact = true;
+}
+
+// The deferral's CONTEXT for one payment (dmgev::PainAwarePay's `defer` callback, both call sites):
+// the timing gates, the pending amplifiers, and the DP above. q.live stays false -- the historical
+// payment -- unless every gate holds and something pending grows the chain.
+//   * the sweep that realises a held land's Later must FOLLOW: the pre-combat main of a deck with no
+//     second main (TapPainSourcesIfUseful runs only at the end of main 1; a deck that searches a
+//     second main may keep lands for it), and no plan pinned "no sweep";
+//   * the plan applying this payment must not damage, destroy or sacrifice our own permanents
+//     (PlanTraits::own_board_hazard) -- that could shrink the chain before the sweep;
+//   * pending = the spell being paid for (PayingSpellCard) and the whole-turn batch's casts
+//     (dmgev::t_pending_casts): PERMANENT spells only (they stay on the battlefield through the
+//     sweep), a legendary one we already control excluded (the legend rule kills it), each card once.
+inline void PainDeferQuery(const GameState& s, const ManaCost& cost, const ManaPool& floating,
+                           std::uint64_t reserved_mask, dmgev::DeferPlan& q)
+{
+    q.live = false; q.exact = false;
+    if (s.phase != Phase::PreCombatMain || s.uses_second_main || g_endm1_sweep_pin == 0) { return; }
+    if (const PlanTraits* t = CurrentPlanTraits(); t != nullptr && t->own_board_hazard) { return; }
+    const int ctrl = s.active_player_index;
+    q.now   = dmgev::ReadGainChain(s, ctrl);
+    q.after = q.now;
+    const CardDefinition* seen[9] = {};
+    int nseen = 0;
+    auto pend = [&](const CardDefinition* d)
+    {
+        if (d == nullptr || d->card.IsInstant() || d->card.IsSorcery() || d->card.IsLand()) { return; }
+        for (int i = 0; i < nseen; ++i)
+        {
+            if (seen[i] == d) { return; }
+            if (seen[i]->card.m_name == d->card.m_name && d->card.HasSupertype(Supertype::Legendary)) { return; }
+        }
+        if (d->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == ctrl && p.card.m_name == d->card.m_name) { return; } }
+        }
+        if (nseen < 9) { seen[nseen++] = d; }
+        dmgev::ChainAdd(q.after, d->params, /*ours=*/true);
+    };
+    if (const Card* c = PayingSpellCard()) { pend(CardDatabase::Instance().LookupCached(*c)); }
+    if (const dmgev::PendingCasts* pc = dmgev::t_pending_casts)
+    { for (int i = 0; i < pc->n; ++i) { pend(pc->d[i]); } }
+    if (q.after == q.now) { return; }
+    q.live = true;
+    PaymentDeferralDP(s, cost, floating, reserved_mask, q);
+}
+
 inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                                   std::uint64_t reserved_mask, int stop_at = -1,
                                   const std::vector<std::pair<int, int>>* aura_fold = nullptr)
