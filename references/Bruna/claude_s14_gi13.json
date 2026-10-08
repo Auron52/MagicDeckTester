@@ -1,0 +1,410 @@
+{
+  "seed": 14, "game_index": 13, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 52, "name": "Seaside Citadel" }, { "num": 53, "name": "Seaside Citadel" }, { "num": 3, "name": "Avacyn's Pilgrim" }, { "num": 41, "name": "Mythic Proportions" }, { "num": 32, "name": "Glittering Wish" }, { "num": 6, "name": "Azorius Chancery" }, { "num": 27, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Avacyn's Pilgrim", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Avacyn's Pilgrim", "land": "Forest", "casts": ["Avacyn's Pilgrim"], "actions": [{ "card": "Avacyn's Pilgrim" }] },
+    { "index": 1, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Azorius Chancery; cast: (nothing)", "land": "Azorius Chancery", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 2, "num": 3, "is_land": false }, { "name": "Forest", "idx": 1, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 2, "num": 3, "is_land": false }, { "name": "Forest", "idx": 1, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Birds of Paradise" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 2, "num": 3, "is_land": false, "taps": "W" }, { "name": "Forest", "idx": 1, "num": 27, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Birds of Paradise", "land": "Seaside Citadel", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 1, "summary": "land=Azorius Chancery; cast: Birds of Paradise", "land": "Azorius Chancery", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: Birds of Paradise", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 3, "summary": "land=Seaside Citadel; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Seaside Citadel", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 14, "summary": "land=Azorius Chancery; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Azorius Chancery", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 25, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 36, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 37, "summary": "land=Azorius Chancery; cast: (nothing)", "land": "Azorius Chancery", "casts": [], "actions": [] },
+    { "index": 38, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "bounce",
+  "source": "Azorius Chancery",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 2, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 5, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 4, "num": 9, "is_land": false }, { "name": "Forest", "idx": 1, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 1, "tapped": true, "name": "Forest", "label": "Forest" }, { "index": 1, "perm_index": 5, "tapped": true, "name": "Azorius Chancery", "label": "Azorius Chancery" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Glittering Wish", "cost": "{W}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 52, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Seaside Citadel", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 11, "summary": "land=Forest; cast: Glittering Wish → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 22, "summary": "land=none; cast: Glittering Wish → Bruna, Light of Alabaster", "land": null, "casts": ["Glittering Wish"], "actions": [{ "card": "Glittering Wish", "tutor_target": "Bruna, Light of Alabaster" }] },
+    { "index": 33, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 34, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 35, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "tutor_etb",
+  "source": "Glittering Wish",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0, "floating_mana": {"U": 1} },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Bruna, Light of Alabaster", "suggested": true }, { "index": 1, "name": "Almost Perfect", "suggested": true }, { "index": 2, "name": "Troyan, Gutsy Explorer", "suggested": true }, { "index": 3, "name": "Unflinching Courage", "suggested": true }, { "index": 4, "name": "Indrik Umbra" }, { "index": 5, "name": "Linvala, Shield of Sea Gate" }, { "index": 6, "name": "Detention Sphere" }, { "index": 7, "name": "Steel of the Godhead" }, { "index": 8, "name": "Vexing Shusher" }, { "index": 9, "name": "Auroral Procession" }, { "index": 10, "name": "Reborn Hope" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 3, "source": "Glittering Wish (searched)", "cards": [{ "name": "Bruna, Light of Alabaster", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 200000, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0, "floating_mana": {"U": 1} },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 200000, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "cast_order": ["*", "Sol Ring", "Bruna, Light of Alabaster"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Sol Ring" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }], "vial_counters": [], "hand": [{ "num": 200000, "name": "Bruna, Light of Alabaster", "cost": "{3}{W}{W}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Bruna, Light of Alabaster, Sol Ring", "land": "Seaside Citadel", "drops": ["Bruna, Light of Alabaster"], "casts": ["Bruna, Light of Alabaster", "Sol Ring"], "cast_order_canonical": ["Bruna, Light of Alabaster", "Sol Ring"], "actions": [{ "card": "Bruna, Light of Alabaster" }, { "card": "Sol Ring" }] },
+    { "index": 1, "summary": "land=Seaside Citadel; cast: Sol Ring, Bruna, Light of Alabaster", "land": "Seaside Citadel", "casts": ["Sol Ring", "Bruna, Light of Alabaster"], "cast_order_canonical": ["Sol Ring", "Bruna, Light of Alabaster"], "actions": [{ "card": "Sol Ring" }, { "card": "Bruna, Light of Alabaster" }] },
+    { "index": 2, "summary": "land=Forest; cast: Bruna, Light of Alabaster, Sol Ring", "land": "Forest", "drops": ["Sol Ring"], "casts": ["Bruna, Light of Alabaster", "Sol Ring"], "cast_order_canonical": ["Bruna, Light of Alabaster", "Sol Ring"], "actions": [{ "card": "Bruna, Light of Alabaster" }, { "card": "Sol Ring" }] },
+    { "index": 3, "summary": "land=Forest; cast: Sol Ring, Bruna, Light of Alabaster", "land": "Forest", "casts": ["Sol Ring", "Bruna, Light of Alabaster"], "cast_order_canonical": ["Sol Ring", "Bruna, Light of Alabaster"], "actions": [{ "card": "Sol Ring" }, { "card": "Bruna, Light of Alabaster" }] },
+    { "index": 4, "summary": "land=none; cast: Bruna, Light of Alabaster, Sol Ring", "land": null, "drops": ["Bruna, Light of Alabaster"], "casts": ["Bruna, Light of Alabaster", "Sol Ring"], "cast_order_canonical": ["Bruna, Light of Alabaster", "Sol Ring"], "actions": [{ "card": "Bruna, Light of Alabaster" }, { "card": "Sol Ring" }] },
+    { "index": 5, "summary": "land=none; cast: Sol Ring, Bruna, Light of Alabaster", "land": null, "casts": ["Sol Ring", "Bruna, Light of Alabaster"], "cast_order_canonical": ["Sol Ring", "Bruna, Light of Alabaster"], "actions": [{ "card": "Sol Ring" }, { "card": "Bruna, Light of Alabaster" }] },
+    { "index": 6, "summary": "land=Forest; cast: Bruna, Light of Alabaster", "land": "Forest", "casts": ["Bruna, Light of Alabaster"], "actions": [{ "card": "Bruna, Light of Alabaster" }] },
+    { "index": 7, "summary": "land=Forest; cast: Mythic Proportions → Avacyn's Pilgrim, Sol Ring", "land": "Forest", "drops": ["Mythic Proportions"], "casts": ["Mythic Proportions", "Sol Ring"], "cast_order_canonical": ["Mythic Proportions", "Sol Ring"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }, { "card": "Sol Ring" }] },
+    { "index": 8, "summary": "land=Forest; cast: Sol Ring, Mythic Proportions → Avacyn's Pilgrim", "land": "Forest", "casts": ["Sol Ring", "Mythic Proportions"], "cast_order_canonical": ["Sol Ring", "Mythic Proportions"], "actions": [{ "card": "Sol Ring" }, { "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 9, "summary": "land=Forest; cast: Mythic Proportions → Birds of Paradise, Sol Ring", "land": "Forest", "drops": ["Mythic Proportions"], "casts": ["Mythic Proportions", "Sol Ring"], "cast_order_canonical": ["Mythic Proportions", "Sol Ring"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }, { "card": "Sol Ring" }] },
+    { "index": 10, "summary": "land=Forest; cast: Sol Ring, Mythic Proportions → Birds of Paradise", "land": "Forest", "casts": ["Sol Ring", "Mythic Proportions"], "cast_order_canonical": ["Sol Ring", "Mythic Proportions"], "actions": [{ "card": "Sol Ring" }, { "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 11, "summary": "land=Seaside Citadel; cast: Sol Ring", "land": "Seaside Citadel", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 12, "summary": "land=Forest; cast: Sol Ring", "land": "Forest", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 13, "summary": "land=none; cast: Sol Ring", "land": null, "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 14, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "tapped": true, "is_land": true }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 8, "num": 55, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1) — 1 to opponent (18→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "tapped": true, "is_land": true }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "tapped": true, "is_land": true }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 8, "num": 55, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 12, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Razorverge Thicket" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "is_land": true, "taps": "G" }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }, { "name": "Sol Ring", "idx": 8, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 46, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seaside Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seaside Citadel; cast: Mythic Proportions → Avacyn's Pilgrim", "land": "Seaside Citadel", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 1, "summary": "land=Seaside Citadel; cast: Mythic Proportions → Birds of Paradise", "land": "Seaside Citadel", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Seaside Citadel; cast: Mythic Proportions → Bruna, Light of Alabaster", "land": "Seaside Citadel", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 200000, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 3, "summary": "land=Forest; cast: Mythic Proportions → Avacyn's Pilgrim", "land": "Forest", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 4, "summary": "land=Forest; cast: Mythic Proportions → Birds of Paradise", "land": "Forest", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 5, "summary": "land=Forest; cast: Mythic Proportions → Bruna, Light of Alabaster", "land": "Forest", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 200000, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 6, "summary": "land=Razorverge Thicket; cast: Mythic Proportions → Avacyn's Pilgrim", "land": "Razorverge Thicket", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 7, "summary": "land=Razorverge Thicket; cast: Mythic Proportions → Birds of Paradise", "land": "Razorverge Thicket", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 8, "summary": "land=Razorverge Thicket; cast: Mythic Proportions → Bruna, Light of Alabaster", "land": "Razorverge Thicket", "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 200000, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 9, "summary": "land=none; cast: Mythic Proportions → Avacyn's Pilgrim", "land": null, "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 10, "summary": "land=none; cast: Mythic Proportions → Birds of Paradise", "land": null, "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 11, "summary": "land=none; cast: Mythic Proportions → Bruna, Light of Alabaster", "land": null, "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 200000, "enchant_target_name": "Bruna, Light of Alabaster" }] },
+    { "index": 12, "summary": "land=Seaside Citadel; cast: (nothing)", "land": "Seaside Citadel", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Razorverge Thicket; cast: (nothing)", "land": "Razorverge Thicket", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "is_land": true, "taps": "G" }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }, { "name": "Seaside Citadel", "idx": 10, "num": 53, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 8, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 46, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Mythic Proportions → Avacyn's Pilgrim", "land": null, "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 3, "enchant_target_name": "Avacyn's Pilgrim" }] },
+    { "index": 1, "summary": "land=none; cast: Mythic Proportions → Birds of Paradise", "land": null, "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 9, "enchant_target_name": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: Mythic Proportions → Bruna, Light of Alabaster", "land": null, "casts": ["Mythic Proportions"], "actions": [{ "card": "Mythic Proportions", "enchant_target": 200000, "enchant_target_name": "Bruna, Light of Alabaster" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": [1], "decision": {
+  "decision_index": 17,
+  "type": "dragon",
+  "source": "Bruna, Light of Alabaster — put Aura cards from your hand",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "is_land": true, "taps": "G" }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }, { "name": "Seaside Citadel", "idx": 10, "num": 53, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 8, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mythic Proportions", "cost": "{4}{G}{G}{G}", "mv": 7, "kind": "permanent" }, { "num": 46, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "max_puts": 1,
+  "ai_set": [0],
+  "candidates": [{ "index": 0, "def": true, "name": "Mythic Proportions" }],
+  "note": "reply one int per candidate (1 = put this card onto the battlefield), up to max_puts total. The engine keeps the rule's play order. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "Bruna, Light of Alabaster: puts Mythic Proportions (from hand) onto it" }, { "turn": 5, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1), Bruna, Light of Alabaster (13) — 14 to opponent (17→3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "tapped": true, "is_land": false }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "is_land": true, "taps": "G" }, { "name": "Mythic Proportions", "idx": 11, "num": 41, "is_aura": true, "attached_to": 200000, "is_land": false }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }, { "name": "Seaside Citadel", "idx": 10, "num": 53, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 8, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Birds of Paradise" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "is_land": true, "taps": "G" }, { "name": "Mythic Proportions", "idx": 11, "num": 41, "is_aura": true, "attached_to": 200000, "is_land": false }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }, { "name": "Seaside Citadel", "idx": 10, "num": 53, "is_land": true, "taps": "GWU" }, { "name": "Sol Ring", "idx": 8, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Birds of Paradise", "land": "Forest", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 1, "summary": "land=Razorverge Thicket; cast: Birds of Paradise", "land": "Razorverge Thicket", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: Birds of Paradise", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 3, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Razorverge Thicket; cast: (nothing)", "land": "Razorverge Thicket", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Avacyn's Pilgrim", "idx": 1, "num": 3, "is_land": false, "taps": "W" }, { "name": "Azorius Chancery", "idx": 4, "num": 6, "is_land": true, "taps": "WU" }, { "name": "Birds of Paradise", "idx": 3, "num": 9, "is_land": false, "taps": "WUBRG" }, { "name": "Birds of Paradise", "idx": 13, "num": 10, "is_land": false }, { "name": "Bruna, Light of Alabaster", "idx": 9, "num": 200000, "is_land": false }, { "name": "Forest", "idx": 7, "num": 27, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 28, "is_land": true, "taps": "G" }, { "name": "Mythic Proportions", "idx": 11, "num": 41, "is_aura": true, "attached_to": 200000, "is_land": false }, { "name": "Seaside Citadel", "idx": 6, "num": 52, "is_land": true, "taps": "GWU" }, { "name": "Seaside Citadel", "idx": 10, "num": 53, "is_land": true, "taps": "GWU" }, { "name": "Sol Ring", "idx": 8, "num": 55, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 46, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Avacyn's Pilgrim (1), Bruna, Light of Alabaster (13) — 14 to opponent (3→-11)" }
+  ]
+}
