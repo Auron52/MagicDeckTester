@@ -134,6 +134,13 @@ struct Job
     // pooled queue and one tail. Sentinels mean "unset" => the env default => byte-identical for every
     // manifest that omits them.
     valuearm::Arm   arm;
+    // Per-job KEEP/BOTTOM POLICY, for the keep A/B (test/keepmodel_exhaustive_ab.sh). Both halves used
+    // to be process environment only (MTG_EXHAUSTIVE_PROFILE / MTG_EXHAUSTIVE_BOTTOM), so every arm
+    // needed its own `mtg --batch` -- one tail per arm, and no way to compare arms until the second one
+    // started. As job fields both arms share one pooled queue. Unset (the default) => the env /
+    // presence-gated behaviour => byte-identical for every manifest that omits them.
+    std::string     exh_profile;               // "" unset; "none" => no keep table; else a profile path
+    int             exh_bottom          = -1;  // -1 unset; 0/1 => that table's bottoming_enabled, forced
     // Per-job BOOLEAN HEURISTIC LEVERS (see ai/HeuristicArm.h). Same argument as the value arm one
     // slot up: a lever read into a process-wide static forces one `mtg --batch` per arm, which is
     // the per-arm wave pattern CLAUDE.md forbids. All-unset (the default) => the env default for
@@ -257,10 +264,16 @@ public:
     // an H job asks for "none" (no sidecar) and a V job for a model path, off the same deck profile.
     // Keying on the path alone would hand the first arm's profile to the other -- silently measuring
     // one arm twice, which is exactly the class of bug this whole change exists to remove.
+    // The per-job keep/bottom policy (Job::exh_profile / exh_bottom) changes the loaded object too, so it
+    // is part of the key for the same reason.
     std::shared_ptr<const MulliganProfile> get(const std::string& path,
-                                               const std::string& value_profile = std::string())
+                                               const std::string& value_profile = std::string(),
+                                               const std::string& exh_profile = std::string(),
+                                               int exh_bottom = -1)
     {
-        const std::string key = value_profile.empty() ? path : (path + '\x1f' + value_profile);
+        std::string key = value_profile.empty() ? path : (path + '\x1f' + value_profile);
+        if (!exh_profile.empty() || exh_bottom >= 0)
+        { key += '\x1e' + exh_profile + '\x1e' + std::to_string(exh_bottom); }
         std::lock_guard<std::mutex> lk(mtx_);
         auto it = map_.find(key);
         if (it != map_.end())
@@ -275,7 +288,7 @@ public:
         // brief stall per boundary (a load is ~1 s; steady-state play does no loads at all, and the second
         // worker to want a profile now gets the cache hit instead of re-parsing) and bounds resident memory
         // to ~cap profiles + the one in-flight load.
-        std::shared_ptr<const MulliganProfile> loaded = load(path, value_profile);
+        std::shared_ptr<const MulliganProfile> loaded = load(path, value_profile, exh_profile, exh_bottom);
         lru_.push_front(key);
         map_[key] = Entry{loaded, lru_.begin()};
         while (map_.size() > cap_)
@@ -288,7 +301,9 @@ public:
 
 private:
     static std::shared_ptr<const MulliganProfile> load(const std::string& path,
-                                                       const std::string& value_profile)
+                                                       const std::string& value_profile,
+                                                       const std::string& exh_profile,
+                                                       int exh_bottom)
     {
         // AttachValueSidecar reads the override off the thread's arm (see ai/ValueArm.h). Set it for
         // the duration of THIS load only: the loading thread is a worker that will go on to run other
@@ -304,7 +319,27 @@ private:
         auto prof = std::filesystem::exists(path)
                         ? std::make_shared<MulliganProfile>(LoadDeckProfile(path))
                         : std::make_shared<MulliganProfile>(MulliganProfile::DefaultProfile());
-        AttachExhaustiveSidecar(*prof, path);
+        // A per-job keep table replaces the env / presence-gated attach entirely (same meanings as
+        // MTG_EXHAUSTIVE_PROFILE, except that a path with no table throws instead of running the
+        // static arm by accident).
+        if (exh_profile.empty()) { AttachExhaustiveSidecar(*prof, path); }
+        else if (exh_profile != "none" && exh_profile != "off" && exh_profile != "0")
+        {
+            auto cached = CachedExhaustiveKeep(exh_profile);
+            if (!cached || cached->empty())
+            { throw std::runtime_error("manifest job \"exhaustive_profile\": no keep table in " + exh_profile); }
+            prof->exhaustive_keep = std::move(cached);
+        }
+        // Forced bottoming: play follows the table's own flag when MTG_EXHAUSTIVE_BOTTOM is unset
+        // (AIEngine), so a copy with the flag set is exactly the env override, per job. The copy is cheap
+        // (the entries live in the shared on-disk table) and is made once per cache entry.
+        if (exh_bottom >= 0 && prof->exhaustive_keep
+            && prof->exhaustive_keep->bottoming_enabled != (exh_bottom == 1))
+        {
+            auto copy = std::make_shared<ExhaustiveKeepPolicy>(*prof->exhaustive_keep);
+            copy->bottoming_enabled = (exh_bottom == 1);
+            prof->exhaustive_keep = std::move(copy);
+        }
         AttachEvalSidecar(*prof, path);
         AttachValueSidecar(*prof, path);
         return prof;
@@ -696,6 +731,19 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("solve_charge_w")) { j.arm.solve_charge_w = jspec["solve_charge_w"].get<int>(); }
     if (jspec.contains("bp_chain_slot")) { j.arm.bp_chain_slot = jspec["bp_chain_slot"].get<int>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
+    // "exhaustive_profile": "none" | <path>, "exhaustive_bottom": bool -- the per-job keep/bottom policy
+    // (see Job::exh_profile). The env form of either would override or be overridden silently, and an
+    // arm that is not what it claims to be is the one failure an A/B cannot show, so mixing them throws.
+    j.exh_profile = jspec.value("exhaustive_profile", std::string());
+    if (jspec.contains("exhaustive_bottom")) { j.exh_bottom = jspec["exhaustive_bottom"].get<bool>() ? 1 : 0; }
+    {
+        const char* ep = std::getenv("MTG_EXHAUSTIVE_PROFILE");
+        const char* eb = std::getenv("MTG_EXHAUSTIVE_BOTTOM");
+        if (!j.exh_profile.empty() && ep)
+        { throw std::runtime_error("manifest job \"exhaustive_profile\" with MTG_EXHAUSTIVE_PROFILE also set -- use one"); }
+        if (j.exh_bottom >= 0 && eb && *eb)
+        { throw std::runtime_error("manifest job \"exhaustive_bottom\" with MTG_EXHAUSTIVE_BOTTOM also set -- use one"); }
+    }
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).
     // An UNKNOWN name throws rather than being ignored: a silently-dropped flag reads as "this arm was
     // measured" while the job actually ran the baseline, which is exactly how an A/B gets corrupted.
@@ -750,7 +798,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
                      / (deck_path.stem().string() + ".profile.json");
     }
     j.profile_path = profile_path.string();
-    std::shared_ptr<const MulliganProfile> prof = cache.get(j.profile_path, j.arm.value_profile);
+    std::shared_ptr<const MulliganProfile> prof = cache.get(j.profile_path, j.arm.value_profile, j.exh_profile, j.exh_bottom);
 
     // Resolve the effective play settings from the manifest's explicit depth/budget + the deck's value_play.
     // A case that OMITS depth falls to value_play, or -- with no enabled model -- the built-in default depth
@@ -1633,7 +1681,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // AIEngine (which owns its own copy). The shared handle is released at the end of this
                     // block; only the AIEngine's copy persists across the job's games.
                     std::shared_ptr<const MulliganProfile> prof =
-                        profile_cache.get(job.profile_path, job.arm.value_profile);
+                        profile_cache.get(job.profile_path, job.arm.value_profile,
+                                          job.exh_profile, job.exh_bottom);
                     // MTG_BATCH_STATE_DUMP=<substr>: pool-invariance instrument (default off; the
                     // value is a job-name substring filter, so raw getenv, not EnvOn). At every job
                     // switch whose name matches, print a content fingerprint of the profile handed to

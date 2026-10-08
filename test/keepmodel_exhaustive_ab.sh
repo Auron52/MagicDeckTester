@@ -16,11 +16,19 @@
 # Writes $OUT/delta.txt (mean B-A, turns) alongside the human REPORT.txt, so a caller can gate on it.
 #
 # Plays with the deck's REAL PLAY PROFILE: the manifest omits "depth" so the deck's enabled value_play
-# block owns the play depth (the shipping condition), with budget_ms as the CLI knob. Each arm runs as
-# ONE `mtg --batch` over all seeds -> a single pooled work queue (one load-imbalance tail per arm, not
-# one per seed -- the old per-seed sweep stranded 23 cores on each config's slow-storm tail). The
-# exhaustive keep/bottom policy is layered via MTG_EXHAUSTIVE_PROFILE on top of the base profile's
-# value_play; requires the exhaustive profile to already exist (generate via MTG_KEEP_EXHAUSTIVE).
+# block owns the play depth (the shipping condition), with budget_ms as the CLI knob. BOTH arms run in
+# ONE `mtg --batch` over all seeds -> a single pooled work queue and one tail (the per-job
+# "exhaustive_profile" / "exhaustive_bottom" manifest keys carry what used to be the per-arm
+# MTG_EXHAUSTIVE_PROFILE / MTG_EXHAUSTIVE_BOTTOM environment, which forced one batch per arm). The
+# exhaustive keep/bottom policy is layered on top of the base profile's value_play; requires the
+# exhaustive profile to already exist (generate via MTG_KEEP_EXHAUSTIVE).
+#
+# EARLY STOP (user, 2026-10-08: the new keep table "shouldn't even be close" to the static rules). The
+# arms are interleaved seed by seed, so seed PAIRS finish in order; test/keepmodel_early_stop.py is
+# polled while the batch runs and ends it as soon as arm B is CLEARLY better (paired t <= -8 over at
+# least 4 seed pairs: <= 0.31% chance of stopping when B is not better). One-sided: a B that looks worse
+# always runs the full planned sample, because a reject quarantines a live profile. KM_EARLY_STOP=0
+# turns it off; KM_EARLY_STOP_T / _MIN_PAIRS / _MIN_ABS tune it (stricter only, please).
 #
 #   KM_DECK=decks/<name>/<name>.txt KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh
 set -uo pipefail
@@ -53,21 +61,6 @@ log "=== EXHAUSTIVE keep/bottom A/B ($(stamp)) deck=$STEM mode=$MODE  [batched, 
 log "seeds=$nseed games=$GAMES budget-ms=$BUDGET (value_play owns depth)  confound=${MTG_CONFOUND_BOTTOM:-0}"
 log "exhaustive profile: $EXH"
 
-# One manifest, seeds pooled, PLAY-PROFILE driven (no "depth" key -> value_play owns the depth).
-MF=$OUT/manifest.json
-{ echo '{ "jobs": ['; first=1
-  for s in $SEEDS; do [ $first -eq 1 ] && first=0 || printf ',\n'
-    printf '  { "name": "s%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s }' \
-      "$s" "$DECK" "$BASE" "$GAMES" "$s" "$BUDGET"
-  done; printf '\n] }\n'; } > "$MF"
-
-# run_arm <tag> <exhaustive-profile|none> <exhaustive_bottom 0|1> -- ONE pooled batch (inherits any
-# MTG_CONFOUND_BOTTOM from the caller's environment).
-run_arm(){ local tag="$1" prof="$2" exb="$3"
-  MTG_EXHAUSTIVE_PROFILE="$prof" MTG_EXHAUSTIVE_BOTTOM="$exb" \
-    "$BIN" --batch "$MF" --threads 0 --game-log-dir "$OUT/wins_$tag" \
-    > "$OUT/batch_$tag.log" 2>"$OUT/batch_$tag.err"; }
-
 if [ "$MODE" = keep ]; then
   A_TAG=static;   A_PROF=none;  A_EXB=0     # static keep,      lookahead bottoming
   B_TAG=exh;      B_PROF=$EXH;  B_EXB=0     # exhaustive keep,  lookahead bottoming
@@ -86,8 +79,70 @@ else
   A_TAG=lookahead; A_PROF=$EXH; A_EXB=0     # exhaustive keep,  lookahead bottoming
   B_TAG=exhbottom; B_PROF=$EXH; B_EXB=1     # exhaustive keep,  blind exhaustive bottoming
 fi
-log "--- arm A=$A_TAG ($(stamp)) ---"; run_arm "$A_TAG" "$A_PROF" "$A_EXB"
-log "--- arm B=$B_TAG ($(stamp)) ---"; run_arm "$B_TAG" "$B_PROF" "$B_EXB"
+
+EARLY=${KM_EARLY_STOP:-1}
+EARLY_T=${KM_EARLY_STOP_T:-8}
+EARLY_MIN=${KM_EARLY_STOP_MIN_PAIRS:-4}
+EARLY_ABS=${KM_EARLY_STOP_MIN_ABS:-0}
+
+# One manifest, BOTH arms, interleaved seed by seed (A s1, B s1, A s2, ...), PLAY-PROFILE driven (no
+# "depth" key -> value_play owns the depth). Every job shares depth/budget/profile, so the batch's LPT
+# sort keeps manifest order and the pairs complete in order -- which is what lets the early stop judge
+# a prefix of seeds rather than whichever jobs happened to finish.
+jbool(){ [ "$1" = 1 ] && echo true || echo false; }
+MF=$OUT/manifest.json
+{ echo '{ "jobs": ['; first=1
+  for s in $SEEDS; do
+    for side in A B; do
+      if [ $side = A ]; then tag=$A_TAG prof=$A_PROF exb=$A_EXB; else tag=$B_TAG prof=$B_PROF exb=$B_EXB; fi
+      [ $first -eq 1 ] && first=0 || printf ',\n'
+      printf '  { "name": "s%s@%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s, "exhaustive_profile": "%s", "exhaustive_bottom": %s }' \
+        "$s" "$tag" "$DECK" "$BASE" "$GAMES" "$s" "$BUDGET" "$prof" "$(jbool "$exb")"
+    done
+  done; printf '\n] }\n'; } > "$MF"
+
+# ONE pooled batch for both arms (inherits any MTG_CONFOUND_BOTTOM from the caller's environment, which
+# applies to both arms alike). The per-arm env levers are cleared: the manifest carries them now, and
+# the batch refuses a job whose manifest key and env form are both set.
+log "--- arms A=$A_TAG B=$B_TAG: one pooled batch, seeds interleaved ($(stamp)) ---"
+rm -f "$OUT/EARLY_STOP.txt" "$OUT/EARLY_STOP_SEEDS.txt"
+env -u MTG_EXHAUSTIVE_PROFILE -u MTG_EXHAUSTIVE_BOTTOM \
+  "$BIN" --batch "$MF" --threads 0 --game-log-dir "$OUT/wins" > "$OUT/batch.log" 2> "$OUT/batch.err" &
+BPID=$!
+if [ "$EARLY" = 1 ]; then
+  while kill -0 "$BPID" 2>/dev/null; do
+    for _ in 1 2 3 4 5 6; do kill -0 "$BPID" 2>/dev/null || break; sleep 5; done
+    if python3 test/keepmodel_early_stop.py "$OUT/batch.log" "$A_TAG" "$B_TAG" "$GAMES" \
+         "$EARLY_MIN" "$EARLY_T" "$EARLY_ABS" "$SEEDS" "$OUT/EARLY_STOP_SEEDS.txt" \
+         > "$OUT/early_stop.tmp" 2>/dev/null; then
+      mv "$OUT/early_stop.tmp" "$OUT/EARLY_STOP.txt"
+      kill "$BPID" 2>/dev/null
+      log "EARLY STOP ($(stamp)): $(cat "$OUT/EARLY_STOP.txt")"
+      break
+    fi
+  done
+  rm -f "$OUT/early_stop.tmp"
+fi
+wait "$BPID"; brc=$?
+[ -e "$OUT/EARLY_STOP.txt" ] || [ "$brc" -eq 0 ] || log "batch exited $brc -- see $OUT/batch.err"
+log "--- batch done ($(stamp)) ---"
+# Per-arm logs in the per-arm format every reader parses ("s<seed>: played=..."), so the report below
+# and scripts/mullgen.sh's round pooling (test/keepmodel_pool_ab.py) are unchanged. After an early stop
+# they carry EXACTLY the seeds the stop rule judged (EARLY_STOP_SEEDS.txt), so the reported delta is the
+# one the decision was made on; otherwise every completed job.
+python3 - "$OUT" "$A_TAG" "$B_TAG" <<'SPLIT'
+import os, re, sys
+out, tags = sys.argv[1], sys.argv[2:]
+sf = os.path.join(out, "EARLY_STOP_SEEDS.txt")
+keep = set(open(sf).read().split()) if os.path.exists(sf) else None
+lines = open(os.path.join(out, "batch.log")).read().splitlines()
+for t in tags:
+    with open(os.path.join(out, f"batch_{t}.log"), "w") as w:
+        for ln in lines:
+            m = re.match(r"s(\d+)@(\S+): (.*)", ln)
+            if m and m.group(2) == t and (keep is None or m.group(1) in keep):
+                w.write(f"s{m.group(1)}: {m.group(3)}\n")
+SPLIT
 
 python3 - "$OUT" "$A_TAG" "$B_TAG" "$SEEDS" <<'PY' | tee -a "$REPORT"
 import sys, os, re
