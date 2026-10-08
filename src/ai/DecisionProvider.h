@@ -2369,6 +2369,36 @@ public:
         const GameState& s, int controller, int self_index,
         const std::vector<int>& legal) const;
 
+    // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
+    // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is
+    // always its front (the d0 / beyond-horizon pick and the human prompt's default). Evaluated on
+    // the state AT THE BOUNCE (after the plan's casts paid), because which lands are spent is what
+    // decides it. USER 2026-10-08: "searched with heuristics ... heuristic it more often than not,
+    // since the decision is usually an easy one" -- so the easy cases narrow to ONE:
+    //   * never return another Karoo, or a land carrying an Aura, while any other land is returnable
+    //     (the replayed Karoo bounces again; the Aura dies) -- the order's own -1000 / -500 tiers;
+    //   * a TAPPED land that re-enters UNTAPPED costs nothing at all (no mana this turn, a clean
+    //     replay), so it dominates every untapped land and every land that re-enters tapped -- the
+    //     candidates are then the tapped clean lands alone (plus a tapped DEPLETION land the replay
+    //     would refresh, which is a real alternative, not a dominated one);
+    //   * otherwise an UNTAPPED land that also re-enters tapped is dominated by a tapped one (it
+    //     loses the same tempo next turn AND its mana this turn);
+    //   * identical lands fold (same name, same tapped state, same counters); and with no other
+    //     land in hand the TAPPED lands of one re-entry class fold too -- the returned land is next
+    //     turn's drop, so which colour sits in hand for the rest of a turn whose mana is spent is
+    //     moot. UNTAPPED lands never fold by colour: their mana is still live this turn (combat,
+    //     main 2), which is exactly the contested case (Dragons s4004 gi47: a floatable Mountain
+    //     whose {R} dies at the end of main 1 vs Haven of the Spirit Dragon's restricted mana).
+    // At most kBounceSearchWidth candidates survive. `why` (optional) receives the deciding rule
+    // (BounceRule) for the MTG_BOUNCE_STATS census. DecisionUnpruned(KarooBounce) returns the whole
+    // ranked list. Never empty when `legal` is not.
+    enum BounceRule { kBounceOnly = 0, kBounceTappedClean, kBounceIdentical, kBounceReplayFold,
+                      kBounceDominated, kBounceContested, kBounceUnpruned, kBounceRuleCount };
+    static constexpr std::size_t kBounceSearchWidth = 3;
+    virtual std::vector<int> BounceSearchCandidates(
+        const GameState& s, int controller, int self_index,
+        const std::vector<int>& legal, int* why = nullptr) const;
+
     // LegendKeepIndex -- legend rule (CR 704.5j): you control two or more legendary permanents with
     // the same name, so you CHOOSE one to keep and the rest go to the graveyard. `duplicates` is the
     // battlefield indices of one such same-name group, ascending; return the index to KEEP.

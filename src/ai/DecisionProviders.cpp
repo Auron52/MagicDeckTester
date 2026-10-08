@@ -86,6 +86,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"digresolve", UnprunedGate::DigResolve},
     {"digchain",   UnprunedGate::DigChain},
     {"devourcount",UnprunedGate::DevourCount},
+    {"karoobounce",UnprunedGate::KarooBounce},
 };
 
 const char* GateName(UnprunedGate g)
@@ -1669,6 +1670,124 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
     // The original scan kept a strict `>` winner, so the LOWEST index wins ties -- stable_sort on a
     // descending score over an ascending input reproduces that.
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return score(a) > score(b); });
+    return out;
+}
+
+std::vector<int> DecisionProvider::BounceSearchCandidates(
+    const GameState& s, int controller, int self_index, const std::vector<int>& legal,
+    int* why) const
+{
+    // The ORDER is BounceLandCandidates' (whichever provider overrides it); this only decides how
+    // much of it the search sees. See the header for the rules and why each is (near-)sound.
+    const std::vector<int> ranked = BounceLandCandidates(s, controller, self_index, legal);
+    auto set_why = [&](int r) { if (why != nullptr) { *why = r; } };
+    if (ranked.size() <= 1) { set_why(kBounceOnly); return ranked; }
+    if (DecisionUnpruned(UnprunedGate::KarooBounce)) { set_why(kBounceUnpruned); return ranked; }
+
+    static const bool s_spare_aura_env = EnvOn("MTG_BOUNCE_SPARE_AURA", true);
+    const bool spare_aura = heurarm::Flag(heurarm::BOUNCE_SPARE_AURA, s_spare_aura_env);
+    struct Info { int idx; bool karoo, aura, tapped, clean, refresh; int dep; std::string name; };
+    std::vector<Info> info;
+    info.reserve(ranked.size());
+    for (int i : ranked)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        Info f;
+        f.idx    = i;
+        f.karoo  = d != nullptr && d->params.etb_bounce_land;
+        f.aura   = false;
+        if (spare_aura)
+        {
+            for (const Permanent& q : s.battlefield)
+            { if (q.aura_attached_to != 0 && q.aura_attached_to == p.card.m_number) { f.aura = true; break; } }
+        }
+        f.tapped = p.tapped;
+        f.clean  = !(d != nullptr && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
+        f.dep    = 0;
+        for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { f.dep += c.count; } }
+        // A spent DEPLETION land the replay would refresh (Remote Farm on its last counter): returning
+        // it trades next turn's tempo for fresh counters -- a real alternative, never folded away.
+        f.refresh = p.tapped && d != nullptr && d->params.enters_tapped_with_depletion > 0
+                 && f.dep < d->params.enters_tapped_with_depletion;
+        f.name   = p.card.m_name.str();
+        info.push_back(std::move(f));
+    }
+    // Exclusions that hold while ANY other land is returnable (the order already ranks them last).
+    auto drop_if_others = [&](auto pred) {
+        bool any_other = false;
+        for (const Info& f : info) { if (!pred(f)) { any_other = true; break; } }
+        if (!any_other) { return; }
+        info.erase(std::remove_if(info.begin(), info.end(), pred), info.end());
+    };
+    drop_if_others([](const Info& f) { return f.karoo; });
+    drop_if_others([](const Info& f) { return f.aura; });
+
+    bool hand_land = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    { if (c.IsLand()) { hand_land = true; break; } }
+    bool any_free_clean = false, any_tapped = false;
+    for (const Info& f : info)
+    {
+        if (f.tapped) { any_tapped = true; }
+        if (f.tapped && f.clean) { any_free_clean = true; }
+    }
+    bool cut_tapped_clean = false, cut_dominated = false;
+    std::vector<const Info*> keep;
+    for (const Info& f : info)
+    {
+        if (any_free_clean)
+        {
+            // A spent land with a clean replay costs nothing: only those (and a refreshing depletion
+            // land) stay.
+            if (!(f.tapped && (f.clean || f.refresh))) { cut_tapped_clean = true; continue; }
+        }
+        else if (any_tapped && !f.tapped && !f.clean)
+        {
+            cut_dominated = true;   // untapped AND re-enters tapped: a tapped land loses less
+            continue;
+        }
+        keep.push_back(&f);
+    }
+    // Folds, walking in the provider's order so each group keeps the provider's preferred copy.
+    std::vector<std::string> seen;
+    std::vector<int> out;
+    bool folded_identical = false, folded_replay = false;
+    for (const Info* f : keep)
+    {
+        std::string key;
+        if (f->tapped && !f->refresh && !hand_land)
+        {
+            key = std::string("T*") + (f->clean ? "c" : "t");    // replay fold (no other land in hand)
+        }
+        else
+        {
+            key = std::string(f->tapped ? "T|" : "U|") + f->name + "|" + std::to_string(f->dep);
+        }
+        if (std::find(seen.begin(), seen.end(), key) != seen.end())
+        {
+            if (key[1] == '*') { folded_replay = true; } else { folded_identical = true; }
+            continue;
+        }
+        seen.push_back(key);
+        out.push_back(f->idx);
+    }
+    // The front is the d0 / beyond-horizon pick and the human prompt's default; the narrowing must
+    // never drop it. (No rule above can -- each removes only what the order ranks below a survivor --
+    // but the invariant is what the base plan's -1 pin relies on, so it is enforced, not assumed.)
+    if (out.empty() || out.front() != ranked.front())
+    {
+        out.erase(std::remove(out.begin(), out.end(), ranked.front()), out.end());
+        out.insert(out.begin(), ranked.front());
+    }
+    if (out.size() > kBounceSearchWidth) { out.resize(kBounceSearchWidth); }
+    // The census tag: contested, else the first rule (in this order) that removed something.
+    (void)folded_identical;
+    set_why(out.size() > 1       ? kBounceContested
+          : cut_tapped_clean     ? kBounceTappedClean
+          : cut_dominated        ? kBounceDominated
+          : folded_replay        ? kBounceReplayFold
+          :                        kBounceIdentical);   // identical copies, or the Karoo / Aura exclusions
     return out;
 }
 

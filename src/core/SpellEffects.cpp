@@ -1978,6 +1978,36 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
         const std::vector<int> ranked =
             ResolveProvider(state).BounceLandCandidates(state, controller, self_index, legal);
         if (!ranked.empty()) { pick = ranked.front(); }
+        // SEARCHED BOUNCE (MTG_BOUNCE_SEARCH): the plan's pin picks candidate k of the provider's
+        // narrowed set ON THIS STATE (Plan::bounce_choice; see ScriptedBounceChoice). No pin (-1) is
+        // the front -- the same land as the line above, so the d0 runner, the beyond-horizon playout
+        // and the human prompt's default are unchanged. Human play never carries a pin (the
+        // enumeration does not fan it; the person answers the prompt below).
+        if (KarooBounceSearchOn() && !ranked.empty())
+        {
+            const bool census = bouncestats::Enabled() && g_bounce_searched_site;
+            const bool want   = g_scripted_bounce_choice >= 1 || census;
+            if (want)
+            {
+                int why = -1;
+                const std::vector<int> cands = ResolveProvider(state).BounceSearchCandidates(
+                    state, controller, self_index, legal, &why);
+                if (census) { bouncestats::Record(cands.size(), why, g_real_resolution); }
+                if (g_scripted_bounce_choice >= 1 && !cands.empty())
+                {
+                    if (bouncestats::Enabled())
+                    {
+                        bouncestats::g_pinned.fetch_add(1, std::memory_order_relaxed);
+                        if (static_cast<std::size_t>(g_scripted_bounce_choice) >= cands.size())
+                        { bouncestats::g_clamped.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    const std::size_t k = std::min<std::size_t>(
+                        static_cast<std::size_t>(g_scripted_bounce_choice), cands.size() - 1);
+                    pick = cands[k];
+                }
+            }
+        }
+        g_scripted_bounce_choice = -1;   // the first bounce of the apply consumes the pin
     }
     if (pick < 0) { pick = self_index; legal.push_back(self_index); }  // mandatory: only the karoo
     // HUMAN PLAY WIDENING: "return a land you control to its owner's hand" makes the karoo ITSELF a

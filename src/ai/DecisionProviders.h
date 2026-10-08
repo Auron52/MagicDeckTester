@@ -123,6 +123,9 @@ enum class UnprunedGate
                   // on ONE nested ladder (DevourRankOrder), so opening this adds back the rungs
                   // between them -- the fodder the provider argued is strictly worse kept. Human
                   // play always keeps the full fan, so a person picks the count themselves.
+    KarooBounce,  // Karoo bounce (Plan::bounce_choice) candidate set opened to every returnable land
+                  // instead of DecisionProvider::BounceSearchCandidates' narrowed set (the easy-case
+                  // dominance folds). Human play never fans it: the human answers the bounce prompt.
     _Count
 };
 

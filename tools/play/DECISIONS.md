@@ -892,8 +892,9 @@ same apply the autonomous lever `MTG_BOUNCE_UNTAPPED_FIRST` uses (`FloatKarooBou
 returned land whose tap is free and unrestricted is tapped as it leaves, and the history says
 `Forest -- tapped for {G} in response to the bounce`. The bounce prompt's note says so. Not floated:
 pain / energy / life taps, depletion lands, filters and other conversion sources, spend-restricted
-mana. The bounce prompt's DEFAULT is unchanged (the provider's order stays on the autonomous lever);
-the human picks the land.
+mana. The bounce prompt's DEFAULT is the provider's top pick -- since 2026-10-08 (the lever went DEFAULT
+ON with the searched bounce) the USER's order: a land that re-enters untapped before one that re-enters
+tapped. The human picks the land; human play never fans the bounce as a plan dimension.
 
 The bounce is answered AFTER the line is committed, so `--validate-line` never sees it: the menu match
 is bounce-agnostic, and CheckLine's advisory trial-apply takes the default pick. The pick is applied for
@@ -903,6 +904,7 @@ back as a dropped cast.
 
 **Replay of OLD recordings.** The reference writer stamps `"karoo_float": 1`;
 `test/viewer_protocol_check.py`'s `recording_rule_args` passes `--legacy-karoo-float` for a reference
-without it, so a game recorded before the rule replays exactly as played. `MTG_HUMAN_KAROO_FLOAT=0` is
-the env twin. Pinned by `test/scenarios/bruna_human_karoo_float_{wild_growth,legacy}.json` and
+without it, so a game recorded before the rule replays exactly as played: no float, and the OLD bounce
+order as the default for any bounce prompt the recording predates. `MTG_HUMAN_KAROO_FLOAT=0` is the env
+twin. Pinned by `test/scenarios/bruna_human_karoo_float_{wild_growth,legacy}.json` and
 `test/viewer_client_check.js` (`testKarooFloatWildGrowth`, the user's game through the real client).

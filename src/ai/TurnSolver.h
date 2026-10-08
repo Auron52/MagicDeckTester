@@ -41,11 +41,12 @@ struct ContPins
     int etbcounter = -1;   // Plan::etbcounter_choice
     int tutor      = -1;   // Plan::tutor_choice
     int scry       = -1;   // Plan::scry_choice (the continuation's own land drop)
+    int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     bool Any() const
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
-            || scry >= 0 || !sac.empty();
+            || scry >= 0 || bounce >= 1 || !sac.empty();
     }
 };
 
@@ -999,6 +1000,15 @@ public:
         // LandPlayOptions::rad_mode by BOTH worlds. Parallels fetch_target / land_face /
         // scry_choice: a plan-level land sub-decision, searched rather than narrowed.
         int rad_mode = -1;
+
+        // SEARCHED KAROO BOUNCE (MTG_BOUNCE_SEARCH; USER 2026-10-08). When land_to_play is a Karoo
+        // (etb_bounce_land), which land its ETB returns: -1 (default) == the provider's front pick at
+        // the bounce; k >= 1 == candidate k of DecisionProvider::BounceSearchCandidates on the state
+        // AT THE BOUNCE (after this plan's casts paid -- which lands are spent is what decides it).
+        // AppendSubdecisionAxes emits one variant per further candidate and the SEARCH picks; both
+        // worlds install it around the Karoo play (ScriptedBounceChoice). Parallels scry_choice /
+        // tutor_choice: a resolution-time pick bound by index, clamped at resolution.
+        int bounce_choice = -1;
 
         // ETB-dig pick (Acclaimed Contender's "look at the top 5, put a Knight into your hand"):
         // which candidate of the provider's ranked EtbDigCandidates the dig takes. -1 (default) ==

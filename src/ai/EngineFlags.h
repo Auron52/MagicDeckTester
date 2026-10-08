@@ -6,6 +6,7 @@
 // environment is read once per process, same as before.
 #include "../core/EnvFlags.h"
 #include "HeuristicArm.h"
+#include "../core/GameLogger.h"   // HumanPlayActive / HumanKarooFloatRuleOn (the legacy Karoo replay gate)
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -128,7 +129,9 @@ inline bool SolveCombatSwapOn()
     return heurarm::Flag(heurarm::SOLVE_COMBAT_SWAP, env_on);
 }
 
-// MTG_BOUNCE_UNTAPPED_FIRST -- DEFAULT OFF until measured (USER 2026-10-06). ONE lever, two halves
+// MTG_BOUNCE_UNTAPPED_FIRST -- DEFAULT ON (ADOPTED 2026-10-08 with MTG_BOUNCE_SEARCH below, after the
+// held-out A/B in docs/design/karoo-tap-in-response.md; =0 restores the old order with no float).
+// The USER chose the model on 2026-10-06. ONE lever, two halves
 // that are only sound TOGETHER, so they are measured jointly:
 //   (1) TAP IN RESPONSE: a Karoo's "return a land you control to its owner's hand" is a triggered
 //       ability (CR 603.2), so before it resolves the controller holds priority and may activate the
@@ -146,8 +149,30 @@ inline bool SolveCombatSwapOn()
 // slot so a pooled batch carries both arms.
 inline bool KarooTapInResponseOn()
 {
-    static const bool env_on = EnvOn("MTG_BOUNCE_UNTAPPED_FIRST");
+    static const bool env_on = EnvOn("MTG_BOUNCE_UNTAPPED_FIRST", true);   // DEFAULT ON; =0 reverts
+    // REPLAY of a reference recorded before the Karoo rules (no `karoo_float` stamp ->
+    // --legacy-karoo-float, or its env twin MTG_HUMAN_KAROO_FLOAT=0): the game was played with no
+    // float AND the old bounce order as the prompt's default, so both halves are off for it. Human
+    // play only -- autonomous play never reads the legacy gate.
+    if (HumanPlayActive() && !HumanKarooFloatRuleOn()) { return false; }
     return heurarm::Flag(heurarm::BOUNCE_UNTAPPED_FIRST, env_on);
+}
+
+// MTG_BOUNCE_SEARCH -- DEFAULT ON (ADOPTED 2026-10-08 with the lever above). The Karoo bounce as a SEARCHED plan dimension (USER 2026-10-08: "The Karoo
+// decision should also be searched with heuristics. However, we may want to heuristic it more often
+// than not, since the decision is usually an easy one."). BounceKarooLand used to take
+// BounceLandCandidates().front() at every node -- a provider top pick taken without branching inside
+// the search window, which the no-greedy rule forbids; the held-out A/B of the lever found the game
+// it costs (Dragons s4004 gi47, docs/design/karoo-tap-in-response.md). On: the provider narrows the
+// returnable lands (DecisionProvider::BounceSearchCandidates, one candidate in the easy cases), the
+// enumeration emits one plan per further candidate (Plan::bounce_choice, AppendSubdecisionAxes), and
+// both apply worlds pin it (ScriptedBounceChoice). The d0 runner and the playout beyond the horizon
+// keep the front pick (they carry no pin). Read by the enumeration and BounceKarooLand; heurarm slot
+// so a pooled batch carries both arms.
+inline bool KarooBounceSearchOn()
+{
+    static const bool env_on = EnvOn("MTG_BOUNCE_SEARCH", true);   // DEFAULT ON; =0 = the front() pick
+    return heurarm::Flag(heurarm::BOUNCE_SEARCH, env_on);
 }
 
 // MTG_NEEDS_TAP_ORDER -- DEFAULT OFF until measured. Needs-based mana-source choice: see the

@@ -42,6 +42,7 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.etbcounter = p.etbcounter_choice;
     c.tutor      = p.tutor_choice;
     c.scry       = p.scry_choice;
+    c.bounce     = p.bounce_choice;
     c.sac        = p.sac_pins;
     return c;
 }

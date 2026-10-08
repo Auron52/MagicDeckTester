@@ -6918,6 +6918,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
                                       : "(heuristic)";
     if (!p.land_face.empty()) { land += "/" + p.land_face; }
     if (p.rad_mode >= 0)      { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
+    if (p.bounce_choice >= 1) { land += "[bounce" + std::to_string(p.bounce_choice) + "]"; }
     if (p.scry_choice >= 0)   { land += "[scry" + std::to_string(p.scry_choice) + "]"; }
     return "land=" + land + ": " + s;
 }
@@ -15401,6 +15402,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     folds(p.land_face);
     fold(static_cast<uint64_t>(p.scry_choice + 2) * 37 + static_cast<uint64_t>(p.etbdig_choice + 2));
     fold(static_cast<uint64_t>(p.rad_mode + 2) * 41);
+    fold(static_cast<uint64_t>(p.bounce_choice + 2) * 83);
     fold(static_cast<uint64_t>(p.tutor_choice + 2) * 41 + static_cast<uint64_t>(p.tapmode_choice + 2));
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
@@ -15682,6 +15684,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
         && p.land_face.empty()
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
+        && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
@@ -15705,7 +15708,8 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
 {
     return p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
         || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
-        || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0;
+        || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0
+        || p.bounce_choice >= 1;
 }
 // SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
 static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
@@ -30814,6 +30818,7 @@ namespace solvememo
         // play; it makes the 813k/604k-style clean records mean what they claim.
         if (a.atk_dork_release != b.atk_dork_release || a.scry_choice != b.scry_choice
             || a.rad_mode != b.rad_mode || a.etbdig_choice != b.etbdig_choice
+            || a.bounce_choice != b.bounce_choice
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
@@ -31061,7 +31066,11 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
         payable = TapForCostDirect(cs, o.cost, for_creature);
     }
     // A bounce land is played after the casts (ApplyPlanDirect's Karoo deferral) -- before combat.
-    if (payable && !karoo_land.empty()) { PlayLandByName(cs, karoo_land, plan.fetch_target, true, plan.land_face, plan.rad_mode); }
+    if (payable && !karoo_land.empty())
+    {
+        ScriptedBounceChoice _sbc(plan.bounce_choice);   // the plan's searched bounce (Plan::bounce_choice)
+        PlayLandByName(cs, karoo_land, plan.fetch_target, true, plan.land_face, plan.rad_mode);
+    }
     return payable && TapForCostDirect(cs, sw.cost, /*for_creature=*/false);
 }
 
@@ -35921,6 +35930,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // Pin the land's ETB scry/surveil disposition when this plan variant carries one
                     // (searched, not narrowed -- see Plan::scry_choice). Consumed by the first look.
                     ScriptedTopChoice _stc(plan.scry_choice);
+                    // ...and a Karoo's searched bounce (Plan::bounce_choice), when the drop is not
+                    // deferred (MTG_NO_KAROO_DEFER). Consumed by the first bounce; -1 is the front.
+                    ScriptedBounceChoice _sbc(plan.bounce_choice);
                     PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay,
                                    plan.land_face, plan.rad_mode);
                 }
@@ -36576,6 +36588,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan's land play installs its own -- a continuation land used to scry by heuristic.
         std::optional<ScriptedTopChoice> stc;
         if (sp.scry_choice >= 0) { stc.emplace(sp.scry_choice); }
+        // ...and its own searched Karoo bounce (Plan::bounce_choice), replayed by the executor from
+        // the continuation's ContPins exactly like the scry pin.
+        ScriptedBounceChoice sbc(sp.bounce_choice);
         if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face, sp.rad_mode))
         { return; }
         if (out_breakpoint != nullptr && sink != nullptr)
@@ -40251,7 +40266,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (karoo_deferred)
     {
         karoo_deferred = false;
-        PlayLandByName(state, karoo_land_name, karoo_fetch);
+        {
+            // The plan's SEARCHED bounce (Plan::bounce_choice): candidate k of the provider's narrowed
+            // set on THIS state, the one the casts above just paid from. -1 = the front. Lockstep
+            // with AIEngine::TakeTurn's deferred Karoo play.
+            ScriptedBounceChoice _sbc(plan.bounce_choice);
+            PlayLandByName(state, karoo_land_name, karoo_fetch);
+        }
         // ...then the land Auras that named it (Bruna sweep D): cast now, on the karoo.
         std::vector<std::pair<std::string, int>> held;
         held.swap(karoo_host_auras);
@@ -49309,6 +49330,155 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED KAROO BOUNCE (MTG_BOUNCE_SEARCH, Plan::bounce_choice; USER 2026-10-08: "The Karoo
+    // decision should also be searched with heuristics"). A Karoo's "return a land you control"
+    // resolves INSIDE the plan's apply (after its casts, the deferral), so like the scry and the tutor
+    // it cannot be an Action: one variant per further candidate of the provider's narrowed set
+    // (DecisionProvider::BounceSearchCandidates), bound by INDEX and resolved on the bounce's own
+    // state. The set depends on which lands the casts spent, which only the apply knows, so the
+    // width here is an UPPER BOUND -- the distinct returnable land names (the narrowed set never
+    // holds two of one name; see the folds) -- and an index the resolution state does not offer
+    // clamps onto a sibling's state, which the post-apply dedup drops for one apply (PlanIsAxisVariant
+    // -> PlanDupSkippable: the duplicate-not-whiff rule of the tutor / sac-land axes). Base plans only
+    // (one axis at a time, so the cost stays additive), and never in human play: the person answers
+    // the bounce prompt themselves. Last of the axes, so no other fan clones a bounce variant.
+    if (KarooBounceSearchOn() && !HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        const bool unpruned = DecisionUnpruned(UnprunedGate::KarooBounce);
+        // ---- SIZING: an UPPER BOUND on the resolution width, as tight as can be proven cheaply ----
+        // Board facts, computed once per Karoo name (the board is the node's; only the hand differs).
+        struct KarooSizing
+        {
+            std::string karoo;
+            std::size_t distinct = 0;       // D: distinct returnable names (no Karoo / Aura while others)
+            std::size_t clean_names = 0;    // C: distinct names of returnable lands with a clean replay
+            std::size_t depletion = 0;      // R: distinct depletion-land names (a tap can make them refresh)
+            std::size_t exact_free = 0;     // the narrowed width on this board, nothing spent (exact)
+            bool clean_tapped = false;      // a returnable clean land is ALREADY spent -> T_u non-empty
+            int  nonclean_capacity = 0;     // mana the board can make WITHOUT tapping a clean land
+            bool uncertain_mana = false;    // sac-for-mana sources the capacity cannot see
+            bool watcher_draws = false;     // a permanent that draws when the plan casts / enters
+            std::vector<Card> hand;         // the hand once the Karoo has left it
+            bool any_full = false;          // unpruned: every land
+            std::size_t lands = 0;
+        };
+        std::vector<KarooSizing> sizing;
+        auto size_for = [&](const std::string& karoo) -> const KarooSizing&
+        {
+            for (const KarooSizing& z : sizing) { if (z.karoo == karoo) { return z; } }
+            KarooSizing z;
+            z.karoo = karoo;
+            GameState nk = state;
+            std::vector<Card>& h = nk.ActivePlayer().hand;
+            for (auto it = h.begin(); it != h.end(); ++it) { if (it->m_name == karoo) { h.erase(it); break; } }
+            z.hand = h;
+            std::vector<int> legal;
+            std::vector<std::string> names_all, names_plain, names_clean, names_dep;
+            auto add_u = [](std::vector<std::string>& v, const std::string& n)
+            { if (std::find(v.begin(), v.end(), n) == v.end()) { v.push_back(n); } };
+            int clean_untapped_mana = 0;
+            for (int bi = 0; bi < static_cast<int>(nk.battlefield.size()); ++bi)
+            {
+                const Permanent& bp = nk.battlefield[static_cast<std::size_t>(bi)];
+                if (bp.controller_index != me) { continue; }
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd != nullptr && IsPaySacSource(*bd)) { z.uncertain_mana = true; }
+                if (bd != nullptr && (bd->params.own_creature_enters_draw > 0 || bd->params.draw_on_aura_cast
+                                      || bd->params.draw_on_equipment_etb)) { z.watcher_draws = true; }
+                if (!bp.card.IsLand()) { continue; }
+                legal.push_back(bi);
+                ++z.lands;
+                const std::string nm = bp.card.m_name.str();
+                add_u(names_all, nm);
+                bool aura = false;
+                for (const Permanent& q : nk.battlefield)
+                { if (q.aura_attached_to != 0 && q.aura_attached_to == bp.card.m_number) { aura = true; break; } }
+                if ((bd != nullptr && bd->params.etb_bounce_land) || aura) { continue; }
+                add_u(names_plain, nm);
+                const bool clean = !(bd != nullptr && (bd->params.enters_tapped
+                                                       || bd->params.enters_tapped_with_depletion > 0));
+                if (bd != nullptr && bd->params.enters_tapped_with_depletion > 0) { add_u(names_dep, nm); }
+                if (clean)
+                {
+                    add_u(names_clean, nm);
+                    if (bp.tapped) { z.clean_tapped = true; }
+                    else { clean_untapped_mana += (bd != nullptr && bd->params.produces_amount > 0)
+                                                ? bd->params.produces_amount : 1; }
+                }
+            }
+            z.distinct    = names_plain.empty() ? std::min<std::size_t>(names_all.size(), 1) : names_plain.size();
+            z.clean_names = names_clean.size();
+            z.depletion   = names_dep.size();
+            z.nonclean_capacity = AvailableManaPool(nk).Total() - clean_untapped_mana;
+            z.exact_free  = legal.empty() ? 0
+                          : ResolveProvider(nk).BounceSearchCandidates(nk, me, -1, legal).size();
+            sizing.push_back(std::move(z));
+            return sizing.back();
+        };
+        // Per plan. Exact when the plan spends nothing (the bounce sees this board). Otherwise, when
+        // the plan must SPEND A CLEAN LAND -- one is spent already, or its mana exceeds everything
+        // else the board can make and nothing in the plan makes mana -- the resolution set is the
+        // spent clean lands (DecisionProvider::BounceSearchCandidates' first rule): one candidate
+        // when no land can be in hand by then (replay fold), else one per clean name; plus a
+        // depletion land the replay could refresh. Anything less certain keeps the distinct-name
+        // bound. Never below the truth, so no candidate is lost; above it, the clamped variant lands
+        // on a sibling's state and the post-apply dedup drops it for one apply.
+        auto width_of = [&](const TurnSolver::Plan& p, const KarooSizing& z) -> std::size_t
+        {
+            if (unpruned) { return z.lands; }
+            int spend = 0;
+            bool has_x = false, producer = false, may_draw = !p.breakpoint_actions.empty() || z.watcher_draws;
+            std::vector<Card> hand = z.hand;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::SacForMana) { producer = true; }
+                if (!a.alt_cost) { spend += a.cost.ManaValue(); }
+                if (a.cost.has_x) { has_x = true; }
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                for (auto it = hand.begin(); it != hand.end(); ++it)
+                { if (it->m_name == a.card_name) { hand.erase(it); break; } }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d == nullptr) { producer = true; may_draw = true; continue; }
+                const CardParams& q = d->params;
+                if ((!d->card.IsLand() && !q.produces.empty()) || q.ritual_floating_mana > 0
+                    || q.creates_treasures > 0 || q.etb_creates_treasures > 0 || q.mana_rock)
+                { producer = true; }
+                if (q.cast_draw > 0 || q.etb_self_draw > 0 || q.tutor_to_hand || q.tutor_to_top)
+                { may_draw = true; }
+            }
+            std::size_t w = z.distinct;
+            if (spend == 0 && !has_x) { w = z.exact_free; }
+            else if (z.clean_tapped
+                     || (!producer && !z.uncertain_mana && spend > z.nonclean_capacity))
+            {
+                bool land_in_hand = may_draw;
+                for (const Card& c : hand) { if (c.IsLand()) { land_in_hand = true; break; } }
+                w = (land_in_hand ? std::max<std::size_t>(z.clean_names, 1) : 1) + z.depletion;
+            }
+            return std::min({ w, z.distinct, DecisionProvider::kBounceSearchWidth });
+        };
+        std::vector<TurnSolver::Plan> extra;
+        for (std::size_t i = 0; i < n_before_axes; ++i)
+        {
+            const TurnSolver::Plan& p = all[i];
+            if (!p.land_decided || p.land_to_play.empty() || p.bounce_choice >= 0
+                || p.bp_choice >= 0) { continue; }
+            const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
+            if (ld == nullptr || !ld->params.etb_bounce_land) { continue; }
+            const std::size_t width = width_of(p, size_for(p.land_to_play));
+            if (bouncestats::Enabled()) { bouncestats::RecordEmit(width); }
+            for (std::size_t k = 1; k < width; ++k)
+            {
+                TurnSolver::Plan v = p;
+                v.bounce_choice = static_cast<int>(k);
+                extra.push_back(std::move(v));
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     // Axis-variant attribution (MTG_BRANCH_STATS; see branchstats::RecordAxis). Classified by
     // the choice tag -- the fans above set exactly one per variant ("one axis at a time").
     if (branchstats::Enabled())
@@ -49439,7 +49609,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 400;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05)
+static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -49550,7 +49720,8 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
         if (all[i].land_decided && !all[i].land_to_play.empty())
         {
             k.push_back(id_of("Pland|" + all[i].land_to_play + "|" + all[i].fetch_target + "|"
-                              + all[i].land_face + "|" + std::to_string(all[i].rad_mode), 'P'));
+                              + all[i].land_face + "|" + std::to_string(all[i].rad_mode)
+                              + "|" + std::to_string(all[i].bounce_choice), 'P'));
         }
         // EXACT-MATCH KEY for EVERY plan-level sub-decision axis, pushed unconditionally (including
         // each field's "unset" -1/0), so two plans disagreeing on any axis each hold a key the other
@@ -49573,6 +49744,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             const TurnSolver::Plan& pl = all[i];
             add(pl.land_decided); adds(pl.land_to_play); adds(pl.fetch_target); adds(pl.land_face);
             add(pl.rad_mode);     add(pl.scry_choice);   add(pl.etbdig_choice);
+            add(pl.bounce_choice);
             add(pl.tutor_choice); add(pl.tapmode_choice); add(pl.freshmode_choice);
             add(pl.lackey_choice); add(pl.fling_victim_choice);
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);

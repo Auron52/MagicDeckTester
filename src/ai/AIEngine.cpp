@@ -3797,6 +3797,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // Same pin the search applied when it scored this plan (Plan::scry_choice), so
                     // the realised land ETB disposes of the top card exactly as the line assumed.
                     ScriptedTopChoice _stc(plan.scry_choice);
+                    ScriptedBounceChoice _sbc(plan.bounce_choice);   // a non-deferred Karoo's searched bounce
                     TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face,
                                         plan.rad_mode);
                 }
@@ -4499,6 +4500,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // empty tag is how a later pin-less continuation stops an earlier one's pins leaking forward.
         std::optional<ContPinScope> rec_pins;
         int rec_scry = -1;
+        int rec_bounce = -1;
         std::vector<Action> rec_acts;   // board activations, dispatched after the casts (below)
         for (const Action& a : recs)
         {
@@ -4507,10 +4509,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 rec_pins.reset();
                 rec_pins.emplace(a.cont_pins.get());
                 rec_scry = a.cont_pins->scry;
+                rec_bounce = a.cont_pins->bounce;
             }
             if (a.kind == Action::Kind::PlayLand)
             { std::optional<ScriptedTopChoice> _rstc;   // the continuation land's own scry pin
               if (rec_scry >= 0) { _rstc.emplace(rec_scry); rec_scry = -1; }
+              // ...and its searched Karoo bounce (Plan::bounce_choice), as ApplyPlanDirect's
+              // bp_play_searched_land installs it. -1 = the front.
+              ScriptedBounceChoice _rsbc(rec_bounce); rec_bounce = -1;
               // Replay the land the SEARCH played, not just a land with the same name. Passing
               // only the name here replayed an MDFC as its FRONT face and a fetchland with no
               // target, so a recorded cast that depended on the searched face's colour stranded
@@ -6521,7 +6527,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (karoo_deferred)
     {
         karoo_deferred = false;
-        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch);
+        {
+            // The SEARCHED bounce the plan was scored with (Plan::bounce_choice; lockstep with
+            // ApplyPlanDirect's deferred Karoo play). -1 = the front; the human chooser, when
+            // installed, still asks (human plans never carry a pin).
+            ScriptedBounceChoice _sbc(plan.bounce_choice);
+            TryPlaySpecificLand(state, karoo_land_name, karoo_fetch);
+        }
         // ...then the land Auras that named it (Bruna sweep D), on the karoo.
         std::vector<std::pair<std::string, int>> held;
         held.swap(karoo_host_auras);

@@ -1299,14 +1299,15 @@ inline bool HumanCombatSwapOn()
 // to be returned can be tapped for mana in response (CR 605.3a) and that mana floats until the phase
 // ends (CR 106.4). The model is BUILT (FloatKarooBouncedLand, SpellEffects.h) and the USER decided it
 // is the right one on 2026-10-06 ("Yes, this is the correct way to handle it"); for AUTONOMOUS play it
-// stays behind MTG_BOUNCE_UNTAPPED_FIRST (KarooTapInResponseOn, EngineFlags.h) together with the
-// provider's bounce ORDER until its held-out A/B clears. A human may always do it, so in human play
-// the FLOAT is on regardless of that lever (the order is not: it is the AI's default pick, and the
-// human chooses the land themselves). HumanPlayActive() is false inside the engine's clairvoyant
+// rides MTG_BOUNCE_UNTAPPED_FIRST (KarooTapInResponseOn, EngineFlags.h; DEFAULT ON since 2026-10-08)
+// together with the provider's bounce ORDER. A human may always do it, so in human play the FLOAT is
+// on regardless of that lever (the order only sets the prompt's default; the human picks the land). HumanPlayActive() is false inside the engine's clairvoyant
 // rollouts and after a --choices-then-auto hand-back, so autonomous play is byte-identical.
 // `--legacy-karoo-float` turns it off for REPLAY: a reference recorded before this rule carries no
 // `karoo_float` key, and its replayers (test/viewer_protocol_check.py) pass the flag so the recording
-// replays exactly as played (the combat-swap pattern above). MTG_HUMAN_KAROO_FLOAT=0 is its env twin
+// replays exactly as played (the combat-swap pattern above): no float, AND -- since the autonomous
+// lever went DEFAULT ON the same day -- the old bounce order as the prompt's default
+// (KarooTapInResponseOn reads this gate in human play). MTG_HUMAN_KAROO_FLOAT=0 is its env twin
 // (scenario controls); DEFAULT ON.
 inline bool g_play_legacy_karoo_float = false;
 inline bool HumanKarooFloatRuleOn()   // the rule the run plays under (the recording stamp reads this)

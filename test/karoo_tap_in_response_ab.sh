@@ -3,7 +3,8 @@
 # heurarm slot BOUNCE_UNTAPPED_FIRST; USER 2026-10-06), on EVERY regression-tier cell:
 #   base   lever OFF (prefer an already-tapped land; an untapped returned land's mana is lost)
 #   lever  lever ON  (an untapped free-tapping returned land is tapped for mana in response and the
-#                     provider prefers a land that re-enters untapped)
+#                     provider prefers a land that re-enters untapped) + MTG_BOUNCE_SEARCH (the bounce
+#                     is a searched plan dimension, Plan::bounce_choice)
 # Adapted from logs/bounce_ab/ab.sh (itself a copy of test/mana_tap_order_ab.sh). Both arms in ONE
 # pooled batch, same seeds and game indices -> PAIRED by construction, one load-imbalance tail.
 #
@@ -49,7 +50,10 @@ def amap(name):
         d[k] = v.strip().strip('"')
     return d
 FILE, PROF = amap("DECK_FILE"), amap("DECK_PROF")
-ARMS = {"base": {"MTG_BOUNCE_UNTAPPED_FIRST": False}, "lever": {"MTG_BOUNCE_UNTAPPED_FIRST": True}}
+# 2026-10-08: the lever arm also SEARCHES the bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice) -- the
+# amendment the first held-out run called for; the base arm is the shipped engine (both off).
+ARMS = {"base":  {"MTG_BOUNCE_UNTAPPED_FIRST": False, "MTG_BOUNCE_SEARCH": False},
+        "lever": {"MTG_BOUNCE_UNTAPPED_FIRST": True,  "MTG_BOUNCE_SEARCH": True}}
 jobs = []
 for spec in cases:
     deck, depth, seed, games, budget = spec.split()

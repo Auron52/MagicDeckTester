@@ -27543,6 +27543,75 @@ inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, con
     return !EffectiveProducesFor(state, p.controller_index, d, &p).empty();
 }
 
+// SEARCHED KAROO BOUNCE pin (Plan::bounce_choice, MTG_BOUNCE_SEARCH): -1 == the provider's front pick
+// (BounceLandCandidates().front() -- the d0 runner's, the beyond-horizon playout's and the human
+// prompt's default); k >= 1 == candidate k of DecisionProvider::BounceSearchCandidates evaluated on
+// the state AT THE BOUNCE, clamped to the last (the duplicate-not-whiff rule of the tutor / sac-land
+// axes: an index the resolution state no longer offers lands on a sibling's state, and the search's
+// post-apply dedup drops it for one apply). Installed around the plan's Karoo play by ApplyPlanDirect
+// and by the executor alike, so the scored plan and the realised turn return the same land; the
+// first Karoo bounce of the apply consumes it.
+inline thread_local int g_scripted_bounce_choice = -1;
+// ...and whether the bounce in progress is a SEARCHED plan's Karoo play (the sites that install the
+// pin), as opposed to the d0 runner's / the beyond-horizon playout's greedy land play. DIAGNOSTIC ONLY
+// (the MTG_BOUNCE_STATS census counts the searched sites, where the width is a decision); no game logic
+// reads it.
+inline thread_local bool g_bounce_searched_site = false;
+struct ScriptedBounceChoice
+{
+    explicit ScriptedBounceChoice(int k)
+        : saved(g_scripted_bounce_choice), saved_site(g_bounce_searched_site)
+    { g_scripted_bounce_choice = k; g_bounce_searched_site = true; }
+    ~ScriptedBounceChoice() { g_scripted_bounce_choice = saved; g_bounce_searched_site = saved_site; }
+    ScriptedBounceChoice(const ScriptedBounceChoice&) = delete;
+    ScriptedBounceChoice& operator=(const ScriptedBounceChoice&) = delete;
+    int  saved;
+    bool saved_site;
+};
+
+// MTG_BOUNCE_STATS=1 -- the Karoo bounce candidate-count census (DIAGNOSTIC ONLY, printed at exit):
+// how wide BounceSearchCandidates was at each bounce, split REAL game vs the search's hypotheticals
+// (g_real_resolution), which rule decided a one-candidate bounce, and how wide the enumeration's fan
+// was when it emitted (its sizing is an upper bound; the gap is what the post-apply dedup absorbs).
+namespace bouncestats
+{
+inline bool Enabled() { static const bool on = EnvOn("MTG_BOUNCE_STATS"); return on; }
+inline std::atomic<unsigned long long> g_real[5]{}, g_search[5]{}, g_rule_real[8]{}, g_rule_search[8]{},
+                                       g_emit[5]{}, g_pinned{0}, g_clamped{0};
+inline void Record(std::size_t n, int rule, bool real)
+{
+    const std::size_t b = n >= 4 ? 4 : n;
+    (real ? g_real : g_search)[b].fetch_add(1, std::memory_order_relaxed);
+    if (rule >= 0 && rule < 8) { (real ? g_rule_real : g_rule_search)[rule].fetch_add(1, std::memory_order_relaxed); }
+}
+inline void RecordEmit(std::size_t width)
+{ g_emit[width >= 4 ? 4 : width].fetch_add(1, std::memory_order_relaxed); }
+struct Dump
+{
+    ~Dump()
+    {
+        if (!Enabled()) { return; }
+        auto row = [](const char* tag, std::atomic<unsigned long long>* h) {
+            std::fprintf(stderr, "[bounce-stats] %-7s width 1=%llu 2=%llu 3=%llu 4+=%llu\n", tag,
+                         h[1].load(), h[2].load(), h[3].load(), h[4].load());
+        };
+        auto rules = [](const char* tag, std::atomic<unsigned long long>* r) {
+            std::fprintf(stderr, "[bounce-stats] %-7s rule only=%llu tapped_clean=%llu identical=%llu"
+                         " replay_fold=%llu dominated=%llu contested=%llu unpruned=%llu\n", tag,
+                         r[0].load(), r[1].load(), r[2].load(), r[3].load(), r[4].load(), r[5].load(),
+                         r[6].load());
+        };
+        row("real", g_real);     rules("real", g_rule_real);
+        row("search", g_search); rules("search", g_rule_search);
+        std::fprintf(stderr, "[bounce-stats] emitted fan width 1=%llu 2=%llu 3=%llu 4+=%llu\n",
+                     g_emit[1].load(), g_emit[2].load(), g_emit[3].load(), g_emit[4].load());
+        std::fprintf(stderr, "[bounce-stats] pinned bounces=%llu, of which clamped (index past the "
+                     "resolution set: an inert variant)=%llu\n", g_pinned.load(), g_clamped.load());
+    }
+};
+inline Dump g_dump;
+}   // namespace bouncestats
+
 // Is the tap-in-response float modelled here? The autonomous lever (MTG_BOUNCE_UNTAPPED_FIRST), or
 // HUMAN PLAY, where a person may always tap the land in response (HumanKarooFloatOn, GameLogger.h --
 // USER 2026-10-08, Bruna seed 18: "You just need to float the Green."). One predicate for the apply

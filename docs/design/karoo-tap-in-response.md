@@ -1,9 +1,9 @@
 # Karoo tap-in-response + the USER's bounce order (MTG_BOUNCE_UNTAPPED_FIRST)
 
-Status: **HUMAN PLAY: the float is ON (2026-10-08). AUTONOMOUS: the lever stays default OFF** — the
-held-out run (2026-10-08, below) is net better on every deck, but ONE game does not recover at
-`--depth 8 --budget-ms 0`, a real loss from the ORDER half; the flip awaits the USER's call. Nothing in
-ground truth moves with the lever off.
+Status: **ADOPTED 2026-10-08 -- `MTG_BOUNCE_UNTAPPED_FIRST` and `MTG_BOUNCE_SEARCH` default ON.** The
+first held-out run found one game the ORDER half lost and no budget recovered (the bounce was not
+searched); the USER asked for the bounce to be searched, and the second held-out run (lever + searched
+bounce) clears the bar on every deck. Human play floats the returned land regardless (2026-10-08).
 
 ## What the user asked for
 
@@ -203,7 +203,7 @@ e.g. creature_giving d0 s6006 gi1449 (5 -> unwon): T2 land-first Chancery return
 Forbidden Orchard; with the float the d0 greedy spends it on Crop Rotation (sacrificing the Chancery for
 an Orchard) and loses the T3 double-Crop-Rotation line -- legal mana, the permitted d0 greedy's choice.
 
-### Decision: NOT flipped (the USER's call)
+### Decision after run #1: NOT flipped (superseded below)
 
 Every deck nets <= 0 and the overall gain is -0.0244 turns/game, but CLAUDE.md's adoption bar also asks
 that every slower game recover at `--depth 8 --budget-ms 0`, and Dragons s4004 gi47 does not. The
@@ -221,10 +221,151 @@ order-only tweak (no-loss credit for a floatable untapped land only when the flo
 phase -- a land-first d0 play, or a land Aura held for the Karoo), but it re-opens a heuristic the
 search should own.
 
+## The amendment: the Karoo bounce is SEARCHED (MTG_BOUNCE_SEARCH, 2026-10-08)
+
+USER, on the proposal above: *"That makes sense. The Karoo decision should also be searched with
+heuristics. However, we may want to heuristic it more often than not, since the decision is usually an
+easy one."*
+
+**What was built.** `Plan::bounce_choice` (-1 = the provider's front pick; k >= 1 = candidate k of
+`DecisionProvider::BounceSearchCandidates` evaluated on the state AT THE BOUNCE, clamped to the last).
+It is the existing resolution-time, index-bound axis machinery (the scry / tutor-resolve / sac-land
+shape): `AppendSubdecisionAxes` emits one variant per further candidate of every base plan whose drop
+is a Karoo (last of the axes, base plans only, so the cost is additive); `ScriptedBounceChoice` pins it
+around the Karoo play in BOTH worlds (ApplyPlanDirect's deferred and non-deferred plays,
+`CombatSwapStaysPayable`'s probe, AIEngine::TakeTurn's deferred and non-deferred plays) and for a
+breakpoint continuation's own Karoo drop (`ContPins::bounce`, replayed by the executor like the scry
+pin); `BounceKarooLand` consumes it. The axis is registered in the plan fingerprint, `SamePlan`,
+`IsApplyEmptyPlan`, `PlanIsAxisVariant` (so an inert variant is dropped by the post-apply state dedup
+for one apply), both PlanDom keys and the plan summary (`[bounce k]`); `kPlanDomAssertedSize` 400 ->
+408. The d0 runner and the playout beyond the horizon carry no pin and keep the front pick -- the only
+permitted greedy. Human play never fans it: the person answers the bounce prompt, whose default
+(`heuristic_default`) is the provider's top pick. `MTG_UNPRUNE=karoobounce` opens the whole list.
+
+**The narrowing rules** (`DecisionProvider::BounceSearchCandidates`, on the state at the bounce, in the
+provider's order so element 0 is always its front):
+
+1. *Exclusions* -- another Karoo (its replay bounces again) or a land carrying an Aura (the Aura dies)
+   is never offered while any other land is returnable. These are the order's own -1000 / -500 tiers.
+2. *Tapped clean land* -- a TAPPED land that re-enters UNTAPPED costs nothing (no mana this turn, a
+   clean replay), so it dominates every untapped land and every land that re-enters tapped: the
+   candidates are the tapped clean lands alone, plus a tapped DEPLETION land whose replay would refresh
+   its counters (a real alternative, not dominated).
+3. *Dominated* -- otherwise, an UNTAPPED land that also re-enters tapped is dominated by a tapped one
+   (the same lost tempo next turn plus its mana this turn).
+4. *Identical fold* -- same name, same tapped state, same counters.
+5. *Replay fold* -- with no other land in hand, TAPPED lands of one re-entry class fold: the returned
+   land is next turn's drop, so which colour sits in hand for the rest of a spent turn is moot.
+   UNTAPPED lands never fold by colour -- their mana is still live (combat, main 2), which is exactly
+   the contested case (Dragons s4004 gi47: the floatable Mountain vs Haven of the Spirit Dragon).
+6. At most 3 candidates (`kBounceSearchWidth`).
+
+**Sizing.** Which lands are spent is known only to the apply, so the enumeration's width is an UPPER
+BOUND: exact for a plan that spends no mana (the bounce sees the node's board); for a plan that MUST
+spend a clean land (one is already spent, or its mana exceeds everything else the board makes and
+nothing in it makes mana) rule 2 bounds it at one (plus a depletion land) when no land can be in hand
+by then, else one per clean name; otherwise the distinct returnable names. Never below the truth, so
+no candidate is lost. The first cut (distinct names only) clamped 78% of its pins; this one ~43%, and an
+inert pin costs one apply, not a rollout.
+
+Tests: `test/unit/test_karoo_bounce_search.cpp` (each rule, the Dragons gi47 board -- two candidates,
+the pin returns Haven, a pin past the set clamps, the axis off ignores the pin).
+
+### The candidate-count distribution (MTG_BOUNCE_STATS, the held-out lever arm, searched sites only)
+
+Counted where the width is a decision -- a SEARCHED plan's Karoo play, in the real game and inside the
+search; the d0 runner's and the beyond-horizon playout's greedy land plays are not counted.
+
+| where | width 1 | width 2 | width 3 |
+|---|---|---|---|
+| real game (13,648 bounces) | **12,601 (92.3%)** | 802 (5.9%) | 245 (1.8%) |
+| inside the search (41.1M) | 29.26M (71.2%) | 6.21M (15.1%) | 5.60M (13.6%) |
+
+Why the real game's one-candidate bounces were one (12,601): only one legal land 5,156; replay fold
+3,681; a spent clean land 2,317; identical copies / the Karoo-Aura exclusions 1,443; dominated 4. The
+search sees more contested boards than the real game plays (it scores the lines that keep lands
+untapped, which the real game mostly does not choose). The enumeration emitted 10.9M one-wide,
+5.4M two-wide and 3.6M three-wide fans; 7.18M of its 13.57M pinned bounces (53%) clamped onto a
+sibling's state (one apply each). Work units +1.5% overall (+0.3% to +3.1% per deck).
+
+### Dragons s4004 gi47 recovers
+
+Both cells, at their own settings (d3/10 ms and the d5 cell's value_play at 40 ms): 5, as the base
+arm. The fan offers {Mountain, Haven of the Spirit Dragon}; the search returns Haven, Scourge of Valkas
+firebreathes twice, the T5 kill stands. The searched bounce changed 23 of the 112,800 lever-arm games
+against the lever-only run.
+
+### Ground truth: all three tiers re-run and ACCEPTED (rebased onto the SelesnyaLifegain keep table)
+
+On the adopted binary (both defaults ON, PGO+LTO), rebased onto `60db0d8c` (the SelesnyaLifegain keep
+table, the Prevent Damage pain deferral, the Soldiers value leaf, the CheckLine real-payment fix), full
+tiers vs the committed GT -- only the 9 Karoo decks move, every other cell is byte-identical:
+
+| tier | PASS / FAIL | Karoo decks, sum Δturns | searched faster / slower | d0 to-unwon / from-unwon |
+|---|---|---|---|---|
+| smoke | 84 / 30 | -334 (every deck <= 0) | 4 / 1 | 17 / 30 |
+| regression | 122 / 38 | -348 (every deck <= 0) | 5 / 11 | 13 / 30 |
+| overnight (full, PGO) | 276 / 109 | -2692 (every deck <= 0; Hinata 2HG rows +6) | 32 / 31 | 99 / 204 |
+
+All 43 searched slower games, re-run on the rebased binary in one pooled batch: 42 converge at
+stage 1, hinata overnight d3 s5005 gi68 at stage 2; none persists. Every to-unwon game is a d0 cell
+(the permitted greedy, light touch per the regression skill; spot-checked: creature_giving d0 s6006
+gi1449 spends the floated Orchard mana on a Crop Rotation that sacrifices the Chancery). Accepted with
+`--accept-with-regressions` notes per tier (the SelesnyaLifegain notes carried forward);
+`test/check_gt_logs.py` 659 consistent. Viewer protocol `--strict`: 556 refs, 0 play-drift / 0
+board-diverged / 0 enum-gap. `test/viewer_client_check.js` all green.
+
+### Held-out A/B #2: lever + searched bounce vs the tip, 112,800 paired games
+
+Same apparatus as #1 (overnight tier, the 9 Karoo decks, one pooled batch, a copied binary,
+24/24 workers busy), on the tree before the SelesnyaLifegain keep table landed. The base arm is
+byte-identical to run #1's tip on all 116 cells. The rebased overnight tier (above) reproduces the lever
+arm game for game on every deck but SelesnyaLifegain, whose keep table changed its hands (there: -216,
+searched 2 / 2).
+
+| deck | games | faster | slower | sum Δturns | mean/game | searched: faster / slower / Δ | units |
+|---|---|---|---|---|---|---|---|
+| creature_giving | 14000 | 128 | 23 | -106 | -0.0076 ± 0.0010 | 4 / 3 / -1 | 1.0076 |
+| dragons | 14000 | 636 | 31 | -666 | -0.0476 ± 0.0021 | 2 / 1 / -1 | 1.0042 |
+| fungus | 10800 | 411 | 53 | -376 | -0.0348 ± 0.0021 | 3 / 2 / -1 | 1.0030 |
+| hinata | 10800 | 415 | 146 | -418 | -0.0387 ± 0.0038 | 11 / 14 / +2 | 1.0203 |
+| hinata2hg | 400 | 2 | 6 | +6 | +0.0150 ± 0.0117 | 2 / 6 / +6 | 1.0137 |
+| kitty | 14000 | 151 | 47 | -110 | -0.0079 ± 0.0011 | 2 / 0 / -2 | 1.0037 |
+| melira | 9400 | 204 | 76 | -176 | -0.0187 ± 0.0026 | 0 / 2 / +2 | 1.0107 |
+| minotaur | 14000 | 252 | 23 | -235 | -0.0168 ± 0.0012 | 0 / 1 / +1 | 1.0168 |
+| minotaur2hg | 600 | 0 | 0 | +0 | +0.0000 | 0 / 0 / +0 | 1.0314 |
+| mirrorwing | 10800 | 443 | 159 | -395 | -0.0367 ± 0.0034 | 6 / 0 / -6 | 1.0100 |
+| selesnya | 14000 | 364 | 139 | -260 | -0.0186 ± 0.0021 | 6 / 5 / -1 | 1.0187 |
+| **all** | 112800 | 3006 | 703 | -2736 | **-0.0243 ± 0.0007** | 36 / 34 / -1 | 1.0153 |
+
+Every deck nets <= 0 (Hinata with its 2HG rows: -412 over 11,200; the 2HG rows alone are +6 over 400,
+all six slower games budget churn, below).
+
+**All 34 searched slower games recover in the two stages** (re-run as chunked single-game jobs, both
+arms; stage 0 = the A/B's own settings): 32 at stage 1 (depth = win turn, 100 ms) and 2 at stage 2
+(depth 8, unlimited): hinata d3 s5005 gi68 and selesnya d3 s4004 gi609. One of them -- dragons d3
+s4004 gi577, 4 -> 5 in the batch -- does not even reproduce as slower in isolation (4 = 4 at every
+stage, including its own settings): a known batch-position susceptibility
+(docs/design/batch-run-to-run-nondeterminism.md), not the change. Every one reads `on <= off` at its
+converging stage; the 2HG six are hinata2hg d5 s4004 gi5 (5 -> 8 in the batch, 5 = 5 at stage 1), gi37,
+d5 s5005 gi16, d5 s6006 gi99, d5 s7007 gi40, gi54.
+
+### Decision: ADOPTED (2026-10-08)
+
+The bar is cleared -- every deck net <= 0 on held-out, every searched slower game recovers in two
+stages -- so `MTG_BOUNCE_UNTAPPED_FIRST` and `MTG_BOUNCE_SEARCH` both default ON (the USER asked for this
+model on 2026-10-06 and for the searched bounce today). `=0` on either restores the old behaviour.
+In HUMAN play the replay gate for old recordings (`--legacy-karoo-float`, no `karoo_float` stamp) now
+also turns the lever's order off, so a reference recorded before today replays with the default it was
+played under.
+
 ## Open for the USER
 
-* Adopt (flip the default ON) as measured (-0.0244/game held-out, every deck <= 0, one Dragons game
-  that only a searched bounce would recover), or after the searched-bounce amendment above?
+* ~~Adopt?~~ Adopted with the searched bounce (above).
+* The Hinata 2HG rows alone net +6 over 400 held-out games (all budget churn); Hinata as a deck nets
+  -412. Counted as one deck here, as run #1 did -- say if 2HG should be judged as its own deck.
+* The sizing still over-emits: 53% of pinned bounces clamp onto a sibling (one apply each, +1.5% work
+  units). A tighter bound needs the payer's tapped set before the apply; left as is.
 * Tie-break choice made here: among lands that both re-enter untapped and cost nothing this phase, a
   TAPPED one is returned before an untapped floatable one (keeps the untapped land for main 2). Your
   rule did not cover that case; say if you want it the other way.
