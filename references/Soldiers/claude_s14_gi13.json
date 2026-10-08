@@ -1,0 +1,314 @@
+{
+  "seed": 14, "game_index": 13, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [19, 25] }, "combat_swap_timing": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Aether Vial" }, { "num": 2, "name": "Aether Vial" }, { "num": 25, "name": "Fortified Beachhead" }, { "num": 41, "name": "Recruitment Officer" }, { "num": 13, "name": "Coppercoat Vanguard" }, { "num": 17, "name": "Esper Sentinel" }, { "num": 43, "name": "Rick, Steadfast Leader" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 53, "name": "Thalia's Lieutenant" }, { "num": 15, "name": "Coppercoat Vanguard" }, { "num": 1, "name": "Aether Vial" }, { "num": 30, "name": "General Kudro of Drannith" }, { "num": 29, "name": "General Kudro of Drannith" }, { "num": 50, "name": "Silent Clearing" }, { "num": 55, "name": "Thalia, Guardian of Thraben" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 25, "name": "Fortified Beachhead" }, { "num": 49, "name": "Silent Clearing" }, { "num": 60, "name": "Unclaimed Territory" }, { "num": 19, "name": "Esper Sentinel" }, { "num": 42, "name": "Recruitment Officer" }, { "num": 35, "name": "Plains" }, { "num": 39, "name": "Ranger-Captain of Eos" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 25, "name": "Fortified Beachhead", "win_optimal": true }, { "num": 49, "name": "Silent Clearing", "win_optimal": true }, { "num": 60, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 19, "name": "Esper Sentinel", "win_optimal": true }, { "num": 42, "name": "Recruitment Officer", "win_optimal": true }, { "num": 35, "name": "Plains", "win_optimal": true }, { "num": 39, "name": "Ranger-Captain of Eos", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 25, "name": "Fortified Beachhead" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 25, "name": "Fortified Beachhead", "win_optimal": true }, { "num": 49, "name": "Silent Clearing", "win_optimal": true }, { "num": 60, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 42, "name": "Recruitment Officer", "win_optimal": true }, { "num": 35, "name": "Plains", "win_optimal": true }, { "num": 39, "name": "Ranger-Captain of Eos", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 25, "name": "Fortified Beachhead" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 35, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Recruitment Officer", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Silent Clearing; cast: Recruitment Officer", "land": "Silent Clearing", "casts": ["Recruitment Officer"], "actions": [{ "card": "Recruitment Officer" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Recruitment Officer", "land": "Unclaimed Territory", "casts": ["Recruitment Officer"], "actions": [{ "card": "Recruitment Officer" }] },
+    { "index": 2, "summary": "land=Plains; cast: Recruitment Officer", "land": "Plains", "casts": ["Recruitment Officer"], "actions": [{ "card": "Recruitment Officer" }] },
+    { "index": 3, "summary": "land=Silent Clearing; cast: (nothing)", "land": "Silent Clearing", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 35, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 35, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Thalia's Lieutenant" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 35, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thalia's Lieutenant", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Silent Clearing; cast: Thalia's Lieutenant", "land": "Silent Clearing", "casts": ["Thalia's Lieutenant"], "actions": [{ "card": "Thalia's Lieutenant" }] },
+    { "index": 1, "summary": "land=Plains; cast: Thalia's Lieutenant", "land": "Plains", "casts": ["Thalia's Lieutenant"], "actions": [{ "card": "Thalia's Lieutenant" }] },
+    { "index": 2, "summary": "land=Silent Clearing; cast: (nothing)", "land": "Silent Clearing", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "ability", "text": "Thalia's Lieutenant: +1/+1 counter on each other Human (1)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Recruitment Officer (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "King Darien XLVIII" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 4, "num": 35, "is_land": true, "taps": "W" }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 34, "name": "King Darien XLVIII", "cost": "{1}{W}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Silent Clearing", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Silent Clearing; cast: Ranger-Captain of Eos → Champion of the Parish", "land": "Silent Clearing", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Champion of the Parish" }] },
+    { "index": 1, "summary": "land=Silent Clearing; cast: Ranger-Captain of Eos → Esper Sentinel", "land": "Silent Clearing", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Esper Sentinel" }] },
+    { "index": 2, "summary": "land=Silent Clearing; cast: Ranger-Captain of Eos → Recruitment Officer", "land": "Silent Clearing", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Recruitment Officer" }] },
+    { "index": 3, "summary": "land=Silent Clearing; cast: King Darien XLVIII", "land": "Silent Clearing", "casts": ["King Darien XLVIII"], "actions": [{ "card": "King Darien XLVIII" }] },
+    { "index": 4, "summary": "land=Silent Clearing; cast: (nothing)", "land": "Silent Clearing", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "ability", "text": "➕ Thalia's Lieutenant: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 19, "battlefield": [{ "name": "King Darien XLVIII", "idx": 8, "num": 34, "is_land": false }, { "name": "Plains", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Silent Clearing", "idx": 7, "num": 49, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: King Darien XLVIII: sac 1 creature", "land": null, "casts": ["King Darien XLVIII"], "actions": [{ "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Recruitment Officer (4), Thalia's Lieutenant (3) — 7 to opponent (17→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 19, "battlefield": [{ "name": "King Darien XLVIII", "idx": 8, "num": 34, "is_land": false }, { "name": "Plains", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Silent Clearing", "idx": 7, "num": 49, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: King Darien XLVIII: sac 1 creature", "land": null, "casts": ["King Darien XLVIII"], "actions": [{ "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Cathar Commando" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 19, "battlefield": [{ "name": "King Darien XLVIII", "idx": 8, "num": 34, "is_land": false }, { "name": "Plains", "idx": 4, "num": 35, "is_land": true, "taps": "W" }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Silent Clearing", "idx": 7, "num": 49, "is_land": true, "taps": "WB" }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Cathar Commando", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos → Champion of the Parish", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Champion of the Parish" }] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos → Champion of the Parish, King Darien XLVIII: sac 1 creature", "land": null, "casts": ["Ranger-Captain of Eos", "King Darien XLVIII"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Champion of the Parish" }, { "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Ranger-Captain of Eos → Esper Sentinel", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Esper Sentinel" }] },
+    { "index": 3, "summary": "land=none; cast: Ranger-Captain of Eos → Esper Sentinel, King Darien XLVIII: sac 1 creature", "land": null, "casts": ["Ranger-Captain of Eos", "King Darien XLVIII"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Esper Sentinel" }, { "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Ranger-Captain of Eos → Recruitment Officer", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Recruitment Officer" }] },
+    { "index": 5, "summary": "land=none; cast: Ranger-Captain of Eos → Recruitment Officer, King Darien XLVIII: sac 1 creature", "land": null, "casts": ["Ranger-Captain of Eos", "King Darien XLVIII"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Recruitment Officer" }, { "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Cathar Commando", "land": null, "casts": ["Cathar Commando"], "actions": [{ "card": "Cathar Commando" }] },
+    { "index": 7, "summary": "land=none; cast: Cathar Commando, King Darien XLVIII: sac 1 creature", "land": null, "casts": ["Cathar Commando", "King Darien XLVIII"], "actions": [{ "card": "Cathar Commando" }, { "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: King Darien XLVIII: sac 1 creature", "land": null, "casts": ["King Darien XLVIII"], "actions": [{ "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "sacrifice Silent Clearing to draw", "land": null, "casts": [], "actions": [{ "card": "Silent Clearing", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 66,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 4, "source": "Ranger-Captain of Eos (searched)", "cards": [{ "name": "Champion of the Parish", "disposition": "to hand" }] }],
+  "events": [{ "turn": 4, "kind": "ability", "text": "➕ Thalia's Lieutenant: +1/+1 counter (Human entered)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "image_refs": {"Rick, Steadfast Leader": "sld/143"},
+  "me": { "life": 18, "battlefield": [{ "name": "King Darien XLVIII", "idx": 8, "num": 34, "is_land": false }, { "name": "Plains", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 39, "is_land": false }, { "name": "Recruitment Officer", "idx": 2, "num": 42, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Silent Clearing", "idx": 7, "num": 49, "tapped": true, "is_land": true }, { "name": "Thalia's Lieutenant", "idx": 5, "num": 53, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 60, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Cathar Commando", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Champion of the Parish", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: King Darien XLVIII: sac 1 creature", "land": null, "casts": ["King Darien XLVIII"], "actions": [{ "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 39, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: King Darien XLVIII: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "land": null, "casts": ["King Darien XLVIII", "Ranger-Captain of Eos"], "actions": [{ "card": "King Darien XLVIII", "src_num": 34, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 39, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Recruitment Officer (4), Thalia's Lieutenant (4), King Darien XLVIII (2) — 10 to opponent (10→0)" }
+  ]
+}
