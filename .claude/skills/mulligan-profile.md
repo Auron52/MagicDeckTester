@@ -9,6 +9,45 @@ user asks to **generate / regenerate / pool / A-B / adopt a mulligan (keep or bo
 Full design + validation history: [docs/design/exhaustive-keep-policy.md](../../docs/design/exhaustive-keep-policy.md).
 
 
+## THE ENGINE IS PGO+LTO. GENERATION RUNS ON `build/PGO` (user, 2026-10-08)
+
+USER: *"we should be using PGO+LTO for everything except maybe quick development cycles."* A keep
+generation is the single longest run in this repo — **measured 1.32x on exactly this workload**
+(`MTG_KEEP_BENCH`, 1000 size-7 floor rollouts at d2/b3, interleaved A/B, thread-CPU time: Release
+129-135 ms/rollout, PGO 103-111, PGO+LTO 99-100). On a 10 h generation that is **~2.5 h back for a
+one-off ~10-15 min build**, so it is never the wrong trade here.
+
+**`mullgen.sh run` and `validate` already do it for you** — they call `harness_pgo_ensure` first
+(`scripts/mullgen.sh`), which builds `build/PGO` if it is not fresh, and `harness_bin` /
+`harness_analyze_bin` then return it. The legacy opt-in `MTG_GEN_PGO=1` **is now the default**;
+`MTG_GEN_PGO=0` is read as `MTG_PGO=0`. So the whole-command route needs nothing from you except:
+
+* **COMMIT `src/` FIRST.** `build/PGO` is trusted only while its `SRC_TREE` stamp equals `HEAD:src`
+  *and* `src/` is clean. A dirty `src/` silently falls back to `build/Release` — you lose ~25% of a
+  multi-hour run's throughput and **nothing warns you**. This also lines up with Rule 0 below: you
+  are supposed to be on a frozen commit anyway, so there is no tension.
+* **`MTG_PGO=0` pins Release**, and belongs on **both** arms of any wall-clock comparison.
+
+**EVERY HAND-TYPED `./build/Release/mtg-analyze ...` BELOW IS THE SLOW PATH.** The raw invocations
+in this skill (the feasibility pre-check, the digest battery, the regret print, the A/B harnesses)
+predate PGO and name `build/Release` literally. When `build/PGO` is fresh, prefer:
+
+```
+BIN=$(bash -c 'source test/lib/harness.sh; harness_analyze_bin')   # -> build/PGO or build/Release
+$BIN decks/<name>/<name>.cod --cards-json src/cards/data/cards.json ...
+```
+
+A probe that takes a minute does not care. **A multi-hour one does, and a frozen `mtg-analyze` copy
+cares most of all** — if you `cp` a binary aside for a long run (see Rule 0), copy the **PGO** one.
+
+**WHY IT CANNOT CHANGE THE ARTIFACT:** PGO/LTO alter code layout, inlining and branch prediction
+only — **no `-ffast-math`, no `-march`** — so the computation is identical, measured byte-identical
+on both the rollout digest and the play digest. **A journal rolled under Release therefore RESUMES
+under PGO**: the resume gate keys on `bucket_fp / deck_fp / seed_base / K / max_mull / equiv_seed /
+R / PlayIdentityAllows`, and the play digest is unchanged by the compiler, so switching to PGO
+mid-generation does **not** invalidate a journal. (Which is the opposite of the recipe/R mismatch
+that destroyed one — see the journal rule in CLAUDE.md.)
+
 ## HARD PRECONDITION — the deck MUST be in the regression suite (user directive, 2026-09-26)
 
 `scripts/mullgen.sh run` **refuses to start** (exit 3) unless the deck resolves to a key in

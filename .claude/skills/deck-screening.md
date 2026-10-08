@@ -9,6 +9,40 @@ It is NOT the route for adopting a combination as a deck (mulligan-profile + val
 decision heuristic (heuristic-optimization). A card the engine does not implement *is* in scope, but
 only through analyze-deck — see **The new-card route** below.
 
+## THE ENGINE IS PGO+LTO. A SCREEN RUNS ON `build/PGO`, NOT `build/Release` (user, 2026-10-08)
+
+USER: *"we should be using PGO+LTO for everything except maybe quick development cycles. It would
+also be good for screening changes."* A screen is one of the long runs this is for — it is the
+cheapest 1.3x in the repo and it costs nothing in correctness.
+
+**It is already automatic, so the thing to get right is not UNDOING it.** `scripts/deck_compare.py`
+calls `pgo_ensure()` in `main()` and takes its binary from `engine_bin()`, which returns
+`build/PGO/mtg` whenever that build is **FRESH** — its `SRC_TREE` stamp equals `HEAD:src` **and**
+`src/` has no uncommitted change — and silently falls back to `build/Release` otherwise. So:
+
+* **COMMIT `src/` BEFORE A SCREEN.** A dirty `src/` is the one way to lose the 1.3x without being
+  told: the stamp cannot be trusted, so `engine_bin()` falls back and the screen just runs ~30%
+  slower. This is a development-cycle convenience, not an error, and nothing warns you.
+* The first screen after an engine change pays a **~10-15 min** PGO build inside `pgo_ensure()`.
+  That is bought back on any screen worth running — a 6 h screen saves ~1.5 h.
+* **`MTG_PGO=0` pins Release. If you set it on one arm of a wall-clock comparison, set it on BOTH**
+  — otherwise you are measuring the compiler, not the change. (Game results are unaffected either
+  way, so a *quality* A/B cannot be corrupted by this; only timings can.)
+
+**WHY IT IS SAFE, and why this does not need its own A/B:** PGO+LTO change code layout, inlining and
+branch prediction only. There is **no `-ffast-math` and no `-march`**, so the program computes
+exactly what `build/Release` computes — measured byte-identical on both the rollout digest and the
+play digest (`docs/design/selesnya-keepgen-bulk-cost.md`; 1.32x on the Selesnya keep-gen workload).
+**So a screen's deltas, digests and `units` are all directly comparable to a Release-built screen's**
+— which is what makes it safe to switch mid-project without rebasing every earlier round onto it.
+`units` is unaffected by construction (it is a work counter, not a clock); `ms` is not, which is one
+more reason to size runs off `units`.
+
+**Training set:** `./build.sh pgo` with no arguments trains on the whole smoke suite at ~1/10 games
+and is the right default for a screen, because a screen's deck is already a suite deck. Code the
+training never reached is still optimised normally (`-fprofile-partial-training`), so a deck outside
+the training set is correct — just without the gain.
+
 ## Rule 0a — "UNION DECK" IS A BANNED WORD. This overrides everything below.
 
 **Do not construct a superset/"union" DECKLIST containing every candidate card and generate a
