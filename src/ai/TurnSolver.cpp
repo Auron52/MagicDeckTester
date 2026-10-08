@@ -30970,17 +30970,65 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a); 
 // (DecisionProvider::AttackWith -> HoldForCombatAuraSwap) is exactly the {U} that pays it
 // (references/suboptimal/Bruna/claude_s3_gi2 T4: Wings on Avacyn's Pilgrim, Birds the only blue --
 // the combat swap is the T4 kill, and the all-attackers approximation calls it unpayable).
+static bool PlayLandByName(GameState& state, const std::string& name, const std::string& fetch_target,
+                           bool allow_shock_pay, const std::string& land_face, int rad_mode);
+static std::string SimulateLandPlay(GameState& state);
+
+// THE PLAN'S OWN LAND DROP, played on a copy the way ApplyPlanDirect will play it. Both timing passes
+// judge a plan BEFORE it is applied, so `state` does not yet hold the land the plan plays first -- and
+// that land's mana is exactly what can pay the swap in combat. Bruna seed 11 T4 (USER 2026-10-08):
+// the line "land=Razorverge Thicket; aura swap -> Colossification" onto an untapped Somberwald Sage
+// was judged on Botanical Sanctum + ONE Thicket, found the {2}{U} unpayable in combat, and kept the
+// swap in main -- Colossification tapped the Sage and the T4 kill was gone. With the Thicket counted
+// the swap is payable from lands alone and goes to combat. Mirrors the apply: a searched land as
+// chosen (shock paid on the same human-play rule), a bounce land (Karoo) after the plan's casts
+// (`karoo_out` names it for the caller), an undecided autonomous plan's greedy drop
+// (SimulateLandPlay). A drop already used this turn plays nothing. Quiet: no reveal log, no chooser.
+static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan& plan, std::string* karoo_out)
+{
+    GameState base = state;
+    const Player& ap = base.ActivePlayer();
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return base; }
+    RevealLogPause quiet;
+    // An undecided plan's drop is the greedy fallback's (ApplyPlanDirect, pre-combat) -- autonomous
+    // only: a human line plays exactly the land it names, never one the human did not choose.
+    if (!plan.land_decided) { if (!HumanPlayActive()) { SimulateLandPlay(base); } return base; }
+    if (plan.land_to_play.empty()) { return base; }
+    static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
+    const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
+    if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+    {
+        if (karoo_out != nullptr) { *karoo_out = plan.land_to_play; }
+        return base;
+    }
+    bool allow_shock_pay = true;
+    if (HumanPlayActive())
+    {
+        allow_shock_pay = false;
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard
+                || a.kind == Action::Kind::DigDraw)
+            { allow_shock_pay = true; break; }
+        }
+    }
+    PlayLandByName(base, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face, plan.rad_mode);
+    return base;
+}
+
 static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Plan& plan, std::size_t q,
                                    int host = 0)
 {
     const Action& sw = plan.actions[q];
-    GameState cs = state;
+    std::string karoo_land;
+    const GameState base = WithPlanLandDrop(state, plan, &karoo_land);
+    GameState cs = base;
     if (host > 0)
     {
         // Read OUTSIDE the RevealLogPause below: the pause nulls the --force-attackers pin. Declared
         // WITH the combat pin this deferral would set, so the attack heuristic's hold for the swap's
         // mana (DecisionProvider::AttackWith -> HoldForCombatAuraSwap) is part of the prediction.
-        GameState as = state;
+        GameState as = base;
         if (as.scripted_combat_aura_swap < 0) { as.scripted_combat_aura_swap = sw.sac_source_id; }
         const std::vector<int> atk = DeclareAttackerIndices(as);
         bool host_attacks = false;
@@ -30998,7 +31046,7 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
         for (Permanent& cp : cs.battlefield)
         {
             if (cp.controller_index == cs.active_player_index && !cp.tapped && cp.card.IsCreature()
-                && CanAttackFull(cp, state.battlefield, cs.active_player_index)) { cp.tapped = true; }
+                && CanAttackFull(cp, base.battlefield, cs.active_player_index)) { cp.tapped = true; }
         }
     }
     RevealLogPause quiet;
@@ -31012,6 +31060,8 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
         const bool for_creature = o.kind == Action::Kind::CastFromHand && od && od->card.IsCreature();
         payable = TapForCostDirect(cs, o.cost, for_creature);
     }
+    // A bounce land is played after the casts (ApplyPlanDirect's Karoo deferral) -- before combat.
+    if (payable && !karoo_land.empty()) { PlayLandByName(cs, karoo_land, plan.fetch_target, true, plan.land_face, plan.rad_mode); }
     return payable && TapForCostDirect(cs, sw.cost, /*for_creature=*/false);
 }
 

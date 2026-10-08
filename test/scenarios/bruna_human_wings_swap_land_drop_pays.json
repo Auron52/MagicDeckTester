@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Somberwald Sage", "controller": 0, "tapped": false },
+    { "name": "Arcanum Wings", "controller": 0, "tapped": false, "equips": "Somberwald Sage" },
+    { "name": "Botanical Sanctum", "controller": 0, "tapped": false },
+    { "name": "Razorverge Thicket", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossification", "Razorverge Thicket", "Lightning Greaves", "Forest"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 4,
+  "human_lines": ["land=Razorverge Thicket;auraswap=Colossification"],
+  "expect_human_summary_contains": "Colossification (in combat, after attacks)",
+  "expect_history_contains": ["deferred to COMBAT", "applied in combat after attackers were declared"],
+  "expect_win_turn": 4,
+  "comment": "USER 2026-10-08, Bruna seed 11 T4: 'Creature fails to attack and win T4 because of the Colossification.' Wings on an untapped Somberwald Sage; Botanical Sanctum + one Razorverge Thicket in play, the second Thicket in hand. The human plays the Thicket and swaps Colossification in. The {2}{U} is payable in combat only with the plan's own land drop (Sanctum U + two Thickets; the Sage's mana is creature-only), so the swap must be deferred to combat: the Sage attacks, the swap lands after attackers are declared, 0 + 20 = 20 = the opponent's life. Before the fix the timing check judged the pre-land board, kept the swap in main, and Colossification's ETB tap took the Sage out of the kill. Autonomous twin: bruna_wings_swap_land_drop_pays_search.json."
+}

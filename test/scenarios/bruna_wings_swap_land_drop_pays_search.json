@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Somberwald Sage",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Arcanum Wings",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Somberwald Sage"
+    },
+    {
+      "name": "Botanical Sanctum",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Razorverge Thicket",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Colossification",
+    "Razorverge Thicket",
+    "Lightning Greaves",
+    "Forest"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 10,
+  "max_turns": 4,
+  "expect_win_turn": 4,
+  "comment": "AUTONOMOUS twin of bruna_human_wings_swap_land_drop_pays.json (USER 2026-10-08, Bruna seed 11 T4): the search, with the same board, plays the Thicket, keeps the Sage attacking and swaps Colossification in during combat for the T4 kill (0 + 20 = 20)."
+}

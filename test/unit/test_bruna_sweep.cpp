@@ -1313,3 +1313,40 @@ TEST_CASE("Aura host ranking: a hardcast Colossification goes on the creature ca
     }
     CHECK(both);
 }
+
+
+// Bruna seed 11 T4 (USER 2026-10-08): "Creature fails to attack and win T4 because of the
+// Colossification." Wings on an untapped Somberwald Sage (cast T2), Botanical Sanctum + ONE Razorverge
+// Thicket on the battlefield, the second Thicket in hand: the human's line plays the Thicket and swaps
+// Colossification in. The swap is payable in combat only WITH the plan's own land drop (Sanctum {U} +
+// two Thickets; the Sage's mana is creature-only), so the timing check must count the land the plan
+// plays first -- it judged the pre-land board, called the swap unpayable and kept it in main, where
+// the ETB tap took the Sage out of the T4 kill.
+TEST_CASE("Human swap timing: the plan's own land drop pays the combat swap (seed 11 T4)")
+{
+    BoardBs b;
+    const int sage = b.Put("Somberwald Sage");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = sage;
+    b.s.battlefield.push_back(w);
+    b.Put("Botanical Sanctum");
+    b.Put("Razorverge Thicket");
+    b.Hand("Colossification");
+    b.Hand("Razorverge Thicket");
+    b.Hand("Lightning Greaves");
+    TurnSolver::Plan with_land = HumanSwapPlan("Colossification");
+    with_land.land_decided = true;
+    with_land.land_to_play = "Razorverge Thicket";
+    CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, with_land) == 0);
+    // Control: the same swap with no land drop is NOT payable in combat (two lands + a creature-only
+    // dork), so it stays in main.
+    TurnSolver::Plan no_land = HumanSwapPlan("Colossification");
+    no_land.land_decided = true;
+    CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, no_land) == -1);
+    // The greedy timing pass (d0 / rollout) judges the same way.
+    SolveSwapArm on(true);
+    TurnSolver::Plan auton = with_land;
+    TurnSolver::DeferAuraSwapToCombat(b.s, /*is_pre_combat=*/true, auton);
+    CHECK(auton.actions.empty());
+}
