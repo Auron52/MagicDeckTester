@@ -87,10 +87,12 @@ produced identically by the base binary); **regression tier at `d80c66bd`: 165/1
 same play digest (`5cb8f5f626c943ad`), same win turns on all 2000 replay-sample rollouts. No
 `-ffast-math`, no `-march`, so IEEE semantics are untouched; it changes layout, inlining and branch
 prediction. Linux/GCC only (MSVC's PGO is a different toolchain; the Windows build is unchanged).
-`mullgen.sh` uses it only with `MTG_GEN_PGO=1`, and only if `build/PGO/SRC_TREE` equals `HEAD:src` with
-a clean `src/`, so a stale PGO binary can never generate on another engine. Validation still runs
-`build/Release`. **Whether to make that the default is a user decision** (it costs a ~10 min PGO build
-before each generation).
+**USER 2026-10-08: the default for everything except quick development cycles, screens included.**
+`test/lib/harness.sh` (`scripts/engine_bin.py` for Python) now picks `build/PGO` whenever its
+`SRC_TREE` equals `HEAD:src` with a clean `src/` -- so a stale PGO binary can never run another engine --
+and the long runners (`mullgen.sh`, `valueleaf.sh`, `deck_compare.py`, the overnight tier) build it
+first when stale. `./build.sh pgo` with no deck trains on the whole suite. (Originally opt-in via
+`MTG_GEN_PGO=1`, generation only, with validation on `build/Release`.)
 
 ## 4. Before / after, at the gen settings
 

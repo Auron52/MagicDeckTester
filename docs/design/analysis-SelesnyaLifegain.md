@@ -780,3 +780,10 @@ Selesnya's five cases were 87 faster / 44 slower. Fixed: the audit now judges on
 
 - **Search leaf depth 0 for Selesnya** (from `selesnya-keepgen-bulk-cost.md`): 2.10x cheaper per
   rollout at +0.040 t. A play-quality trade, so the user's call.
+  Recommendation given 2026-10-08: keep depth 1 -- the generation it was meant to speed up is done,
+  and +0.040 t is a sixth of what the keep table gained.
+
+Answered 2026-10-08 (USER):
+- "Optimize the deck" meant PERFORMANCE.
+- PGO+LTO: "we should be using PGO+LTO for everything except maybe quick development cycles. It would
+  also be good for screening changes." -- now the engine for every long run (`test/lib/harness.sh`).
