@@ -527,8 +527,21 @@ KM_DECK=decks/<name>/<name>.txt KM_MODE=keep   bash test/keepmodel_exhaustive_ab
 KM_DECK=decks/<name>/<name>.txt KM_MODE=bottom bash test/keepmodel_exhaustive_ab.sh
 ```
 
-Reports per-depth win-turn deltas over 16–24 seeds × depths 0/3/5. Negative = exhaustive wins.
-(`MTG_DUMP_WINS` writes `[win] gi=N wt=M` to **stderr** — the harness parses the `err_` files.)
+Reports the paired win-turn delta (B − A) per seed and overall, at the deck's play profile (16 seeds ×
+1000 games per arm by default). Negative = the candidate (B) wins. Both arms run in **one pooled
+`mtg --batch`**, interleaved seed by seed (per-job `exhaustive_profile` / `exhaustive_bottom` manifest
+keys; the old per-arm `MTG_EXHAUSTIVE_PROFILE` / `MTG_EXHAUSTIVE_BOTTOM` env forms are refused alongside
+them), and the shared log is split back into `batch_<tag>.log` for the report and the round pooling.
+
+**Early stop (user, 2026-10-08).** The new keep table is normally far ahead of the static rules (*"it
+shouldn't even be close"*), so the harness stops a check as soon as the candidate is **clearly better**:
+paired t ≤ −8 over at least 4 seed pairs (`test/keepmodel_early_stop.py`; ≤ 0.31% chance of stopping when
+the candidate is not better). It is **one-sided** — a candidate that looks worse always runs the full
+sample, because a reject quarantines a live profile. On SelesnyaLifegain (keep −0.2345 t) it would have
+stopped after 4 of 16 pairs. `mullgen.sh` gives it `TIE_ABS` as a floor (so an early stop never
+escalates) and logs a NOTE when a keep check does **not** stop early: that means the table is not clearly
+ahead of the static rules, which is unusual and worth reading the per-seed table for.
+`KM_EARLY_STOP=0` disables it.
 
 **Diagnosing a bottoming loss (clairvoyance vs R-noise):** identify losing `(seed, gi)` from the two
 runs' win dumps (game index is stable — same library both sides), log both with `--log-dir` to read the

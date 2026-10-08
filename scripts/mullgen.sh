@@ -194,9 +194,12 @@ run_ab(){
     local seeds; seeds=$(seed_block "$base" "$per" "$r")
     env "$@" \
       KM_DECK="$DECK" KM_MODE="$mode" KM_STATIC="$BASE" KM_EXH_PROFILE="$PROF" \
-      KM_AB_SEEDS="$seeds" KM_OUT="$rd" \
+      KM_AB_SEEDS="$seeds" KM_OUT="$rd" KM_EARLY_STOP_MIN_ABS="${KM_EARLY_STOP_MIN_ABS:-$TIE_ABS}" \
       bash test/keepmodel_exhaustive_ab.sh > "$OUT/ab_${tag}_r$((r+1)).log" 2>&1
     [ -s "$rd/delta.txt" ] || { echo "ERR"; return 1; }
+    # An early stop (the candidate is CLEARLY better; see test/keepmodel_early_stop.py) clears the tie
+    # band by construction -- the stop rule is given TIE_ABS as its floor -- so it never escalates.
+    [ -e "$rd/EARLY_STOP.txt" ] && rlog "  round $((r+1)): stopped early -- $(cat "$rd/EARLY_STOP.txt")"
     dirs+=("$rd")
     python3 test/keepmodel_pool_ab.py --a-tag "$atag" --b-tag "$btag" "${dirs[@]}" \
       > "${abdir}_POOLED.txt" 2>&1
@@ -435,6 +438,12 @@ PY
     dk=$(run_ab keep keep "$KEEP_BASE" "$KEEP_PER_ROUND" static exh) || { log "keep A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "keep A/B failed to run"; return 1; }; return 1; }
     log "keep (exhaustive vs static) delta: ${dk}t  (negative = exhaustive wins)"
+    # The exhaustive table is normally FAR ahead of the static rules (user, 2026-10-08: "it shouldn't
+    # even be close"), so a keep check that did NOT stop early is a finding in itself, whatever it says.
+    if [ "${KM_EARLY_STOP:-1}" = 1 ] && [ ! -e "logs/keepmodel_exh_keep_${KEY}_r1/EARLY_STOP.txt" ]; then
+      log "NOTE: the keep check did NOT stop early -- the new table is not clearly ahead of the static"
+      log "      rules, and it usually is by a wide margin. Read the per-seed table below before trusting it."
+    fi
     db=$(run_ab bottom bottom_confounded "$BOTTOM_BASE" "$KEEP_PER_ROUND" lookahead exhbottom MTG_CONFOUND_BOTTOM=3) || {
       log "confounded bottoming A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "bottoming A/B failed to run"; return 1; }; return 1; }
