@@ -806,6 +806,24 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
     return true;
 }
 
+// CleanupDiscardRankingWithOrder plus the MTG_SHED_STATS firing census (ShedStats::CountPolicy): how
+// often a deck policy's index 0 differs from the generic fallback's -- the ranking its =0 hatch
+// restores. A byte-identical A/B on a policy is only believable next to a non-zero count. Off by
+// default = one static bool read on the shipped path.
+static std::vector<int> CleanupDiscardRankingCounted(const GameState& s,
+                                                     const std::vector<std::string>* required_pieces,
+                                                     const std::vector<int>& shed)
+{
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = CleanupDiscardRanking(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -5823,7 +5841,7 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     if (paws >= 0) { shed.push_back(paws); }                                              // protected
     if (slot >= 0) { shed.push_back(slot); }
     for (int k = hard_n - 1; k >= 0; --k) { shed.push_back(land_keep[k]); }
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 // ---- TreasureHuntProvider ---------------------------------------------------
@@ -8020,7 +8038,7 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
     { if (((best >> t) & 1u) && turn_of[t] < 0) { shed.push_back(pool_hand[dp.pool_of[t]]); } }
     if (kept_vial >= 0) { shed.push_back(kept_vial); }
     for (int t = nm - 1; t >= 0; --t) { if (kept_mana[mana_idx[t]]) { shed.push_back(mana_idx[t]); } }
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 }   // namespace
@@ -8452,7 +8470,7 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
     if (kept_vial >= 0) { shed.push_back(kept_vial); }
     if (anthem1 >= 0) { shed.push_back(pool_hand[anthem1]); }
     push_slot('A');                                                             // coloured land #1
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 // ---- SoldiersProvider --------------------------------------------------------
@@ -8983,7 +9001,7 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
     for (int i : others)        { shed.push_back(i); }                                       // S8
     for (std::size_t k = ladder.size(); k-- > 0;) { shed.push_back(ladder[k]); }             // keep tail
     for (std::size_t k = creature_kept.size(); k-- > 0;) { shed.push_back(creature_kept[k]); }
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 std::string GoblinsProvider::ForcedEarlyLandName(const GameState& s, int controller) const
@@ -11562,7 +11580,7 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
     for (int i : vials)      { shed.push_back(i); }
     for (std::size_t k = mults.size(); k > mi; --k) { shed.push_back(mults[k - 1]); }   // King first
     for (std::size_t k = taken.size(); k > 0; --k)  { shed.push_back(taken[k - 1]); }
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 
@@ -13542,7 +13560,7 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
     put_unkept_rev(engines);                                               // extra Defense copies
     for (int i : others) { shed.push_back(i); }                            // unrecognised
     for (std::size_t k = ladder.size(); k-- > 0;) { shed.push_back(ladder[k]); }   // keep tail
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 // MTG_CG_ORDER -- the USER-reviewed Creature Giving cast order (2026-08-19, ruling recorded
@@ -20952,7 +20970,7 @@ std::vector<int> FluctuatorProvider::CleanupDiscardCandidates(
     for (auto it = ladder.rbegin(); it != ladder.rend(); ++it) { emit(*it); }   // the ladder, backwards
     for (int i = 0; i < n; ++i)                          // totality guard (nothing should reach it)
     { if (!ap.hand[static_cast<std::size_t>(i)].m_is_staged) { emit(i); } }
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 // ---- DragonsProvider: the Mind Stone dig (searched axis) --------------------
@@ -23123,7 +23141,7 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     for (int i = 0; i < n; ++i) { if (is_cls(i, C_REST)) { put(i); } }                      // S6 unrecognised
     for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }                  // the ladder, backwards
 
-    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
 // ---- SnowProvider::CleanupDiscardCandidates ---------------------------------
