@@ -543,6 +543,13 @@ public:
                "Creative Technique) and Maelstrom Wanderer GRANTS HASTE, so a bound must cover "
                "cards cast this turn off the top -- the hardest shape on the list." }; }
     const char* Name() const override { return "BreachingDragonstorm"; }
+    // Cleanup discard: the USER-settled bucket policy (2026-10-09,
+    // docs/design/breaching-dragonstorm-discard-policy-proposal.md "BreachingDragonstorm: SETTLED") --
+    // KEEP the only red source > enabler 1 > mana to 5 (flat, counting the board) > enabler 2 > a
+    // colour-payable payoff > a 2nd one. MTG_BREACH_BUCKET_DISCARD=0 restores GenericProvider's max-MV
+    // fallback (the A/B hatch).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
