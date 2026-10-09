@@ -1917,7 +1917,7 @@ seeds 930000.., 20 single-threaded processes; 8,243 decisions, 32.6M units):
 §5i) -> value leaf -> keep table. The Beseech axis is the remaining width lever; a doctrine is the
 USER's (see "Search width: the Beseech axis" below once measured).
 
-## Search width: the Beseech axis -- `MTG_PD_BESEECH_USEFUL` DRAFT (2026-10-08), default OFF, USER doctrine
+## Search width: the Beseech axis -- `MTG_PD_BESEECH_USEFUL`, the USER's doctrine ADOPTED 2026-10-09 (default ON)
 
 Beseech the Queen reaches every distinct library name with MV <= lands (~19), each a searched variant,
 times the twobrid payment variants, at every ply: ~44% of all scored candidates. The draft applies the
@@ -1945,9 +1945,30 @@ name. A MEASUREMENT lever until the USER rules on the doctrine.
   s108346 gi345 (T5 -> unwon) is NOT the lever: the BASE also never wins at b100 / b1000 / d6 / d8 -- the
   Zenith lockstep defect below, fixed.
 - OFF path: PD's three smoke rows reproduce the committed GT digests exactly in every round.
-- **USER DECISION (surfaced; default taken = OFF):** adopt the Beseech doctrine (as drafted, or amended)?
-  Recommendation: adopt -- quality-neutral at ~0.8x units, every slower game recovers; the freed budget
-  goes to depth.
+- **USER DECISION (2026-10-09):** *"I agree with that beseech idea. Engine creatures only and skip
+  duplicates."* -- narrower than the draft above: the search offers Beseech ONLY the engine creatures
+  (Tamanoa / Vito / Dina / Rhox Faithmender, by param role), and none we already have a copy of in hand
+  or on our battlefield. Shipped as `MTG_PD_BESEECH_USEFUL` default ON (`PreventDamageProvider::
+  TutorCandidates`; unit tests B1-B2 in `test/unit/test_prevent_damage_wish.cpp`). The draft's damage
+  sources / tutors / land roles are deleted.
+
+### The USER's rule, measured (2026-10-09; one pooled batch, every arm a heurarm flag set; `base` = the five-fix stack with Beseech unpruned; fresh seeds s130001/s131001 x600 d5 b20, 2HG s132001 x300, d3 b10 s133001 x400, d0 s134001 x3000; `logs/pd_opt/multi3/`)
+
+| arm | delta vs base (all 4,900) | searched cells only (1,900) | better / worse (searched) | units |
+|---|---|---|---|---|
+| draft (2026-10-08) | -0.0039 +/- 0.0015 | -0.0054 | 16 / 4 | 0.82x |
+| **USER: engine creatures only, skip every duplicate** | **-0.0278 +/- 0.0047** | +0.0016 (+3 turns: d3 +7, d5 0 / -2, 2HG -2) | 52 / 57 | **0.62x** |
+| ...skip only a held LEGEND (Vito / Dina) | -0.0220 +/- 0.0045 | +0.0047 | 52 / 66 | 0.62x |
+| ...all duplicates -> fall back to the duplicates (SHIPPED) | -0.0286 +/- 0.0047 | +0.0026 | 53 / 61 | 0.61x |
+
+- The aggregate gain is the depth-0 runner (-0.046 t/game, 131 / 43): its greedy first pick is now an
+  engine creature. Searched play is neutral within noise; work is 0.61-0.65x of the unpruned Beseech
+  (the draft: 0.82x).
+- "Skip duplicates" read literally (any engine creature already held) beats the legend-only reading
+  (+0.0057 +/- 0.0020 for legend-only vs literal, p 0.01).
+- The fallback when EVERY fetchable engine creature is a duplicate (the rule is silent): the duplicates
+  (engine creatures stay the only targets) vs the whole library measured equal (-0.0008 +/- 0.0008,
+  10 / 6). Shipped: the duplicates -- the narrower list. **USER review item** (default taken).
 
 ## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
 

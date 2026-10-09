@@ -207,6 +207,7 @@ TEST_CASE("PD wish: Beseech the Queen and Green Sun's Zenith are NOT ranked (lev
     PreventDamageProvider pd;
     const GameState s = MakeW({ "Green Sun's Zenith", "Beseech the Queen" },
                               { "Tamanoa", "City of Brass", "Grand Coliseum", "Ancient Tomb" });
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = 0;   // the Beseech restriction has its own tests (B1-B3)
     for (const char* tutor : { "Beseech the Queen", "Green Sun's Zenith" })
     {
         const CardParams& pp = ParamsOf(tutor);
@@ -216,6 +217,7 @@ TEST_CASE("PD wish: Beseech the Queen and Green Sun's Zenith are NOT ranked (lev
         heurarm::t_arm[heurarm::PD_WISH_RANK] = -1;
         CHECK(on.front() == "Tamanoa");   // library order: the ranking would have led Vito / Dina
     }
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = -1;
 }
 
 TEST_CASE("PD wish W7: a held Green Sun's Zenith covers the gain role -> Vito first (USER 2026-09-29)")
@@ -355,6 +357,29 @@ TEST_CASE("PD wish W15: at most ONE land target -- Battlefield Forge when availa
     CHECK(Pos(off, "Brushland") >= 0);
 }
 
+TEST_CASE("PD wish W16: MTG_PD_WISH_LAND_CAST (amendment draft) -- the land that makes more engine creatures castable from DISTINCT lands beats Battlefield Forge")
+{
+    // Claude-play sweep s61013 (2026-10-08): mulled to five on City of Brass + Ancient Tomb, the T2 Wish
+    // took City's {G}. Dina's {B}{G} needs City for {B} AND a second green land: Brushland casts Dina
+    // (and Rhox), Battlefield Forge only Rhox.
+    const GameState s = MakeW({ "Living Wish", kDinaW, kRhoxW }, { "City of Brass", "Ancient Tomb" });
+    const std::vector<std::string> off = WishUseful(s);   // control: the USER's "always Battlefield Forge"
+    CHECK(Pos(off, "Battlefield Forge") >= 0);
+    CHECK(Pos(off, "Brushland") < 0);
+    heurarm::t_arm[heurarm::PD_WISH_LAND_CAST] = 1;
+    const std::vector<std::string> on = WishUseful(s);
+    heurarm::t_arm[heurarm::PD_WISH_LAND_CAST] = -1;
+    CHECK(Pos(on, "Brushland") >= 0);
+    CHECK(Pos(on, "Battlefield Forge") < 0);
+    // A tie keeps Battlefield Forge: with a second black-or-green land the Forge casts Dina too.
+    const GameState t = MakeW({ "Living Wish", kDinaW, kRhoxW }, { "City of Brass", "Karplusan Forest" });
+    heurarm::t_arm[heurarm::PD_WISH_LAND_CAST] = 1;
+    const std::vector<std::string> tie = WishUseful(t);
+    heurarm::t_arm[heurarm::PD_WISH_LAND_CAST] = -1;
+    CHECK(Pos(tie, "Battlefield Forge") >= 0);
+    CHECK(Pos(tie, "Brushland") < 0);
+}
+
 namespace
 {
 bool ZenithMayFetchDina(const GameState& s)
@@ -386,4 +411,48 @@ TEST_CASE("PD zenith Z2: Dina in HAND -- skipped only when castable ({B} + {G} f
     CHECK_FALSE(ZenithMayFetchDina(MakeW({ "Green Sun's Zenith", kDinaW, "City of Brass" }, { "Karplusan Forest" })));
     // No Dina anywhere -> no narrowing.
     CHECK(ZenithMayFetchDina(MakeW({ "Green Sun's Zenith" }, { "City of Brass", "Karplusan Forest" })));
+}
+
+// ---- Beseech the Queen: the USER's doctrine (2026-10-09: "Engine creatures only and skip duplicates")
+namespace
+{
+std::vector<std::string> Beseech(const GameState& s)
+{ return PreventDamageProvider().TutorCandidates(s, 0, ParamsOf("Beseech the Queen")); }
+
+const std::vector<std::string> kBeseechLib = { "Tamanoa", kDinaW, kVitoW, kRhoxW, "City of Brass",
+                                               "Manabarbs", "Spellshock", "Green Sun's Zenith" };
+const std::vector<std::string> kFourLands = { "City of Brass", "Grand Coliseum", "Ancient Tomb", "Brushland" };
+}
+
+TEST_CASE("PD beseech B1: the search offers Beseech only the engine creatures we do not already have")
+{
+    // Tamanoa on the battlefield and Vito in hand are duplicates; Dina and Rhox (MV 4 <= 4 lands) stay.
+    std::vector<std::string> board = kFourLands;
+    board.push_back("Tamanoa");
+    const GameState s = MakeW({ "Beseech the Queen", kVitoW }, board, kBeseechLib);
+    const std::vector<std::string> on = Beseech(s);
+    CHECK(on == std::vector<std::string>{ kDinaW, kRhoxW });
+    // Control: the lever off -> every legal name (Tamanoa, Vito, the damage sources, the Zenith, a land).
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = 0;
+    const std::vector<std::string> off = Beseech(s);
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = -1;
+    for (const char* nm : { "Tamanoa", kVitoW, kDinaW, kRhoxW, "Manabarbs", "Spellshock",
+                            "Green Sun's Zenith", "City of Brass" })
+    { CHECK(Pos(off, nm) >= 0); }
+}
+
+TEST_CASE("PD beseech B2: every fetchable engine creature a duplicate -> those duplicates; none fetchable -> every name")
+{
+    std::vector<std::string> board = kFourLands;
+    board.push_back("Tamanoa");
+    const GameState s = MakeW({ "Beseech the Queen", kVitoW, kDinaW, kRhoxW }, board, kBeseechLib);
+    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW, kVitoW, kRhoxW });
+    // No engine creature left in the library: the whole list (a Beseech is never made unfetchable).
+    const GameState t = MakeW({ "Beseech the Queen" }, kFourLands,
+                              { "City of Brass", "Manabarbs", "Spellshock", "Green Sun's Zenith" });
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = 0;
+    const std::vector<std::string> off = Beseech(t);
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = -1;
+    CHECK(Beseech(t) == off);
+    CHECK(off.size() == 4);
 }

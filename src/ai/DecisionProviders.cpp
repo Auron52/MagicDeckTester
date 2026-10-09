@@ -11715,6 +11715,36 @@ bool PdIsBigColourlessLand(const GameState& s, int controller, const CardDefinit
     return true;
 }
 
+// Can the coloured pips of `cost` be paid from DISTINCT lands among `srcs` (one colour mask per land)?
+// Colours only, eventually -- no mana total, no tapped state (USER 2026-09-29: "we don't need to be
+// fancy with the costs"). A depth-first assignment: <= 3 pips per engine creature, <= ~12 lands.
+bool PdAssignPips(const std::vector<unsigned>& srcs, const std::vector<unsigned>& pips, std::size_t k,
+                  std::vector<char>& used)
+{
+    if (k == pips.size()) { return true; }
+    for (std::size_t j = 0; j < srcs.size(); ++j)
+    {
+        if (used[j] || !(srcs[j] & pips[k])) { continue; }
+        used[j] = 1;
+        if (PdAssignPips(srcs, pips, k + 1, used)) { return true; }
+        used[j] = 0;
+    }
+    return false;
+}
+
+bool PdPipsFromDistinctLands(const std::vector<unsigned>& srcs, const ManaCost& c)
+{
+    std::vector<unsigned> pips;
+    for (int i = 0; i < c.white; ++i) { pips.push_back(1u); }
+    for (int i = 0; i < c.blue;  ++i) { pips.push_back(2u); }
+    for (int i = 0; i < c.black; ++i) { pips.push_back(4u); }
+    for (int i = 0; i < c.red;   ++i) { pips.push_back(8u); }
+    for (int i = 0; i < c.green; ++i) { pips.push_back(16u); }
+    if (pips.size() > srcs.size()) { return false; }
+    std::vector<char> used(srcs.size(), 0);
+    return PdAssignPips(srcs, pips, 0, used);
+}
+
 // Can we cast Tamanoa EASILY: three DISTINCT lands (board + hand) cover {R}{G}{W}? And do we hold an
 // Ancient Tomb-shaped land? (The Tamanoa-vs-Rhox call, USER 2026-09-29.)
 struct PdTamanoaFacts { bool rgw_ok = false; bool tomb = false; };
@@ -11893,8 +11923,8 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     //     library and bakes EVERY green target into its own cast variant (TurnSolver's
     //     tutor_mv_max_is_x branch), so resolution always has a pin; a trial MTG_PD_GSZ_RANK lever
     //     (2026-09-29) was byte-identical to OFF on 600 held-out games and was deleted.
-    //   * Beseech the Queen -- it reaches the whole library (Manabarbs, Spellshock, Earthquake, the
-    //     other tutors) and the doctrine says nothing about it; it keeps the nonlands-first order.
+    //   * Beseech the Queen -- it keeps the nonlands-first order; its search list is RESTRICTED instead
+    //     (the USER's Beseech doctrine below: engine creatures only, no duplicates).
     static const bool s_wish_env = EnvOn("MTG_PD_WISH_RANK", true);
     if (pp.wish_from_sideboard && all.size() > 1 && heurarm::Flag(heurarm::PD_WISH_RANK, s_wish_env))
     { all = PdRankEngineTutor(s, controller, std::move(all)); }
@@ -12003,6 +12033,56 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
                     if (nm == "Battlefield Forge") { keep_land = nm; break; }
                     if (keep_land.empty()) { keep_land = nm; }
                 }
+                // AMENDMENT DRAFT (MTG_PD_WISH_LAND_CAST, default OFF -- for the USER's review; claude-play
+                // sweep s61013, 2026-10-08): the Wish's {G} proves a green SOURCE, not a SPARE one. Mulled
+                // to five on City of Brass + Ancient Tomb, the T2 Wish took City's G -- and Dina's {B}{G}
+                // then needs City for {B} AND a second green land: Brushland casts Dina on T3 (a T5 win),
+                // Battlefield Forge cannot (T6). So each land is scored by how many engine creatures in hand
+                // become colour-castable from DISTINCT lands (board + hand + the fetched land); the highest
+                // wins and Battlefield Forge keeps every tie.
+                static const bool s_land_cast_env = EnvOn("MTG_PD_WISH_LAND_CAST");
+                if (!keep_land.empty() && heurarm::Flag(heurarm::PD_WISH_LAND_CAST, s_land_cast_env))
+                {
+                    std::vector<unsigned> srcs;                   // one colour mask per land we have
+                    std::vector<const CardDefinition*> engine;    // the engine creatures in hand
+                    auto mask = [&](const CardDefinition& d, bool in_hand)
+                    {
+                        unsigned m = 0;
+                        for (Color c : EffectiveProduces(s, controller, d, in_hand)) { m |= PdColourBit(c); }
+                        return m;
+                    };
+                    for (const Permanent& p : s.battlefield)
+                    {
+                        if (p.controller_index != controller) { continue; }
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                        if (d != nullptr && d->card.IsLand()) { srcs.push_back(mask(*d, false)); }
+                    }
+                    for (const Card& c : ap.hand)
+                    {
+                        if (c.m_is_staged) { continue; }
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                        if (d == nullptr) { continue; }
+                        if (d->card.IsLand()) { srcs.push_back(mask(*d, true)); }
+                        else if (PdEngineRole(d) != kPdNoRole) { engine.push_back(d); }
+                    }
+                    auto castable = [&](const std::string& nm)
+                    {
+                        std::vector<unsigned> v = srcs;
+                        v.push_back(mask(*CardDatabase::Instance().Lookup(nm), true));
+                        int n = 0;
+                        for (const CardDefinition* e : engine)
+                        { if (PdPipsFromDistinctLands(v, e->card.m_mana_cost)) { ++n; } }
+                        return n;
+                    };
+                    int best = castable(keep_land);
+                    for (const std::string& nm : trimmed)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                        if (d == nullptr || !d->card.IsLand() || nm == keep_land) { continue; }
+                        const int n = castable(nm);
+                        if (n > best) { best = n; keep_land = nm; }
+                    }
+                }
                 trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), [&](const std::string& nm)
                 {
                     const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
@@ -12013,117 +12093,43 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
         }
         if (!useful.empty()) { all = std::move(useful); }
     }
-    // BESEECH THE QUEEN -- DOCTRINE DRAFT (MTG_PD_BESEECH_USEFUL, default OFF: a MEASUREMENT lever for
-    // the USER's review, ledger "Search width: the Beseech axis"). Beseech reaches every distinct
-    // library name with MV <= our lands -- ~19 of them -- and every one is a searched variant, times the
-    // twobrid payment variants, at every ply: ~44% of all candidates the search scores. This applies
-    // the Wish doctrine's SHAPE to it (USER 2026-09-29, of the Wish: "In goldfish nothing else is
-    // relevant"), by ROLE read off params, never names:
-    //   KEEP  the engine creatures (gain / drain / amp, PdEngineRole), the damage sources that feed
-    //         them (Manabarbs land_tap_damage_each_player, Spellshock on_cast_trigger_damage, Rolling
-    //         Earthquake x_damage_each_creature_and_player, Pyrohemia ping_all_amount), the creature
-    //         tutors (Living Wish wish_from_sideboard, Green Sun's Zenith tutor_to_battlefield_single),
-    //         an Ancient Tomb-shaped land (PdIsBigColourlessLand: the deck's only acceleration), the
-    //         FUEL land (most self-damage per tap, untapped), and -- only while a colour or next turn's
-    //         land drop is short (the Wish TRIM's "lands done" test) -- ONE TEMPO land (see below).
-    //   DROP  another Beseech (a tutor that can only re-fetch what this one could), a Vito / Dina we
-    //         already hold (legend rule), and the redundant lands.
-    // The order is untouched (nonlands first, library order). Never trims to empty. Human play
-    // (DecisionUnpruned Tutor) keeps every name.
-    static const bool s_beseech_env = EnvOn("MTG_PD_BESEECH_USEFUL");
+    // BESEECH THE QUEEN -- THE USER'S DOCTRINE (USER 2026-10-09, on the 2026-10-08 draft: "I agree with
+    // that beseech idea. Engine creatures only and skip duplicates."). MTG_PD_BESEECH_USEFUL, DEFAULT ON;
+    // =0 = every legal name. Beseech reaches every distinct library name with MV <= our lands -- ~19 of
+    // them -- and each is a searched variant, times the twobrid payment variants, at every ply (~44% of
+    // the candidates the search scored). The AUTONOMOUS search now offers it only
+    //   * the ENGINE CREATURES, by param role (PdEngineRole: gain Tamanoa, drain Vito / Dina, amp Rhox
+    //     Faithmender), and of those
+    //   * none we already have a copy of, in hand or on our battlefield (a DUPLICATE).
+    // Every fetchable engine creature a duplicate -> those duplicates (engine creatures stay the only
+    // targets); none fetchable at all -> the whole list (a Beseech is never made unfetchable). Human play
+    // (DecisionUnpruned Tutor) keeps every name. The order is untouched (nonlands first, library order).
+    // Measured 2026-10-09 (ledger "Search width: the Beseech axis"): 0.61x units, searched play neutral.
+    static const bool s_beseech_env = EnvOn("MTG_PD_BESEECH_USEFUL", true);
     if (pp.tutor_max_mv_is_lands && !pp.wish_from_sideboard && all.size() > 1
         && !DecisionUnpruned(UnprunedGate::Tutor)
         && heurarm::Flag(heurarm::PD_BESEECH_USEFUL, s_beseech_env))
     {
-        const Player& ap = s.players[controller];
-        unsigned producible = 0, need = 0;
-        int hand_lands = 0;
-        bool held_vito = false, held_dina = false;
-        auto see = [&](const CardDefinition* d, bool in_hand)
-        {
-            if (d == nullptr) { return; }
-            if (d->card.IsLand())
-            {
-                for (Color c : EffectiveProduces(s, controller, *d, in_hand)) { producible |= PdColourBit(c); }
-                if (in_hand) { ++hand_lands; }
-                return;
-            }
-            const int role = PdEngineRole(d);
-            if (role == kPdVito) { held_vito = true; }
-            if (role == kPdDina) { held_dina = true; }
-            if (in_hand && role != kPdNoRole) { need |= PdCostColours(d->card.m_mana_cost); }
-        };
+        std::vector<std::string> held;   // names we have a copy of: our battlefield + hand
+        auto hold = [&](const CardDefinition* d)
+        { if (d != nullptr) { held.push_back(d->card.m_name.str()); } };
         for (const Permanent& p : s.battlefield)
-        { if (p.controller_index == controller) { see(CardDatabase::Instance().LookupCached(p.card), false); } }
-        for (const Card& c : ap.hand)
-        { if (!c.m_is_staged) { see(CardDatabase::Instance().LookupCached(c), true); } }
+        { if (p.controller_index == controller) { hold(CardDatabase::Instance().LookupCached(p.card)); } }
+        for (const Card& c : s.players[controller].hand)
+        { if (!c.m_is_staged) { hold(CardDatabase::Instance().LookupCached(c)); } }
+        std::vector<std::string> engine, fresh;
         for (const std::string& nm : all)
         {
-            const int role = PdEngineRole(CardDatabase::Instance().Lookup(nm));
-            if (role == kPdNoRole || (role == kPdVito && held_vito) || (role == kPdDina && held_dina)) { continue; }
-            need |= PdCostColours(CardDatabase::Instance().Lookup(nm)->card.m_mana_cost);
+            if (PdEngineRole(CardDatabase::Instance().Lookup(nm)) == kPdNoRole) { continue; }
+            engine.push_back(nm);
+            if (std::find(held.begin(), held.end(), nm) == held.end()) { fresh.push_back(nm); }
         }
-        const unsigned missing = need & ~producible;
-        const int lands_wanted = (ap.lands_played_this_turn == 0 ? 1 : 0) + 1;
-        const bool lands_done = missing == 0 && hand_lands >= lands_wanted;
-        std::vector<std::string> kept;
-        // LANDS by ROLE (the first cut kept "one missing-colour fixer" and lost two held-out games whose
-        // T5 line Beseeched a land for a different reason -- s104261 gi260: Tarnished Citadel as FUEL,
-        // 3 self-damage per coloured tap = 3 Vito drain under Tamanoa; s104219 gi218: Reflecting Pool as
-        // the next land drop, while the fixer slot had fallen to library order):
-        //   FUEL   the untapped land with the most self-damage per tap (Tarnished Citadel) -- always,
-        //          like the other damage sources;
-        //   TEMPO  while colours or next turn's drop are short: the land that fixes the most missing
-        //          colours, then makes the most colours, enters untapped, and hurts least.
-        std::string fuel, tempo;
-        int fuel_dmg = 0;
-        std::array<int, 4> tempo_key{ -1, -1, -1, -1 };
-        for (const std::string& nm : all)
-        {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-            if (d == nullptr) { continue; }
-            const CardParams& p = d->params;
-            if (d->card.IsLand())
-            {
-                if (PdIsBigColourlessLand(s, controller, d, /*in_hand=*/true)) { kept.push_back(nm); continue; }
-                if (!p.enters_tapped && p.tap_self_damage > fuel_dmg) { fuel_dmg = p.tap_self_damage; fuel = nm; }
-                if (lands_done) { continue; }
-                unsigned m = 0;
-                for (Color c : EffectiveProduces(s, controller, *d, /*in_hand=*/true)) { m |= PdColourBit(c); }
-                int fix = 0, ncol = 0;
-                for (unsigned b = m & missing; b != 0; b &= b - 1) { ++fix; }
-                for (unsigned b = m; b != 0; b &= b - 1) { ++ncol; }
-                const std::array<int, 4> k{ fix, ncol, p.enters_tapped ? 0 : 1, 10 - p.tap_self_damage };
-                if (k > tempo_key) { tempo_key = k; tempo = nm; }
-                continue;
-            }
-            const int role = PdEngineRole(d);
-            if (role != kPdNoRole)
-            {
-                if ((role == kPdVito && held_vito) || (role == kPdDina && held_dina)) { continue; }
-                kept.push_back(nm);
-                continue;
-            }
-            const bool damage = p.land_tap_damage_each_player > 0 || p.on_cast_trigger_damage > 0
-                             || p.x_damage_each_creature_and_player || p.ping_all_amount > 0;
-            const bool creature_tutor = p.wish_from_sideboard || p.tutor_to_battlefield_single;
-            if (damage || creature_tutor) { kept.push_back(nm); }
-        }
-        if (!fuel.empty()) { kept.push_back(fuel); }
-        if (!tempo.empty() && tempo != fuel) { kept.push_back(tempo); }
-        if (!kept.empty())
-        {
-            // Restore the incoming order (the land picks were appended out of place).
-            std::vector<std::string> ordered;
-            for (const std::string& nm : all)
-            { if (std::find(kept.begin(), kept.end(), nm) != kept.end()) { ordered.push_back(nm); } }
-            all = std::move(ordered);
-        }
+        if (!fresh.empty())       { all = std::move(fresh); }
+        else if (!engine.empty()) { all = std::move(engine); }
         static const bool s_dbg = EnvOn("MTG_PD_BESEECH_DEBUG");
         if (s_dbg)
         {
-            std::fprintf(stderr, "[pd-beseech] t%d lands_done=%d missing=%u hand_lands=%d kept:",
-                         s.turn_number, lands_done ? 1 : 0, missing, hand_lands);
+            std::fprintf(stderr, "[pd-beseech] t%d kept:", s.turn_number);
             for (const std::string& nm : all) { std::fprintf(stderr, " %s;", nm.c_str()); }
             std::fprintf(stderr, "\n");
         }

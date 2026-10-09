@@ -376,6 +376,9 @@ TEST_CASE("Beseech the Queen: ANY card with MV <= lands you control; the cap is 
     Lib2(s, "Living Wish");                      // MV 2 (a sorcery: empty tutor_types = any card)
     Lib2(s, "Mountain");                         // MV 0
     const CardParams& pp = D("Beseech the Queen").params;
+    // The LEGAL list: the search's doctrine restriction (MTG_PD_BESEECH_USEFUL; tests B1-B2 in
+    // test_prevent_damage_wish.cpp) is pinned off.
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = 0;
     // Two lands, no land in hand -> MV <= 2.
     std::vector<std::string> c = Prov2().TutorCandidates(s, 0, pp);
     CHECK(std::find(c.begin(), c.end(), "Tamanoa") == c.end());
@@ -386,6 +389,7 @@ TEST_CASE("Beseech the Queen: ANY card with MV <= lands you control; the cap is 
     Hand2(s, "Mountain");
     c = Prov2().TutorCandidates(s, 0, pp);
     CHECK(std::find(c.begin(), c.end(), "Tamanoa") != c.end());
+    heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = -1;
     // ...but at RESOLUTION on two lands a baked Tamanoa is illegal and is re-picked.
     PerformTutor(s, 0, pp, "Tamanoa", "Beseech the Queen");
     const std::vector<Card>& h = s.players[0].hand;
