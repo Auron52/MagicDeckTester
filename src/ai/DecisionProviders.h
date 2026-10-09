@@ -729,6 +729,11 @@ public:
     // (GameState::vial_target_mv), so no land constant sits on this shared base.
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // NOT prefix-stable while the slivers rule is on: shedding the soft 4th re-shapes the fill, and
+    // shedding the first Cloudshredder / Hatchery makes the 2nd copy live -- so a multi-card cleanup
+    // re-asks after each shed. =0 (the generic ranking) keeps the batched path. Subclasses with their
+    // own discard rule declare their own (Knights, WhiteKnights; Soldiers pins true).
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Knights (Aether Vial knight tribal). Rode VialProvider and STILL DOES -- it derives from it, so
@@ -843,6 +848,10 @@ public:
     // GenericProvider::CleanupDiscardCandidates, the max-MV fallback). PROVISIONAL (user review).
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // PINNED to the class default (batched multi-shed path). VialProvider declares its slivers rule
+    // unstable (2026-10-09), and Soldiers must not inherit that: its own rule above has always run
+    // batched, so this keeps it byte-identical.
+    bool CleanupDiscardShedStable() const override { return true; }
 };
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
