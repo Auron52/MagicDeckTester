@@ -355,6 +355,9 @@ inline bool CleanupDiscardProtected(const GameState& state, const Card& c,
     // rituals). Count copies in hand -- staged included, since a staged copy is already committed to
     // a line, which is exactly what makes the loose one spare -- plus, under the `deck` scope, the
     // copies still in the library. Protection re-engages once the count hits 1.
+    // The provider may take a piece's discard protection over (its shed order then decides); see
+    // DecisionProvider::CleanupDiscardProtectionWaived -- required_pieces also gates the mulligan.
+    if (ResolveProvider(state).CleanupDiscardProtectionWaived(state, c)) { return false; }
     const Player& ap = state.players[state.active_player_index];
     const DiscardProtectScope scope = EffectiveDiscardProtectScope(state);
     if (scope == DiscardProtectScope::All) { return true; }

@@ -368,6 +368,23 @@ enum Slot : int
     LA_PASS_CEILING,          // MTG_LA_PASS_CEILING  SolveWithLookahead's budgeted root arms FullSearchLine's proportional overrun ceiling (kOverrunBudgetMult x the budget) around every pass after the first, so ONE candidate's rollout can no longer run a pass unbounded (Landfall s2040 gi38: 37.7M units against a 9,000-unit budget). Re-prices work only: inert at an unlimited budget. DEFAULT ON (2026-10-15); =0 restores the uncapped pass
     PUT_BOUNCE_FOLD,          // MTG_PUT_BOUNCE_FOLD        land-search gap 3: a Primeval Titan ATTACK bounce variant whose (pick, clamped bounce index) a sibling already resolved from the same pin-blind main phase is declined BEFORE its unit charge (TurnSolver.cpp PutBounceFold; la_cand rides the combat-pin share, FSLineWin proves its base's apply clean). It skips only what the combat-pin fold would skip after the combat. IDENTITY fold, default ON; =0 is the A/B hatch
     PUT_BOUNCE_FOLD_VERIFY,   // MTG_PUT_BOUNCE_FOLD_VERIFY diagnostic: decline nothing; run each candidate the put-bounce fold WOULD decline and count whether the combat-pin fold then skips it (ok) or not (bad -- must be 0). Play is the fold-off play
+    ANGELS_BUCKET_DISCARD,    // MTG_ANGELS_BUCKET_DISCARD    Angels: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    AURA_BUCKET_DISCARD,      // MTG_AURA_BUCKET_DISCARD      Auras: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    BREACH_BUCKET_DISCARD,    // MTG_BREACH_BUCKET_DISCARD    BreachingDragonstorm: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    BURN_BUCKET_DISCARD,      // MTG_BURN_BUCKET_DISCARD      burn: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    CG_BUCKET_DISCARD,        // MTG_CG_BUCKET_DISCARD        Creature Giving: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    CRITTER_BUCKET_DISCARD,   // MTG_CRITTER_BUCKET_DISCARD   CritterLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    DRAGONSTORM_BUCKET_DISCARD, // MTG_DRAGONSTORM_BUCKET_DISCARD Dragonstorm: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    EDF_BUCKET_DISCARD,       // MTG_EDF_BUCKET_DISCARD       EldraziDisplacerFlicker: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    FLUCT_BUCKET_DISCARD,     // MTG_FLUCT_BUCKET_DISCARD     Fluctuator: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    GIANTS_BUCKET_DISCARD,    // MTG_GIANTS_BUCKET_DISCARD    Giants: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    GOBLIN_BUCKET_DISCARD,    // MTG_GOBLIN_BUCKET_DISCARD    Goblins: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    KNIGHTS_BUCKET_DISCARD,   // MTG_KNIGHTS_BUCKET_DISCARD   Knights: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    POD_BUCKET_DISCARD,       // MTG_POD_BUCKET_DISCARD       Melira Pod: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    SLIVERS_BUCKET_DISCARD,   // MTG_SLIVERS_BUCKET_DISCARD   slivers_vial (VialProvider): the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    FUNGUS_BUCKET_DISCARD,    // MTG_FUNGUS_BUCKET_DISCARD    Fungus: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    WK_BUCKET_DISCARD,        // MTG_WK_BUCKET_DISCARD        WhiteKnights (its extras over the Knights rule): the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    SELESNYA_BUCKET_DISCARD,  // MTG_SELESNYA_BUCKET_DISCARD  SelesnyaLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     COUNT
 };
 
@@ -697,6 +714,23 @@ inline const char* Name(int slot)
         "MTG_LA_PASS_CEILING",
         "MTG_PUT_BOUNCE_FOLD",
         "MTG_PUT_BOUNCE_FOLD_VERIFY",
+        "MTG_ANGELS_BUCKET_DISCARD",
+        "MTG_AURA_BUCKET_DISCARD",
+        "MTG_BREACH_BUCKET_DISCARD",
+        "MTG_BURN_BUCKET_DISCARD",
+        "MTG_CG_BUCKET_DISCARD",
+        "MTG_CRITTER_BUCKET_DISCARD",
+        "MTG_DRAGONSTORM_BUCKET_DISCARD",
+        "MTG_EDF_BUCKET_DISCARD",
+        "MTG_FLUCT_BUCKET_DISCARD",
+        "MTG_GIANTS_BUCKET_DISCARD",
+        "MTG_GOBLIN_BUCKET_DISCARD",
+        "MTG_KNIGHTS_BUCKET_DISCARD",
+        "MTG_POD_BUCKET_DISCARD",
+        "MTG_SLIVERS_BUCKET_DISCARD",
+        "MTG_FUNGUS_BUCKET_DISCARD",
+        "MTG_WK_BUCKET_DISCARD",
+        "MTG_SELESNYA_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
