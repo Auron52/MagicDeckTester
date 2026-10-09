@@ -33790,8 +33790,8 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
 //             counting their output -- Priest of Titania = every Elf on the battlefield, Elvish
 //             Archdruid = our Elves -- in the USER's order Priest > Archdruid > Llanowar = Mystic >
 //             Alchemist.
-//   LIFEGAIN  1 (Feed the Clan > Wellwisher) while a lifegain payoff (Paragon / Ageless) is held or
-//             in play.
+//   LIFEGAIN  1 (Feed the Clan > Wellwisher) while a lifegain payoff (Paragon / Ageless, and
+//             Bogbeast -- its pump is the life gained this turn) is held or in play.
 //   PAYOFFS   2 + a soft 3rd, net of board, ranked by castability x enablement; equal ones Bogbeast >
 //             Paragon > Craterhoof > Ageless > Avatar. Paragon / Ageless are enabled only with a
 //             lifegain source in hand or play (Feed, Wellwisher, Blossoming Sands, Blighted Steppe,
@@ -33801,10 +33801,11 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
 //             not enabled (Wave below 8 mana first) -> surplus Elves beyond the target -> keep tail.
 //
 // CASTABILITY is a two-turn projection: M1 = board lands + board dorks + the first kept land drop;
-// M2 = board lands + two kept land drops + the board dorks AND the castable hand Elves deployed on
-// the next turn within M1 (in the USER's order), with Priest / Archdruid re-counted over the new
-// Elves. A payoff is distance 1 if it is castable off M1, 2 off M2, unreachable otherwise; castability
-// ranks first (nearer kept first), the USER's order breaks ties.
+// M2 = board lands + two kept land drops + the board dorks AND the best next-turn deployment of the
+// castable hand Elves within M1, with Priest / Archdruid re-counted over the new Elves. A payoff is
+// distance 1 if it is castable off M1, 2 off M2, unreachable otherwise; castability ranks first
+// (nearer kept first), the USER's order breaks ties. An unreachable payoff's distance is its GAP --
+// the mana (and W sources) it is still short at M2 -- so the farthest is shed first.
 //
 // KEEP LADDER (agent default, the Giants ramp shape -- most kept first; read backwards it is the
 // keep tail):  land > Elf > payoff > land > Elf > payoff > land (> W lands kept past 3 for a Paragon)
@@ -33828,9 +33829,10 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
 //     lifegain and surplus castable payoffs (past 2 + soft 3rd) shed with their bucket's group.
 //   * a reachable Wave ranks right after Craterhoof among equals (the USER's list does not name it);
 //     the kept Paragon takes a HARD slot (the 2nd) when castability alone would leave it soft or out.
-//   * "not reachable / not enabled": Waves first, then unreachable before not-enabled, then the
-//     USER's order reversed. A lifegain card that is the ONLY lifegain source is laddered right after
-//     the first kept Paragon / Ageless it enables, so the pair gives way together.
+//   * "not reachable / not enabled": Waves first, then the largest gap first (a reachable but
+//     unenabled payoff has gap 0), the USER's order reversed only on an equal gap. A lifegain card
+//     that is the ONLY lifegain source is laddered right after the first kept Paragon / Ageless it
+//     enables, so the pair gives way together.
 static bool SelesnyaBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_SELESNYA_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
@@ -33894,7 +33896,13 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         if (p.own_creature_enters_lifegain_toughness && d.card.IsCreature()) { return P_AVATAR; }
         return P_NONE;
     };
-    auto gated = [](int k) { return k == P_PARAGON || k == P_AGELESS; };   // the lifegain payoffs
+    // ENABLEMENT gate (USER: "Paragon / Ageless count as enabled only with a lifegain source").
+    auto gated = [](int k) { return k == P_PARAGON || k == P_AGELESS; };
+    // A LIFEGAIN PAYOFF for the LIFEGAIN 1 rule: the gated pair plus Blossoming Bogbeast, whose team pump
+    // is +X/+X for the life gained THIS TURN (cards.json: attack_team_pump_per_life_gained) -- so a Feed
+    // the Clan beside a Bogbeast has a payoff (review fix 2026-10-09). Bogbeast is not gated: its own
+    // attack gains 2 first.
+    auto lg_payoff = [&](int k) { return gated(k) || k == P_BOGBEAST; };
 
     // ---- 1. board census ------------------------------------------------------------------------
     int board_lands = 0, board_land_mana = 0, board_w = 0, board_payoffs = 0, board_lifegain_cards = 0;
@@ -33921,7 +33929,7 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         if (k != P_NONE)
         {
             ++board_payoffs;
-            if (gated(k))       { board_lg_payoff = true; }
+            if (lg_payoff(k))   { board_lg_payoff = true; }
             if (k == P_PARAGON) { board_paragon = true; }
         }
         if (lg_source(d->params, false)) { board_lg_source = true; }
@@ -33937,15 +33945,15 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         }
         return k;
     };
-    // A dork's yield once `deployed` (hand Elves cast next turn) have joined the board.
-    auto dork_out = [&](const CardDefinition& d, const std::vector<const CardDefinition*>& deployed) -> int
+    // A dork's yield once dep[0..nd) (hand Elves cast next turn) have joined the board.
+    auto dork_out = [&](const CardDefinition& d, const CardDefinition* const* dep, int nd) -> int
     {
         const CardParams& p = d.params;
         if (!p.mana_per_creature_subtype.empty())
         {
             int k = board_sub(p.mana_per_creature_subtype, p.mana_per_creature_count_all);
-            for (const CardDefinition* e : deployed)
-            { if (CardHasSubtype(e->card, p.mana_per_creature_subtype)) { ++k; } }
+            for (int e = 0; e < nd; ++e)
+            { if (CardHasSubtype(dep[e]->card, p.mana_per_creature_subtype)) { ++k; } }
             return k;
         }
         if (p.mana_per_life_gained) { return 1; }
@@ -33967,7 +33975,7 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         if (lg_source(d->params, true)) { ++hand_lg_sources; }
         const int k = pay_kind(*d);
         if (k == P_PARAGON) { holding_paragon = true; }
-        if (gated(k))       { holding_lg_payoff = true; }
+        if (lg_payoff(k))   { holding_lg_payoff = true; }
     }
     auto legend_dead = [&](int i)
     {
@@ -34038,9 +34046,8 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     const int keep_lands = std::min(static_cast<int>(lands.size()), std::max(land_need, w_front));
 
     // ---- 4. the two-turn projection --------------------------------------------------------------
-    const std::vector<const CardDefinition*> no_deploy;
     int board_dork_mana = 0;
-    for (const CardDefinition* d : board_dorks) { board_dork_mana += dork_out(*d, no_deploy); }
+    for (const CardDefinition* d : board_dorks) { board_dork_mana += dork_out(*d, nullptr, 0); }
     const int drops2 = std::min(2, keep_lands);
     const int m1 = board_land_mana + board_dork_mana + (keep_lands >= 1 ? 1 : 0);
     const int w1 = board_w + ((keep_lands >= 1 && w_land(defs[at(lands[0])])) ? 1 : 0);
@@ -34050,26 +34057,41 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     std::vector<int> castable, uncastable;
     for (int i : dorks)
     { (defs[at(i)]->card.m_mana_cost.ManaValue() <= m1 ? castable : uncastable).push_back(i); }
-    // M2 with the first `count` castable Elves offered for deployment next turn, within M1.
+    // M2 with the first `count` castable Elves (USER order) on offer: the BEST next-turn deployment
+    // within M1, not a greedy one (review fix 2026-10-09 -- greedy in keep order let an Archdruid eat
+    // M1 = 3 for M2 = 4 where Llanowar + Mystic make 5). Bounded exhaustive: every subset of the first
+    // kMaxDeploy offered Elves whose mana values fit M1 (2^8 at most; a hand never holds more castable
+    // Elves than that, and any past the 8th simply does not enter the projection).
+    constexpr int kMaxDeploy = 8;
     auto project_m2 = [&](std::size_t count) -> int
     {
-        std::vector<const CardDefinition*> deployed;
-        int budget = m1;
-        for (std::size_t k = 0; k < count && k < castable.size(); ++k)
+        const int k_n = static_cast<int>(std::min({ count, castable.size(), static_cast<std::size_t>(kMaxDeploy) }));
+        const CardDefinition* dep[kMaxDeploy];
+        int best = 0;
+        for (unsigned mask = 0; mask < (1u << k_n); ++mask)
         {
-            const CardDefinition* d = defs[at(castable[k])];
-            const int mv = d->card.m_mana_cost.ManaValue();
-            if (mv <= budget) { budget -= mv; deployed.push_back(d); }
+            int cost = 0, nd = 0;
+            for (int k = 0; k < k_n; ++k)
+            {
+                if (((mask >> k) & 1u) == 0) { continue; }
+                const CardDefinition* d = defs[at(castable[at(k)])];
+                cost += d->card.m_mana_cost.ManaValue();
+                dep[nd++] = d;
+            }
+            if (cost > m1) { continue; }
+            int m = board_land_mana + drops2;
+            for (const CardDefinition* d : board_dorks) { m += dork_out(*d, dep, nd); }
+            for (int k = 0; k < nd; ++k)                { m += dork_out(*dep[k], dep, nd); }
+            best = std::max(best, m);
         }
-        int m = board_land_mana + drops2;
-        for (const CardDefinition* d : board_dorks) { m += dork_out(*d, deployed); }
-        for (const CardDefinition* d : deployed)    { m += dork_out(*d, deployed); }
-        return m;
+        return best;
     };
     const int m2_pot = project_m2(castable.size());
 
     // ---- 5. PAYOFFS: castability x enablement, 2 + a soft 3rd, net of board ------------------------
-    struct PayInfo { int idx; int kind; int eff; int dist; bool enabled; };
+    // `gap` = the mana (and W sources) a payoff is still SHORT at the two-turn horizon -- its distance
+    // to castable once it is out of reach, so a 1-short Ageless outlives an 8-drop (review fix).
+    struct PayInfo { int idx; int kind; int eff; int dist; int gap; bool enabled; };
     const bool lg_available = board_lg_source || hand_lg_sources > 0;
     constexpr int kWaveX = 5;   // USER: "8+ mana within 2 turns (X = 5)"
     std::vector<PayInfo> good, bad;
@@ -34082,6 +34104,7 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         pi.eff  = d.card.m_mana_cost.ManaValue() + (pi.kind == P_WAVE ? kWaveX : 0);
         const int wreq = d.card.m_mana_cost.white;
         pi.dist = (pi.eff <= m1 && w1 >= wreq) ? 1 : (pi.eff <= m2_pot && w2 >= wreq) ? 2 : 3;
+        pi.gap  = std::max(0, pi.eff - m2_pot) + std::max(0, wreq - w2);
         pi.enabled = !gated(pi.kind) || lg_available;
         (pi.dist <= 2 && pi.enabled ? good : bad).push_back(pi);
     }
@@ -34138,7 +34161,11 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     std::vector<int> ladder;
     ladder.reserve(at(n));
     auto take = [&](int i) { if (i >= 0 && !kept[at(i)]) { kept[at(i)] = 1; ladder.push_back(i); } };
-    auto take_land = [&](int k) { if (k < keep_lands) { take(lands[at(k)]); } };
+    // The LANDS-3 slots hold the first min(keep_lands, land_need) kept lands; any W land kept PAST the 3
+    // for a Paragon is laddered after the 3rd land slot, as documented (review fix 2026-10-09: the
+    // extras used to take the top slots and the "past 3" loop never ran).
+    const int reg_lands = std::min(keep_lands, land_need);
+    auto take_land = [&](int k) { if (k < reg_lands) { take(lands[at(k)]); } };
     auto take_elf  = [&](std::size_t k) { if (k < elf_keep) { take(castable[k]); } };
     auto take_pay  = [&](std::size_t k)
     {
@@ -34150,7 +34177,7 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     take_land(0); take_elf(0); if (hard_n > 0) { take_pay(0); }
     take_land(1); take_elf(1); if (hard_n > 1) { take_pay(1); }
     take_land(2);
-    for (int k = 3; k < keep_lands; ++k) { take_land(k); }
+    for (int k = reg_lands; k < keep_lands; ++k) { take(lands[at(k)]); }   // W lands kept past the 3
     if (!lg_sole) { take(kept_lg); }
     for (std::size_t k = 2; k < elf_keep; ++k) { take_elf(k); }
     for (std::size_t k = hard_n; k < kept_pay_n; ++k) { take_pay(k); }   // the soft one(s)
@@ -34171,10 +34198,13 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     for (auto it = lifegain.rbegin(); it != lifegain.rend(); ++it) { if (!kept[at(*it)]) { put(*it); } }
     std::stable_sort(bad.begin(), bad.end(), [](const PayInfo& a, const PayInfo& b)
     {
+        // Waves below 8 first (USER); then FARTHEST from castable first -- "based on how castable"
+        // (review fix 2026-10-09: the USER's tie order alone shed a 1-short Ageless before an
+        // 8-drop); a reachable-but-unenabled payoff has gap 0 and so goes last; the USER's order
+        // reversed only on an equal gap.
         const bool wa = a.kind == P_WAVE, wb = b.kind == P_WAVE;
         if (wa != wb) { return wa; }
-        const bool ua = a.dist > 2, ub = b.dist > 2;
-        if (ua != ub) { return ua; }
+        if (a.gap != b.gap) { return a.gap > b.gap; }
         if (a.kind != b.kind) { return a.kind > b.kind; }
         return a.idx < b.idx;
     });
