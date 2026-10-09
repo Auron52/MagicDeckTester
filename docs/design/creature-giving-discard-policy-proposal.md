@@ -54,8 +54,22 @@ the generic ranking, so the A/B has the three arms asked for: buckets / DotH-las
 rule 2026-08-06/07). Tests: `test/unit/test_creature_giving_discard.cpp`.
 
 - **Keep ladder:** land > Suture Priest (none in play) > Birds (none in play, a source still owed) >
-  Defense (none in play; else Enlightened Tutor) > land > land tutor > land > fuel (projected < 3) >
-  land > land. Land slots fill until 5 sources counting board lands + dorks.
+  Defense (none in play; else Enlightened Tutor) > land > land tutor (only while a source is still
+  owed) > land > fuel (projected < 3) > land > land. Land slots fill until 5 sources counting board
+  lands + dorks; a kept spell's colour land (below) joins right behind the spell.
+- **Review fixes (2026-10-09):**
+  - *COLOURS FIRST BEATS THE COUNT -- integrator reading (2026-10-09), surfaced to the USER;*
+    consistent with EldraziFlicker R6 and the USER's Prevent Damage ladder ("coloured lands that
+    produce what we need"). A land that supplies a colour a KEPT spell needs, and that no board /
+    already-kept source supplies, is kept even past the 5-source quota (the best such land in the
+    land keep order). The fuel distance counts only the sources actually kept (board + kept lands /
+    Birds + the colour lands that giver would itself keep), no longer every live hand land. Found by
+    an independent review: with five lands in play the hand's only blue source (Breeding Pool) was
+    index 0 while Hunted Phantasm held the fuel slot as "near" only because of that same Pool.
+  - *The land tutor is MANA (design-literal; reverses agent reading 3 below):* once the 5 sources
+    are met at its place in the ladder (board + the lands / Birds kept before it) it is SURPLUS
+    MANA, shed in the surplus-mana tier ahead of a spare Enlightened Tutor, surplus fuel and Massacre
+    Wurm. It does not itself count as a source (agent reading, kept from D9).
 - **Shed order:** dead Chancery, then lone Reflecting Pool > Wardens > surplus mana (lands weakest
   first, then Birds, then land tutors) > spare Enlightened Tutor > surplus fuel (worst first) >
   Massacre Wurm > 2nd Suture Priest > extra Defense copies > unrecognised > the ladder backwards.
@@ -70,17 +84,19 @@ Agent readings (the USER may overturn any of these):
    no colour.
 2. A Chancery is dead with no other land in play and no other non-Karoo land in hand; a Reflecting
    Pool is "lone" with no non-reflecting land in play or in hand (proposal section 4).
-3. The land-tutor slot is filled whatever the source count (proposal D9: a slot, not a source); a
-   Crop Rotation with no land in play cannot fill it and is a surplus land tutor.
+3. ~~The land-tutor slot is filled whatever the source count~~ -- REVERSED by the 2026-10-09 review
+   (above): the slot is open only while the 5 sources are not yet met at its place in the ladder.
+   Still an agent reading: "met" is read at that ladder position, and the tutor is not itself a
+   source. A Crop Rotation with no land in play cannot fill it and is a surplus land tutor.
 4. Enlightened Tutor fills the ENGINE slot only with no Defense in play or in hand AND a Defense it
    can find still in the library (proposal's `is_finder`); every other copy is the "spare
    Enlightened Tutor".
 5. FUEL "filled" = opponent creatures + our Orchards in play + our War-Riders' age counters >= 3
    (Defense's `upkeep_sac_tutor_opp_min`); when filled every fuel card is surplus fuel.
-6. Distance (proposal section 6): deficit = max(MV - reach, worst colour shortfall), reach = board
-   sources + live hand lands + hand dorks; a giver with deficit >= 2 ranks below a near one inside
-   FUEL (the only bucket holding two different cards). It flips Phantasm below War-Riders when blue
-   is two sources short.
+6. Distance (proposal section 6): deficit = max(MV - reach, worst colour shortfall) over the KEPT
+   sources (integrator reading 2026-10-09, above; it used to count every live hand land); a giver
+   with deficit >= 2 ranks below a near one inside FUEL (the only bucket holding two different
+   cards). It flips Phantasm below War-Riders when no blue source is in play or in hand.
 7. The Wardens' blank class also requires no lifegain payoff in play or in hand (counter payoffs,
    lifegain-to-drain payoffs); with one present they become unrecognised (shed just before the keep
    tail). Inert on this list.
