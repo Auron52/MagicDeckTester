@@ -11176,7 +11176,8 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 //   MUXUS       (USER) "Exempt Muxus, but definitely do not keep multiple and maybe even one if there
 //               is no route to cheating it in." A Muxus in play does not kill the hand copy; a 2nd
 //               hand copy sheds right after a dead Three Tree City; with no Goblin Lackey in play or
-//               in hand the lone Muxus is the FIRST creature shed (USER confirmed).
+//               in hand the lone Muxus is SURPLUS -- no ladder slot -- and the FIRST creature shed
+//               (USER confirmed).
 //   CREATURES   Muxus > Siege-Gang > Krenko (crowd-gated) > Pashalik > Mogg War Marshal > Matron >
 //               Twinshot > Chainwhirler > Bolt > Stingscourger, discounted by distance: EV = P(play) x
 //               value, MinotaurProvider's adopted model (hard decay, value = 6 x 0.85^position in the
@@ -11186,8 +11187,11 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 //
 // KEEP: land1 > creature1 > land2 > engine > lord1 > creature2 > land3 > creature3 > lord2 > creature4..
 // SHED: dead Three Tree City > 2nd Muxus (and any other duplicate legend) > surplus mana (colourless
-//       land, lands, Vials) > lords over the cap (King first) > the ladder read backwards (its creature
-//       tail is the "surplus creatures": no-route Muxus first, then Stingscourger, up the order).
+//       land, lands, Vials) > lords over the cap (King first) > a no-route Muxus > the ladder read
+//       backwards (its creature tail is the "surplus creatures": Stingscourger first, up the order).
+// NOT PREFIX-STABLE: the Lackeys in hand set how many creatures get the put discount (and a shed
+// moves the crowd, the reach and the value positions), so CleanupDiscardShedStable() is false while
+// the rule is on and a multi-card cleanup is re-ranked per shed, as the executor's real cleanup is.
 //
 // AGENT READINGS (surfaced in the design doc's implementation notes; the USER may overturn each):
 //   * ">= 1 land always" is the proposal's LAND sub-role floor (an engine never takes a land's slot;
@@ -11228,6 +11232,8 @@ static bool GoblinBucketDiscardEnabled()
     static const bool on = EnvOn("MTG_GOBLIN_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::GOBLIN_BUCKET_DISCARD, on);
 }
+
+bool GoblinsProvider::CleanupDiscardShedStable() const { return !GoblinBucketDiscardEnabled(); }
 
 std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
@@ -11350,9 +11356,10 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
 
     // ---- 3. partition the non-staged hand ------------------------------------------------------
     std::vector<const CardDefinition*> defs(un, nullptr);
-    std::vector<char> no_route_muxus(un, 0), surplus_engine(un, 0);
+    std::vector<char> surplus_engine(un, 0);
     std::vector<int> lands, dead_lands, dupes, vials, engines, mults, pool;
     bool muxus_seen = false;
+    int no_route_muxus = -1;   // SURPLUS: never ladder-eligible, the first creature shed
     int vials_seen = board_vials, hand_bodies = staged_bodies;
     for (int i = 0; i < n; ++i)
     {
@@ -11385,8 +11392,11 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
             // this one (USER: exempt) -- but never two in HAND.
             if (muxus_seen) { dupes.push_back(i); continue; }
             muxus_seen = true;
-            if (!route) { no_route_muxus[static_cast<std::size_t>(i)] = 1; }
-            pool.push_back(i); ++hand_bodies;
+            ++hand_bodies;
+            // With no cheat route the lone Muxus is SURPLUS (USER: "maybe even one if there is no
+            // route to cheating it in"): it takes no creature ladder slot -- with <= 3 other creatures
+            // a slot would protect it above lord2 (review finding) -- and sheds as the first creature.
+            if (!route) { no_route_muxus = i; } else { pool.push_back(i); }
             continue;
         }
         if (legendary && (on_board_named(hc) || earlier_copy(i))) { dupes.push_back(i); continue; }
@@ -11547,7 +11557,6 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
     std::stable_sort(pool.begin(), pool.end(), [&](int a, int b)
     {
         const std::size_t ia = static_cast<std::size_t>(a), ib = static_cast<std::size_t>(b);
-        if (no_route_muxus[ia] != no_route_muxus[ib]) { return no_route_muxus[ia] < no_route_muxus[ib]; }
         if (ev[ia] != ev[ib]) { return ev[ia] > ev[ib]; }
         return value_pos[ia] < value_pos[ib];
     });
@@ -11579,6 +11588,7 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
     for (std::size_t k = lands.size(); k > li; --k) { shed.push_back(lands[k - 1]); }   // colourless first
     for (int i : vials)      { shed.push_back(i); }
     for (std::size_t k = mults.size(); k > mi; --k) { shed.push_back(mults[k - 1]); }   // King first
+    if (no_route_muxus >= 0) { shed.push_back(no_route_muxus); }                        // first creature
     for (std::size_t k = taken.size(); k > 0; --k)  { shed.push_back(taken[k - 1]); }
     return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
