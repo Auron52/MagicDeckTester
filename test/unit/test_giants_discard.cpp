@@ -210,9 +210,11 @@ TEST_CASE("Giants discard G8: the USER's Giant order -- Flinger 2nd, Sovereign b
     CHECK(Gen(s).front() == 1);   // generic sheds Hamletback Goliath
 }
 
-// A second copy must be paid for on top of the first. reach 7: the 2nd Titan needs 12 (5 short, 0.02 x
-// 7 = 0.14) and falls below the Harbinger (2.64). A copy IN PLAY counts the same way.
-TEST_CASE("Giants discard G9: duplicates pay cumulative mana, counting the copy in play")
+// A second copy in HAND must be paid for on top of the first. reach 7: the 2nd Titan needs 12 (5 short,
+// 0.02 x 7 = 0.14) and falls below the Harbinger (2.64). A copy IN PLAY is already paid for and adds
+// nothing (review fix 2026-10-09): beside a resolved Titan the hand Titan is castable (6 <= reach 7), so
+// it is kept as the first Giant and the Harbinger -- the 4th Giant -- sheds first.
+TEST_CASE("Giants discard G9: duplicates in hand pay cumulative mana; a copy in play does not")
 {
     const GameState s = MakeGiants({ kTi, kTi, kHar, kM, kM, kBo, kGr, kFl }, Mountains(5));
     CHECK(Gi(s) == std::vector<int>{ 1, 4, 5, 2, 6, 7, 0, 3 });
@@ -220,7 +222,7 @@ TEST_CASE("Giants discard G9: duplicates pay cumulative mana, counting the copy 
     std::vector<std::string> board = Mountains(5);
     board.push_back(kTi);
     const GameState t = MakeGiants({ kTi, kHar, kM, kM, kBo, kGr, kFl, kTec }, board);
-    CHECK(Gi(t) == std::vector<int>{ 0, 3, 4, 1, 5, 7, 6, 2 });
+    CHECK(Gi(t) == std::vector<int>{ 1, 3, 4, 7, 5, 6, 0, 2 });
     CHECK(Gen(t).front() == 0);
 }
 
