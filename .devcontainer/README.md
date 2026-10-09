@@ -19,6 +19,43 @@ On first creation the container will:
   (`postCreateCommand`). This step **downloads pugixml + nlohmann_json** via
   `FetchContent`, so it needs network access the first time.
 
+### Troubleshooting: "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine"
+
+Recurring on Windows, mostly right after a reboot (seen 2026-07-06, 09-22, 10-02).
+**Root cause (found 2026-10-02):** if Docker Desktop is not already running when VS Code
+opens, the Dev Containers extension launches `Docker Desktop.exe` **itself — as a child of
+VS Code's extension host.** *Reopen in Container* reloads the window, which tears down the
+extension host and Windows kills its whole process tree, Docker included (the backend log
+just stops — no shutdown sequence). The new window's check then fails, the extension
+relaunches Docker as its child again, and the cycle repeats.
+
+Check who owns Docker — if the top `Docker Desktop.exe`'s parent is `Code.exe`, this is it:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='Docker Desktop.exe'" |
+  % { "$($_.ProcessId) <- $((Get-Process -Id $_.ParentProcessId -EA 0).Name)" }
+```
+
+**Fix (one-time, per machine):** start Docker at logon independently of VS Code, so the
+extension never has to launch it. Docker's own AutoStart (the HKCU `Run` key) fires too late
+— Windows delays `Run` entries, and VS Code got there first. A logon Scheduled Task runs
+immediately and is owned by Task Scheduler, so a window reload can't kill it:
+
+```powershell
+$a = New-ScheduledTaskAction -Execute 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+$t = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+       -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+$p = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName 'Docker Desktop (independent of VSCode)' -Action $a -Trigger $t -Settings $s -Principal $p
+```
+
+**If Docker is currently a child of VS Code**, re-parent it (no containers lost if none are
+running): `docker desktop stop; Start-ScheduledTask -TaskName 'Docker Desktop (independent of VSCode)'`.
+
+Also keep Docker Desktop's **Resource Saver off** (Settings → Resources); it stops the
+engine when idle and produces the same error.
+
 ## Build & run
 
 ```bash
