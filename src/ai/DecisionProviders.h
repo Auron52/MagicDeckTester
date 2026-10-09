@@ -2469,6 +2469,13 @@ public:
     // except toward lethal. See the base hook's doc.
     bool FodderSacUseful(const GameState& s, const Permanent& src,
                          const CardDefinition& sd) const override;
+    // The USER-settled cleanup-discard buckets (2026-10-09, docs/design/melira-pod-discard-policy-
+    // proposal.md): combo pieces on top (enabler 1 / outlet 1 / persist 2, net of board), a Chord
+    // filling a MISSING piece's slot, Birthing Pod a 1-of keep until the combo is assembled and easily
+    // castable, mana 4 (5 with a Chord kept), the USER's toolbox shed order. The generic max-MV rule
+    // pitched the engine or a combo piece in 63% of real sheds. MTG_POD_BUCKET_DISCARD=0 -> generic.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 class MinotaurProvider : public DeckProvider

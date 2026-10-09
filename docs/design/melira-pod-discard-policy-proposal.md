@@ -72,6 +72,60 @@ USER aside: "True, Celes is not very good when in hand. She is much better in th
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `MeliraPodProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`, after
+`ReviveCandidates`) behind `MTG_POD_BUCKET_DISCARD` (heurarm `POD_BUCKET_DISCARD`, default ON; `=0`
+returns exactly `GenericProvider::CleanupDiscardCandidates`). Tests: `test/unit/test_melira_pod_discard.cpp`
+(12 cases; every board's full shed order derived by hand from the SETTLED block, plus the generic control).
+No profile, `cards.json`, decklist or engine change was needed (`required_pieces` stays empty, so the
+`CleanupDiscardProtectionWaived` hook is not used).
+
+As built (net of board throughout; classification by params):
+- KEEP: mana1 > enabler (or Chord) > mana2 > outlet (or Chord) > mana3 > persist1 (or Chord) > Pod >
+  mana4 > persist2 > mana5 (only with a Chord kept above it).
+- SHED: dead Karoo > Celes with no source of a colour she needs > duplicate legend (2nd Melira, in play or
+  an earlier hand copy) > surplus lands (keep order reversed) > toolbox (Chupacabra > Severance Priest >
+  Reclamation Sage > Celes with R > surplus dorks > Felidar > Reveillark > Ooze > Voice > Ranger >
+  Recruiter) > extra Pods / the Pod with the combo assembled > surplus combo copies (spare enablers >
+  spare persist, costlier first > Bloodthrone > spare Feeders) > extra Chords > Ranger / Recruiter while
+  a role is missing > the ladder reversed.
+- Mana order inside the bucket: greedy G/W/B coverage over board + hand (a hand Pathway counts both
+  faces), then dorks (while a {G} source exists to cast them), then lands: fastlands that would enter
+  tapped (board lands above `fastland_max_other_lands`) last, then more colours, then hand order.
+  Painlands are not demoted. Dorks never shed as surplus mana.
+
+Agent readings (the USER may overturn any):
+1. **Extra Chord placement / mana5.** An extra Chord sheds after the surplus combo copies (the SETTLED
+   SHED line), i.e. it is kept just above the toolbox, and it does NOT raise the mana quota: mana5 sits
+   above the extra-Chord slot in the KEEP line, so only a Chord kept for a missing piece activates it.
+2. **A Chord fills a missing slot only if the library still holds a creature of that role** (the PD
+   "tutor with no legal target" class). Celes counts for the enabler role here because a Chord PUTS her
+   onto the battlefield.
+3. **"Easily castable"** = each role not on the battlefield has a hand piece castable *on its own* from
+   the mana in play plus one *untapped* land drop, colour-exact (each pip takes a distinct source). Not
+   the sum of all pieces in one turn.
+4. **Persist sub-role order.** persist1 / persist2 take the sub-role (Redcap payload / Finks body) not
+   yet held on board or kept, then the copy castable next turn, then Redcap, then hand order. So with
+   too little mana for Redcap, Finks is persist1 (and Pod, right after it, climbs Finks into Redcap).
+   The enabler slot likewise takes the castable copy first.
+5. **"Recruiter / Ranger protected while a role is missing"** = they leave the toolbox and shed only
+   after every explicit shed class, ahead of the ladder; "missing" is `PutTargetPolicy`'s any_missing
+   (enabler / outlet / lifegain persist / damage persist absent from battlefield + hand). With nothing
+   missing they shed after Voice, Ranger first (the proposal's section 6 order).
+6. **Celes with an R source** sheds right after the three inert bodies, and a **surplus dork** right after
+   her (both "above the inert bodies" in the proposal's P3 / B1).
+7. **Severance Priest vs Reclamation Sage** carry identical (empty) params; the USER's order (Priest
+   first) is expressed as "more coloured pips sheds first" among the vanilla bodies.
+8. **A Pod in play fills the Pod slot** (all hand Pods are then extra), per "quotas count the board".
+9. **Surplus persist copies** shed costlier first (a spare Redcap before a spare Finks).
+10. Unclassified non-land cards (none on this list) open the toolbox block.
+
+Not implemented, per the SETTLED design: the Reveillark recovery term (OFF), a toolbox distance term
+(the USER fixed the toolbox order). **D10 stands:** Celes's ETB rummage (`SpellEffects.h`,
+`etb_discard_any_number`) still discards "the hand's excess lands beyond two" and does not consult this
+ranking.
+
 
 ---
 
