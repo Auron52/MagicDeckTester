@@ -472,6 +472,31 @@ inline bool PainPayEnabled()
     return heurarm::Flag(heurarm::PD_PAIN_PAY, v);
 }
 
+// EXACT rest-of-line check (TapForCostSharedOnce's `line_ok`, read by PainAwarePay's harmful mode
+// below). DEFAULT ON; =0 restores the legacy check: the plan-total estimate of what is owed, tested
+// for per-colour PRESENCE. claude-play sweep s61001 T5 (2026-10-08), plan "Rolling Earthquake X=2,
+// Tamanoa": the X spell keeps the batch prepay out (PP_XSPELL), the Quake's minimum-damage payment
+// took Pool / Coliseum / Forge and left Ancient Tomb ({C}{C}) + City of Brass, and the presence test
+// read Tamanoa's {R}{G}{W} as payable -- it credits an any-colour source's yield to EVERY colour (and
+// counts every untapped permanent, a Vito or a Spellshock, as a generic mana) -- so the historical
+// assignment (Tomb + Forge {R}, which pays both) was never tried and Tamanoa was silently dropped.
+// ON, two halves (both in the lambda):
+//   SUPPLY -- the remaining mana sources must cover the line's mana value and be ASSIGNABLE to its
+//     coloured pips (ColorFeasibility::PayablePips, the adopted MTG_COLOR_EXACT matcher), on top of
+//     the presence test: it can only turn "payable" into "strands".
+//   DEMAND -- what is owed is the line's live unpaid hold (g_line_unpaid_cost) minus this cast,
+//     capped by the old estimate, which still counted the casts already paid: on a line's last cast
+//     it demanded them again. With an exact supply test that phantom was 966 of the 1,020 payments
+//     flagged in 60 PD games, 366 of which then took the more painful historical assignment for
+//     nothing. It can only lower the demand.
+// Only Prevent Damage reaches it (dmg_events_armed; the harmful-mode exact-floor branch with a
+// multi-cast plan in scope).
+inline bool LineOkExactEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_LINE_OK_EXACT", true);
+    return heurarm::Flag(heurarm::PD_LINE_OK_EXACT, v);
+}
+
 struct PayDmgCap
 {
     bool live       = false;     // a policy is running this payment (nested payers just enforce)

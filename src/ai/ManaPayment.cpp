@@ -638,6 +638,32 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         const int cur[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
         int need[5], need_tot = std::max(0, pt->cast_mv_total - cost_in.ManaValue());
         for (int c = 0; c < 5; ++c) { need[c] = std::max(0, pt->cast_pips[c] - cur[c]); }
+        // EXACT REST OF LINE, demand half (MTG_PD_LINE_OK_EXACT -- see dmgev::LineOkExactEnabled).
+        // That estimate still counts every cast the line has ALREADY paid, so on its last cast it
+        // asks the board to pay the earlier casts a second time; once the supply test below is
+        // exact, that phantom sends the payment to the historical assignment for nothing (measured,
+        // 60 PD games d3 + d5, seed 9101: of 1,020 post-minimum verdicts the exact supply test alone
+        // turned to "strands", 966 were this phantom -- 538 on a last cast, where nothing is owed --
+        // and 366 of them took the historical, more painful, payment). The line's own unpaid hold
+        // (g_line_unpaid_cost: bound by both apply paths, decremented as each cast pays, and still
+        // holding THIS cast here) is the exact remainder. Used only while it is evidently THIS line's
+        // hold -- it still owes at least this cast (its mana value and every coloured pip; a hold
+        // left over from an outer line, e.g. during a breakpoint continuation whose casts are not
+        // in it, usually is not) -- and only to LOWER the estimate: the demand side can only relax.
+        const bool exact = dmgev::LineOkExactEnabled();
+        if (exact)
+        {
+            const ManaCost& lu = g_line_unpaid_cost;
+            const int lu_mv = lu.ManaValue();
+            const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+            bool holds_this = lu_mv > 0 && lu_mv >= cost_in.ManaValue();
+            for (int c = 0; c < 5; ++c) { if (owed[c] < cur[c]) { holds_this = false; } }
+            if (holds_this)
+            {
+                for (int c = 0; c < 5; ++c) { need[c] = std::min(need[c], owed[c] - cur[c]); }
+                need_tot = std::min(need_tot, lu_mv - cost_in.ManaValue());
+            }
+        }
         const int a = state.active_player_index;
         const ManaPool& fl = state.floating_mana;
         int have_tot = fl.Total();
@@ -662,6 +688,30 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         }
         if (have_tot < need_tot) { return 0; }
         for (int c = 0; c < 5; ++c) { if (have[c] < need[c]) { return 0; } }
+        // EXACT REST OF LINE, supply half. The test above is PRESENCE, not an assignment, and it
+        // over-credits two ways (s61001 T5 -- see dmgev::LineOkExactEnabled): `have` adds an
+        // any-colour source's whole yield to EVERY colour, so one City of Brass passes {R}{G}{W} on
+        // its own; and `have_tot` counts every untapped permanent, because SourceMaxNetLive's floor
+        // is ManaProducedPerTap = max(1, produces_amount) -- a Vito, a Faithmender, a Spellshock each
+        // read as one more generic mana. Under the lever the remaining MANA SOURCES (ColorFeasibility:
+        // the matcher and source model of the subset enumerator's MTG_COLOR_EXACT gate) must also
+        // cover the line's mana value and be ASSIGNABLE to its coloured pips, one unit per pip
+        // (Hall's condition). It runs after the presence test, so it can only turn a 1 into a 0.
+        // `usable` false = the board needs no matching (no multi-colour source) or the model stands
+        // down (MTG_COLOR_EXACT=0, a scaled source) -- presence decides, as before. The float is
+        // already in the build under the leftover-float model, all but its {C}, which pays only
+        // generic; otherwise all of it is credit.
+        if (exact && need_tot > 0)
+        {
+            const ColorFeasibility cf = BuildColorFeasibility(state);
+            if (cf.usable)
+            {
+                const bool fl_in = FloatLeftoverManaEnabled();
+                if (cf.total + (fl_in ? fl.colorless : fl.Total()) < need_tot
+                    || !cf.PayablePips(need, fl_in ? ManaPool{} : fl))
+                { return 0; }
+            }
+        }
         return 1;
     },
     // PAIN DEFERRAL (useful mode): the pending amplifiers, timing gates and the DP over the sources
@@ -3766,6 +3816,102 @@ void BuildColorDemandIndex(const std::vector<Action>& cands, ColorDemandIndex& o
     out.uniform = true;
 }
 
+// Hall's condition over a demand set keyed by colour MASK (`counts[i]` pips payable from any colour in
+// `masks[i]`), plus the one-colour bursts' exact colour choice. The shared tail of Payable (a subset
+// of candidate actions) and PayablePips (a plain per-colour pip demand) -- moved here verbatim from
+// Payable, so its verdicts are unchanged. Defined `inline`: both callers live in this file.
+inline bool ColorFeasibility::HallFeasible(const int* masks, const int* counts, int ndm,
+                                           const ManaPool& credit, int prod_cost) const
+{
+    const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
+    // Hall scan over the colour sets that can BIND -- and only a UNION OF DEMAND MASKS can. For any
+    // set S, let S' be the union of the masks contained in S. Every mask inside S is inside S' and
+    // vice versa, so need(S') == need(S) exactly; and have() is non-decreasing in S, because adding
+    // a colour adds cover[] and cred[] while the producer deduction can grow by at most the cover
+    // gain (max(0,x+d) - max(0,x) <= d), leaving the credit gain. So need(S) > have(S) implies
+    // need(S') > have(S'): scanning the unions alone returns the same verdict as the full 31-set
+    // walk, rejecting the same subsets.
+    //
+    // Why it is worth the branch: `usable` is armed by the SOURCE side alone (has_multi), so a deck
+    // that merely OWNS a dual pays the full scan even when nothing it casts has two colours to
+    // compete over. A mono-colour demand set is ndm == 1 -- one check instead of 31. Measured on
+    // Fungus (mono-green, holding a Simic Growth Chamber and Utopia Mycon): 413M subsets through
+    // the full scan to find 17 rejections, with Payable at 19.9% of the game.
+    //
+    // The closure is only taken while it is provably smaller than the scan it replaces: ndm <= 3
+    // bounds it at 2^3-1 = 7 sets. Wider demand sets keep the flat walk.
+    unsigned scan[8];
+    int      nscan = 0;
+    if (ndm <= 3)
+    {
+        unsigned seen = 0;
+        for (int t = 1; t < (1 << ndm); ++t)
+        {
+            unsigned v = 0;
+            for (int i = 0; i < ndm; ++i)
+            { if (t & (1 << i)) { v |= static_cast<unsigned>(masks[i]); } }
+            if (v != 0 && ((seen >> v) & 1u) == 0) { seen |= 1u << v; scan[nscan++] = v; }
+        }
+    }
+    const int nsets = nscan ? nscan : 31;
+    // One Hall scan for a FIXED colour choice of the one-colour bursts (`pick[b]` = the colour index
+    // burst b makes, -1 = none demanded). With no burst this is the historical scan verbatim.
+    int pick[ColorFeasibility::kMaxBurst];
+    auto hall = [&]() -> bool
+    {
+        for (int k = 0; k < nsets; ++k)
+        {
+            const unsigned s = nscan ? scan[k] : static_cast<unsigned>(k + 1);
+            int need = 0;
+            for (int i = 0; i < ndm; ++i)
+            { if ((static_cast<unsigned>(masks[i]) & ~s) == 0) { need += counts[i]; } }   // payable only from s
+            if (need == 0) { continue; }
+            int cov = cover[s];
+            for (int b = 0; b < nburst; ++b) { if (pick[b] >= 0 && (s & (1u << pick[b]))) { cov += burst_amt[b]; } }
+            int have = cov + credit.wild;
+            for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
+            // What the producers must draw out of S itself (see the note above).
+            if (prod_cost > 0) { have -= std::max(0, prod_cost - (total - cov)); }
+            if (need > have) { return false; }
+        }
+        return true;
+    };
+    if (nburst == 0) { return hall(); }
+    // ONE-COLOUR BURSTS: the subset is payable iff SOME choice of one colour per burst passes Hall.
+    // Only colours the subset actually demands can help (a burst into an undemanded colour adds only
+    // generic supply, already in `total`), so each burst's options are mask & demanded, or {none}.
+    unsigned demanded = 0;
+    for (int i = 0; i < ndm; ++i) { demanded |= static_cast<unsigned>(masks[i]); }
+    int opts[ColorFeasibility::kMaxBurst][5]; int nopt[ColorFeasibility::kMaxBurst];
+    for (int b = 0; b < nburst; ++b)
+    {
+        nopt[b] = 0;
+        for (int c = 0; c < 5; ++c)
+        { if ((static_cast<unsigned>(burst_mask[b]) & demanded) & (1u << c)) { opts[b][nopt[b]++] = c; } }
+        if (nopt[b] == 0) { opts[b][0] = -1; nopt[b] = 1; }
+    }
+    int odo[ColorFeasibility::kMaxBurst] = {0};
+    for (;;)
+    {
+        for (int b = 0; b < nburst; ++b) { pick[b] = opts[b][odo[b]]; }
+        if (hall()) { return true; }
+        int b = 0;
+        while (b < nburst && ++odo[b] >= nopt[b]) { odo[b] = 0; ++b; }
+        if (b == nburst) { return false; }
+    }
+}
+
+bool ColorFeasibility::PayablePips(const int pips[5], const ManaPool& credit) const
+{
+    // Singleton demands only (a plain W/U/B/R/G pip count -- no hybrid halves, no producers). No
+    // single-pip shortcut either: the caller has no presence gate standing in front of this one.
+    int masks[5]; int counts[5]; int ndm = 0;
+    for (int i = 0; i < 5; ++i)
+    { if (pips[i] > 0) { masks[ndm] = 1 << i; counts[ndm] = pips[i]; ++ndm; } }
+    if (ndm == 0) { return true; }
+    return HallFeasible(masks, counts, ndm, credit, /*prod_cost=*/0);
+}
+
 bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
                                const ManaPool& credit, bool noncreature_only,
                                const ColorDemandIndex* idx) const
@@ -3859,82 +4005,7 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
     // One coloured pip is decided by PRESENCE alone, which SubsetPayable already tested.
     if (total_pips < 2) { return true; }
 
-    const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
-    // Hall scan over the colour sets that can BIND -- and only a UNION OF DEMAND MASKS can. For any
-    // set S, let S' be the union of the masks contained in S. Every mask inside S is inside S' and
-    // vice versa, so need(S') == need(S) exactly; and have() is non-decreasing in S, because adding
-    // a colour adds cover[] and cred[] while the producer deduction can grow by at most the cover
-    // gain (max(0,x+d) - max(0,x) <= d), leaving the credit gain. So need(S) > have(S) implies
-    // need(S') > have(S'): scanning the unions alone returns the same verdict as the full 31-set
-    // walk, rejecting the same subsets.
-    //
-    // Why it is worth the branch: `usable` is armed by the SOURCE side alone (has_multi), so a deck
-    // that merely OWNS a dual pays the full scan even when nothing it casts has two colours to
-    // compete over. A mono-colour demand set is ndm == 1 -- one check instead of 31. Measured on
-    // Fungus (mono-green, holding a Simic Growth Chamber and Utopia Mycon): 413M subsets through
-    // the full scan to find 17 rejections, with Payable at 19.9% of the game.
-    //
-    // The closure is only taken while it is provably smaller than the scan it replaces: ndm <= 3
-    // bounds it at 2^3-1 = 7 sets. Wider demand sets keep the flat walk.
-    unsigned scan[8];
-    int      nscan = 0;
-    if (ndm <= 3)
-    {
-        unsigned seen = 0;
-        for (int t = 1; t < (1 << ndm); ++t)
-        {
-            unsigned v = 0;
-            for (int i = 0; i < ndm; ++i)
-            { if (t & (1 << i)) { v |= static_cast<unsigned>(masks[i]); } }
-            if (v != 0 && ((seen >> v) & 1u) == 0) { seen |= 1u << v; scan[nscan++] = v; }
-        }
-    }
-    const int nsets = nscan ? nscan : 31;
-    // One Hall scan for a FIXED colour choice of the one-colour bursts (`pick[b]` = the colour index
-    // burst b makes, -1 = none demanded). With no burst this is the historical scan verbatim.
-    int pick[ColorFeasibility::kMaxBurst];
-    auto hall = [&]() -> bool
-    {
-        for (int k = 0; k < nsets; ++k)
-        {
-            const unsigned s = nscan ? scan[k] : static_cast<unsigned>(k + 1);
-            int need = 0;
-            for (int i = 0; i < ndm; ++i)
-            { if ((static_cast<unsigned>(masks[i]) & ~s) == 0) { need += counts[i]; } }   // payable only from s
-            if (need == 0) { continue; }
-            int cov = cover[s];
-            for (int b = 0; b < nburst; ++b) { if (pick[b] >= 0 && (s & (1u << pick[b]))) { cov += burst_amt[b]; } }
-            int have = cov + credit.wild;
-            for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
-            // What the producers must draw out of S itself (see the note above).
-            if (prod_cost > 0) { have -= std::max(0, prod_cost - (total - cov)); }
-            if (need > have) { return false; }
-        }
-        return true;
-    };
-    if (nburst == 0) { return hall(); }
-    // ONE-COLOUR BURSTS: the subset is payable iff SOME choice of one colour per burst passes Hall.
-    // Only colours the subset actually demands can help (a burst into an undemanded colour adds only
-    // generic supply, already in `total`), so each burst's options are mask & demanded, or {none}.
-    unsigned demanded = 0;
-    for (int i = 0; i < ndm; ++i) { demanded |= static_cast<unsigned>(masks[i]); }
-    int opts[ColorFeasibility::kMaxBurst][5]; int nopt[ColorFeasibility::kMaxBurst];
-    for (int b = 0; b < nburst; ++b)
-    {
-        nopt[b] = 0;
-        for (int c = 0; c < 5; ++c)
-        { if ((static_cast<unsigned>(burst_mask[b]) & demanded) & (1u << c)) { opts[b][nopt[b]++] = c; } }
-        if (nopt[b] == 0) { opts[b][0] = -1; nopt[b] = 1; }
-    }
-    int odo[ColorFeasibility::kMaxBurst] = {0};
-    for (;;)
-    {
-        for (int b = 0; b < nburst; ++b) { pick[b] = opts[b][odo[b]]; }
-        if (hall()) { return true; }
-        int b = 0;
-        while (b < nburst && ++odo[b] >= nopt[b]) { odo[b] = 0; ++b; }
-        if (b == nburst) { return false; }
-    }
+    return HallFeasible(masks, counts, ndm, credit, prod_cost);
 }
 
 // Plan-scoped source reservation (see g_plan_reserved_sources). Stored as CARD NUMBERS, not
