@@ -43,6 +43,57 @@ true)`; `=0` restores `GenericProvider::CleanupDiscardCandidates` (max-MV). Quot
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `CreatureGivingProvider::CleanupDiscardCandidates` (+ `CleanupDiscardShedStable`) in
+`src/ai/DecisionProviders.cpp`, behind `MTG_CG_BUCKET_DISCARD` (heurarm `CG_BUCKET_DISCARD`, default
+ON). **`=0` is the Defense-of-the-Heart-last patch that shipped 2026-08-06**, kept byte-for-byte, not
+the generic ranking, so the A/B has the three arms asked for: buckets / DotH-last (`=0`) / generic
+(`GenericProvider::CleanupDiscardCandidates`, reachable in tests and as the base class). The stale
+"spare-copy band" wording in that patch's header comment is fixed (the band was removed as an engine
+rule 2026-08-06/07). Tests: `test/unit/test_creature_giving_discard.cpp`.
+
+- **Keep ladder:** land > Suture Priest (none in play) > Birds (none in play, a source still owed) >
+  Defense (none in play; else Enlightened Tutor) > land > land tutor > land > fuel (projected < 3) >
+  land > land. Land slots fill until 5 sources counting board lands + dorks.
+- **Shed order:** dead Chancery, then lone Reflecting Pool > Wardens > surplus mana (lands weakest
+  first, then Birds, then land tutors) > spare Enlightened Tutor > surplus fuel (worst first) >
+  Massacre Wurm > 2nd Suture Priest > extra Defense copies > unrecognised > the ladder backwards.
+- **Land keep order:** greedy colour cover first (a land counts while it adds a colour the hand's
+  spells still lack, measured against the board's sources), ties and the remainder by Orchard > City >
+  fetch > shock > Forest/Tree > Reflecting Pool > Chancery, untapped first.
+
+Agent readings (the USER may overturn any of these):
+1. Colour need = the most pips of each colour over the hand's non-land spells (Wardens excluded) --
+   so the Wurm's BBB and Phantasm's UU drive it as the USER named; a fetchland in hand counts its
+   cards.json `produces` (the documented "flexible colour source in hand"), a Reflecting Pool adds
+   no colour.
+2. A Chancery is dead with no other land in play and no other non-Karoo land in hand; a Reflecting
+   Pool is "lone" with no non-reflecting land in play or in hand (proposal section 4).
+3. The land-tutor slot is filled whatever the source count (proposal D9: a slot, not a source); a
+   Crop Rotation with no land in play cannot fill it and is a surplus land tutor.
+4. Enlightened Tutor fills the ENGINE slot only with no Defense in play or in hand AND a Defense it
+   can find still in the library (proposal's `is_finder`); every other copy is the "spare
+   Enlightened Tutor".
+5. FUEL "filled" = opponent creatures + our Orchards in play + our War-Riders' age counters >= 3
+   (Defense's `upkeep_sac_tutor_opp_min`); when filled every fuel card is surplus fuel.
+6. Distance (proposal section 6): deficit = max(MV - reach, worst colour shortfall), reach = board
+   sources + live hand lands + hand dorks; a giver with deficit >= 2 ranks below a near one inside
+   FUEL (the only bucket holding two different cards). It flips Phantasm below War-Riders when blue
+   is two sources short.
+7. The Wardens' blank class also requires no lifegain payoff in play or in hand (counter payoffs,
+   lifegain-to-drain payoffs); with one present they become unrecognised (shed just before the keep
+   tail). Inert on this list.
+8. The bucket arm declares `CleanupDiscardShedStable() == false` (a shed spell can move the colour
+   cover, a shed land the Pool / Karoo / fuel-distance reads), so a multi-card rollout cleanup is
+   re-ranked per shed; `=0` keeps the default `true`.
+
+Housekeeping, report only (cards.json, not touched): Enlightened Tutor's `tutor_heuristic` is
+`"enabler_then_wincon"` and its oracle note names Tainted Remedy / Aria of Flame -- Anti-Lifegain
+cards. The param is parsed (`CardDatabase.cpp`) but read nowhere else in `src/` -- the target comes
+from `TutorCandidates` / the searched tutor axis -- so play is unaffected; the param and the note are
+another deck's leftovers (proposal D6) and only mislead a reader.
+
 
 ---
 
