@@ -2222,6 +2222,24 @@ all 9 slower searched games recover -- 7 at stage 1 (`--depth W --budget-ms 100`
 gi33) at stage 2 (`--depth 8 --budget-ms 0`) (`logs/pd_opt/ord_verify/`). **References:** 0 / 11 short,
 5.273 vs the human's 5.636 (`logs/pd_opt/refbench/user_order.json`).
 
+### Ground truth for both USER changes (2026-10-09) -- and a correction
+
+**Correction:** `c6bc7c02` (the discard ladder) accepted PD's regression and overnight tiers WITHOUT
+re-running them -- `--accept-with-regressions` promotes a tier's LAST run, which predated the ladder -- so
+those keys were stale and its "PD regression and overnight rows byte-identical" was never measured. Only
+its smoke keys were fresh. Fixed here: both tiers RUN on `114d1651` (ladder + cast order), then accepted.
+
+| tier | searched faster / slower | d0 faster / slower |
+|---|---|---|
+| smoke | 4 PD keys move; d0 7.6130 -> 7.6030, d3/d5/2HG same score | -- |
+| regression | 2 / 2 | 10 / 8 |
+| overnight | 12 / 4 | 65 / 44 |
+
+Every slower searched game recovers at stage 1 (`--depth W --budget-ms 100`), i.e. budget churn
+(`logs/pd_opt/g3009/`, `logs/pd_opt/ovslow/`): seed 3009 gi6 (d3 + d5, 5->6) slows only with BOTH levers on;
+seed 4012 gi8 (d3 + d5 5->7, 2HG 7->8; the 2HG recovers to T6, better than the old T7) is the cast order;
+seed 5025 gi20 (d3, 6->8) is the discard ladder.
+
 ## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
 
 | flag | defect | fix | reach |

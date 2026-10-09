@@ -1,4 +1,4 @@
-# Regression ground truth -- commit db5eb35d  date 2026-10-09
+# Regression ground truth -- commit 114d1651  date 2026-10-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -21,6 +21,11 @@
 # accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
+# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
+# accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
+# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
+# accepted-with-regressions (regression, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
+# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -121,7 +126,7 @@ critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
 melira2hg_smoke_d3_s1001=4.8400/15182cf23a0ec013
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=5.0200/17792659b430d2f9
-pd2hg_smoke_d3_s1001=5.9333/8a689057398127eb
+pd2hg_smoke_d3_s1001=5.9333/2422e26f841b2f9b
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.5400/fe8f95f9362334e7
 fluctuator_smoke_d5_s1001=3.5067/7b3eeadf188dfa29
@@ -137,9 +142,9 @@ selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
 soldiers_smoke_d0_s1001=4.4320/0c7926df614c90b5
 soldiers_smoke_d3_s1001=4.2800/50e56ed79872f3b3
 soldiers_smoke_d5_s1001=4.2933/abf388e9f9e0a413
-pd_smoke_d0_s1001=7.6130/4e67f841d74bb306
-pd_smoke_d3_s1001=5.6800/fcf43d50fa0e787c
-pd_smoke_d5_s1001=5.8000/7772773084cf3c71
+pd_smoke_d0_s1001=7.6030/b8ff69a34f6a7050
+pd_smoke_d3_s1001=5.6800/07956644f801198e
+pd_smoke_d5_s1001=5.8000/2e6adbb6659f076c
 bruna2hg_smoke_d3_s1001=5.5000/774533ea4ce7f561
 bruna_smoke_d0_s1001=6.2560/02241b8dafc23b80
 bruna_smoke_d3_s1001=4.8933/d2f585183739c7f3
@@ -279,7 +284,7 @@ whiteknights2hg_regression_d3_s2002=4.5800/1b2753b651882581
 fivecolour2hg_regression_d3_s2002=5.3400/25d5cd76cbc94442
 fluctuator2hg_regression_d3_s2002=3.5600/c22ef90f0e87aabc
 angels2hg_regression_d3_s2002=5.1667/2b9e249e4b93bbe9
-pd2hg_regression_d3_s2002=5.8400/af7a7a62a32354d4
+pd2hg_regression_d3_s2002=5.8400/494f9147a60e95b0
 fluctuator_regression_d0_s2002=5.1670/d028d0e755828667
 fluctuator_regression_d3_s2002=3.5867/ec64f45c11055934
 fluctuator_regression_d3_s3003=3.5200/170ba9de5a232dc1
@@ -305,11 +310,11 @@ soldiers_regression_d3_s2002=4.2400/557e65914a556944
 soldiers_regression_d3_s3003=4.2600/a3977f7005460030
 soldiers_regression_d5_s2002=4.2400/3b4c36f18f7cf84c
 soldiers_regression_d5_s3003=4.2800/cc9dbdf77c219ad0
-pd_regression_d0_s2002=7.5230/019b72d0175b4996
-pd_regression_d3_s2002=5.6750/fef1264d97d294d2
-pd_regression_d3_s3003=5.7500/1ca36ce9e96fa661
-pd_regression_d5_s2002=5.7200/5bd5ba9d9097c8d4
-pd_regression_d5_s3003=5.8000/18b86603d8ff25a1
+pd_regression_d0_s2002=7.5240/0dbf29f08572bdd4
+pd_regression_d3_s2002=5.6500/60b4020bde322cee
+pd_regression_d3_s3003=5.7750/210a8504369ccbd0
+pd_regression_d5_s2002=5.6800/e93bd3264de8cad8
+pd_regression_d5_s3003=5.8400/596fac9a90e99497
 bruna_regression_d0_s2002=6.2860/e72e55b3f87dc4d4
 bruna_regression_d3_s2002=5.1667/94ecd3ec2782666f
 bruna_regression_d3_s3003=5.0933/0058df3fd7d1874e
@@ -634,18 +639,18 @@ soldiers_overnight_d5_s4004=4.2400/8176740359fd349a
 soldiers_overnight_d5_s5005=4.2440/1dec09d137ee5490
 soldiers_overnight_d5_s6006=4.2420/8ca5b88ccf73d32a
 soldiers_overnight_d5_s7007=4.2780/37698003de31ea44
-pd_overnight_d0_s4004=7.5220/381e0a5236fb9034
-pd_overnight_d0_s6006=7.5280/bb8ecfabfacbf185
-pd_overnight_d0_s8008=7.5735/7ffdb5b50ee4fca1
-pd_overnight_d0_s10010=7.5640/f842fd5470f63acd
-pd_overnight_d3_s4004=5.6600/95b5c263fe8e4d7a
-pd_overnight_d3_s5005=5.6500/20cdb98cab91d7bb
-pd_overnight_d3_s6006=5.6200/8a71d63770027919
-pd_overnight_d3_s7007=5.5600/f0d9a6008c224ce1
-pd_overnight_d5_s4004=5.5733/f7f96bf018ec8b0b
-pd_overnight_d5_s5005=5.6267/278395ef38669495
-pd_overnight_d5_s6006=5.6133/9a3452d3f06dce4d
-pd_overnight_d5_s7007=5.6000/579bfd94a249a21f
+pd_overnight_d0_s4004=7.5275/d2a9c24329f0f457
+pd_overnight_d0_s6006=7.5210/9741d48ea35ae178
+pd_overnight_d0_s8008=7.5720/1d4ec69c85dd5c2f
+pd_overnight_d0_s10010=7.5575/e24fe3ccc64a1614
+pd_overnight_d3_s4004=5.6600/d7e759edde12cb7b
+pd_overnight_d3_s5005=5.6500/b7a181368a54d2b6
+pd_overnight_d3_s6006=5.6000/038ff4f9df8a083e
+pd_overnight_d3_s7007=5.5500/759a387028fd47ae
+pd_overnight_d5_s4004=5.5867/f9eb209a13f48291
+pd_overnight_d5_s5005=5.6133/ec9f924710091d48
+pd_overnight_d5_s6006=5.6133/3f00841d9ba39231
+pd_overnight_d5_s7007=5.6000/770073bd141e31dc
 bruna_overnight_d0_s4004=6.2610/4baa93b99eed5adb
 bruna_overnight_d0_s6006=6.2645/90a7d13e36c63db2
 bruna_overnight_d0_s8008=6.2840/115bef2a21c82c2d
@@ -710,10 +715,10 @@ pirates2hg_overnight_d5_s4004=5.1067/1f5990fb1fe0a6c7
 pirates2hg_overnight_d5_s5005=4.9800/85d4c768a38b5473
 pirates2hg_overnight_d5_s6006=5.1133/d73e2546ffdd227e
 pirates2hg_overnight_d5_s7007=4.9667/cb89df74217aa351
-pd2hg_overnight_d5_s4004=5.8400/f14d3151f59a0ea7
-pd2hg_overnight_d5_s5005=5.7400/fdc1d2e97c57baac
-pd2hg_overnight_d5_s6006=5.6600/7018cf8dc075753c
-pd2hg_overnight_d5_s7007=5.8000/767f7c12fb56cb22
+pd2hg_overnight_d5_s4004=5.8400/365a3fc9f92557cd
+pd2hg_overnight_d5_s5005=5.7200/aa85fd4f38c6d985
+pd2hg_overnight_d5_s6006=5.6400/6d71d0d01887f57e
+pd2hg_overnight_d5_s7007=5.8000/8c063392a2e966d2
 fluctuator_overnight_d0_s4004=5.1455/ae9e09ca79a5b57b
 fluctuator_overnight_d0_s6006=5.2175/5a94065d77b441d4
 fluctuator_overnight_d0_s8008=5.1040/4116c85f96cb1a14
