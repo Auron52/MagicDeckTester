@@ -75,6 +75,49 @@ many critters as possible."
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `KnightsProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`, the
+shared helper `KnightsCurveShed` + the `vialcurve` curve fill, which WhiteKnights and slivers_vial
+reuse with their own objectives), behind `MTG_KNIGHTS_BUCKET_DISCARD` (default ON; `=0` ->
+`GenericProvider`'s max-MV ranking, not VialProvider's slivers rule). Tests:
+`test/unit/test_knights_discard.cpp`.
+
+What runs, compactly:
+- SHED = duplicate legends (a namesake in play or an earlier hand copy) -> every Vial except a
+  turn-1 first copy with none in play -> surplus lands (reverse keep order: Plains first) -> any
+  unclassified nonland (max MV first; empty on this list) -> creatures outside the fill (lowest value
+  first) -> the fill, latest-scheduled turn first, lowest value first within a turn -> the turn-1 Vial
+  -> the kept lands (Plains first, the fixer last).
+- LANDS keep order: a fixer (any multi-colour land) > a single-colour land; quota 3, or 4 while a
+  held live creature has MV >= 4; the fixer clause keeps one fixer even past the quota.
+- FILL: mana per turn = lands in play + one kept land per turn (colour-exact: a turn's casts must fit
+  its wild / single-colour units), plus one Vial put per turn of a creature with MV == charge; the kept
+  subset maximises (creatures cast, lords, value-lex). Exhaustive subset DP (3^n per turn x charge
+  state, n <= 9), ~2.5 us for a typical 8-card hand, ~100 us worst case (9 creatures + Vial, -O1).
+- `CleanupDiscardShedStable()` is false while the rule is on: shedding the held 4-drop lowers the land
+  target and shedding the off-colour card releases its fixer, so a multi-card cleanup re-asks.
+
+Agent readings (surfaced for the USER):
+1. "(+1 per upkeep)" = the charge rises by AT MOST one per upkeep (Aether Vial's "you may"); the fill
+   takes the best charge trajectory. The literal always-add reading strands a Vial already at its
+   target. Only the most-charged Vial in play is modelled.
+2. "4 while a Haytham is held" keyed on MV >= 4 (the reason it needs the 4th land); a dead duplicate
+   does not count.
+3. The fixer clause may extend the kept lands beyond 3 when the board already fills them; "a Vial able
+   to reach it" = a Vial in play with charge <= MV <= charge + 3.
+4. The turn-1 Vial (USER: "kept as an engine only at the end of turn 1") is the last nonland shed --
+   after every creature, before the kept lands (Goblins' "engine = a sub-role of mana" precedent).
+5. Value order is param-derived and reproduces the USER's: lords by anthem points, then breadth, then
+   cheaper (Haytham > Benalish > Veteran = Zhalfir > Exemplar); bodies Adeline > Contender-with-a-
+   Knight-in-play > Worthy > Contender > 2/1s. Equal values keep the earlier hand card.
+6. Value-lex tie-break = compare the kept sets by their most valuable differing card; "latest-
+   scheduled" = the schedule that puts the fewest, least valuable cards on the latest turns.
+7. Draws are not modelled; the duplicate-legend rule covers any legend (Adeline is a 1-of here).
+
+Not run here (the brief forbids game runs on this box): the regression suite incl. `knights2hg`,
+`MTG_DISCARD_SHED_VERIFY=1`, and the `MTG_SHED_STATS` census (D8).
+
 
 ---
 

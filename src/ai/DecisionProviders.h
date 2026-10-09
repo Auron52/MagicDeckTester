@@ -725,6 +725,19 @@ public:
                "Vial puts a creature onto the battlefield at instant speed and Kinsbaile Cavalier "
                "grants DOUBLE STRIKE -- both have to be priced before any bound is sound." }; }
     const char* Name() const override { return "Knights"; }
+    // The USER-settled Knights cleanup-discard rule (2026-10-09,
+    // docs/design/knights-discard-policy-proposal.md): lands to 3 (4 with a 4-drop held), Vial
+    // surplus after turn 1, and ONE creature pool kept by a 3-turn CURVE FILL (most creatures cast,
+    // then more lords, then value). MTG_KNIGHTS_BUCKET_DISCARD (default ON; =0 -> GenericProvider's
+    // max-MV ranking, not whatever VialProvider holds). Declared HERE, on KnightsProvider, so Knights
+    // can never inherit a rule placed on the shared VialProvider base (the proposal's section 0).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // NOT prefix-stable while the rule is on: shedding the held 4-drop lowers the land target to 3
+    // (a kept 4th land turns surplus), and shedding the off-colour card releases the fixer it was
+    // holding -- so a multi-card cleanup must re-ask after each shed. The generic fallback (=0) is
+    // prefix-stable, so it keeps the batched path.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // WhiteKnights (2026-09-25) -- mono-white Knight tribal on Aether Vial, a DIFFERENT shipping list

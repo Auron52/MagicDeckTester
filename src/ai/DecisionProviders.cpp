@@ -1,4 +1,5 @@
 #include <array>
+#include <bit>      // std::popcount / std::countr_zero (the Vial-family curve fill's subset DP)
 #include <limits>
 #include <optional>
 #include <map>
@@ -7384,6 +7385,634 @@ const char* VialProvider::CastOrderTierName(int rank) const
         default: return nullptr;
     }
 }
+
+// =================================================================================================
+// ---- THE AETHER-VIAL FAMILY'S CLEANUP DISCARD: the shared 3-turn CURVE FILL ----------------------
+// =================================================================================================
+//
+// USER, 2026-10-09, reviewing Knights (docs/design/knights-discard-policy-proposal.md, USER section):
+// "I don't think lord or not is the relevant factor. It's more: what can we play on curve. We should
+// not keep 4 3-mana cards whether they are lords or not. More lords is good, but only if we can curve
+// out. So really, the ideal would take into account the mana and vials on the board and in hand." --
+// settled "as described" as ONE creature pool kept by a 3-TURN CURVE FILL. WhiteKnights runs the same
+// rule plus extras (docs/design/whiteknights-discard-policy.md) and slivers_vial runs the fill with
+// LORDS FIRST (docs/design/slivers-vial-discard-policy-proposal.md), so the fill is shared and each
+// deck brings its own objective -- the three tie rules differ.
+//
+// THE MODEL -- one Build answers "which subsets of the pool can we cast in our next kTurns turns?":
+//   * MANA per turn = the sources in play + one KEPT hand land played per turn, in the deck rule's
+//     keep order (an enters-tapped land pays from the following turn), split by what a unit can pay:
+//     WILD (a multi-colour source -- the engine taps one as any single colour), SINGLE-colour,
+//     COLOURLESS-only, and CREATURE-SPELL-ONLY (Ancient Ziggurat; also counted in its class). Draws
+//     are not modelled: the fill plans with the hand we keep ("mana per turn = lands in play + one
+//     kept land drop per turn").
+//   * A turn's hard-cast set is affordable when its total cost fits, its non-creature cost fits the
+//     unrestricted units, and its coloured pips fit -- Hall's condition, which for this source shape
+//     is exactly sum_c max(0, pips_c - single_c) <= wild.
+//   * An Aether Vial in play adds ONE free put per turn of a creature whose mana value EQUALS its
+//     charge, and the charge rises by AT MOST one per upkeep. AGENT READING of the design's "(+1 per
+//     upkeep)": the card says "you MAY put a charge counter", and the literal always-add reading would
+//     strand a Vial already at the deck's target (a Knights Vial on 3 could never put a second
+//     3-drop). The fill takes the best charge trajectory. With two Vials in play only the most-charged
+//     one is modelled (agent reading; the second is always shed, so the board rarely holds two).
+//
+// THE SEARCH is exhaustive, as the design allows ("hand <= 9 cards, so the curve fill can be
+// exhaustive"): a subset DP -- after turn k, which subsets are castable in turns 1..k, per Vial
+// charge -- costing 3^n submask steps per (turn, charge) state, n <= kMaxPool. It runs inside
+// rollouts, so it is deterministic (ties fall to fixed value ranks, then hand index), RNG-free,
+// allocation-free (per-thread scratch) and never copies the GameState.
+namespace
+{
+namespace vialcurve
+{
+constexpr int      kTurns   = 3;     // the window: USER for Knights, agent default for slivers_vial
+constexpr int      kMaxPool = 10;    // DP bound; never reached by a real hand (hand <= 9)
+constexpr unsigned kMasks   = 1u << kMaxPool;
+constexpr int      kHandMax = 64;    // stack buffers; a larger hand takes the generic ranking
+
+struct Mana
+{
+    int total[kTurns];
+    int wild[kTurns];
+    int single[kTurns][5];   // W U B R G -- the Color enum order
+    int restricted[kTurns];  // creature-spell-only units (also counted in their own class)
+};
+
+enum class Kind : char { Wild, Single, Colourless };
+
+struct Source
+{
+    Kind kind;
+    int  colour;      // Kind::Single only
+    int  units;       // produces_amount (Remote Farm, Sol Ring: 2)
+    bool restricted;  // creature_mana_only (Ancient Ziggurat)
+};
+
+Source ClassifySource(const CardDefinition* d)
+{
+    Source s{Kind::Colourless, 0, 1, false};
+    if (d == nullptr) { return s; }
+    s.units      = std::max(1, d->params.produces_amount);
+    s.restricted = d->params.creature_mana_only;
+    unsigned bits = 0;
+    for (Color c : d->params.produces)
+    { if (c != Color::Colorless) { bits |= 1u << static_cast<int>(c); } }
+    if (std::popcount(bits) >= 2) { s.kind = Kind::Wild; }
+    else if (bits != 0)           { s.kind = Kind::Single; s.colour = std::countr_zero(bits); }
+    return s;
+}
+
+void AddAt(Mana& m, const Source& src, int units, int turn)
+{
+    if (turn < 0 || turn >= kTurns || units <= 0) { return; }
+    m.total[turn] += units;
+    if (src.restricted)                { m.restricted[turn] += units; }
+    if (src.kind == Kind::Wild)        { m.wild[turn] += units; }
+    else if (src.kind == Kind::Single) { m.single[turn][src.colour] += units; }
+}
+
+void AddFrom(Mana& m, const Source& src, int units, int from_turn)
+{
+    for (int k = std::max(0, from_turn); k < kTurns; ++k) { AddAt(m, src, units, k); }
+}
+
+struct Spell
+{
+    int          cost;      // effective mana value (affinity applied)
+    std::uint8_t pip[5];    // coloured pips, W U B R G
+    bool         creature;  // creature-spell-only mana may pay it
+    int          put_mv;    // an Aether Vial at exactly this charge puts it (-1: not a creature)
+};
+
+// Thrumming Hivepool's affinity, counted the way ManaPayment does: one generic less per permanent we
+// control with a listed subtype (an animated all-types land included). Every other card: its MV.
+// Slivers in play NOW -- agent reading of "Hivepool's cost = 6 - Slivers in play"; the Slivers the
+// fill itself casts earlier in the window are not credited.
+int EffectiveCost(const GameState& s, const CardDefinition& d)
+{
+    const int mv = d.card.m_mana_cost.ManaValue();
+    if (!d.params.affinity_for_subtype || d.params.subtypes_affected.empty()) { return mv; }
+    int reduction = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        bool matches = p.AnimatedAllTypes();
+        for (const std::string& sub : d.params.subtypes_affected)
+        {
+            if (matches) { break; }
+            for (const std::string& cs : p.card.m_subtypes) { if (cs == sub) { matches = true; break; } }
+        }
+        if (matches) { ++reduction; }
+    }
+    return mv - std::min(d.card.m_mana_cost.generic, reduction);
+}
+
+Spell MakeSpell(const GameState& s, const CardDefinition* d)
+{
+    Spell sp{0, {0, 0, 0, 0, 0}, true, -1};
+    if (d == nullptr) { return sp; }
+    const ManaCost& mc = d->card.m_mana_cost;
+    sp.cost = EffectiveCost(s, *d);
+    const int pips[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+    for (int c = 0; c < 5; ++c) { sp.pip[c] = static_cast<std::uint8_t>(std::clamp(pips[c], 0, 20)); }
+    sp.creature = d->card.IsCreature();
+    sp.put_mv   = sp.creature ? mc.ManaValue() : -1;
+    return sp;
+}
+
+class Fill
+{
+public:
+    // R_[k][d][M] = "subset M is castable within the first k turns, ending at Vial charge
+    // vial_charge + d". Without a Vial there is one charge state.
+    void Build(const Spell* pool, int n, const Mana& mana, int vial_charge)
+    {
+        n_ = n; full_ = 1u << n; mana_ = mana;
+        for (int i = 0; i < n; ++i) { pool_[i] = pool[i]; }
+        // A Vial whose reachable charges (c .. c + kTurns) put nothing in the pool adds no state.
+        bool puts = false;
+        for (int i = 0; i < n && vial_charge >= 0; ++i)
+        { if (pool_[i].put_mv >= vial_charge && pool_[i].put_mv <= vial_charge + kTurns) { puts = true; } }
+        vial_ = puts ? vial_charge : -1;
+        nst_ = vial_ >= 0 ? kTurns + 1 : 1;
+        cost_[0] = 0; nc_[0] = 0;
+        for (int c = 0; c < 5; ++c) { pip_[0][c] = 0; }
+        for (unsigned M = 1; M < full_; ++M)
+        {
+            const int lo = std::countr_zero(M);
+            const unsigned P = M & (M - 1);
+            cost_[M] = static_cast<std::int16_t>(cost_[P] + pool_[lo].cost);
+            nc_[M]   = static_cast<std::int16_t>(nc_[P] + (pool_[lo].creature ? 0 : pool_[lo].cost));
+            for (int c = 0; c < 5; ++c)
+            { pip_[M][c] = static_cast<std::uint8_t>(pip_[P][c] + pool_[lo].pip[c]); }
+        }
+        for (int k = 0; k < kTurns; ++k)
+        {
+            for (unsigned M = 0; M < full_; ++M)
+            {
+                bool ok = cost_[M] <= mana_.total[k]
+                       && nc_[M] <= mana_.total[k] - mana_.restricted[k];
+                if (ok)
+                {
+                    int excess = 0;
+                    for (int c = 0; c < 5; ++c) { excess += std::max(0, pip_[M][c] - mana_.single[k][c]); }
+                    ok = excess <= mana_.wild[k];
+                }
+                hard_[k][M] = ok ? 1 : 0;
+            }
+        }
+        for (int d = 0; d < nst_; ++d) { std::fill_n(R_[0][d], full_, std::uint8_t{0}); }
+        R_[0][0][0] = 1;
+        for (int k = 0; k < kTurns; ++k)
+        {
+            for (int d = 0; d < nst_; ++d) { std::fill_n(R_[k + 1][d], full_, std::uint8_t{0}); }
+            const int dmax = std::min(k + 1, nst_ - 1);
+            for (int d = 0; d <= dmax; ++d)
+            {
+                // Entering this turn's upkeep at charge offset d (held) or d - 1 (one counter added).
+                for (unsigned M = 0; M < full_; ++M)
+                {
+                    cv_[M] = CastV(k, d, M) ? 1 : 0;
+                    pv_[M] = static_cast<std::uint8_t>(R_[k][d][M] | (d > 0 ? R_[k][d - 1][M] : 0));
+                }
+                std::uint8_t* out = R_[k + 1][d];
+                for (unsigned M = 0; M < full_; ++M)
+                {
+                    // Castability is DOWNWARD-CLOSED (any subset of a castable set is castable), so a
+                    // superset of an infeasible set is infeasible without a search -- only the minimal
+                    // infeasible sets pay the 3^n submask walk. Masks run in increasing order, so
+                    // every M minus one card is already decided.
+                    std::uint8_t r = 1;
+                    for (unsigned b = M; b != 0; b &= b - 1) { if (!out[M ^ (b & (0u - b))]) { r = 0; break; } }
+                    if (r && !pv_[M])   // casting nothing this turn already works when pv_[M] holds
+                    {
+                        r = 0;
+                        for (unsigned B = M; B != 0; B = (B - 1) & M)
+                        { if (cv_[B] && pv_[M ^ B]) { r = 1; break; } }
+                    }
+                    out[M] = r;
+                }
+            }
+        }
+    }
+
+    unsigned Full() const { return full_; }
+    int      Cost(unsigned M) const { return cost_[M]; }
+    bool     Feasible(unsigned M) const
+    {
+        for (int d = 0; d < nst_; ++d) { if (R_[kTurns][d][M]) { return true; } }
+        return false;
+    }
+
+    // One schedule for a feasible `mask`, read back from the DP: turn_of[i] = the 0-based turn slot
+    // i is cast or put on (-1 outside the mask). Backtracking from the LAST turn, each turn takes the
+    // FEWEST cards it can, and of those the least valuable (lowest rank_bit sum) -- so a card counts as
+    // "latest-scheduled" only when the rest of the fill really cannot make room for it earlier.
+    void Schedule(unsigned mask, const std::uint32_t* rank_bit, int* turn_of) const
+    {
+        for (int i = 0; i < n_; ++i) { turn_of[i] = -1; }
+        int d = -1;
+        for (int x = 0; x < nst_; ++x) { if (R_[kTurns][x][mask]) { d = x; break; } }
+        if (d < 0) { return; }
+        unsigned cur = mask;
+        for (int k = kTurns - 1; k >= 0; --k)
+        {
+            unsigned best_b = 0;
+            int best_dp = -1, best_pc = 0;
+            std::uint32_t best_val = 0;
+            for (unsigned B = cur;; B = (B - 1) & cur)
+            {
+                if (CastV(k, d, B))
+                {
+                    const unsigned rest = cur ^ B;
+                    int dp = -1;
+                    if (R_[k][d][rest])                   { dp = d; }
+                    else if (d > 0 && R_[k][d - 1][rest]) { dp = d - 1; }
+                    if (dp >= 0)
+                    {
+                        const int pc = std::popcount(B);
+                        std::uint32_t val = 0;
+                        for (unsigned b = B; b != 0; b &= b - 1) { val += rank_bit[std::countr_zero(b)]; }
+                        if (best_dp < 0 || pc < best_pc || (pc == best_pc && val < best_val))
+                        { best_b = B; best_dp = dp; best_pc = pc; best_val = val; }
+                    }
+                }
+                if (B == 0) { break; }
+            }
+            if (best_dp < 0) { return; }   // unreachable: R_ was built by exactly this recurrence
+            for (unsigned b = best_b; b != 0; b &= b - 1) { turn_of[std::countr_zero(b)] = k; }
+            cur ^= best_b;
+            d = best_dp;
+        }
+    }
+
+private:
+    bool CastV(int k, int d, unsigned M) const
+    {
+        if (hard_[k][M]) { return true; }
+        if (vial_ < 0) { return false; }
+        const int ch = vial_ + d;
+        for (unsigned b = M; b != 0; b &= b - 1)
+        {
+            const int i = std::countr_zero(b);
+            if (pool_[i].put_mv == ch && hard_[k][M ^ (1u << i)]) { return true; }
+        }
+        return false;
+    }
+
+    Spell        pool_[kMaxPool];
+    Mana         mana_;
+    int          n_, nst_, vial_;
+    unsigned     full_;
+    std::int16_t cost_[kMasks];
+    std::int16_t nc_[kMasks];
+    std::uint8_t pip_[kMasks][5];
+    std::uint8_t hard_[kTurns][kMasks];
+    std::uint8_t R_[kTurns + 1][kTurns + 1][kMasks];
+    std::uint8_t cv_[kMasks];
+    std::uint8_t pv_[kMasks];
+};
+
+// Per-thread scratch (~30 KB): the fill runs inside rollouts on every worker, and a frame that size
+// at the bottom of a deep search does not belong on the stack. Trivially constructible, so reading it
+// costs no TLS guard.
+thread_local Fill t_fill;
+
+// rank[j] over a pool by VALUE ascending: rank 0 = the most expendable. Equal values keep the EARLIER
+// hand card (the shared builder's tier-B convention), so a later hand index ranks lower among equals.
+void RankByValue(const int* value, const int* hand_idx, int n, int* rank)
+{
+    int order[kHandMax];
+    for (int i = 0; i < n; ++i) { order[i] = i; }
+    std::sort(order, order + n, [&](int a, int b)
+    {
+        if (value[a] != value[b]) { return value[a] < value[b]; }
+        return hand_idx[a] > hand_idx[b];
+    });
+    for (int r = 0; r < n; ++r) { rank[order[r]] = r; }
+}
+
+// The pool as the DP sees it: up to kMaxPool cards, highest-ranked first (on any real hand, all of
+// them). slot_of[j] = DP slot of pool card j (-1: outside the DP, i.e. outside the fill); rank_bit[t]
+// orders the DP slots by the same value ranks.
+struct DpPool
+{
+    int           n = 0;
+    int           pool_of[kMaxPool];   // DP slot -> pool index
+    std::uint32_t rank_bit[kMaxPool];
+};
+
+void PickDpPool(const int* rank, int np, DpPool& dp, int* slot_of)
+{
+    int by_rank[kHandMax];
+    for (int j = 0; j < np; ++j) { by_rank[rank[j]] = j; slot_of[j] = -1; }
+    dp.n = 0;
+    for (int r = np - 1; r >= 0 && dp.n < kMaxPool; --r)
+    {
+        const int j = by_rank[r];
+        slot_of[j] = dp.n;
+        dp.pool_of[dp.n] = j;
+        ++dp.n;
+    }
+    // Slot 0 is the most valuable, so its local rank is the highest.
+    for (int t = 0; t < dp.n; ++t) { dp.rank_bit[t] = 1u << (dp.n - 1 - t); }
+}
+
+std::uint32_t ValueKey(unsigned M, const DpPool& dp)
+{
+    std::uint32_t v = 0;
+    for (unsigned b = M; b != 0; b &= b - 1) { v += dp.rank_bit[std::countr_zero(b)]; }
+    return v;
+}
+
+}   // namespace vialcurve
+
+// ---- Knights: the curve rule ------------------------------------------------------
+//
+// THE KNIGHTS-FAMILY VALUE ORDER (higher = keep): the fill's last tie-break, and the order creatures
+// outside the fill are shed in. USER (Knights): lords "Haytham > Benalish Marshal > Inspiring Veteran
+// = Marshal of Zhalfir > Knight Exemplar"; bodies "Adeline > Worthy Knight > Acclaimed Contender
+// (above Worthy with a Knight in play) > Venerable = Bodyguard". Keyed on PARAMS so the order is
+// derived rather than a name list: a lord ranks by anthem points, then breadth, then cheaper first,
+// which reproduces the USER's lord order exactly (2+2 > all-creatures > two MV-2 Knight lords, tied >
+// the MV-3 one).
+int KnightsCurveValue(const GameState& s, const CardDefinition* d)
+{
+    if (d == nullptr) { return 0; }
+    const CardParams& p = d->params;
+    const int mv = d->card.m_mana_cost.ManaValue();
+    if (IsLordPermanent(*d) && p.power_bonus > 0)
+    { return 1000 + 100 * p.power_bonus + (p.affects_all_creatures ? 50 : 0) - 10 * mv; }
+    if (p.power_equals_creature_count)                          { return 900; }   // Adeline
+    if (p.etb_dig_count > 0 && !p.etb_dig_requires_subtypes.empty())
+    {
+        // The SAME board scan as VialProvider::CastOrderRank's rank 9 / 12 split, so the two agree.
+        for (const Permanent& perm : s.battlefield)
+        {
+            if (perm.controller_index != s.active_player_index || !perm.card.IsCreature()) { continue; }
+            for (const std::string& want : p.etb_dig_requires_subtypes)
+                for (const std::string& cs : perm.card.m_subtypes)
+                    if (cs == want) { return 720; }               // above Worthy Knight (USER)
+        }
+        return 600;                                               // below Worthy Knight
+    }
+    if (p.cast_trigger_creates_tokens > 0)                      { return 700; }   // Worthy Knight
+    return 500 + 10 * d->card.m_power.value_or(0) + d->card.m_toughness.value_or(0);   // the 2/1s
+}
+
+// THE KNIGHTS RULE (USER-settled 2026-10-09; docs/design/knights-discard-policy-proposal.md, block
+// "Knights: SETTLED"):
+//   LANDS  3 counting the board, 4 while a Haytham is held; >= 1 fixer while holding a blue/red card
+//          (no board fixer, no Vial able to reach it); surplus Plains shed before fixers.
+//          AGENT READINGS: "a Haytham" is keyed on its mana value -- a held live creature of MV >= 4,
+//          the reason it needs the 4th land -- which on Knights is exactly Haytham. The fixer clause
+//          may EXTEND the kept lands by
+//          one when the board already fills the 3 (keeping the land that makes the held card castable
+//          at all); "a Vial able to reach it" = a Vial in play with charge <= MV <= charge + 3.
+//   VIAL   surplus after turn 1 (kept as an engine only at the end of turn 1); a 2nd always shed.
+//          AGENT READING: the turn-1 Vial is the last NONLAND card shed (Goblins' "engine, a sub-role
+//          of mana" precedent) -- after every creature, before the kept lands.
+//   CREATURES ONE pool, kept by the 3-turn curve fill: the subset that casts the MOST creatures in the
+//          window, ties -> more lords (IsLordPermanent with an anthem), then value (above). Off-colour
+//          cards with no fixer and no Vial reach simply do not fit the fill's mana.
+//   SHED   duplicate legends (a copy in play, or a 2nd copy in hand: the 2nd Haytham) -> Vial after
+//          turn 1 ->
+//          surplus lands (Plains first) -> [anything unclassified, max-MV first] -> creatures outside
+//          the fill (lowest value first) -> remaining creatures, latest-scheduled first -> [the
+//          turn-1 Vial] -> lands (Plains first, fixers last).
+// Every non-staged hand index is named exactly once, routed through CleanupDiscardRankingWithOrder.
+std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::string>* required_pieces)
+{
+    using namespace vialcurve;
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- 1. board census (net of board) -------------------------------------------------------
+    Mana mana{};
+    int board_units = 0;
+    unsigned board_colours = 0;   // colours a source in play can make (a wild source makes all five)
+    int vial_charge = -1;         // the most-charged Vial in play (-1: none)
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        if (perm.card.IsLand())
+        {
+            const Source src = ClassifySource(d);
+            AddFrom(mana, src, src.units, 0);
+            board_units += src.units;
+            if (src.kind == Kind::Wild)        { board_colours |= 0x1Fu; }
+            else if (src.kind == Kind::Single) { board_colours |= 1u << src.colour; }
+        }
+        if (d != nullptr && d->params.upkeep_adds_charge)
+        { vial_charge = std::max(vial_charge, perm.charge_counters); }
+    }
+    auto legend_in_play = [&](const Card& hc)
+    {
+        for (const Permanent& perm : s.battlefield)
+        { if (perm.controller_index == me && perm.card.m_name == hc.m_name) { return true; } }
+        return false;
+    };
+
+    // ---- 2. partition the hand ------------------------------------------------------------------
+    enum : char { C_SKIP, C_DEAD, C_VIAL, C_MANA, C_CREATURE, C_REST };
+    char cls[kHandMax];
+    const CardDefinition* defs[kHandMax];
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        cls[i] = C_SKIP;
+        defs[i] = nullptr;
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        defs[i] = d;
+        if (CleanupDiscardIsLand(c))                                { cls[i] = C_MANA; continue; }
+        if (d == nullptr)                                           { cls[i] = C_REST; continue; }
+        if (d->params.upkeep_adds_charge)                           { cls[i] = C_VIAL; continue; }
+        if (d->card.HasSupertype(Supertype::Legendary))
+        {
+            bool dead = legend_in_play(c);
+            for (int j = 0; j < i && !dead; ++j)
+            {
+                const Card& o = ap.hand[static_cast<std::size_t>(j)];
+                if (!o.m_is_staged && o.m_name == c.m_name) { dead = true; }
+            }
+            if (dead) { cls[i] = C_DEAD; continue; }
+        }
+        cls[i] = d->card.IsCreature() ? C_CREATURE : C_REST;
+    }
+
+    // ---- 3. the Vial: kept only as a turn-1 engine, and only the first copy -------------------
+    int kept_vial = -1;
+    if (s.turn_number <= 1 && vial_charge < 0)
+    { for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL) { kept_vial = i; break; } } }
+
+    // ---- 4. mana: the land target, its fixer clause, and the keep order -----------------------
+    int target = 3;
+    bool fixer_needed = false;
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[i] != C_CREATURE) { continue; }
+        const ManaCost& mc = defs[i]->card.m_mana_cost;
+        const int mv = mc.ManaValue();
+        if (mv >= 4) { target = 4; }
+        const int pips[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        bool off = false;
+        for (int c = 0; c < 5; ++c) { if (pips[c] > 0 && !(board_colours & (1u << c))) { off = true; } }
+        const bool vial_reach = vial_charge >= 0 && vial_charge <= mv && mv <= vial_charge + kTurns;
+        if (off && !vial_reach) { fixer_needed = true; }
+    }
+    int mana_idx[kHandMax];
+    Source msrc[kHandMax];
+    int nm = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[i] != C_MANA) { continue; }
+        mana_idx[nm++] = i;
+        msrc[i] = ClassifySource(defs[i]);
+    }
+    auto enters_tapped = [&](int i) { return defs[i] != nullptr && defs[i]->params.enters_tapped; };
+    // Keep order, best first: a fixer ("surplus Plains shed before fixers"), more mana per source,
+    // untapped, then hand order.
+    std::sort(mana_idx, mana_idx + nm, [&](int a, int b)
+    {
+        const bool fa = msrc[a].kind == Kind::Wild, fb = msrc[b].kind == Kind::Wild;
+        if (fa != fb) { return fa; }
+        if (msrc[a].units != msrc[b].units) { return msrc[a].units > msrc[b].units; }
+        const bool ta = enters_tapped(a), tb = enters_tapped(b);
+        if (ta != tb) { return !ta; }
+        return a < b;
+    });
+    char kept_mana[kHandMax] = {};
+    {
+        const int need = std::max(0, target - board_units);
+        int have = 0;
+        bool kept_fixer = false;
+        for (int t = 0; t < nm && have < need; ++t)
+        {
+            const int i = mana_idx[t];
+            kept_mana[i] = 1;
+            have += msrc[i].units;
+            if (msrc[i].kind == Kind::Wild) { kept_fixer = true; }
+        }
+        if (fixer_needed && !kept_fixer)
+        {
+            for (int t = 0; t < nm; ++t)
+            {
+                const int i = mana_idx[t];
+                if (!kept_mana[i] && msrc[i].kind == Kind::Wild) { kept_mana[i] = 1; break; }
+            }
+        }
+    }
+
+    // ---- 5. the curve fill ----------------------------------------------------------------------
+    // Kept lands enter one per turn in keep order.
+    int drop = 0;
+    for (int t = 0; t < nm; ++t)
+    {
+        const int i = mana_idx[t];
+        if (!kept_mana[i] || !CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
+        if (drop < kTurns) { AddFrom(mana, msrc[i], msrc[i].units, drop + (enters_tapped(i) ? 1 : 0)); }
+        ++drop;
+    }
+    int pool_hand[kHandMax], value[kHandMax], rank[kHandMax], slot_of[kHandMax];
+    int np = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[i] != C_CREATURE) { continue; }
+        pool_hand[np] = i;
+        value[np] = KnightsCurveValue(s, defs[i]);
+        ++np;
+    }
+    RankByValue(value, pool_hand, np, rank);
+    DpPool dp;
+    PickDpPool(rank, np, dp, slot_of);
+    Spell spells[kMaxPool];
+    unsigned lord_bits = 0;
+    for (int t = 0; t < dp.n; ++t)
+    {
+        const CardDefinition* d = defs[pool_hand[dp.pool_of[t]]];
+        spells[t] = MakeSpell(s, d);
+        if (d != nullptr && IsLordPermanent(*d) && d->params.power_bonus > 0) { lord_bits |= 1u << t; }
+    }
+    Fill& F = t_fill;
+    F.Build(spells, dp.n, mana, vial_charge);
+    unsigned best = 0;
+    std::uint64_t best_score = 0;
+    for (unsigned M = 0; M < F.Full(); ++M)
+    {
+        if (!F.Feasible(M)) { continue; }
+        const std::uint64_t sc = (static_cast<std::uint64_t>(std::popcount(M)) << 40)
+                               | (static_cast<std::uint64_t>(std::popcount(M & lord_bits)) << 32)
+                               | ValueKey(M, dp);
+        if (sc > best_score) { best = M; best_score = sc; }
+    }
+    int turn_of[kMaxPool];
+    F.Schedule(best, dp.rank_bit, turn_of);
+
+    // ---- 6. the shed order ----------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) { if (cls[i] == C_DEAD)    { shed.push_back(i); } }
+    for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL && i != kept_vial) { shed.push_back(i); } }
+    for (int t = nm - 1; t >= 0; --t) { if (!kept_mana[mana_idx[t]]) { shed.push_back(mana_idx[t]); } }
+    {
+        int rest[kHandMax], nr = 0;
+        for (int i = 0; i < n; ++i) { if (cls[i] == C_REST) { rest[nr++] = i; } }
+        std::sort(rest, rest + nr, [&](int a, int b)
+        {
+            const int ma = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)]);
+            const int mb = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+            if (ma != mb) { return ma > mb; }
+            return a < b;
+        });
+        for (int k = 0; k < nr; ++k) { shed.push_back(rest[k]); }
+    }
+    {
+        int by_rank[kHandMax];
+        for (int j = 0; j < np; ++j) { by_rank[rank[j]] = j; }
+        for (int r = 0; r < np; ++r)   // outside the fill, lowest value first
+        {
+            const int j = by_rank[r];
+            if (slot_of[j] < 0 || !((best >> slot_of[j]) & 1u)) { shed.push_back(pool_hand[j]); }
+        }
+    }
+    for (int k = kTurns - 1; k >= 0; --k)   // the fill, latest-scheduled first, then lowest value
+    {
+        for (int t = dp.n - 1; t >= 0; --t)
+        { if (((best >> t) & 1u) && turn_of[t] == k) { shed.push_back(pool_hand[dp.pool_of[t]]); } }
+    }
+    for (int t = dp.n - 1; t >= 0; --t)     // defensive: a fill member the schedule did not place
+    { if (((best >> t) & 1u) && turn_of[t] < 0) { shed.push_back(pool_hand[dp.pool_of[t]]); } }
+    if (kept_vial >= 0) { shed.push_back(kept_vial); }
+    for (int t = nm - 1; t >= 0; --t) { if (kept_mana[mana_idx[t]]) { shed.push_back(mana_idx[t]); } }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+}   // namespace
+
+// ---- KnightsProvider::CleanupDiscardCandidates --------------------------------------------------
+// The USER-settled Knights rule -- see KnightsCurveShed above. MTG_KNIGHTS_BUCKET_DISCARD=0 restores
+// GenericProvider's max-MV ranking (not VialProvider's: the A/B measures this policy against the
+// generic rule, not against another deck's).
+static bool KnightsBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_KNIGHTS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::KNIGHTS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> KnightsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    const int n = static_cast<int>(s.players[s.active_player_index].hand.size());
+    if (!KnightsBucketDiscardEnabled() || n <= 0 || n > vialcurve::kHandMax)
+    { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    return KnightsCurveShed(s, required_pieces);
+}
+
+bool KnightsProvider::CleanupDiscardShedStable() const { return !KnightsBucketDiscardEnabled(); }
 
 // ---- SoldiersProvider --------------------------------------------------------
 
@@ -16218,7 +16847,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // byte-for-byte and there is nothing here to narrow.
     if (wknights)    { return g_white_knights; }
     // Knights: KnightsProvider, which DERIVES FROM VialProvider -- the deck rode VialProvider and
-    // still runs on exactly its hooks, so this is play-neutral. Must sit ABOVE `vial`.
+    // still runs on its hooks, except the cleanup discard (its own USER-settled rule since
+    // 2026-10-09, declared on KnightsProvider so nothing placed on the shared base reaches it).
+    // Must sit ABOVE `vial`.
     if (knights)     { return g_knights; }
     if (breaching)   { return g_breaching_dragonstorm; }
     // Pirates: ABOVE anti (Forerunner's tutor_to_top) -- see the flag. Placed this high because its
