@@ -358,6 +358,7 @@ add_executable(mtg-test
     test/unit/test_fungus_discard.cpp
     test/unit/test_selesnyalifegain_discard.cpp
     test/unit/test_knights_discard.cpp
+    test/unit/test_whiteknights_discard.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

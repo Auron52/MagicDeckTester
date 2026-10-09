@@ -7727,7 +7727,7 @@ std::uint32_t ValueKey(unsigned M, const DpPool& dp)
 
 }   // namespace vialcurve
 
-// ---- Knights: the curve rule ------------------------------------------------------
+// ---- Knights / WhiteKnights: the curve rule ------------------------------------------------------
 //
 // THE KNIGHTS-FAMILY VALUE ORDER (higher = keep): the fill's last tie-break, and the order creatures
 // outside the fill are shed in. USER (Knights): lords "Haytham > Benalish Marshal > Inspiring Veteran
@@ -7735,7 +7735,11 @@ std::uint32_t ValueKey(unsigned M, const DpPool& dp)
 // (above Worthy with a Knight in play) > Venerable = Bodyguard". Keyed on PARAMS so the order is
 // derived rather than a name list: a lord ranks by anthem points, then breadth, then cheaper first,
 // which reproduces the USER's lord order exactly (2+2 > all-creatures > two MV-2 Knight lords, tied >
-// the MV-3 one).
+// the MV-3 one). AGENT READING for the WhiteKnights bodies the USER did not rank -- Kinsbaile
+// Cavalier's team double strike, Hero of Bladehold's attack tokens, Silverblade Paladin's soulbond
+// double strike, Accorder Paladin's battle cry -- slotted between Adeline and the 2/1s by what each
+// adds to the team; Basri is a 2/1 (its token ability measured play-identical to Venerable Knight,
+// see its cards.json note).
 int KnightsCurveValue(const GameState& s, const CardDefinition* d)
 {
     if (d == nullptr) { return 0; }
@@ -7744,6 +7748,9 @@ int KnightsCurveValue(const GameState& s, const CardDefinition* d)
     if (IsLordPermanent(*d) && p.power_bonus > 0)
     { return 1000 + 100 * p.power_bonus + (p.affects_all_creatures ? 50 : 0) - 10 * mv; }
     if (p.power_equals_creature_count)                          { return 900; }   // Adeline
+    if (p.grants_double_strike && !p.subtypes_affected.empty()) { return 850; }   // Kinsbaile (agent)
+    if (p.attack_creates_tokens > 0)                            { return 800; }   // Hero (agent)
+    if (p.soulbond)                                             { return 750; }   // Silverblade (agent)
     if (p.etb_dig_count > 0 && !p.etb_dig_requires_subtypes.empty())
     {
         // The SAME board scan as VialProvider::CastOrderRank's rank 9 / 12 split, so the two agree.
@@ -7757,31 +7764,38 @@ int KnightsCurveValue(const GameState& s, const CardDefinition* d)
         return 600;                                               // below Worthy Knight
     }
     if (p.cast_trigger_creates_tokens > 0)                      { return 700; }   // Worthy Knight
+    if (p.battle_cry_power > 0)                                 { return 650; }   // Accorder (agent)
     return 500 + 10 * d->card.m_power.value_or(0) + d->card.m_toughness.value_or(0);   // the 2/1s
 }
 
 // THE KNIGHTS RULE (USER-settled 2026-10-09; docs/design/knights-discard-policy-proposal.md, block
-// "Knights: SETTLED"):
+// "Knights: SETTLED"), with `wk_extras` adding the WhiteKnights extras
+// (docs/design/whiteknights-discard-policy.md):
 //   LANDS  3 counting the board, 4 while a Haytham is held; >= 1 fixer while holding a blue/red card
 //          (no board fixer, no Vial able to reach it); surplus Plains shed before fixers.
 //          AGENT READINGS: "a Haytham" is keyed on its mana value -- a held live creature of MV >= 4,
-//          the reason it needs the 4th land -- which on Knights is exactly Haytham. The fixer clause
-//          may EXTEND the kept lands by
+//          the reason it needs the 4th land -- which on Knights is exactly Haytham and on WhiteKnights
+//          also Hero of Bladehold / Kinsbaile Cavalier. The fixer clause may EXTEND the kept lands by
 //          one when the board already fills the 3 (keeping the land that makes the held card castable
 //          at all); "a Vial able to reach it" = a Vial in play with charge <= MV <= charge + 3.
+//          WK: Sol Ring and Remote Farm "count as mana (2)" -- the quota counts mana UNITS
+//          (produces_amount), a rock counts as a source, and among kept sources the bigger one is
+//          preferred (fewer cards for the same mana); a kept Sol Ring is cast on the first turn it is
+//          affordable and nets its output less its cost that turn (agent).
 //   VIAL   surplus after turn 1 (kept as an engine only at the end of turn 1); a 2nd always shed.
 //          AGENT READING: the turn-1 Vial is the last NONLAND card shed (Goblins' "engine, a sub-role
 //          of mana" precedent) -- after every creature, before the kept lands.
 //   CREATURES ONE pool, kept by the 3-turn curve fill: the subset that casts the MOST creatures in the
 //          window, ties -> more lords (IsLordPermanent with an anthem), then value (above). Off-colour
 //          cards with no fixer and no Vial reach simply do not fit the fill's mana.
-//   SHED   duplicate legends (a copy in play, or a 2nd copy in hand: the 2nd Haytham) -> Vial after
-//          turn 1 ->
+//   SHED   [WK: Swords / Unexpectedly Absent first] -> duplicate legends (a copy in play, or a 2nd
+//          copy in hand: Knights' 2nd Haytham, WK's 2nd Adeline / Basri) -> Vial after turn 1 ->
 //          surplus lands (Plains first) -> [anything unclassified, max-MV first] -> creatures outside
 //          the fill (lowest value first) -> remaining creatures, latest-scheduled first -> [the
 //          turn-1 Vial] -> lands (Plains first, fixers last).
 // Every non-staged hand index is named exactly once, routed through CleanupDiscardRankingWithOrder.
-std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::string>* required_pieces)
+std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::string>* required_pieces,
+                                  bool wk_extras)
 {
     using namespace vialcurve;
     const int me = s.active_player_index;
@@ -7798,7 +7812,8 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
     {
         if (perm.controller_index != me) { continue; }
         const CardDefinition* d = def_of(perm.card);
-        if (perm.card.IsLand())
+        const bool rock = wk_extras && d != nullptr && d->params.mana_rock && !perm.card.IsLand();
+        if (perm.card.IsLand() || rock)
         {
             const Source src = ClassifySource(d);
             AddFrom(mana, src, src.units, 0);
@@ -7817,7 +7832,7 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
     };
 
     // ---- 2. partition the hand ------------------------------------------------------------------
-    enum : char { C_SKIP, C_DEAD, C_VIAL, C_MANA, C_CREATURE, C_REST };
+    enum : char { C_SKIP, C_REMOVAL, C_DEAD, C_VIAL, C_MANA, C_CREATURE, C_REST };
     char cls[kHandMax];
     const CardDefinition* defs[kHandMax];
     for (int i = 0; i < n; ++i)
@@ -7830,7 +7845,9 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
         defs[i] = d;
         if (CleanupDiscardIsLand(c))                                { cls[i] = C_MANA; continue; }
         if (d == nullptr)                                           { cls[i] = C_REST; continue; }
+        if (wk_extras && d->tmpl == CardTemplate::Removal)          { cls[i] = C_REMOVAL; continue; }
         if (d->params.upkeep_adds_charge)                           { cls[i] = C_VIAL; continue; }
+        if (wk_extras && d->params.mana_rock)                       { cls[i] = C_MANA; continue; }
         if (d->card.HasSupertype(Supertype::Legendary))
         {
             bool dead = legend_in_play(c);
@@ -7908,7 +7925,8 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
     }
 
     // ---- 5. the curve fill ----------------------------------------------------------------------
-    // Kept lands enter one per turn in keep order.
+    // Kept lands enter one per turn in keep order; a kept rock (WK's Sol Ring) is cast on the first
+    // turn it is affordable.
     int drop = 0;
     for (int t = 0; t < nm; ++t)
     {
@@ -7916,6 +7934,19 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
         if (!kept_mana[i] || !CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
         if (drop < kTurns) { AddFrom(mana, msrc[i], msrc[i].units, drop + (enters_tapped(i) ? 1 : 0)); }
         ++drop;
+    }
+    for (int t = 0; t < nm; ++t)
+    {
+        const int i = mana_idx[t];
+        if (!kept_mana[i] || CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
+        const int rmv = defs[i] != nullptr ? defs[i]->card.m_mana_cost.ManaValue() : 0;
+        for (int k = 0; k < kTurns; ++k)
+        {
+            if (mana.total[k] < rmv) { continue; }
+            AddAt(mana, msrc[i], msrc[i].units - rmv, k);
+            AddFrom(mana, msrc[i], msrc[i].units, k + 1);
+            break;
+        }
     }
     int pool_hand[kHandMax], value[kHandMax], rank[kHandMax], slot_of[kHandMax];
     int np = 0;
@@ -7955,6 +7986,7 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
     // ---- 6. the shed order ----------------------------------------------------------------------
     std::vector<int> shed;
     shed.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) { if (cls[i] == C_REMOVAL) { shed.push_back(i); } }
     for (int i = 0; i < n; ++i) { if (cls[i] == C_DEAD)    { shed.push_back(i); } }
     for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL && i != kept_vial) { shed.push_back(i); } }
     for (int t = nm - 1; t >= 0; --t) { if (!kept_mana[mana_idx[t]]) { shed.push_back(mana_idx[t]); } }
@@ -8009,10 +8041,35 @@ std::vector<int> KnightsProvider::CleanupDiscardCandidates(
     const int n = static_cast<int>(s.players[s.active_player_index].hand.size());
     if (!KnightsBucketDiscardEnabled() || n <= 0 || n > vialcurve::kHandMax)
     { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
-    return KnightsCurveShed(s, required_pieces);
+    return KnightsCurveShed(s, required_pieces, /*wk_extras=*/false);
 }
 
 bool KnightsProvider::CleanupDiscardShedStable() const { return !KnightsBucketDiscardEnabled(); }
+
+// ---- WhiteKnightsProvider::CleanupDiscardCandidates ---------------------------------------------
+// USER (2026-10-09, docs/design/whiteknights-discard-policy.md): "Knights curve rule + the extras" --
+// Swords / Unexpectedly Absent shed first (removal is inert against the goldfish), Sol Ring and Remote
+// Farm count as mana (2 each), duplicate legends (2nd Adeline / Basri, in play or in hand) shed early,
+// Vial surplus after turn 1. The extras key on params Knights' mainboard never carries (removal
+// template, mana_rock, produces_amount 2), so they could equally live in the shared rule; they are
+// passed as `wk_extras` to keep the Knights rule literal. MTG_WK_BUCKET_DISCARD=0 -> the generic
+// ranking, independent of MTG_KNIGHTS_BUCKET_DISCARD.
+static bool WkBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_WK_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::WK_BUCKET_DISCARD, on);
+}
+
+std::vector<int> WhiteKnightsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    const int n = static_cast<int>(s.players[s.active_player_index].hand.size());
+    if (!WkBucketDiscardEnabled() || n <= 0 || n > vialcurve::kHandMax)
+    { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    return KnightsCurveShed(s, required_pieces, /*wk_extras=*/true);
+}
+
+bool WhiteKnightsProvider::CleanupDiscardShedStable() const { return !WkBucketDiscardEnabled(); }
 
 // ---- SoldiersProvider --------------------------------------------------------
 
@@ -16842,9 +16899,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // WhiteKnights ABOVE Knights, and that order is the whole point: WhiteKnights trips BOTH
     // signatures (it shares the Knight Exemplar / Worthy Knight / Acclaimed Contender core), so
     // below the `knights` branch it would never be reached and the two lists would share a
-    // provider -- which provider_audit.py --check exists to reject. An EMPTY derivation of
-    // KnightsProvider, so this is play-neutral by construction: every judgement hook is inherited
-    // byte-for-byte and there is nothing here to narrow.
+    // provider -- which provider_audit.py --check exists to reject. A derivation of KnightsProvider:
+    // every judgement hook is inherited byte-for-byte EXCEPT the cleanup discard, which since
+    // 2026-10-09 is the USER-settled WhiteKnights rule (the Knights rule plus extras).
     if (wknights)    { return g_white_knights; }
     // Knights: KnightsProvider, which DERIVES FROM VialProvider -- the deck rode VialProvider and
     // still runs on its hooks, except the cleanup discard (its own USER-settled rule since
