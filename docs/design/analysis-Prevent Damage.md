@@ -1786,7 +1786,7 @@ every arm equally):
 Tamanoa count toward the ceiling only while a Vito or Dina is out (on the board or cast this plan)?
 Both real counterexamples are drainer-less boards. The refinement is one more arm to measure.
 
-## Pain deferral (USER report 2026-10-08, `references/Prevent_Damage/claude_s11_gi10.json` T5) -- `MTG_PD_PAIN_DEFER`, default ON, PROVISIONAL
+## Pain deferral (USER report 2026-10-08, `references/Prevent_Damage/claude_s11_gi10.json` T5) -- `MTG_PD_PAIN_DEFER`, default ON, ADOPTED (USER 2026-10-09)
 
 **The report.** *"See references/Prevent_Damage/claude_s11_gi10.json for an example of suboptimal mana
 tapping. I had to use the manual-tap option ... My line was strictly better because the opponent lost 3
@@ -1859,7 +1859,8 @@ references replay with 0 drift/diverged/gap both WITH and WITHOUT the legacy fla
 clean under the regression tier. The s11 reference's own manual taps pin its payment either way; the
 auto-tapped replay of the same plan now reproduces the user's line (opp 3 / us 19 at T6).
 
-**USER DECISION (surfaced, default taken = ON):** keep `MTG_PD_PAIN_DEFER` on. It is a payment rule (the
+**USER DECISION 2026-10-09: ADOPTED, ON.** USER: *"Yes, let's turn on Pain deferral then."* (Surfaced
+2026-10-08 with ON as the default taken, including the one unrecovered searched game s72434 gi433.) It is a payment rule (the
 standing mana-payment exemption), dominant per payment by construction, net faster on both cells.
 
 ## Suite admission (2026-10-08) -- the 3x rule PASSES; all three tiers + GT added
