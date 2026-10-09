@@ -431,6 +431,17 @@ for spec in "${CASES[@]}"; do
   fi
 done
 
+# ---- CounterList overflow (src/core/Permanent.h) -----------------------------------------------
+# The binary prints "[counterlist] OVERFLOW xN" at exit if a counter put ever fell past the inline
+# array. Storage is canonical (one entry per Counter::Type) so it cannot happen today; the line was
+# once printed x5,787,486 per regression batch for weeks with nothing reading it, because the
+# Permanent.h comment claimed a gate that did not exist. This is that gate.
+if grep -q '^\[counterlist\] OVERFLOW' "$LOGDIR/batch.err" 2>/dev/null; then
+  log ""
+  log "FAIL: $(grep -m1 '^\[counterlist\] OVERFLOW' "$LOGDIR/batch.err")"
+  FAIL=$((FAIL+1))
+fi
+
 # ---- reference reproducibility (engine<->GUI protocol layer) ------------------------------
 # Replays every saved references/<deck>/claude_*.json by INTENT (content-anchored picks, engine
 # defaults for predated decision points -- docs/design/reference-intent-replay.md) against the
