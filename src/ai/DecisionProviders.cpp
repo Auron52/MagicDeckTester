@@ -16685,7 +16685,9 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
 
 // ---- CritterLifegainProvider::LegendKeepIndex -------------------------------
 //
-// Three Ajani, Strength of the Pride: a fresh copy enters at loyalty 5 and has not activated
+// Written for v1's three Ajani, Strength of the Pride (the v2 list runs ONE, so on the shipped deck
+// only Heliod x2 reaches this, at loyalty 0 -> keep-oldest): a fresh copy enters at loyalty 5 and
+// has not activated
 // this turn, while the incumbent may be at 1 and already spent -- keeping the oldest there throws
 // away four loyalty and this turn's activation. Keep the MOST loyalty; tie -> the copy that can
 // still activate; tie -> oldest. Non-walker duplicates (Daxos x1, Heliod x2: loyalty 0 on both)
@@ -17057,6 +17059,308 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
 
     // MTG_SHED_STATS firing counter: how often this policy's index 0 differs from the generic
     // fallback's (the ranking the =0 hatch restores). Off by default = zero cost.
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// ---- CritterLifegainProvider::CleanupDiscardCandidates ----------------------
+//
+// THE USER'S DESIGN (2026-10-09; docs/design/critterlifegain-discard-policy-proposal.md,
+// "CritterLifegain: SETTLED -- ANGELS-STYLE shape"), which replaced the agent's four-bucket proposal:
+//
+//   MANA      3 lands counting the board, 4 while holding a 4+ mana card (Ajani, Archangel).
+//             Plains > Remote Farm.
+//   ENABLERS  the watchers: Soul Warden / Soul's Attendant > Auriok Champion > Daxos; 2 counting the
+//             board.
+//   CREATURES "fill the rest" with a mix of payoffs (Pridemate / Voice > Archangel > Heliod > Serra;
+//             Serra top at 30+ life) and Ocelot Prides + Ranger-Captain + Ajani. Variety first (one
+//             copy per name), then 4-5 drops (Ajani, Archangel) shed first, then value order.
+//   OCELOT PRIDE is NOT discounted by Prides in play (USER) -- "copies multiply".
+//   The 2nd PAYOFF is kept ahead of a 2nd watcher (USER).
+//
+// KEEP: land -> watcher -> payoff -> Ocelot -> land -> payoff -> 2nd watcher -> land -> creatures to
+//       fill -> 4th land (only with a 4+ drop)
+// SHED: Unexpectedly Absent -> duplicate legend (2nd Heliod / Daxos / Ajani, in play or in hand) ->
+//       surplus lands (Remote Farm first) -> creature overflow (repeat names first, then 4-5 drops,
+//       then value) -> spare watchers -> protected (the KEEP ladder read backwards).
+//
+// AGENT DEFAULT (surfaced in the review record, pending the USER): Ocelot Prides are EXEMPT from the
+// variety rule -- a 2nd Pride is not "a duplicate".
+// AGENT READINGS (the USER did not rule; each is listed in the doc's Implementation notes):
+//   (a) "creatures to fill" fills the REST OF THE SEVEN-CARD HAND: room = 7 - (hand cards the core
+//       ladder kept) - (1 when the 4th land is kept). The creatures beyond that room are the SHED
+//       list's "creature overflow". This is the one reading under which both lists hold as written:
+//       KEEP puts the fill creatures above the 4th land, SHED puts the creature overflow below the
+//       spare watchers, and MANA's "4 while holding a 4+ mana card" is true of the hand kept.
+//   (b) "Holding a 4+ mana card" is read on the hand that SURVIVES the cleanup: the 4th land is
+//       kept when the core ladder or the fill (sized with the 4th land's slot reserved) keeps a card
+//       of mana value 4+. A 4+ drop that is itself creature overflow (4-5 drops shed first) does
+//       not reserve a land it would never use; and where the 4+ drop and the 4th land compete for
+//       the last slot, KEEP's "creatures to fill -> 4th land" gives it to the creature. (Reading it
+//       on the hand BEFORE the shed was tried first and is not prefix-stable: the overflow 4+ drop
+//       sheds before the land it reserved, which then flips to surplus mid-cleanup.)
+//   (c) The payoff slots count payoffs IN PLAY (the brief's net-of-board, and the USER's explicit
+//       exemption of Ocelot is read as saying the other creature quotas DO count the board), the
+//       Ajani -2 Pridemate token included (it resolves the real definition by name). They pick by
+//       variety, then the USER's payoff order; "4-5 drops shed first" is applied to the FILL, not
+//       to the two payoff slots, so the USER's Archangel > Heliod > Serra stays meaningful there.
+//   (d) The fill's VALUE order: Pridemate / Voice > Ocelot Pride > Archangel > Heliod > Serra >
+//       Ajani > Ranger-Captain (Serra first at 30+ life). The payoffs keep the USER's order; Ocelot
+//       sits right below the first payoffs, as the ladder places it (payoff > Ocelot > payoff) and
+//       as the deck's profile measures it (first copy +0.306 vs Pridemate +0.309; its second copy
+//       the only strongly positive one, +0.211); Ajani and Ranger-Captain, listed last by the USER,
+//       are last (both measure negative).
+//   (e) Variety reads the HAND (a name kept earlier in the ladder makes a later copy a repeat; a
+//       name in play does not). Lands are 1 drop each (a Remote Farm is one land). Surplus lands
+//       shed Remote Farm first (enters_tapped), then the highest hand index.
+//   (f) A card no bucket names sheds right after the removal (unreachable on the shipped list).
+// No distance-to-castable term beyond "4-5 drops shed first": the SETTLED block names none.
+//
+// PREFIX-STABLE (DecisionProvider::CleanupDiscardShedStable's default holds): the fill room depends
+// on the core ladder and the 4th-land reservation, never on the hand size, and every class above
+// the protected tail is shed before any card the ladder or the fill relies on, so shedding index 0
+// and re-ranking leaves the rest in order (test_critterlifegain_discard.cpp checks it shed by shed).
+static bool CritterBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_CRITTER_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::CRITTER_BUCKET_DISCARD, on);
+}
+
+std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!CritterBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    // The cleanup's hand limit (CR 402.2 / 514.1). No card in this deck lifts it (no_max_hand_size).
+    constexpr int kHandLimit = 7;
+
+    auto is_watcher = [](const CardParams& p)                    // Soul Warden / Attendant / Champion, Daxos
+    { return p.any_creature_enters_lifegain > 0 || p.own_creature_enters_lifegain > 0; };
+    auto is_payoff = [](const CardParams& p)                     // Pridemate / Voice, Archangel, Heliod, Serra
+    {
+        return p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
+            || p.lifegain_target_own_counter || p.life_threshold_pump_life > 0;
+    };
+    auto is_ocelot = [](const CardParams& p) { return p.endstep_lifegain_tokens > 0; };
+
+    // ---- board census (net of board; Prides in play deliberately NOT counted) ---------------
+    int board_lands = 0, board_watchers = 0, board_payoffs = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.IsLand()) { ++board_lands; continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (is_watcher(d->params)) { ++board_watchers; }
+        if (is_payoff(d->params))  { ++board_payoffs; }
+    }
+
+    // ---- partition the hand -------------------------------------------------------------------
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    for (int i = 0; i < n; ++i) { if (!ap.hand[at(i)].m_is_staged) { defs[at(i)] = def_of(ap.hand[at(i)]); } }
+    std::vector<char> dup(at(n), 0);
+    MarkDuplicateLegendsInHand(s, defs, dup);
+    std::vector<int> lands, removal, other, dead, watchers, creatures;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = defs[at(i)];
+        if (CleanupDiscardIsLand(hc)) { lands.push_back(i); continue; }
+        if (d == nullptr)             { other.push_back(i); continue; }
+        if (BucketShedIsRemoval(d))   { removal.push_back(i); continue; }
+        if (dup[at(i)])               { dead.push_back(i); continue; }
+        if (is_watcher(d->params))    { watchers.push_back(i); continue; }
+        if (d->card.IsCreature() || d->params.loyalty_start > 0) { creatures.push_back(i); continue; }
+        other.push_back(i);
+    }
+
+    // Watchers, best kept first: the either-side watchers (any_creature_enters_lifegain), cheapest
+    // first -- Soul Warden / Soul's Attendant ({W}) before Auriok Champion ({W}{W}) -- then Daxos.
+    std::vector<int> watcher_order = watchers;
+    std::sort(watcher_order.begin(), watcher_order.end(), [&](int a, int b)
+    {
+        const int ga = defs[at(a)]->params.any_creature_enters_lifegain > 0 ? 0 : 1;
+        const int gb = defs[at(b)]->params.any_creature_enters_lifegain > 0 ? 0 : 1;
+        if (ga != gb) { return ga < gb; }
+        const int ma = CleanupDiscardManaValue(ap.hand[at(a)]), mb = CleanupDiscardManaValue(ap.hand[at(b)]);
+        if (ma != mb) { return ma < mb; }
+        return a < b;
+    });
+    auto serra_online = [&](const CardParams& p)
+    { return p.life_threshold_pump_life > 0 && ap.life >= p.life_threshold_pump_life; };
+    auto payoff_rank = [&](int i) -> int   // the USER's payoff order, best first
+    {
+        const CardParams& p = defs[at(i)]->params;
+        if (p.life_threshold_pump_life > 0)            { return serra_online(p) ? -1 : 3; }  // Serra Ascendant
+        if (p.lifegain_self_counters > 0)              { return 0; }   // Ajani's Pridemate / Voice of the Blessed
+        if (p.lifegain_each_own_creature_counters > 0) { return 1; }   // Archangel of Thune
+        if (p.lifegain_target_own_counter)             { return 2; }   // Heliod, Sun-Crowned
+        return 4;
+    };
+    auto fill_value = [&](int i) -> int    // agent reading (d), best first
+    {
+        const CardParams& p = defs[at(i)]->params;
+        if (p.life_threshold_pump_life > 0)            { return serra_online(p) ? -1 : 4; }  // Serra Ascendant
+        if (p.lifegain_self_counters > 0)              { return 0; }   // Pridemate / Voice
+        if (is_ocelot(p))                              { return 1; }   // Ocelot Pride
+        if (p.lifegain_each_own_creature_counters > 0) { return 2; }   // Archangel of Thune
+        if (p.lifegain_target_own_counter)             { return 3; }   // Heliod
+        if (p.loyalty_start > 0)                       { return 5; }   // Ajani, Strength of the Pride
+        return 6;                                                      // Ranger-Captain of Eos, any other
+    };
+
+    // ---- the core keep ladder -----------------------------------------------------------------
+    std::vector<char> keep(at(n), 0);
+    std::vector<int> taken;
+    taken.reserve(at(n));
+    auto take = [&](int i) { keep[at(i)] = 1; taken.push_back(i); };
+    auto name_kept = [&](int i)
+    {
+        for (int j : taken) { if (ap.hand[at(j)].m_name == ap.hand[at(i)].m_name) { return true; } }
+        return false;
+    };
+    auto pick_land = [&]() -> int          // Plains > Remote Farm: an untapped land first, then hand order
+    {
+        int best = -1;
+        for (int i : lands)
+        {
+            if (keep[at(i)]) { continue; }
+            const bool ti = defs[at(i)] != nullptr && defs[at(i)]->params.enters_tapped;
+            const bool tb = best >= 0 && defs[at(best)] != nullptr && defs[at(best)]->params.enters_tapped;
+            if (best < 0 || (tb && !ti)) { best = i; }
+        }
+        return best;
+    };
+    int lands_n = board_lands, watchers_n = board_watchers, payoffs_n = board_payoffs;
+    auto top_up_lands = [&](int target)
+    { while (lands_n < target) { const int i = pick_land(); if (i < 0) { break; } take(i); ++lands_n; } };
+    auto top_up_watchers = [&](int target)
+    {
+        for (int i : watcher_order)
+        {
+            if (watchers_n >= target) { break; }
+            if (keep[at(i)]) { continue; }
+            take(i); ++watchers_n;
+        }
+    };
+    auto top_up_payoffs = [&](int target)
+    {
+        while (payoffs_n < target)
+        {
+            int best = -1, best_key = 0;
+            for (int i : creatures)
+            {
+                if (keep[at(i)] || !is_payoff(defs[at(i)]->params)) { continue; }
+                const int key = (name_kept(i) ? 100 : 0) + payoff_rank(i);   // variety, then the order
+                if (best < 0 || key < best_key) { best = i; best_key = key; }
+            }
+            if (best < 0) { break; }
+            take(best); ++payoffs_n;
+        }
+    };
+    auto take_ocelot = [&]()               // NOT netted against Prides in play (USER)
+    {
+        for (int i : creatures)
+        { if (!keep[at(i)] && is_ocelot(defs[at(i)]->params)) { take(i); return; } }
+    };
+
+    top_up_lands(1);       // land
+    top_up_watchers(1);    // watcher
+    top_up_payoffs(1);     // payoff
+    take_ocelot();         // Ocelot
+    top_up_lands(2);       // land
+    top_up_payoffs(2);     // payoff  (the 2nd payoff ahead of the 2nd watcher -- USER)
+    top_up_watchers(2);    // 2nd watcher
+    top_up_lands(3);       // land
+
+    // ---- creatures to fill, and the 4th land ----------------------------------------------------
+    const int core_hand = static_cast<int>(taken.size());
+    std::vector<int> fill_order;
+    for (int i : creatures) { if (!keep[at(i)]) { fill_order.push_back(i); } }
+    std::vector<int> copy_ordinal(at(n), 0);   // variety: copies of the name kept or ahead of it; Prides exempt
+    for (std::size_t a = 0; a < fill_order.size(); ++a)
+    {
+        const int i = fill_order[a];
+        if (is_ocelot(defs[at(i)]->params)) { continue; }
+        int c = name_kept(i) ? 1 : 0;
+        for (std::size_t b = 0; b < a; ++b)
+        { if (ap.hand[at(fill_order[b])].m_name == ap.hand[at(i)].m_name) { ++c; } }
+        copy_ordinal[at(i)] = c;
+    }
+    std::sort(fill_order.begin(), fill_order.end(), [&](int a, int b)
+    {
+        if (copy_ordinal[at(a)] != copy_ordinal[at(b)]) { return copy_ordinal[at(a)] < copy_ordinal[at(b)]; }  // variety
+        const bool ba = CleanupDiscardManaValue(ap.hand[at(a)]) >= 4;
+        const bool bb = CleanupDiscardManaValue(ap.hand[at(b)]) >= 4;
+        if (ba != bb) { return !ba; }                                                                  // 4-5 drops last
+        const int va = fill_value(a), vb = fill_value(b);
+        if (va != vb) { return va < vb; }                                                              // value
+        return a < b;
+    });
+    // "4th land (only with a 4+ drop)": reserved when the hand that SURVIVES the cleanup -- the core
+    // plus the fill sized for the reservation -- holds a 4+ mana card (agent reading (b)). Where the
+    // 4+ drop and the 4th land compete for the last slot, KEEP's "creatures to fill -> 4th land"
+    // gives it to the creature.
+    auto big = [&](int i) { return CleanupDiscardManaValue(ap.hand[at(i)]) >= 4; };
+    int fourth = -1;
+    if (const int spare_land = pick_land(); spare_land >= 0)
+    {
+        const std::size_t room_r = static_cast<std::size_t>(std::max(0, kHandLimit - core_hand - 1));
+        bool kept_big = std::any_of(taken.begin(), taken.end(), big);
+        for (std::size_t k = 0; k < fill_order.size() && k < room_r && !kept_big; ++k)
+        { kept_big = big(fill_order[k]); }
+        if (kept_big) { fourth = spare_land; }
+    }
+    const int room = std::max(0, kHandLimit - core_hand - (fourth >= 0 ? 1 : 0));
+    const std::size_t fill_n = std::min(fill_order.size(), static_cast<std::size_t>(room));
+    for (std::size_t k = 0; k < fill_n; ++k) { take(fill_order[k]); }   // creatures to fill
+    if (fourth >= 0) { take(fourth); }                                   // 4th land
+
+    // ---- emit the shed order --------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(at(n));
+    std::vector<char> listed(at(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[at(i)] || ap.hand[at(i)].m_is_staged) { return; }
+        listed[at(i)] = 1;
+        shed.push_back(i);
+    };
+    for (int pass = 0; pass < 2; ++pass)                               // Unexpectedly Absent
+    {
+        for (int i : removal) { if ((defs[at(i)]->params.tuck_to_library ? 0 : 1) == pass) { put(i); } }
+    }
+    for (int i : other) { put(i); }
+    for (int i : dead) { put(i); }                                     // duplicate legends
+    {
+        std::vector<int> rest;                                         // surplus lands, Remote Farm first
+        for (int i : lands) { if (!keep[at(i)]) { rest.push_back(i); } }
+        std::sort(rest.begin(), rest.end(), [&](int a, int b)
+        {
+            const bool ta = defs[at(a)] != nullptr && defs[at(a)]->params.enters_tapped;
+            const bool tb = defs[at(b)] != nullptr && defs[at(b)]->params.enters_tapped;
+            if (ta != tb) { return ta; }
+            return a > b;
+        });
+        for (int i : rest) { put(i); }
+    }
+    for (std::size_t k = fill_order.size(); k > fill_n; --k) { put(fill_order[k - 1]); }   // creature overflow
+    for (auto it = watcher_order.rbegin(); it != watcher_order.rend(); ++it) { if (!keep[at(*it)]) { put(*it); } }  // spare watchers
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }   // protected, the KEEP ladder backwards
+    for (int i = 0; i < n; ++i) { put(i); }                            // defensive: cannot fire
+
     if (ShedStats::Enabled())
     {
         const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);

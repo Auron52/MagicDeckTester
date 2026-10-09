@@ -2378,12 +2378,15 @@ public:
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
-// Auriok Champion feeding Ajani's Pridemate / Voice of the Blessed / Archangel of Thune / Heliod,
-// Sun-Crowned, with Ajani, Strength of the Pride x3). Exists FIRST for routing correctness:
+// Auriok Champion / Daxos feeding Ajani's Pridemate / Voice of the Blessed / Archangel of Thune /
+// Heliod, Sun-Crowned / Serra Ascendant, with Ocelot Pride as the token engine and ONE Ajani,
+// Strength of the Pride -- the v2 list; v1, archived under decks/CritterLifegain/v1-thune4-basilica/,
+// ran three Ajani). Exists FIRST for routing correctness:
 // Ranger-Captain of Eos alone carries sac_creature_outlet (the Goblins signature) AND tutor_to_hand
 // (the anti-lifegain signature) -- the recorded misroute class -- so the deck needs its own
 // signature, OR-ed across the three lifegain-watcher params (Pridemate/Voice, Thune, Heliod), none
-// of which any other deck sets. It holds exactly ONE hook: the walker-aware legend keep below.
+// of which any other deck sets. Its hooks: the walker-aware legend keep, same-turn walker
+// activation, the mined watcher-first cast order, and the USER's cleanup-discard buckets.
 // Everything else is Generic -- no narrowing, full search.
 class CritterLifegainProvider : public DeckProvider
 {
@@ -2391,12 +2394,21 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "CritterLifegain"; }
-    // Legend rule for three Ajani, Strength of the Pride: keep the copy with the MOST loyalty
-    // (tie: the one that can still activate this turn, then the oldest). Tried as the generic
+    // Legend rule, written for v1's three Ajani, Strength of the Pride: keep the copy with the MOST
+    // loyalty (tie: the one that can still activate this turn, then the oldest). On the v2 list (one
+    // Ajani) it only ever sees Heliod x2, both at loyalty 0, which falls through to keep-oldest.
+    // Tried as the generic
     // default first and REJECTED there: fivecolour smoke d0 gi=15 moved 6->7 (the kept fresh
     // Bolas spent its +3 in main 2 on our own permanent and cost the winning cast), so the
     // refinement lives with the deck that wants it. MTG_LEGEND_KEEP_LOYALTY=0 restores oldest.
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
+    // The USER's cleanup-discard design (2026-10-09, docs/design/critterlifegain-discard-policy-
+    // proposal.md "CritterLifegain: SETTLED", Angels-style): MANA (3 lands counting the board, 4 while
+    // holding a 4+ drop) / ENABLERS (watchers, 2 counting the board) / CREATURES (payoffs, Ocelot
+    // Prides, Ranger-Captain, Ajani; variety first), interleaved keep ladder, every hand card named.
+    // MTG_CRITTER_BUCKET_DISCARD (default ON; =0 -> GenericProvider::CleanupDiscardCandidates).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
     // Same-turn "cast Ajani + activate" plan variants (see DecisionProvider). DEFAULT ON here;
     // MTG_WALKER_CAST_ACTIVATE=0 restores the cast-only enumeration for the A/B.
     bool SearchesWalkerCastActivation() const override
