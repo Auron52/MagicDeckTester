@@ -3819,9 +3819,11 @@ void BuildColorDemandIndex(const std::vector<Action>& cands, ColorDemandIndex& o
 // Hall's condition over a demand set keyed by colour MASK (`counts[i]` pips payable from any colour in
 // `masks[i]`), plus the one-colour bursts' exact colour choice. The shared tail of Payable (a subset
 // of candidate actions) and PayablePips (a plain per-colour pip demand) -- moved here verbatim from
-// Payable, so its verdicts are unchanged. Defined `inline`: both callers live in this file.
-inline bool ColorFeasibility::HallFeasible(const int* masks, const int* counts, int ndm,
-                                           const ManaPool& credit, int prod_cost) const
+// Payable, so its verdicts are unchanged. FORCED inline (MTG_DB_ALWAYS_INLINE, CardDatabase.h): Payable
+// is a hot path (per enumerated subset) and was one function before the split -- a plain `inline` left
+// an out-of-line call in it. Both callers live in this file.
+MTG_DB_ALWAYS_INLINE bool ColorFeasibility::HallFeasible(const int* masks, const int* counts, int ndm,
+                                                         const ManaPool& credit, int prod_cost) const
 {
     const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
     // Hall scan over the colour sets that can BIND -- and only a UNION OF DEMAND MASKS can. For any
