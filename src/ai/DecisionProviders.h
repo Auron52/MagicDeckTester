@@ -1257,6 +1257,7 @@ public:
     // named. MTG_GOBLIN_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking).
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;   // false while the bucket rule is on (re-rank per shed)
     // (A Goblin Matron tutor-target exclusion list was evaluated + REJECTED. The +0.0025 rollout regression
     // was NOT a clairvoyance artifact -- per-game diff (2026-07-31) showed the two slower games were the
     // "lone Lackey" exclusion misfiring: with a bomb IN HAND (Muxus/Krenko/Warchief), fetching Lackey to

@@ -373,3 +373,45 @@ TEST_CASE("Goblins discard: a duplicate legend other than Muxus is dead")
     CHECK(o.front() == 1);
     CheckPermutation(s, o);
 }
+
+TEST_CASE("Goblins discard: a no-route Muxus is SURPLUS -- never a ladder slot, the first creature shed")
+{
+    // Review finding (2026-10-09): with <= 3 other creatures the no-route Muxus used to take a creature
+    // ladder slot (creature3, above lord2), so Hordemaster went first. SETTLED: "a lone Muxus is the
+    // FIRST creature shed" -- after dead TTC / 2nd Muxus / surplus mana / lords over the cap, none
+    // of which this hand has.
+    // 0 Muxus, 1 Siege-Gang, 2 Matron, 3 Chieftain, 4 Hordemaster, 5 Warchief, 6 Mountain, 7 Mountain.
+    const GameState s = MakeGob({ kMux, kSg, kMa, kCh, kRh, kWc, kMtn, kMtn }, { kMtn, kMwm }, 3);
+    const std::vector<int> o = Gob(s);
+    // Then the ladder backwards: lord2 Hordemaster, creature2 Siege-Gang (two short), lord1 Chieftain,
+    // engine Warchief, land2, creature1 Matron, land1.
+    CHECK(o == std::vector<int>{ 0, 4, 1, 3, 5, 7, 2, 6 });
+    CheckPermutation(s, o);
+}
+
+TEST_CASE("Goblins discard: the rule is NOT prefix-stable, so a multi-card cleanup re-ranks per shed")
+{
+    heurarm::t_arm[heurarm::GOBLIN_BUCKET_DISCARD] = 1;
+    CHECK_FALSE(GoblinsProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::GOBLIN_BUCKET_DISCARD] = 0;
+    CHECK(GoblinsProvider().CleanupDiscardShedStable());   // the generic max-MV rule is prefix-stable
+    heurarm::t_arm[heurarm::GOBLIN_BUCKET_DISCARD] = -1;
+
+    // Why (review finding): the number of Lackeys in hand sets how many creatures get the Lackey
+    // discount, so shedding the spare Lackey re-prices the rest. Three sheds read off one ranking
+    // differ from three per-card re-rankings (what the executor's real cleanup does).
+    GameState s = MakeGob({ kLa, kLa, kMux, kSg, kMa, kMwm, kPa, kSt, kBolt, kKr }, { kMtn, kMtn, kMtn }, 4);
+    auto name_at = [&](int i) { return s.players[0].hand[static_cast<std::size_t>(i)].m_name.str(); };
+    const std::vector<int> once = Gob(s);
+    std::vector<std::string> batched, reranked;
+    for (int k = 0; k < 3; ++k) { batched.push_back(name_at(once[static_cast<std::size_t>(k)])); }
+    for (int k = 0; k < 3; ++k)
+    {
+        const int first = Gob(s).front();
+        reranked.push_back(name_at(first));
+        s.players[0].hand.erase(s.players[0].hand.begin() + first);
+    }
+    CHECK(batched == std::vector<std::string>{ kSt, kLa, kKr });
+    CHECK(reranked.back() == kSg);
+    CHECK(batched != reranked);
+}
