@@ -65,6 +65,52 @@ Horizon Canopy last. Toughness/lifelink valued 0 (comment at the implementation 
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `AurasProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`) behind
+`MTG_AURA_BUCKET_DISCARD` (heurarm slot `AURA_BUCKET_DISCARD`, default ON; `=0` returns exactly
+`GenericProvider::CleanupDiscardCandidates`). Tests: `test/unit/test_auras_discard.cpp`. The tests
+assert the full shed order on 20 hand-derived boards, check that every index is named once, and walk
+each board shed by shed to show the order is prefix-stable.
+
+Shed order as emitted, most expendable first:
+dup legend (a Light-Paws with one in play, or a 2nd copy in hand) -> blank 0-power Auras (higher MV
+first) -> dead scaler (the Mask) -> cards with no class (none in the list) -> lands beyond the 4th ->
+spare plain creatures (lower power, then higher MV) -> stranded Coronet / Lion Umbra -> spare Kor ->
+the soft 4th land -> useful Auras (lowest live power per mana first) -> Light-Paws (none in play) ->
+the creature-slot card -> the hard lands (the last one kept goes first). Lands are kept in this rank
+order: Horizon Canopy > untapped Razorverge > Brushland > Branchloft > Plains/Forest > tapped
+Razorverge. Any land needed to cover W or G comes first.
+
+Agent readings (the USER may overturn any of them):
+- (a) "Light-Paws if none in play" means no Light-Paws in play. A Kor in play does NOT unprotect a
+  Light-Paws in hand: the design has no rung for a Light-Paws that is neither a duplicate nor protected.
+- (b) A BLANK is the SETTLED test (0 power, no scaler in play or in hand) plus the proposal's band-1
+  exemptions, which the review did not overturn:
+  - Nothing is blank while an engine is in play. With Light-Paws out, each Aura cast fetches another
+    Aura; with Kor out, each one draws a card.
+  - When a restricted Aura is held and has no host yet, its SOLE enabler is kept (the cheapest 0-power
+    Aura) if no plain Aura with power is in hand.
+  - A DEAD Mask is a scaler whose cast-now power is 0 (no enchantment on the battlefield), with no
+    other non-stranded Aura in hand and no engine in play.
+- (c) STRANDED is read literally: a restricted Aura with no creature in play or in hand. A Coronet
+  that has a creature but no enabler anywhere stays useful.
+- (d) When two Auras have equal rates, a scaler is kept over a non-scaler (proposal §7.1 tie-break 1).
+  Next comes mana value: with Light-Paws in play the pricier is kept (USER), otherwise the cheaper
+  (proposal). Hand order breaks any remaining tie.
+- (e) A Branchloft Pathway in hand counts as covering both W and G. A land the W+G cover needs is a
+  hard keep even past the third (e.g. three Plains in play make a hand Forest a hard keep).
+- (f) A card the design has no class for sheds right after the blanks, highest MV first. Examples: a
+  land Aura, a non-Aura spell, an unknown card. The shipping list has none.
+- (g) Ties inside a shed class go by hand order, earliest first.
+- (h) Kor's +2/+2 per Aura is not counted in an Aura's value, because it is the same for every Aura
+  (proposal §9). Toughness and lifelink count as 0, as the design says; a comment at the site warns
+  that this inverts once the opponent deals damage.
+
+No profile, cards.json or engine change was needed: `required_pieces` is empty, so nothing is
+engine-protected. The same-turn restricted-Aura PLAY gap (`auras-same-turn-restricted-aura-gap.md`)
+was not touched.
+
 
 ---
 
