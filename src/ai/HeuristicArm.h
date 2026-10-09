@@ -342,6 +342,9 @@ enum Slot : int
     PD_BATCH_TIMING,          // MTG_PD_BATCH_TIMING        Prevent Damage: the whole-turn batch prepay DECLINES (PP_PD_TIMING) a multi-cast plan that casts something growing the value of every pain / Manabarbs event (Tamanoa; Vito / Dina / Faithmender / Bilbo with a gain engine out), when every chain-relevant cast is monotone (no Purity, no Manabarbs) and two casts pay mana -- paying the whole plan up front deals the later casts' pain before that amplifier resolves, a dominated timing; the casts then pay one at a time. Order-independent (PdBatchTimingDominated). Claude-play sweep s61005 T5 / s61013 T4 (2026-10-08). Default ON; =0 = the batch on every multi-cast plan
     PD_DEFER_C_GENERIC,       // MTG_PD_DEFER_C_GENERIC     Prevent Damage: the pain deferral's payability test (CapabilityCovers) treats {C} as generic while no {C} pip is live this turn, so a held City of Brass may stand in for a Reflecting Pool that could also reflect {C} (s61013 T4: Vito paid pain-first before it could drain). Default ON; =0 = the WUBRG + C superset test
     PD_WISH_LAND_CAST,        // MTG_PD_WISH_LAND_CAST      Prevent Damage: AMENDMENT DRAFT to the Wish's one-land rule ("always Battlefield Forge"): each sideboard land is scored by how many engine creatures in hand become colour-castable from DISTINCT lands (board + hand + it); the highest wins, Battlefield Forge keeps ties. The Wish's {G} proves a green source, not a spare one (claude-play sweep s61013: City of Brass paid the Wish, Dina then needed it for {B} and Brushland for {G}). Default OFF -- the doctrine is the USER's
+    PD_BESEECH_FINISHER,      // MTG_PD_BESEECH_FINISHER    Prevent Damage: AMENDMENT DRAFT to the USER's Beseech rule -- once a gain creature (Tamanoa) is on our battlefield and a drain creature (Vito / Dina) is on it or in hand, the damage sources not already held (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia) join Beseech's list after the engine creatures (gate 2026-10-09: T5 Beseech -> Rolling Earthquake kills became T6). Default OFF -- the doctrine is the USER's
+    PD_BESEECH_FIN_ALWAYS,    // MTG_PD_BESEECH_FIN_ALWAYS  Prevent Damage: AMENDMENT DRAFT to the USER\'s Beseech rule -- the damage sources not held (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia) join Beseech\'s list ALWAYS, after the engine creatures (the recovery check\'s unrecovered games fetched Rolling Earthquake on T3, before anything was assembled). Fresh seeds: searched -0.008 t/game vs unpruned at 0.63x units. Default OFF -- the USER decides
+    PD_BESEECH_TOMB,          // MTG_PD_BESEECH_TOMB        Prevent Damage: AMENDMENT DRAFT to the USER\'s Beseech rule -- an Ancient Tomb-shaped land not held (the deck\'s only acceleration) joins Beseech\'s list. Default OFF -- the USER decides
     COUNT
 };
 
@@ -645,6 +648,9 @@ inline const char* Name(int slot)
         "MTG_PD_BATCH_TIMING",
         "MTG_PD_DEFER_C_GENERIC",
         "MTG_PD_WISH_LAND_CAST",
+        "MTG_PD_BESEECH_FINISHER",
+        "MTG_PD_BESEECH_FIN_ALWAYS",
+        "MTG_PD_BESEECH_TOMB",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

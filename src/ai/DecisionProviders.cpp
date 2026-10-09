@@ -12117,13 +12117,63 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
         { if (p.controller_index == controller) { hold(CardDatabase::Instance().LookupCached(p.card)); } }
         for (const Card& c : s.players[controller].hand)
         { if (!c.m_is_staged) { hold(CardDatabase::Instance().LookupCached(c)); } }
-        std::vector<std::string> engine, fresh;
+        // AMENDMENT DRAFT (MTG_PD_BESEECH_FINISHER, default OFF -- for the USER's review): once the engine
+        // is assembled -- a gain creature (Tamanoa) on our battlefield and a drain creature (Vito / Dina)
+        // on it or in hand -- every damage source turns into a drain, so the damage sources not already
+        // held (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia) join the list, after the engine
+        // creatures. Counterexamples to the rule as shipped (gate 2026-10-09, smoke d3 pd2hg gi1 and pd
+        // gi22): T5 Beseech -> Rolling Earthquake for the kill, T6 without it.
+        static const bool s_finisher_env = EnvOn("MTG_PD_BESEECH_FINISHER");
+        bool assembled = false;
+        if (heurarm::Flag(heurarm::PD_BESEECH_FINISHER, s_finisher_env))
+        {
+            bool gain_out = false, drain = false;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != controller) { continue; }
+                const int role = PdEngineRole(CardDatabase::Instance().LookupCached(p.card));
+                if (role == kPdGain) { gain_out = true; }
+                if (role == kPdVito || role == kPdDina) { drain = true; }
+            }
+            for (const Card& c : s.players[controller].hand)
+            {
+                if (c.m_is_staged) { continue; }
+                const int role = PdEngineRole(CardDatabase::Instance().LookupCached(c));
+                if (role == kPdVito || role == kPdDina) { drain = true; }
+            }
+            assembled = gain_out && drain;
+        }
+        // Two more AMENDMENT DRAFTS (default OFF, the USER decides; ledger "Amendment drafts"): the
+        // recovery check's unrecovered games Beseeched Rolling Earthquake EARLY (on T3, nothing assembled
+        // yet) or Ancient Tomb (the deck's only acceleration).
+        //   MTG_PD_BESEECH_FIN_ALWAYS  the damage sources not held, ALWAYS (not only once assembled)
+        //   MTG_PD_BESEECH_TOMB        an Ancient Tomb-shaped land not held
+        static const bool s_fin_always_env = EnvOn("MTG_PD_BESEECH_FIN_ALWAYS");
+        static const bool s_tomb_env = EnvOn("MTG_PD_BESEECH_TOMB");
+        const bool want_dmg = assembled || heurarm::Flag(heurarm::PD_BESEECH_FIN_ALWAYS, s_fin_always_env);
+        const bool want_tomb = heurarm::Flag(heurarm::PD_BESEECH_TOMB, s_tomb_env);
+        std::vector<std::string> engine, fresh, finishers;
         for (const std::string& nm : all)
         {
-            if (PdEngineRole(CardDatabase::Instance().Lookup(nm)) == kPdNoRole) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            const bool dup = std::find(held.begin(), held.end(), nm) != held.end();
+            if (PdEngineRole(d) == kPdNoRole)
+            {
+                if (d != nullptr && !dup)
+                {
+                    const CardParams& q = d->params;
+                    const bool dmg = q.land_tap_damage_each_player > 0 || q.on_cast_trigger_damage > 0
+                                  || q.x_damage_each_creature_and_player || q.ping_all_amount > 0;
+                    if ((want_dmg && dmg)
+                        || (want_tomb && PdIsBigColourlessLand(s, controller, d, /*in_hand=*/true)))
+                    { finishers.push_back(nm); }
+                }
+                continue;
+            }
             engine.push_back(nm);
-            if (std::find(held.begin(), held.end(), nm) == held.end()) { fresh.push_back(nm); }
+            if (!dup) { fresh.push_back(nm); }
         }
+        fresh.insert(fresh.end(), finishers.begin(), finishers.end());
         if (!fresh.empty())       { all = std::move(fresh); }
         else if (!engine.empty()) { all = std::move(engine); }
         static const bool s_dbg = EnvOn("MTG_PD_BESEECH_DEBUG");

@@ -1970,6 +1970,95 @@ name. A MEASUREMENT lever until the USER rules on the doctrine.
   (engine creatures stay the only targets) vs the whole library measured equal (-0.0008 +/- 0.0008,
   10 / 6). Shipped: the duplicates -- the narrower list. **USER review item** (default taken).
 
+### Landing gate (2026-10-09, `4c08528f`; the five sweep fixes + the USER's Beseech rule; CI Linux + Windows + parity green)
+
+Full smoke 114/118 and full regression 160/166 byte-identical -- only pd / pd2hg keys move; 556 references
+replay clean (0 drift / diverged / enum-gap); scenarios 158/158; mtg-test 539/539. PD searched rows vs
+the previous GT: overnight -16 turns (d3 -8 / 400, d5 -3 / 300, 2HG -5 / 200), regression +1, smoke 0;
+every d0 row faster (~-0.04 t/game). Accepted deck-scoped with a recorded note in all three tiers.
+
+### Recovery check of the USER's rule (two-stage, every slower searched game: multi3's 61 + the gate's 7)
+
+| stage | recovered | of |
+|---|---|---|
+| 1: `--depth W --budget-ms 100` | 12 | 68 |
+| 2: `--depth 8 --budget-ms 0` (the stage-1 failures) | 13 | 56 |
+| **total** | **25** | **68** -- **43 do NOT recover** |
+
+The rule does NOT meet the adoption bar's recovery clause (it is the USER's rule; reported, not
+overridden). Why, from the games themselves: replaying the unrecovered games with Beseech UNPRUNED and
+reading what it fetched (38 games the finisher amendment below does not fix, `logs/pd_opt/probe/`):
+Rolling Earthquake 10, Ancient Tomb 10, an engine creature 7 (search-path noise), Green Sun's Zenith 5,
+other lands 7, no Beseech 2. Earthquake was often fetched on T3 with nothing assembled yet (to hold the
+finisher); Ancient Tomb is the deck's only acceleration. Every gate-tier slower game with an explained
+line Beseeched in the old line -- most for Rolling Earthquake, cast the same turn or the next as the
+kill.
+
+### Amendment drafts (default OFF; the USER decides)
+
+- `MTG_PD_BESEECH_FINISHER`: once a gain creature (Tamanoa) is on our battlefield and a drain creature
+  (Vito / Dina) on it or in hand, the damage sources not held (Manabarbs, Spellshock, Rolling Earthquake,
+  Pyrohemia) join the list after the engine creatures. Fresh seeds s140001/s141001 x600, 2HG s142001
+  x300, d3 s143001 x400, d0 s144001 x3000 (`logs/pd_opt/recwish/`): **-0.0059 +/- 0.0018 overall (p 0.001);
+  searched cells -0.0158 t/game (49 better / 19 worse), every searched cell better; units 1.00x.** At play
+  settings it fixes 30 of the 68 slower games outright.
+- `MTG_PD_WISH_LAND_CAST` (the Living Wish "always Battlefield Forge" counterexample, s61013): each
+  sideboard land is scored by how many engine creatures in hand become colour-castable from DISTINCT
+  lands (board + hand + it); the highest wins, Battlefield Forge keeps ties. Same batch: **0 of 4,900
+  paired games changed win turn** (it fires rarely). On s61013 itself the Wish now takes Brushland (was
+  Battlefield Forge), but the search casts the Wish on T3 after a T2 Ancient Tomb + Vito, so the game
+  stays T6 -- the T5 line also needs the T2 Wish. Unit test W16.
+
+**The amendments side by side** (one pooled batch, fresh seeds s150001/s151001 x600 d5 b20, 2HG s152001
+x300, d3 b10 s153001 x400, d0 s154001 x3000; every arm vs Beseech UNPRUNED; `logs/pd_opt/multi4/`):
+
+| arm | searched cells: turns vs unpruned (1,900 games) | all 4,900 | units vs unpruned |
+|---|---|---|---|
+| the USER's rule (shipped) | **+31 (+0.016 / game): d5 +13 / +13, d3 +6, 2HG -1** | -0.0090 +/- 0.0040 | 0.58x |
+| + FINISHER (Tamanoa out + a drain had) | -4 (-0.002) | -0.0145 +/- 0.0039 | 0.59x |
+| + damage sources ALWAYS (`MTG_PD_BESEECH_FIN_ALWAYS`) | **-15 (-0.008)** | -0.0165 +/- 0.0038 | 0.63x |
+| + FINISHER + Ancient Tomb (`MTG_PD_BESEECH_TOMB`) | -10 (-0.005) | -0.0159 +/- 0.0038 | 0.60x |
+| + FINISHER + Ancient Tomb + creature tutors (`MTG_PD_BESEECH_TUTORS`) | -11 (-0.006) | -0.0161 +/- 0.0038 | 0.64x |
+
+- On these seeds the shipped rule is WORSE than unpruned in searched play (+0.016 t/game; multi3 had it
+  neutral, +0.0016) -- better overall only through the depth-0 runner. Pooled over both batches
+  (3,800 searched games): +34 turns, +0.009 t/game.
+- FINISHER vs the shipped rule: -0.0055 +/- 0.0018 overall, every searched cell better (d5 -0.020
+  p 0.035, d5 -0.022 p 0.001, d3 -0.023 p 0.049), units 1.00x. Replicates `recwish` (-0.0158 searched).
+- ALWAYS vs FINISHER -0.0020 +/- 0.0013 (25 / 15, n.s.) for +7.8% units; Tomb vs FINISHER -0.0014 +/-
+  0.0011 (n.s.); the tutors add nothing (-0.0002 vs Tomb).
+
+**Recovery of each amendment** (two-stage, every searched game slower than UNPRUNED in the batch above;
+`logs/pd_opt/rec4/`):
+
+| arm | slower vs unpruned | stage 1 (d=W b100) | stage 2 (d8 b0) | NOT recovered |
+|---|---|---|---|---|
+| + FINISHER | 52 | 16 | 6 | 30 |
+| + FINISHER + Ancient Tomb | 42 | 18 | 5 | 19 |
+| + damage sources ALWAYS | 34 | 11 | 5 | 18 |
+
+What unpruned Beseech fetched in ALWAYS's 18 unrecovered games: Green Sun's Zenith 6, Ancient Tomb 6,
+lands 5 (Reflecting Pool 2, City of Brass 2, Tarnished Citadel 1), Tamanoa 1. So no narrowing tried
+clears the recovery bar; reaching it needs roughly the 2026-10-08 draft's set (damage sources + Ancient
+Tomb + the creature tutors + a fuel / tempo land) at ~0.82x units. The tutors slot measured nothing on
+aggregate (-0.0002) and was deleted; FINISHER, FIN_ALWAYS and TOMB stay as default-OFF levers (unit tests
+B3-B4).
+
+### Open USER decisions (Beseech / Wish, 2026-10-09; defaults taken in brackets)
+
+1. **The Beseech rule's cost in searched play.** As shipped it is cheapest (~0.6x units) but plays
+   +0.009 t/game slower than unpruned in searched games (pooled, 3,800) and 43 of 68 slower games do not
+   recover. Recommended amendment: **`MTG_PD_BESEECH_FIN_ALWAYS`** -- "engine creatures AND the damage
+   sources, skip duplicates": searched -0.008 vs unpruned (better than unpruned) at 0.63x units, 18
+   unrecovered of 34. Narrower alternative: `MTG_PD_BESEECH_FINISHER` (damage sources once the engine is
+   assembled; neutral vs unpruned at 0.59x). [shipped rule unchanged; amendments OFF]
+2. The all-duplicates fallback: the duplicates vs the whole library measured equal. [the duplicates]
+3. `MTG_PD_WISH_LAND_CAST` (the "always Battlefield Forge" counterexample): correct on s61013 (takes
+   Brushland), 0 win-turn changes in 4,900 games. [OFF]
+4. Twobrid `{2/B}` payment as a searched axis vs a payer choice -- with Beseech's list now 2-4 names the
+   axis costs far less; recommendation: keep it searched (paying more mana with painful lands can be
+   worth MORE drain, so the choice is not dominated). [searched]
+
 ## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
 
 | flag | defect | fix | reach |

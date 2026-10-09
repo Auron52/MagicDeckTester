@@ -456,3 +456,47 @@ TEST_CASE("PD beseech B2: every fetchable engine creature a duplicate -> those d
     CHECK(Beseech(t) == off);
     CHECK(off.size() == 4);
 }
+
+TEST_CASE("PD beseech B3: MTG_PD_BESEECH_FINISHER (amendment draft) -- an assembled engine adds the damage sources not held")
+{
+    // Tamanoa on the battlefield, Vito in hand: the engine is assembled, so Manabarbs and Spellshock
+    // join after the engine creatures (Vito, held, stays out).
+    std::vector<std::string> board = kFourLands;
+    board.push_back("Tamanoa");
+    const GameState s = MakeW({ "Beseech the Queen", kVitoW }, board, kBeseechLib);
+    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = 1;
+    const std::vector<std::string> on = Beseech(s);
+    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = -1;
+    CHECK(on == std::vector<std::string>{ kDinaW, kRhoxW, "Manabarbs", "Spellshock" });
+    CHECK(Beseech(s) == std::vector<std::string>{ kDinaW, kRhoxW });   // control: the shipped rule
+    // No drain creature anywhere: not assembled, the amendment adds nothing.
+    const GameState t = MakeW({ "Beseech the Queen" }, board, kBeseechLib);
+    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = 1;
+    const std::vector<std::string> none = Beseech(t);
+    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = -1;
+    CHECK(Pos(none, "Manabarbs") < 0);
+}
+
+TEST_CASE("PD beseech B4: MTG_PD_BESEECH_FIN_ALWAYS / MTG_PD_BESEECH_TOMB (amendment drafts)")
+{
+    // Nothing assembled (no Tamanoa anywhere): FIN_ALWAYS still adds the damage sources; TOMB adds an
+    // Ancient Tomb in the library. Four lands -> MV <= 4.
+    const GameState s = MakeW({ "Beseech the Queen" }, kFourLands,
+                              { "Tamanoa", kDinaW, "Manabarbs", "Spellshock", "Ancient Tomb", "City of Brass" });
+    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW });            // control: the shipped rule
+    heurarm::t_arm[heurarm::PD_BESEECH_FIN_ALWAYS] = 1;
+    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW, "Manabarbs", "Spellshock" });
+    heurarm::t_arm[heurarm::PD_BESEECH_FIN_ALWAYS] = -1;
+    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = 1;                              // not assembled: nothing
+    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW });
+    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = -1;
+    // kFourLands holds an Ancient Tomb on the battlefield -- a DUPLICATE, so TOMB adds nothing here...
+    heurarm::t_arm[heurarm::PD_BESEECH_TOMB] = 1;
+    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW });
+    // ...and adds it when none is held.
+    const GameState t = MakeW({ "Beseech the Queen" }, { "City of Brass", "Grand Coliseum", "Brushland", "Karplusan Forest" },
+                              { "Tamanoa", kDinaW, "Manabarbs", "Ancient Tomb", "City of Brass" });
+    CHECK(Beseech(t) == std::vector<std::string>{ "Tamanoa", kDinaW, "Ancient Tomb" });
+    heurarm::t_arm[heurarm::PD_BESEECH_TOMB] = -1;
+    CHECK(Beseech(t) == std::vector<std::string>{ "Tamanoa", kDinaW });
+}
