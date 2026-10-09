@@ -328,6 +328,9 @@ public:
     // restores the generic max-MV ranking (A/B hatch).
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // Not prefix-stable while the buckets are on: the mana reach counts hand lands, so shedding a
+    // surplus Mountain can move a Giant's distance-discounted value (review 2026-10-09). Re-rank per shed.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Prevent Damage (Manabarbs / painlands / Tamanoa / Rhox Faithmender / Vito / Dina). Onboarded
