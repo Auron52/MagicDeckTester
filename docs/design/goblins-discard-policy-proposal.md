@@ -82,6 +82,57 @@ played earlier than a lord."
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+`GoblinsProvider::CleanupDiscardCandidates` (src/ai/DecisionProviders.cpp, after `PayEchoToKeep`;
+`IsSubtypeCostReducer` is forward-declared there), behind `MTG_GOBLIN_BUCKET_DISCARD` (heurarm
+`GOBLIN_BUCKET_DISCARD`, default ON; `=0` is exactly `GenericProvider`'s max-MV ranking). Tests:
+`test/unit/test_goblins_discard.cpp`, 15 cases.
+
+As implemented. KEEP ladder `L C L E M C L C M C..` (land / creature / engine / multiplier); land
+slots = max(0, 3 - lands in play), Mountain > Cavern > Three Tree City; engine slot 1 unless a Lackey
+/ Warchief / Skirk is in play, Lackey > Warchief > Skirk > (turn-1 Vial); multiplier slots = cap(crowd)
+- multipliers in play, Chieftain > Hordemaster = Piledriver (Piledriver first through T2) > King,
+Chieftain with King when a Goblin haste granter is in play; creatures by EV, value order Muxus >
+Siege-Gang > Krenko > Pashalik > Mogg > Matron > Twinshot > Chainwhirler > Bolt > surplus engines >
+Stingscourger, with a no-route Muxus forced last. SHED = dead colourless land > 2nd+ hand Muxus and
+other duplicate legends > surplus lands (worst first, so colourless first) > surplus Vials > lords
+over the cap (King first) > the ladder backwards.
+
+Agent readings (each also in the code comment; the USER may overturn any):
+1. **">= 1 land always"** is read as the proposal's land sub-role floor (an engine never takes a land
+   slot; land1 heads the ladder), NOT "keep one land in hand even with 3+ in play" -- the latter
+   would keep a 4th land above every creature and undo "3 flat". With 3 lands in play a hand land is
+   surplus mana and sheds first.
+2. **Sources are lands**: Vial / Skirk fill no land slot; an empty engine slot does not fall back to
+   a 4th land (the proposal's "fungible upward" rule is not restated in the SETTLED block).
+3. **Engine slot, net of board**: a Lackey / Warchief / Skirk in play fills it; a Vial in play does
+   not (else a ticking Vial would demote a hand Lackey). Consequence to note: a Skirk in play makes a
+   hand Lackey a surplus engine.
+4. **Surplus engines** sit just above Stingscourger (Lackey > Warchief > Skirk), so "then
+   Stingscourger" stays the first non-Muxus creature shed.
+5. **crowd** = Goblin creatures in play (tokens included) + min(3, non-multiplier Goblin creatures in
+   hand); counting the capped lords would make crowd 0 unreachable whenever a lord is in hand. One
+   crowd for every multiplier (the proposal's tighter "deployed" crowd for Piledriver is dropped with
+   "level with Hordemaster").
+6. **Krenko's gate** reads the board (the proposal's G = 0, "behind a 2-drop on an empty board"):
+   with no Goblin in play Krenko drops just below Mogg War Marshal. A hand-inclusive crowd is never 0
+   while a 2-drop body is in hand, so it would gate nothing.
+7. **EV** is MinotaurProvider's adopted model verbatim: P = 1 / .70 / .35 / .10 / .03 by sources
+   short (reach = lands in play + kept hand lands + Skirk fodder), value = 6 x 0.85^position, a
+   duplicate pays cumulative mana (copies earlier in HAND only).
+8. **Lackey in hand** is an eraser too, one turn late (distance <= 1) when a red source can cast it;
+   otherwise a routed Muxus sinks on mana distance and the route means nothing. Puts go to the
+   highest-value card (the proposal's wording). A staged (impulse-exiled) Lackey counts as a route.
+9. **No route = no Lackey** in play or in hand, regardless of whether Muxus is hard-castable
+   ("cheating it in").
+10. **Vial put** at the Vial's current charge (mv == charge), tapped or not; one per Vial.
+11. The turn-1 Vial is the last engine candidate; haste redundancy reads only a granter in play.
+
+goblins2hg: the ranking has no face-damage term, so nothing needs `OpponentHeads()`.
+Not changed (out of scope, reported): `cards.json` Muxus `oracle_text` / bracket note (see the
+CARD-DATA FINDING above; params are right).
+
 
 ---
 

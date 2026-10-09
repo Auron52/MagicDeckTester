@@ -9489,6 +9489,440 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     return true;                                             // nothing else to cast -> keep the attacker (PAY)
 }
 
+// ---- GoblinsProvider::CleanupDiscardCandidates --------------------------------
+//
+// THE USER'S BUCKETS, settled 2026-10-09: docs/design/goblins-discard-policy-proposal.md, the
+// "#### Goblins: SETTLED" block (the 09-23 proposal below it is background and loses wherever they
+// differ). MTG_GOBLIN_BUCKET_DISCARD=0 restores the generic max-MV ranking.
+//
+// WHY: with no override the shared tier B sheds by descending mana value -- Muxus, Siege-Gang and
+// Krenko FIRST, the deck's crowd-makers -- and keeps Stingscourger and a spare Aether Vial. Real play
+// rarely sheds (the deck empties its hand by T4), but the rollout cleanup takes index 0 of this with
+// no search above it.
+//
+//   MANA        3 sources counting the board, FLAT (USER: "3 flat" -- no Warchief reduction, no
+//               Siege/Muxus extension). Mountain > Cavern of Souls > Three Tree City. A colourless-only
+//               land with no other red source and < 3 Goblins in play (Three Tree City) is DEAD.
+//               Cavern pays creature spells only, so it is no red source for Bolt or a channel.
+//   ENGINES     1, net of board: Goblin Lackey > Goblin Warchief > Skirk Prospector. AETHER VIAL
+//               (USER): "surplus after turn 1" -- an engine candidate (last) only at the end of turn 1,
+//               otherwise shed with the surplus mana; a 2nd Vial always. A surplus Lackey / Warchief /
+//               Skirk falls into the creature pool.
+//   MULTIPLIERS capped by crowd 0 / 1 / 2 at crowd 0 / 1-2 / 3+, net of board. Chieftain >
+//               Hordemaster = Piledriver > King. PILEDRIVER (USER): "it should be held to a similar
+//               level as our 2-mana lord ... a Piledriver should be played earlier than a lord" --
+//               Piledriver first through turn 2, Hordemaster from turn 3 (USER confirmed). Haste does
+//               not stack: with a Goblin haste granter in play a hand Chieftain is a plain +1/+1 lord.
+//   MUXUS       (USER) "Exempt Muxus, but definitely do not keep multiple and maybe even one if there
+//               is no route to cheating it in." A Muxus in play does not kill the hand copy; a 2nd
+//               hand copy sheds right after a dead Three Tree City; with no Goblin Lackey in play or
+//               in hand the lone Muxus is the FIRST creature shed (USER confirmed).
+//   CREATURES   Muxus > Siege-Gang > Krenko (crowd-gated) > Pashalik > Mogg War Marshal > Matron >
+//               Twinshot > Chainwhirler > Bolt > Stingscourger, discounted by distance: EV = P(play) x
+//               value, MinotaurProvider's adopted model (hard decay, value = 6 x 0.85^position in the
+//               full order, a duplicate pays cumulative mana), with the erasers -- a resolved Warchief
+//               (generic only), one Lackey put per Lackey per combat, a Vial at mv == charge, Skirk's
+//               fodder as red mana, Twinshot's {1}{R} channel.
+//
+// KEEP: land1 > creature1 > land2 > engine > lord1 > creature2 > land3 > creature3 > lord2 > creature4..
+// SHED: dead Three Tree City > 2nd Muxus (and any other duplicate legend) > surplus mana (colourless
+//       land, lands, Vials) > lords over the cap (King first) > the ladder read backwards (its creature
+//       tail is the "surplus creatures": no-route Muxus first, then Stingscourger, up the order).
+//
+// AGENT READINGS (surfaced in the design doc's implementation notes; the USER may overturn each):
+//   * ">= 1 land always" is the proposal's LAND sub-role floor (an engine never takes a land's slot;
+//     land1 heads the ladder), NOT a land kept beyond the board's 3 -- that would undo "3 flat".
+//   * Sources are LANDS. A Vial or Skirk Prospector fills no land slot (Skirk's fodder is reach in
+//     the distance term only); an empty engine slot is NOT handed to a 4th land.
+//   * Only a Lackey / Warchief / Skirk IN PLAY fills the engine slot -- a Vial in play does not, or a
+//     ticking Vial would push the deck's best card (Lackey) into the creature pool.
+//   * Surplus engines rank just above Stingscourger (Lackey > Warchief > Skirk), so the USER's
+//     "then Stingscourger" stays the first non-Muxus creature shed.
+//   * crowd = Goblin creatures in play (tokens included) + min(3, Goblin creatures in hand that are
+//     not multipliers): counting the capped lords themselves would make "crowd 0" unreachable while
+//     a lord is in hand.
+//   * Krenko's gate reads the BOARD (the proposal's G: "at G = 0 ... It should fall behind a 2-drop
+//     on an empty board"): with no Goblin in play Krenko drops just below Mogg War Marshal, the first
+//     2-drop under it. A hand-inclusive crowd could never be 0 while a 2-drop body sat in hand to
+//     fall behind, so it would gate nothing.
+//   * A Lackey in HAND (castable: a red source for it) also erases one put, one turn late
+//     (distance <= 1); without it a routed Muxus would sink to the bottom on mana distance alone and
+//     the route the USER kept it for would mean nothing.
+//   * Staged (impulse-exiled) cards are never named, but they count as hand cards for the route and
+//     the crowd -- they are playable until the end of next turn.
+//   * Hard-casting Muxus is not a "route" ("cheating it in", USER): no Lackey -> first creature shed.
+//   * A put (Lackey or Vial) goes to the highest-VALUE card it can deploy, as the proposal words it;
+//     a Vial counts tapped or not (it untaps before its next put), at its current charge.
+//   * A duplicate's cumulative mana counts copies earlier in HAND only: a copy in play is paid for,
+//     and for Muxus the USER exempted it. Another duplicate legend (a 1-of here) sheds with the 2nd
+//     Muxus. "Another red source" for Three Tree City is a red-producing land, Cavern included.
+//   * The turn-1 Vial is the LAST engine candidate (the proposal's Lackey > Warchief > Skirk > Vial),
+//     and haste redundancy reads only a granter already IN PLAY.
+// No face-damage term exists here (the creature order is positional), so goblins2hg needs no
+// OpponentHeads() scaling. Classification is by PARAMS; every read goes through the definition (a
+// hand card is a name-only placeholder); the return routes through CleanupDiscardRankingWithOrder.
+inline bool IsSubtypeCostReducer(const CardDefinition& d);   // defined with MinotaurProvider's policy
+
+static bool GoblinBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_GOBLIN_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::GOBLIN_BUCKET_DISCARD, on);
+}
+
+std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!GoblinBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const std::size_t un = static_cast<std::size_t>(n);
+    constexpr int kSources = 3;   // USER: "3 flat"
+
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto makes_red = [](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        for (Color c : d->params.produces) { if (c == Color::Red) { return true; } }
+        return false;
+    };
+    auto makes_colour = [](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        for (Color c : d->params.produces) { if (c != Color::Colorless) { return true; } }
+        return false;
+    };
+    auto is_goblin_creature = [](const Card& c) { return c.IsCreature() && CardHasSubtype(c, "Goblin"); };
+    auto is_lackey = [](const CardParams& p) { return !p.combat_damage_puts_subtype_from_hand.empty(); };
+    auto is_lord   = [](const CardParams& p) { return p.power_bonus > 0 && !p.subtypes_affected.empty(); };
+    auto is_pump   = [](const CardParams& p) { return p.attack_pump_power_per_other_matching > 0; };
+    auto is_mult   = [&](const CardDefinition* d)
+    { return d != nullptr && d->card.IsCreature() && (is_lord(d->params) || is_pump(d->params)); };
+    // Lackey 0 > Warchief 1 > Skirk 2; the turn-1 Vial is appended at 3. -1 = not an engine.
+    auto engine_rank = [&](const CardDefinition* d) -> int
+    {
+        if (d == nullptr || d->card.IsLand()) { return -1; }
+        if (is_lackey(d->params))       { return 0; }
+        if (IsSubtypeCostReducer(*d))   { return 1; }
+        if (IsSacManaOutlet(d->params)) { return 2; }
+        if (d->params.upkeep_adds_charge && !d->card.IsCreature()) { return 3; }
+        return -1;
+    };
+
+    // ---- 1. board census (own permanents) -----------------------------------------------------
+    int board_lands = 0, board_red_any = 0, board_red_cavern = 0, board_goblins = 0, board_fodder = 0;
+    int board_lackeys = 0, board_mults = 0, board_vials = 0;
+    bool board_engine = false, board_haste = false, skirk_on = false;
+    struct Reducer { const std::string* tribe; int amount; };
+    std::array<Reducer, 8> reducers{};
+    int n_reducers = 0;
+    std::array<int, 8> vial_charge{};
+    int n_vial_charge = 0;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        const Card& pc = d != nullptr ? d->card : perm.card;
+        if (pc.IsLand())
+        {
+            ++board_lands;
+            if (makes_red(d)) { if (d->params.colored_creature_only) { ++board_red_cavern; } else { ++board_red_any; } }
+            continue;
+        }
+        if (is_goblin_creature(pc))
+        {
+            ++board_goblins;   // tokens included
+            // Skirk's food is the EXPENDABLE bodies -- not a lord, a pump or the reducer (the same
+            // exclusion TutorCandidates' skirk_ramp makes); Skirk itself is food for the last sac.
+            const bool scaling = d != nullptr
+                && (is_mult(d) || !d->params.reduces_spell_subtype.empty());
+            if (!scaling) { ++board_fodder; }
+        }
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        if (is_lackey(p)) { ++board_lackeys; board_engine = true; }
+        if (IsSubtypeCostReducer(*d))
+        {
+            board_engine = true;
+            if (!p.reduces_spell_subtype.empty() && n_reducers < static_cast<int>(reducers.size()))
+            { reducers[static_cast<std::size_t>(n_reducers++)] = { &p.reduces_spell_subtype, p.reduces_spell_subtype_amount }; }
+        }
+        if (IsSacManaOutlet(p)) { board_engine = true; skirk_on = true; }
+        if (is_mult(d)) { ++board_mults; }
+        if (p.grants_haste && !p.subtypes_affected.empty()) { board_haste = true; }
+        if (p.upkeep_adds_charge)
+        {
+            ++board_vials;
+            if (n_vial_charge < static_cast<int>(vial_charge.size()))
+            { vial_charge[static_cast<std::size_t>(n_vial_charge++)] = perm.charge_counters; }
+        }
+    }
+    auto on_board_named = [&](const Card& hc)
+    {
+        for (const Permanent& perm : s.battlefield)
+        { if (perm.controller_index == me && perm.card.m_name == hc.m_name) { return true; } }
+        return false;
+    };
+    auto earlier_copy = [&](int i)
+    {
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& hj = ap.hand[static_cast<std::size_t>(j)];
+            if (!hj.m_is_staged && hj.m_name == ap.hand[static_cast<std::size_t>(i)].m_name) { return true; }
+        }
+        return false;
+    };
+
+    // ---- 2. hand facts that do not depend on the partition (staged cards included) -------------
+    bool route = board_lackeys > 0;   // a cheat route for Muxus: a Goblin Lackey in play or in hand
+    int hand_lackeys = 0, staged_bodies = 0;
+    bool hand_red_land = false;
+    for (const Card& hc : ap.hand)
+    {
+        const CardDefinition* d = def_of(hc);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand()) { if (!hc.m_is_staged && makes_red(d)) { hand_red_land = true; } continue; }
+        if (is_lackey(d->params)) { route = true; ++hand_lackeys; }
+        if (hc.m_is_staged && is_goblin_creature(d->card) && !is_mult(d)) { ++staged_bodies; }
+    }
+    const bool other_red = board_red_any + board_red_cavern > 0 || hand_red_land;
+
+    // ---- 3. partition the non-staged hand ------------------------------------------------------
+    std::vector<const CardDefinition*> defs(un, nullptr);
+    std::vector<char> no_route_muxus(un, 0), surplus_engine(un, 0);
+    std::vector<int> lands, dead_lands, dupes, vials, engines, mults, pool;
+    bool muxus_seen = false;
+    int vials_seen = board_vials, hand_bodies = staged_bodies;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[static_cast<std::size_t>(i)] = d;
+        const bool legendary = d != nullptr && d->card.HasSupertype(Supertype::Legendary);
+        if (CleanupDiscardIsLand(hc))
+        {
+            if (d != nullptr && !makes_colour(d) && !other_red && board_goblins < 3) { dead_lands.push_back(i); }
+            else if (legendary && (on_board_named(hc) || earlier_copy(i)))       { dupes.push_back(i); }
+            else                                                                  { lands.push_back(i); }
+            continue;
+        }
+        if (d == nullptr) { pool.push_back(i); continue; }
+        const CardParams& p = d->params;
+        const bool body = is_goblin_creature(d->card) && !is_mult(d);
+        if (p.upkeep_adds_charge && !d->card.IsCreature())
+        {
+            // Only the turn-1 hand Vial is an engine candidate; any other hand Vial is surplus mana.
+            if (vials_seen == 0 && s.turn_number <= 1) { engines.push_back(i); }
+            else                                       { vials.push_back(i); }
+            ++vials_seen;
+            continue;
+        }
+        if (legendary && p.etb_reveal_count > 0)
+        {
+            // Muxus: its ETB reveal-6 fires before the legend rule, so a copy IN PLAY does not kill
+            // this one (USER: exempt) -- but never two in HAND.
+            if (muxus_seen) { dupes.push_back(i); continue; }
+            muxus_seen = true;
+            if (!route) { no_route_muxus[static_cast<std::size_t>(i)] = 1; }
+            pool.push_back(i); ++hand_bodies;
+            continue;
+        }
+        if (legendary && (on_board_named(hc) || earlier_copy(i))) { dupes.push_back(i); continue; }
+        if (body) { ++hand_bodies; }
+        if (engine_rank(d) >= 0) { engines.push_back(i); continue; }
+        if (is_mult(d))          { mults.push_back(i); continue; }
+        pool.push_back(i);
+    }
+
+    // ---- 4. the engine slot (net of board), lands, crowd ---------------------------------------
+    std::stable_sort(engines.begin(), engines.end(), [&](int a, int b)
+    { return engine_rank(defs[static_cast<std::size_t>(a)]) < engine_rank(defs[static_cast<std::size_t>(b)]); });
+    int engine_keep = -1;
+    for (int e : engines)
+    {
+        if (engine_keep < 0 && !board_engine) { engine_keep = e; continue; }
+        if (engine_rank(defs[static_cast<std::size_t>(e)]) == 3) { vials.push_back(e); }   // the turn-1 Vial
+        else { surplus_engine[static_cast<std::size_t>(e)] = 1; pool.push_back(e); }
+    }
+    std::sort(vials.begin(), vials.end());
+
+    auto land_score = [&](int i)   // higher = kept first
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (!makes_red(d)) { return 0; }                       // colourless-only (Three Tree City)
+        return d->params.colored_creature_only ? 1 : 2;        // Cavern < Mountain
+    };
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b) { return land_score(a) > land_score(b); });
+    const int kept_lands = std::min(std::max(0, kSources - board_lands), static_cast<int>(lands.size()));
+    int red_any = board_red_any, red_cavern = board_red_cavern;
+    for (int k = 0; k < kept_lands; ++k)
+    {
+        const int sc = land_score(lands[static_cast<std::size_t>(k)]);
+        if (sc == 2) { ++red_any; } else if (sc == 1) { ++red_cavern; }
+    }
+    const int skirk_ramp = skirk_on ? board_fodder : 0;   // "Sacrifice a Goblin: Add {R}"
+    const int reach      = board_lands + kept_lands + skirk_ramp;
+    red_any += skirk_ramp;
+    const int red_creature = red_any + red_cavern;         // Cavern's colour pays creature spells only
+
+    const int crowd    = board_goblins + std::min(3, hand_bodies);
+    const int mult_cap = crowd == 0 ? 0 : (crowd <= 2 ? 1 : 2);
+    const int mult_keep = std::min(std::max(0, mult_cap - board_mults), static_cast<int>(mults.size()));
+
+    // ---- 5. multiplier keep order ---------------------------------------------------------------
+    const bool early = s.turn_number <= 2;   // Piledriver over the 2-mana lord through turn 2
+    auto mult_key = [&](int i) -> int
+    {
+        const CardParams& p = defs[static_cast<std::size_t>(i)]->params;
+        if (is_lord(p) && p.grants_haste && !board_haste) { return 0; }                      // Chieftain
+        if (is_pump(p)) { return early ? 10 : 11; }                                           // Piledriver
+        if (CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(i)]) <= 2) { return early ? 11 : 10; } // Hordemaster
+        return p.grants_haste ? 20 : 21;   // Chieftain with haste already out, then the dominated King
+    };
+    std::stable_sort(mults.begin(), mults.end(), [&](int a, int b) { return mult_key(a) < mult_key(b); });
+
+    // ---- 6. creature pool: value order, distance, EV ---------------------------------------------
+    auto pool_rank = [&](int i) -> int
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { return 110; }
+        if (surplus_engine[static_cast<std::size_t>(i)]) { return 90 + engine_rank(d); }
+        const CardParams& p = d->params;
+        if (p.etb_reveal_count > 0)                                { return 0; }    // Muxus
+        if (p.etb_self_creates_tokens >= 2)                        { return 10; }   // Siege-Gang
+        if (!p.tap_creates_tokens_per_controlled_subtype.empty())  { return board_goblins == 0 ? 45 : 20; } // Krenko
+        if (p.sac_outlet_creates_tokens > 0)                       { return 30; }   // Pashalik Mons
+        if (p.etb_self_creates_tokens > 0)                         { return 40; }   // Mogg War Marshal
+        if (p.tutor_to_hand || p.tutor_to_top)                     { return 50; }   // Goblin Matron
+        if (p.channel_cost.has_value() || p.etb_damage_any > 0)    { return 60; }   // Twinshot Sniper
+        if (p.etb_damage_each_opponent > 0)                        { return 70; }   // Chainwhirler
+        if (!d->card.IsCreature() && p.damage > 0)                 { return 80; }   // Lightning Bolt
+        if (d->card.IsCreature()) { return p.echo_cost.has_value() ? 105 : 100; }  // bodies; Stingscourger
+        return 110;
+    };
+    auto power_of = [&](int i)
+    { const CardDefinition* d = defs[static_cast<std::size_t>(i)]; return d ? d->card.m_power.value_or(0) : 0; };
+    std::vector<int> byval = pool;
+    std::stable_sort(byval.begin(), byval.end(), [&](int a, int b)
+    {
+        const int ra = pool_rank(a), rb = pool_rank(b);
+        if (ra != rb) { return ra < rb; }
+        if (power_of(a) != power_of(b)) { return power_of(a) > power_of(b); }
+        return CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)])
+             > CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+    });
+
+    std::vector<int> dist(un, 0);
+    for (int i : pool)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        int generic = mc.generic;
+        for (int k = 0; k < n_reducers; ++k)   // a resolved Warchief: generic only, floored at 0
+        {
+            const Reducer& r = reducers[static_cast<std::size_t>(k)];
+            if (CardHasSubtype(d->card, *r.tribe)) { generic -= r.amount; }
+        }
+        generic = std::max(0, generic);
+        int copies = 0;   // a duplicate pays cumulative mana (copies held earlier in hand)
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& hj = ap.hand[static_cast<std::size_t>(j)];
+            if (!hj.m_is_staged && hj.m_name == ap.hand[static_cast<std::size_t>(i)].m_name) { ++copies; }
+        }
+        const int need = (mc.ManaValue() - mc.generic + generic) * (1 + copies);
+        const int red_have = d->card.IsCreature() ? red_creature : red_any;
+        int dd = std::max({ 0, need - reach, mc.red - red_have });
+        if (d->params.channel_cost.has_value())   // Twinshot: {1}{R} from hand, not a creature spell
+        {
+            const ManaCost& cc = *d->params.channel_cost;
+            dd = std::min(dd, std::max({ 0, cc.ManaValue() - reach, cc.red - red_any }));
+        }
+        dist[static_cast<std::size_t>(i)] = dd;
+    }
+    // Erasers, each spent on the highest-value card it can deploy. A Lackey puts a Goblin permanent
+    // card: one in play puts next combat, one in hand a turn later.
+    {
+        int now = board_lackeys, later = red_creature > 0 ? hand_lackeys : 0;
+        std::vector<char> zeroed(un, 0);
+        for (int i : byval)
+        {
+            if (now <= 0 && later <= 0) { break; }
+            const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+            if (d == nullptr || !is_goblin_creature(d->card)) { continue; }
+            if (now > 0) { dist[static_cast<std::size_t>(i)] = 0; zeroed[static_cast<std::size_t>(i)] = 1; --now; }
+            else { dist[static_cast<std::size_t>(i)] = std::min(dist[static_cast<std::size_t>(i)], 1); --later; }
+        }
+        for (int k = 0; k < n_vial_charge; ++k)   // a Vial puts a creature with mv == its charge
+        {
+            const int c = vial_charge[static_cast<std::size_t>(k)];
+            if (c <= 0) { continue; }
+            for (int i : byval)
+            {
+                const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+                if (d == nullptr || !d->card.IsCreature() || zeroed[static_cast<std::size_t>(i)]) { continue; }
+                if (CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(i)]) != c) { continue; }
+                dist[static_cast<std::size_t>(i)] = 0; zeroed[static_cast<std::size_t>(i)] = 1;
+                break;
+            }
+        }
+    }
+    std::vector<double> ev(un, 0.0);
+    std::vector<int>    value_pos(un, 0);
+    {
+        static const double kP[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };   // MinotaurProvider's hard decay
+        double v = 6.0;
+        for (std::size_t k = 0; k < byval.size(); ++k)
+        {
+            const std::size_t i = static_cast<std::size_t>(byval[k]);
+            const int dd = dist[i];
+            ev[i] = (dd < 5 ? kP[dd] : 0.02) * v;
+            value_pos[i] = static_cast<int>(k);
+            v *= 0.85;
+        }
+    }
+    std::stable_sort(pool.begin(), pool.end(), [&](int a, int b)
+    {
+        const std::size_t ia = static_cast<std::size_t>(a), ib = static_cast<std::size_t>(b);
+        if (no_route_muxus[ia] != no_route_muxus[ib]) { return no_route_muxus[ia] < no_route_muxus[ib]; }
+        if (ev[ia] != ev[ib]) { return ev[ia] > ev[ib]; }
+        return value_pos[ia] < value_pos[ib];
+    });
+
+    // ---- 7. the keep ladder -----------------------------------------------------------------------
+    std::vector<int> taken;
+    taken.reserve(un);
+    enum Slot : char { S_L, S_C, S_E, S_M };
+    static const Slot kFill[] = { S_L, S_C, S_L, S_E, S_M, S_C, S_L, S_C, S_M };
+    int land_left = kept_lands, mult_left = mult_keep;
+    std::size_t li = 0, ci = 0, mi = 0;
+    for (Slot slot : kFill)
+    {
+        switch (slot)
+        {
+            case S_L: if (land_left > 0) { taken.push_back(lands[li++]); --land_left; } break;
+            case S_C: if (ci < pool.size()) { taken.push_back(pool[ci++]); } break;
+            case S_E: if (engine_keep >= 0) { taken.push_back(engine_keep); } break;
+            case S_M: if (mult_left > 0) { taken.push_back(mults[mi++]); --mult_left; } break;
+        }
+    }
+    while (ci < pool.size()) { taken.push_back(pool[ci++]); }   // creature4..
+
+    // ---- 8. the shed order --------------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(un);
+    for (int i : dead_lands) { shed.push_back(i); }
+    for (int i : dupes)      { shed.push_back(i); }
+    for (std::size_t k = lands.size(); k > li; --k) { shed.push_back(lands[k - 1]); }   // colourless first
+    for (int i : vials)      { shed.push_back(i); }
+    for (std::size_t k = mults.size(); k > mi; --k) { shed.push_back(mults[k - 1]); }   // King first
+    for (std::size_t k = taken.size(); k > 0; --k)  { shed.push_back(taken[k - 1]); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 
 // Goblin Matron fetch RANKING (value x deploy-discount, STATE-AWARE), FOLDED IN (default-on; disable for
 // A/B via the unpruned Tutor gate = raw unranked list). Orders the full candidate set best-first so the
