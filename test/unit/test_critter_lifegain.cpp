@@ -299,6 +299,23 @@ TEST_CASE("Voice of the Blessed: flying+vigilance from the 4th +1/+1 counter, in
     CHECK(t.battlefield[v2].card.HasKeyword(Keyword::Vigilance));
 }
 
+TEST_CASE("Voice of the Blessed: a DIRECT +1/+1 site (World War Hulk chapter II) re-evaluates the counter thresholds too")
+{
+    // The sites that put +1/+1 counters without AddPlusCounters (Emiel, Celes, Scavenging Ooze,
+    // Jared, Turntimber, Scale the Heights, this Saga) used to skip RefreshCounterThresholdKeywords,
+    // so a Voice reaching 4 counters that way stayed without flying/vigilance until the next
+    // lifegain. No shipped deck pairs them today; this pins the chokepoint for the one that will.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    const int v = Put(s, "Voice of the Blessed", 0, 10);
+    AddPlusCounters(s.battlefield[v], 1);
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Vigilance));
+    FireSagaChapter(s, 0, Def("World War Hulk"), 2);          // three counters -> 4
+    CHECK(PlusCounters(s.battlefield[v]) == 4);
+    CHECK(s.battlefield[v].card.HasKeyword(Keyword::Flying));
+    CHECK(s.battlefield[v].card.HasKeyword(Keyword::Vigilance));
+}
+
 TEST_CASE("Legend rule: a second Heliod dying as a CREATURE is a death -- Daxos gains 1, the survivor drops off")
 {
     EnsureCardsLoaded();

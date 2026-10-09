@@ -5399,6 +5399,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         }
         state.battlefield[entered_index].counters.Add(
             Counter{ Counter::Type::PlusOnePlusOne, n });
+        RefreshCounterThresholdKeywords(state.battlefield[entered_index]);
         if (log)
         {
             EmitPlayEvent(state.turn_number, "ability",
@@ -6654,6 +6655,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
             {
                 if (q.controller_index != ectrl || !q.card.IsCreature()) { continue; }
                 q.counters.Add(Counter{Counter::Type::PlusOnePlusOne, per});
+                RefreshCounterThresholdKeywords(q);
                 // CR 704.5r: the +1/+1 annihilates a -1/-1 already on the body -- for the
                 // ENTERING persist body this IS the Melira-replacement mechanic (the return's
                 // own counter is cancelled by the trigger it fired, so the body loops clean).
@@ -9288,6 +9290,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         {
             state.battlefield[ranked[k].second].counters.Add(
                 Counter{Counter::Type::PlusOnePlusOne, ranked[k].first});
+            RefreshCounterThresholdKeywords(state.battlefield[ranked[k].second]);
         }
     }
     else if (ab.effect == "regrow_multicolored")
@@ -9924,6 +9927,7 @@ inline void ApplyGraveyardExileGrow(GameState& state, int controller, int source
         {
             q.counters.Add(Counter{Counter::Type::PlusOnePlusOne,
                                    od->params.gy_exile_grow_counters});
+            RefreshCounterThresholdKeywords(q);
         }
         GainLife(state, controller, od->params.gy_exile_grow_lifegain);
         if (g_play_event_sink && !g_tap_speculating)
@@ -11501,7 +11505,10 @@ inline void PerformLookTopPutCreature(GameState& state, int controller, const Ca
             // "+1/+1 counters if mana value <= max_mv" -- counters ride the permanent (EffectivePower).
             const int mv = perm.card.m_mana_cost.ManaValue();
             if (pp.look_put_counter_bonus > 0 && mv <= pp.look_put_counter_bonus_max_mv)
-            { perm.counters.Add(Counter{ Counter::Type::PlusOnePlusOne, pp.look_put_counter_bonus }); }
+            {
+                perm.counters.Add(Counter{ Counter::Type::PlusOnePlusOne, pp.look_put_counter_bonus });
+                RefreshCounterThresholdKeywords(perm);
+            }
             state.battlefield.push_back(perm);
             const int slot = static_cast<int>(state.battlefield.size()) - 1;
             FireEtbWatchers(state, controller, slot);
@@ -12442,7 +12449,11 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         for (Permanent& q : state.battlefield)
         {
             if (q.controller_index != controller || q.card.m_number != source_id) { continue; }
-            if (self_ctr > 0) { q.counters.Add(Counter{Counter::Type::PlusOnePlusOne, self_ctr}); }
+            if (self_ctr > 0)
+            {
+                q.counters.Add(Counter{Counter::Type::PlusOnePlusOne, self_ctr});
+                RefreshCounterThresholdKeywords(q);
+            }
             q.temp_power_bonus += self_pp;
             q.temp_tough_bonus += self_pt;
             break;
@@ -16261,7 +16272,10 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     Permanent& tgt = state.battlefield[ti];
 
     if (pp.counters_on_target > 0)
-    { tgt.counters.Add(Counter{Counter::Type::PlusOnePlusOne, pp.counters_on_target}); }
+    {
+        tgt.counters.Add(Counter{Counter::Type::PlusOnePlusOne, pp.counters_on_target});
+        RefreshCounterThresholdKeywords(tgt);
+    }
     if (pp.grants_temp_haste) { tgt.temp_haste = true; }
 
     // P/T pump: flat + graveyard-scaled (Ancestral Anger) + drawn-count (Fists of Flame, AFTER
@@ -28042,7 +28056,10 @@ inline void FireSagaChapter(GameState& state, int controller, const CardDefiniti
                      tgt.EffectivePower(), tgt.EffectiveToughness());
     }
     if (chapter == 2)
-    { tgt.counters.Add(Counter{Counter::Type::PlusOnePlusOne, pp.saga_ch2_counters_on_target}); }
+    {
+        tgt.counters.Add(Counter{Counter::Type::PlusOnePlusOne, pp.saga_ch2_counters_on_target});
+        RefreshCounterThresholdKeywords(tgt);
+    }
     else
     {
         // "Until end of turn, double its power and toughness" == it gets +X/+Y until end of turn,
