@@ -11077,26 +11077,396 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 
 // ---- CreatureGivingProvider -------------------------------------------------
 
-// The cleanup shed must never pitch the engine. Defense of the Heart is the deck's whole plan
-// (fetch Hunted Phantasm + Wurm; the drain chain follows), and the generic highest-MV rule ranks
-// it FIRST when the hand floods -- the probe-retirement classification (2026-08-06, gi564/gi798:
-// shedding DotH rolled out a turn worse than shedding ANY other card) is the measurement. Rank
-// every DotH copy last among the otherwise-ranked candidates; the spare-copy band and MV rule
-// order the rest. Visible information only. docs/design/searched-discard-as-search-node.md.
+// ---- CreatureGivingProvider::CleanupDiscardCandidates -----------------------
+//
+// THE USER'S BUCKETS (2026-10-09, docs/design/creature-giving-discard-policy-proposal.md, "Creature
+// Giving: SETTLED" -- "replaces the DotH-last name patch"), MTG_CG_BUCKET_DISCARD (default ON).
+// =0 restores the rule that shipped before it -- the DotH-last patch below -- NOT the generic
+// ranking, so the A/B is three-armed (generic stays reachable as GenericProvider's own ranking).
+//
+// THE =0 ARM (shipped 2026-08-06): the cleanup shed must never pitch the engine. Defense of the
+// Heart is the deck's whole plan (fetch Hunted Phantasm + Wurm; the drain chain follows), and the
+// generic highest-MV rule ranks it FIRST when the hand floods -- the probe-retirement classification
+// (2026-08-06, gi564/gi798: shedding DotH rolled out a turn worse than shedding ANY other card) is
+// the measurement. Every DotH copy goes last among the otherwise-ranked candidates and the shared
+// max-MV rule orders the rest. Visible information only. docs/design/searched-discard-as-search-node.md.
+//
+// THE BUCKETS, net of board:
+//   MANA    5 sources counting the board (lands + mana dorks), "colours first (UU Phantasm, BBB
+//           Wurm)": lands covering a colour the hand's spells still lack go first, then Orchard >
+//           City > fetch > shock > Forest/Tree > Reflecting Pool > Chancery. One Birds while none is
+//           in play. One land-tutor slot, Crop Rotation > Sylvan Scrying (Crop Rotation live only
+//           with a land in play).
+//   DRAIN   Suture Priest ONLY, quota 1 (USER). Massacre Wurm is a payoff kept only if room.
+//   FUEL    Hunted Phantasm > Varchild's War-Riders, 1, FILLED once opponent creatures + our
+//           Orchards + War-Riders age counters reach 3; inside the bucket a card two or more mana
+//           from castable (colour-exact) ranks below a near one.
+//   ENGINE  Defense of the Heart > Enlightened Tutor, 1.
+//   BLANK   Soul Warden / Essence Warden: "discarded BEFORE spare lands" (USER). There is NO "a live
+//           Defense will fetch it" rule (USER).
+// KEEP LADDER: land > Suture Priest > Birds > Defense > land > land tutor > land > fuel > land > land.
+// SHED ORDER: dead Chancery / lone Reflecting Pool > Wardens > surplus mana (lands weakest first,
+// then Birds, then land tutors) > spare Enlightened Tutor > surplus fuel > Massacre Wurm > 2nd
+// Suture Priest > extra Defense copies ("they stack") > unrecognised > the ladder read backwards.
+// The leftovers "if room" (agent default: 2nd Suture Priest > Massacre Wurm > 2nd fuel) are exactly
+// the surplus-fuel / Wurm / 2nd-Priest classes in reverse.
+//
+// Agent readings (surfaced in the doc's implementation notes):
+//   * Colour need = the most pips of each colour over the hand's non-land spells (Wardens excluded),
+//     measured against the board's sources; a fetchland in hand counts its `produces` (the
+//     cards.json "flexible colour source in hand" convention), a Reflecting Pool adds no colour.
+//   * A Karoo (Chancery) is dead with no other land on the board and no other non-Karoo land in hand;
+//     a Reflecting Pool is "lone" with no non-reflecting land on the board or in hand (proposal 4).
+//   * The land-tutor slot is filled whatever the source count (a slot, not a source -- proposal D9);
+//     a Crop Rotation with no land in play is a surplus land tutor.
+//   * Enlightened Tutor fills the ENGINE slot only with no Defense on the board or in hand AND a
+//     Defense it can find still in the library; otherwise it is the "spare Enlightened Tutor".
+//   * Distance (proposal 6): deficit = max(MV - reach, worst colour shortfall), reach = board sources
+//     + live hand lands + hand dorks; "far" = deficit >= 2. Applied inside FUEL only, the one bucket
+//     with two different cards.
+//   * The Wardens' blank class requires no lifegain payoff on our board or in hand (counter payoffs,
+//     lifegain-to-drain payoffs) -- inert on this list, keeps a screening arm honest.
+// Classification is by PARAMS (taps_spawn_opp_token, etb_bounce_land, reflecting, fetch_land_types,
+// opp_creature_enters_life_loss, opp_dies_life_loss, etb_opp_creates_tokens,
+// cumulative_upkeep_opp_token, upkeep_sac_tutor_creatures, tutor_to_top, any_creature_enters_lifegain);
+// hand cards resolve through the card definition. Not prefix-stable (a shed spell can move the colour
+// cover, a shed land the Pool / Karoo / fuel-distance reads), so the bucket arm declares
+// CleanupDiscardShedStable() false and a multi-card cleanup is re-ranked per shed.
+static bool CgBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_CG_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> the DotH-last patch
+    return heurarm::Flag(heurarm::CG_BUCKET_DISCARD, on);
+}
+
+bool CreatureGivingProvider::CleanupDiscardShedStable() const { return !CgBucketDiscardEnabled(); }
+
 std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
-    std::vector<int> base = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
-    const Player& ap = s.players[s.active_player_index];
-    std::vector<int> out, doth;
-    for (int i : base)
+    if (!CgBucketDiscardEnabled())
     {
-        if (i >= 0 && i < static_cast<int>(ap.hand.size())
-            && ap.hand[i].m_name == "Defense of the Heart") { doth.push_back(i); }
-        else { out.push_back(i); }
+        // The DotH-last patch, byte-for-byte as shipped 2026-08-06 (see the header).
+        std::vector<int> base = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        const Player& ap = s.players[s.active_player_index];
+        std::vector<int> out, doth;
+        for (int i : base)
+        {
+            if (i >= 0 && i < static_cast<int>(ap.hand.size())
+                && ap.hand[i].m_name == "Defense of the Heart") { doth.push_back(i); }
+            else { out.push_back(i); }
+        }
+        out.insert(out.end(), doth.begin(), doth.end());
+        return out;
     }
-    out.insert(out.end(), doth.begin(), doth.end());
-    return out;
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto hdef   = [&](int i) { return def_of(ap.hand[static_cast<std::size_t>(i)]); };
+    auto ci     = [](Color c) { return static_cast<int>(c); };   // White..Green = 0..4
+    auto is_dork = [](const CardDefinition* d)
+    { return d != nullptr && (d->tmpl == CardTemplate::ManaDork || d->params.mana_rock); };
+    auto lg_payoff = [](const CardParams& p)
+    {
+        return p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
+            || p.lifegain_target_own_counter || p.lifegain_each_opp_loses > 0
+            || p.lifegain_target_opp_loses_that_much;
+    };
+    constexpr int kSourceQuota  = 5;
+    constexpr int kFuelFilledAt = 3;   // Defense of the Heart's upkeep_sac_tutor_opp_min (USER: "reach 3")
+
+    // ---- board census -----------------------------------------------------------------------------
+    int board_lands = 0, board_sources = 0, board_dorks = 0, board_orchards = 0, war_rider_age = 0;
+    int opp_creatures = 0, board_nonrefl_lands = 0;
+    bool board_drain = false, board_engine = false, payoff_seen = false;
+    int have[5] = { 0, 0, 0, 0, 0 };   // board sources per colour
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me)
+        {
+            if (perm.card.IsCreature()) { ++opp_creatures; }
+            continue;
+        }
+        const CardDefinition* d = def_of(perm.card);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        const bool land = perm.card.IsLand(), dork = is_dork(d);
+        if (land)
+        {
+            ++board_lands;
+            if (p.taps_spawn_opp_token) { ++board_orchards; }
+            if (!p.reflecting)          { ++board_nonrefl_lands; }
+        }
+        if (dork) { ++board_dorks; }
+        if (land || dork)
+        {
+            ++board_sources;
+            bool seen[5] = { false, false, false, false, false };
+            for (Color c : EffectiveProduces(s, me, *d))
+            { if (c != Color::Colorless && !seen[ci(c)]) { seen[ci(c)] = true; ++have[ci(c)]; } }
+        }
+        if (p.opp_creature_enters_life_loss > 0) { board_drain = true; }
+        if (p.upkeep_sac_tutor_creatures > 0)    { board_engine = true; }
+        if (p.cumulative_upkeep_opp_token)       { war_rider_age += perm.age_counters; }
+        if (lg_payoff(p))                        { payoff_seen = true; }
+    }
+    const int opp_projected = opp_creatures + board_orchards + war_rider_age;
+
+    // ---- partition the hand -----------------------------------------------------------------------
+    enum Cls : char { C_NONE, C_LAND, C_DORK, C_LTUTOR, C_ENGINE, C_DRAIN, C_FUEL, C_PAYOFF,
+                      C_FINDER, C_BLANK, C_OTHER };
+    std::vector<char> cls(static_cast<std::size_t>(n), C_NONE);
+    auto cl = [&](int i) -> char& { return cls[static_cast<std::size_t>(i)]; };
+    int hand_nonkaroo_lands = 0, hand_nonrefl_lands = 0;   // for the Karoo / Reflecting Pool tests
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        if (CleanupDiscardIsLand(c))
+        {
+            cl(i) = C_LAND;
+            if (d == nullptr || !d->params.etb_bounce_land) { ++hand_nonkaroo_lands; }
+            if (d == nullptr || !d->params.reflecting)      { ++hand_nonrefl_lands; }
+            continue;
+        }
+        if (d == nullptr) { cl(i) = C_OTHER; continue; }
+        const CardParams& p = d->params;
+        if (lg_payoff(p)) { payoff_seen = true; }
+        bool land_tutor = false;
+        if (p.tutor_land_to_battlefield || p.tutor_to_hand)
+        { for (const std::string& t : p.tutor_types) { if (t == "Land") { land_tutor = true; break; } } }
+        if (is_dork(d))                                                  { cl(i) = C_DORK; }
+        else if (land_tutor)                                             { cl(i) = C_LTUTOR; }
+        else if (p.upkeep_sac_tutor_creatures > 0)                       { cl(i) = C_ENGINE; }
+        else if (p.opp_creature_enters_life_loss > 0)                    { cl(i) = C_DRAIN; }
+        else if (p.etb_opp_creates_tokens > 0 || p.cumulative_upkeep_opp_token) { cl(i) = C_FUEL; }
+        else if (p.opp_dies_life_loss > 0)                               { cl(i) = C_PAYOFF; }
+        else if (p.tutor_to_top)                                         { cl(i) = C_FINDER; }
+        else if (p.any_creature_enters_lifegain > 0)                     { cl(i) = C_BLANK; }
+        else                                                             { cl(i) = C_OTHER; }
+    }
+    // A lifegain payoff anywhere makes the Wardens real cards again (unrecognised, kept late).
+    if (payoff_seen) { for (int i = 0; i < n; ++i) { if (cl(i) == C_BLANK) { cl(i) = C_OTHER; } } }
+
+    // ---- MANA: dead lands, colour need, the land keep order ----------------------------------------
+    std::vector<char> dead(static_cast<std::size_t>(n), 0);
+    std::vector<int> live_lands;
+    for (int i = 0; i < n; ++i)
+    {
+        if (cl(i) != C_LAND) { continue; }
+        const CardDefinition* d = hdef(i);
+        if (d != nullptr && d->params.etb_bounce_land
+            && board_lands == 0 && hand_nonkaroo_lands == 0) { dead[static_cast<std::size_t>(i)] = 1; continue; }
+        if (d != nullptr && d->params.reflecting && board_nonrefl_lands == 0 && hand_nonrefl_lands == 0)
+        { dead[static_cast<std::size_t>(i)] = 1; continue; }
+        live_lands.push_back(i);
+    }
+    auto pips = [](const CardDefinition* d, int c) -> int
+    {
+        if (d == nullptr) { return 0; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        const int v[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        return v[c];
+    };
+    int need[5] = { 0, 0, 0, 0, 0 };
+    for (int i = 0; i < n; ++i)
+    {
+        const char k = cl(i);
+        if (k == C_NONE || k == C_LAND || k == C_BLANK) { continue; }
+        for (int c = 0; c < 5; ++c) { need[c] = std::max(need[c], pips(hdef(i), c)); }
+    }
+    auto land_bits = [&](const CardDefinition* d) -> unsigned
+    {
+        if (d == nullptr || d->params.reflecting) { return 0u; }
+        unsigned b = 0;
+        for (Color c : d->params.produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } }
+        return b;
+    };
+    auto land_tier = [](const CardDefinition* d) -> int
+    {
+        if (d == nullptr) { return 4; }
+        const CardParams& p = d->params;
+        if (p.taps_spawn_opp_token)           { return 0; }   // Forbidden Orchard (rainbow + fuel)
+        if (p.etb_bounce_land)                { return 6; }   // Azorius Chancery
+        if (p.reflecting)                     { return 5; }   // Reflecting Pool
+        if (!p.fetch_land_types.empty())      { return 2; }   // Windswept Heath / Misty Rainforest
+        if (p.produces.size() >= 5)           { return 1; }   // City of Brass
+        if (p.etb_pay_life_to_untap > 0 || p.produces.size() >= 2) { return 3; }   // the shocks
+        return 4;                                             // Forest / Tree of Tales
+    };
+    auto land_less = [&](int a, int b)
+    {
+        const CardDefinition* da = hdef(a);
+        const CardDefinition* db = hdef(b);
+        const int ta = land_tier(da), tb = land_tier(db);
+        if (ta != tb) { return ta < tb; }
+        const bool xa = da != nullptr && da->params.enters_tapped, xb = db != nullptr && db->params.enters_tapped;
+        if (xa != xb) { return !xa; }
+        return a < b;
+    };
+    std::vector<int> land_order;   // live lands, best kept first
+    {
+        int cover[5] = { have[0], have[1], have[2], have[3], have[4] };
+        std::vector<int> rest = live_lands;
+        for (;;)
+        {
+            int best = -1, best_gain = 0;
+            for (int i : rest)
+            {
+                const unsigned b = land_bits(hdef(i));
+                int g = 0;
+                for (int c = 0; c < 5; ++c) { if (((b >> c) & 1u) && cover[c] < need[c]) { ++g; } }
+                if (g > best_gain || (g > 0 && g == best_gain && land_less(i, best))) { best = i; best_gain = g; }
+            }
+            if (best < 0) { break; }
+            land_order.push_back(best);
+            const unsigned b = land_bits(hdef(best));
+            for (int c = 0; c < 5; ++c) { if ((b >> c) & 1u) { ++cover[c]; } }
+            rest.erase(std::find(rest.begin(), rest.end(), best));
+        }
+        std::stable_sort(rest.begin(), rest.end(), land_less);
+        land_order.insert(land_order.end(), rest.begin(), rest.end());
+    }
+
+    // ---- per-bucket candidate lists, best kept first ------------------------------------------------
+    std::vector<int> dorks, ltutors, engines, drains, fuels, payoffs, finders, blanks, others;
+    for (int i = 0; i < n; ++i)
+    {
+        switch (cl(i))
+        {
+            case C_DORK:   dorks.push_back(i);   break;
+            case C_LTUTOR: ltutors.push_back(i); break;
+            case C_ENGINE: engines.push_back(i); break;
+            case C_DRAIN:  drains.push_back(i);  break;
+            case C_FUEL:   fuels.push_back(i);   break;
+            case C_PAYOFF: payoffs.push_back(i); break;
+            case C_FINDER: finders.push_back(i); break;
+            case C_BLANK:  blanks.push_back(i);  break;
+            case C_OTHER:  others.push_back(i);  break;
+            default: break;
+        }
+    }
+    // Land tutors: Crop Rotation (live only with a land in play) > Sylvan Scrying > a dead Crop Rotation.
+    auto tutor_rank = [&](int i)
+    {
+        const CardParams& p = hdef(i)->params;
+        if (p.sacrifice_land && board_lands == 0) { return 2; }
+        return p.tutor_land_to_battlefield ? 0 : 1;
+    };
+    std::stable_sort(ltutors.begin(), ltutors.end(), [&](int a, int b) { return tutor_rank(a) < tutor_rank(b); });
+    // Fuel: near before far (colour-exact distance), then Hunted Phantasm (a 5-token burst alone
+    // turns Defense on) before the ramping War-Riders.
+    {
+        int reach = board_sources, src[5] = { have[0], have[1], have[2], have[3], have[4] };
+        auto credit = [&](const CardDefinition* d)
+        {
+            ++reach;
+            const unsigned b = land_bits(d);
+            for (int c = 0; c < 5; ++c) { if ((b >> c) & 1u) { ++src[c]; } }
+        };
+        for (int i : live_lands) { credit(hdef(i)); }
+        for (int i : dorks)      { credit(hdef(i)); }
+        auto far = [&](int i)
+        {
+            const CardDefinition* d = hdef(i);
+            int deficit = d->card.m_mana_cost.ManaValue() - reach;
+            for (int c = 0; c < 5; ++c) { deficit = std::max(deficit, pips(d, c) - src[c]); }
+            return deficit >= 2;
+        };
+        std::stable_sort(fuels.begin(), fuels.end(), [&](int a, int b)
+        {
+            const bool fa = far(a), fb = far(b);
+            if (fa != fb) { return !fa; }
+            const bool ba = hdef(a)->params.etb_opp_creates_tokens > 0;
+            const bool bb = hdef(b)->params.etb_opp_creates_tokens > 0;
+            if (ba != bb) { return ba; }
+            return a < b;
+        });
+    }
+    // Enlightened Tutor finds the engine only while a Defense it can reach is left in the library.
+    bool finder_live = false;
+    if (!finders.empty())
+    {
+        const CardParams& fp = hdef(finders.front())->params;
+        for (const Card& lc : ap.library)
+        {
+            const CardDefinition* ld = def_of(lc);
+            if (ld == nullptr || ld->params.upkeep_sac_tutor_creatures <= 0) { continue; }
+            for (const std::string& t : fp.tutor_types)
+            { if (CardMatchesTypeName(ld->card, t)) { finder_live = true; break; } }
+            if (finder_live) { break; }
+        }
+    }
+
+    // ---- the keep ladder ----------------------------------------------------------------------------
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int> ladder;
+    ladder.reserve(static_cast<std::size_t>(n));
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; ladder.push_back(i); };
+    auto first_free = [&](const std::vector<int>& v) -> int
+    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
+    int src_need = std::max(0, kSourceQuota - board_sources);
+    enum Slot { S_LAND, S_DRAIN, S_DORK, S_ENGINE, S_TUTOR, S_FUEL };
+    static const Slot kLadder[] = { S_LAND, S_DRAIN, S_DORK, S_ENGINE, S_LAND, S_TUTOR, S_LAND,
+                                    S_FUEL, S_LAND, S_LAND };
+    for (Slot slot : kLadder)
+    {
+        switch (slot)
+        {
+            case S_LAND:
+                if (src_need > 0) { const int i = first_free(land_order); if (i >= 0) { take(i); --src_need; } }
+                break;
+            case S_DRAIN:
+                if (!board_drain) { const int i = first_free(drains); if (i >= 0) { take(i); } }
+                break;
+            case S_DORK:
+                if (board_dorks == 0 && src_need > 0)
+                { const int i = first_free(dorks); if (i >= 0) { take(i); --src_need; } }
+                break;
+            case S_ENGINE:
+                if (!board_engine)
+                {
+                    int i = first_free(engines);
+                    if (i < 0 && finder_live) { i = first_free(finders); }
+                    if (i >= 0) { take(i); }
+                }
+                break;
+            case S_TUTOR:
+            { const int i = first_free(ltutors); if (i >= 0 && tutor_rank(i) < 2) { take(i); } break; }
+            case S_FUEL:
+                if (opp_projected < kFuelFilledAt) { const int i = first_free(fuels); if (i >= 0) { take(i); } }
+                break;
+        }
+    }
+
+    // ---- emit the shed order ----------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    auto put_unkept_rev = [&](const std::vector<int>& v)   // the bucket's overflow, worst first
+    { for (std::size_t k = v.size(); k-- > 0;) { if (!keep[static_cast<std::size_t>(v[k])]) { shed.push_back(v[k]); } } };
+    for (int pass = 0; pass < 2; ++pass)                                   // dead Chancery, then lone Pool
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (!dead[static_cast<std::size_t>(i)]) { continue; }
+            const bool karoo = hdef(i) != nullptr && hdef(i)->params.etb_bounce_land;
+            if (karoo == (pass == 0)) { shed.push_back(i); }
+        }
+    }
+    for (int i : blanks) { shed.push_back(i); }                            // Wardens
+    put_unkept_rev(land_order);                                            // surplus mana
+    put_unkept_rev(dorks);
+    put_unkept_rev(ltutors);
+    put_unkept_rev(finders);                                               // spare Enlightened Tutor
+    put_unkept_rev(fuels);                                                 // surplus fuel
+    for (int i : payoffs) { shed.push_back(i); }                           // Massacre Wurm
+    put_unkept_rev(drains);                                                // 2nd Suture Priest
+    put_unkept_rev(engines);                                               // extra Defense copies
+    for (int i : others) { shed.push_back(i); }                            // unrecognised
+    for (std::size_t k = ladder.size(); k-- > 0;) { shed.push_back(ladder[k]); }   // keep tail
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // MTG_CG_ORDER -- the USER-reviewed Creature Giving cast order (2026-08-19, ruling recorded

@@ -1205,8 +1205,15 @@ public:
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "CreatureGiving"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // The USER's cleanup-discard buckets (2026-10-09, docs/design/creature-giving-discard-policy-
+    // proposal.md "Creature Giving: SETTLED"): MANA 5 sources / Suture Priest / Birds / Defense /
+    // land tutor / fuel, Wardens shed before spare lands. MTG_CG_BUCKET_DISCARD (default ON; =0 ->
+    // the Defense-of-the-Heart-last patch that shipped 2026-08-06, so the A/B has three arms).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // The bucket arm is not prefix-stable (a shed can move the colour cover / land liveness / fuel
+    // distance), so a multi-card cleanup is re-ranked per shed; =0 keeps the default true.
+    bool CleanupDiscardShedStable() const override;
 
     // EOT dominance: the two axes this deck inverts relative to the generic table (USER,
     // 2026-08-14 -- the archetype declares what is deck-dependent; see DecisionProvider.h).
