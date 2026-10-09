@@ -788,8 +788,8 @@ public:
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
 // lands in play (its curve tops at mana value 2), it BANKS further land drops so a future
-// topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). Inherits
-// Generic for everything else; the only override is the equal-value land-drop tiebreak.
+// topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). Its other
+// judgement hook is the USER's cleanup-discard buckets (below); everything else inherits Generic.
 class BurnProvider : public DeckProvider
 {
 public:
@@ -814,6 +814,20 @@ public:
     // Mountain (no utility land whose loss is free) -- so holding it until it wins the game or unlocks
     // Spectacle is a pure gain in available mana. See HoldSacLandBurn in TurnSolver.cpp.
     bool HoldsSacLandBurnUntilLethal() const override { return true; }
+    // The USER's cleanup-discard buckets (2026-10-09, docs/design/burn-discard-policy-proposal.md
+    // "burn: SETTLED"): 2nd Eidolon > dead Blaze/Blood > lands past 3 (+1 with a Blaze) > a Volley
+    // with no land > burn beyond lethal > a 2nd Light Up the Stage > spare creatures > the keep
+    // ladder. MTG_BURN_BUCKET_DISCARD (default ON; =0 -> GenericProvider::CleanupDiscardCandidates,
+    // the max-MV fallback, with every required piece protected as before).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // Eidolon of the Great Revel is a mulligan.required_piece; its DISCARD protection is waived unless
+    // the USER's single-Eidolon keep condition holds (same flag). Goblin Guide / Swiftspear stay
+    // protected.
+    bool CleanupDiscardProtectionWaived(const GameState& s, const Card& c) const override;
+    // The bucket arm is not prefix-stable (a shed can move the Blaze land, the Volley land count or
+    // the lethal walk), so a multi-card cleanup is re-ranked per shed; =0 keeps the default true.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
