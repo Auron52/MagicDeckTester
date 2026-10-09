@@ -16237,11 +16237,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // that signature. That is no longer true -- the term was removed from the signature rather
     // than worked around here (see the eldrazi flag above), which fixes it for every deck instead
     // of this one. The ordering is kept because the goblin reason stands on its own.
-    // Was g_generic until the label measurement gave this deck a hook worth holding. FungusProvider
-    // is GenericProvider plus ONE override -- ProvenWinlessThisTurn -- so every judgement hook is
-    // still byte-for-byte the Generic one, and with MTG_FUNGUS_CERT off the two are indistinguishable
-    // apart from Name(). The certificate is consulted only where the search is unbounded (the label
-    // ladder), so it cannot change play at all. See FungusProvider's declaration for the 93.7%.
+    // Was g_generic until the label measurement gave this deck a hook worth holding: the winless
+    // certificate (ProvenWinlessThisTurn), consulted only where the search is unbounded (the label
+    // ladder), so it cannot change play. See FungusProvider's declaration for the 93.7%. The provider
+    // has since gained real judgement hooks too (sac outlets, the devour ladder, the main-phase split,
+    // the USER's cleanup-discard buckets), so it is no longer "Generic plus one override".
     if (fungus)      { return g_fungus; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }
@@ -32139,6 +32139,331 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         return FungusNote(FungusWhy::CombatLethal, false);
     }
     return FungusNote(FungusWhy::Fired, true);
+}
+
+// ---- FungusProvider::CleanupDiscardCandidates --------------------------------
+//
+// THE USER'S BUCKETS (2026-09-24) plus the SETTLED gaps (2026-10-09): docs/design/
+// fungus-cleanup-discard.md sections 5 and 6. Default ON; MTG_FUNGUS_BUCKET_DISCARD=0 restores the
+// generic max-MV ranking -- which on this deck sheds Mycoloth and Doubling Season FIRST and keeps the
+// 19th Forest (the one real cleanup in 400 measured games shed the Season, section 4).
+//
+// USER 09-24: *"Rather than just an order, the best way to deal with it is to start with buckets. One
+// for mana, one for threats and perhaps one for enablers. (doubling season + beastmaster) Though you
+// only really want 1 Doubling Season and 1 Beastmaster at the most. Mana we should aim to have the
+// lesser of 3-4 spots and 5 total mana (counting the board) We should keep a mix of Fungus, but
+// especially one Sporecrown, one Mycoloth, one Sporesower and a 1-drop, preferably Utopia Mycon."*
+// and *"To be clear the max 5 includes the accelerator mana"*. USER 10-09: *"I would keep things that
+// combo with doubling season (like Mycoloth, Saproling Burst) along with the season itself unless they
+// are uncastable for the foreseeable future."*
+//
+// BUCKETS, every one keyed on PARAMS (a hand card is a name-only placeholder -- every read goes through
+// the definition), each quota NET OF BOARD:
+//   MANA      lands + ONE accelerator. need = max(0, 5 - board_mana); keep_lands = min(3, live lands,
+//             need); keep_accel = min(1, accelerators, need - keep_lands) -- the 5 includes the
+//             accelerator, so a kept Wild Growth is one of the five, not a bonus on top. board_mana is
+//             what our board makes in a turn: lands by produces_amount (a Chamber counts 2), each land
+//             Aura's extra (Wild Growth +1), rocks, creature mana dorks.
+//   ENABLERS  Doubling Season (doubles_tokens / doubles_counters) 1, Beastmaster Ascension
+//             (quest_counter_per_attacker) 1.
+//   THREATS   the core -- one Sporecrown (the Fungus/Saproling lord), one Sporesower
+//             (spore_upkeep_each_fungus), one Fungus 1-drop (Utopia Mycon -- the any-colour Saproling
+//             sac outlet -- preferred), one Mycoloth -- and the rest beyond the core.
+// THE SEASON TIER (USER 10-09): the kept Season + its combo partners -- devour / per-+1/+1-counter
+// upkeep tokens (Mycoloth), fade-counter tokens (Saproling Burst; candidate-B list only, so it is keyed
+// on fading_counters + fade_creates_tokens, never a name) -- kept TOGETHER above Beastmaster and the
+// rest of the core, with only the mana within the 5 kept longer. Unless uncastable for the foreseeable
+// future: the doc's surfaced agent reading, 5 mana not reachable within 2 turns counting board_mana +
+// the first two kept land drops + the kept accelerator -- then the tier gives way FIRST among the
+// within-target cards.
+//
+// KEEP LADDER (most kept first; read backwards it is the tail of the shed order):
+//   kept lands > kept accelerator > [Season tier, if castable] > core 1-drop > Sporecrown > Sporesower
+//   > Beastmaster > [Season tier, if NOT castable] > beyond the core (one of each name first, then the
+//   duplicates, Essence Warden last)
+// SHED ORDER: dead (a Karoo with no other land to return -- the Karoo rule, "dead Simic Growth Chamber
+// first"; a legend already on our battlefield or a 2nd hand copy) > surplus mana (lands, then
+// accelerators) > surplus enablers (Beastmaster, then Season) > the ladder backwards. Every non-staged
+// hand index is named, so nothing falls through to the max-MV tier.
+//
+// AGENT READINGS (each surfaced in the doc's implementation notes):
+//   * a mana_rock (candidate B's Sol Ring) is an accelerator too; a land Aura needs a host (a land in
+//     play or a kept land) or it is surplus.
+//   * board_mana does NOT count Utopia Mycon's sac-for-mana or a Brightcap Badger grant: both spend the
+//     swarm, and under-counting only raises the land target.
+//   * a hand land fills one unit of `need` whatever it taps for (the formula counts lands, not mana);
+//     land keep order: non-Karoo > Karoo, untapped > enters-tapped, more mana, hand order.
+//   * the core 1-drop slot is filled from the board only by a Mycon-type, or by any Fungus 1-drop
+//     while no Mycon is in hand ("preferably Utopia Mycon"). Essence Warden is not a Fungus, so it
+//     never fills the 1-drop slot.
+//   * the tier keeps ONE copy of each partner kind (the 09-24 "one Mycoloth"), net of board, and holds
+//     its position even with no Season anywhere (Mycoloth is the card the deck exists to cast). Inner
+//     keep order: Season > devour partner > fade partner.
+//   * castability: a land drop adds its produces_amount, a Karoo +1 (it returns a land); the bar is the
+//     literal 5 for the whole tier, so it moves as one unit.
+//   * surplus enablers: Beastmaster before Season ("Beastmaster gives way first", carried over).
+//   * beyond the core, keep order lord > Sporesower / partner copies > other bodies > the sac-draw
+//     outlet (Psychotrope) > defender (Shell-Dweller); "Essence Warden last" = a non-Fungus,
+//     non-Saproling creature whose payload is any_creature_enters_lifegain (inert in a goldfish).
+//     Unclassified spells (candidate B's Concordant Crossroads) are "other bodies".
+// Deterministic (stable sorts, ties by hand index), prefix-stable (every quota is decided from the
+// board and the cards already KEPT, so shedding a not-kept card changes nothing behind it).
+static bool FungusBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_FUNGUS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::FUNGUS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> FungusProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!FungusBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+
+    // ---- roles, by PARAMS ----------------------------------------------------------------------
+    auto is_season = [](const CardParams& p) { return p.doubles_tokens || p.doubles_counters; };
+    auto is_beast  = [](const CardParams& p) { return p.quest_counter_per_attacker > 0; };
+    auto is_devour = [](const CardParams& p) { return p.devour > 0 || p.upkeep_tokens_per_plus_one_counter; };
+    auto is_fade   = [](const CardParams& p) { return p.fading_counters > 0 && p.fade_creates_tokens > 0; };
+    auto is_accel  = [](const CardDefinition& d)
+    {
+        if (d.card.IsLand() || d.card.IsCreature()) { return false; }
+        return (d.params.is_land_aura && d.params.land_aura_extra_mana > 0) || d.params.mana_rock;
+    };
+    auto accel_mana = [](const CardDefinition& d)
+    { return d.params.is_land_aura ? d.params.land_aura_extra_mana : ManaProducedPerTap(d); };
+    auto is_fungus = [](const Card& c) { return CardHasSubtype(c, "Fungus"); };
+    auto is_lord = [](const CardDefinition& d)
+    {
+        if (!d.card.IsCreature() || d.params.power_bonus <= 0) { return false; }
+        for (const std::string& sub : d.params.subtypes_affected)
+        { if (sub == "Fungus" || sub == "Saproling") { return true; } }
+        return false;
+    };
+    auto is_sower    = [](const CardDefinition& d) { return d.card.IsCreature() && d.params.spore_upkeep_each_fungus; };
+    auto is_one_drop = [&](const CardDefinition& d)
+    { return d.card.IsCreature() && is_fungus(d.card) && d.card.m_mana_cost.ManaValue() == 1; };
+    auto is_mycon    = [&](const CardDefinition& d) { return is_one_drop(d) && d.params.sac_outlet_add_mana_any_color; };
+    auto is_karoo    = [](const CardDefinition* d) { return d != nullptr && d->params.etb_bounce_land; };
+
+    // ---- 1. board census (own permanents) --------------------------------------------------------
+    int board_mana = 0, board_lands = 0;
+    bool b_season = false, b_beast = false, b_devour = false, b_fade = false;
+    bool b_lord = false, b_sower = false, b_mycon = false, b_one_drop = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand())
+        {
+            ++board_lands;
+            board_mana += d != nullptr ? ManaProducedPerTap(*d) : 1;
+            continue;
+        }
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        if (q.is_land_aura && q.land_aura_extra_mana > 0)   { board_mana += q.land_aura_extra_mana; }
+        else if (q.mana_rock)                               { board_mana += ManaProducedPerTap(*d); }
+        else if (p.card.IsCreature() && !q.produces.empty()) { board_mana += ManaProducedPerTap(*d); }
+        if (is_season(q)) { b_season = true; }
+        if (is_beast(q))  { b_beast  = true; }
+        if (is_devour(q)) { b_devour = true; }
+        if (is_fade(q))   { b_fade   = true; }
+        if (is_lord(*d))  { b_lord   = true; }
+        if (is_sower(*d)) { b_sower  = true; }
+        if (is_mycon(*d)) { b_mycon  = true; }
+        if (is_one_drop(*d)) { b_one_drop = true; }
+    }
+
+    // ---- 2. partition the hand (each non-staged card into exactly one list) ------------------------
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    bool hand_nonkaroo_land = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        defs[at(i)] = def_of(hc);
+        if (CleanupDiscardIsLand(hc) && !is_karoo(defs[at(i)])) { hand_nonkaroo_land = true; }
+    }
+    auto legend_dead = [&](int i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.m_name == hc.m_name) { return true; } }
+        for (int j = 0; j < i; ++j)
+        {
+            if (!ap.hand[at(j)].m_is_staged && ap.hand[at(j)].m_name == hc.m_name) { return true; }
+        }
+        return false;
+    };
+    std::vector<int> dead, lands, accels, seasons, beasts, devours, fades, threats;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = defs[at(i)];
+        if (CleanupDiscardIsLand(hc))
+        {
+            // The Karoo rule: with no land in play and none in hand to play first, a Chamber returns
+            // ITSELF -- a blank, and the first thing shed.
+            if (is_karoo(d) && board_lands == 0 && !hand_nonkaroo_land) { dead.push_back(i); }
+            else { lands.push_back(i); }
+            continue;
+        }
+        if (d == nullptr) { threats.push_back(i); continue; }   // unknown: beyond the core
+        const CardParams& q = d->params;
+        if (d->card.HasSupertype(Supertype::Legendary) && legend_dead(i)) { dead.push_back(i); }
+        else if (is_accel(*d))  { accels.push_back(i); }
+        else if (is_season(q))  { seasons.push_back(i); }
+        else if (is_beast(q))   { beasts.push_back(i); }
+        else if (is_devour(q))  { devours.push_back(i); }
+        else if (is_fade(q))    { fades.push_back(i); }
+        else                    { threats.push_back(i); }
+    }
+    // Dead Karoos lead the dead (the doc's "Dead Simic Growth Chamber first"), then dead legends.
+    std::stable_sort(dead.begin(), dead.end(), [&](int a, int b)
+    {
+        return static_cast<int>(CleanupDiscardIsLand(ap.hand[at(a)]))
+             > static_cast<int>(CleanupDiscardIsLand(ap.hand[at(b)]));
+    });
+
+    // ---- 3. MANA: lands, then one accelerator, to 5 total counting the board ----------------------
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)   // best kept FIRST
+    {
+        const CardDefinition* da = defs[at(a)];
+        const CardDefinition* db = defs[at(b)];
+        const bool ka = is_karoo(da), kb = is_karoo(db);
+        if (ka != kb) { return !ka; }
+        const bool ta = da != nullptr && da->params.enters_tapped, tb = db != nullptr && db->params.enters_tapped;
+        if (ta != tb) { return !ta; }
+        const int ma = da != nullptr ? ManaProducedPerTap(*da) : 1, mb = db != nullptr ? ManaProducedPerTap(*db) : 1;
+        if (ma != mb) { return ma > mb; }
+        return a < b;
+    });
+    constexpr int kManaTarget = 5;   // the deck's top of curve: Mycoloth {3}{G}{G}, Doubling Season {4}{G}
+    const int need = std::max(0, kManaTarget - board_mana);
+    const int keep_lands = std::min({ 3, static_cast<int>(lands.size()), need });
+    std::stable_sort(accels.begin(), accels.end(), [&](int a, int b)
+    { return accel_mana(*defs[at(a)]) > accel_mana(*defs[at(b)]); });
+    int kept_accel = -1;
+    if (need - keep_lands >= 1)
+    {
+        for (int i : accels)
+        {
+            const CardDefinition& d = *defs[at(i)];
+            if (d.params.is_land_aura && board_lands == 0 && keep_lands == 0) { continue; }   // no host
+            kept_accel = i;
+            break;
+        }
+    }
+    // Castability of the Season tier: 5 mana within 2 turns (agent reading, surfaced in the doc).
+    int reach2 = board_mana;
+    for (int k = 0; k < std::min(2, keep_lands); ++k)
+    {
+        const CardDefinition* d = defs[at(lands[at(k)])];
+        reach2 += is_karoo(d) ? 1 : (d != nullptr ? ManaProducedPerTap(*d) : 1);
+    }
+    if (kept_accel >= 0) { reach2 += accel_mana(*defs[at(kept_accel)]); }
+    const bool tier_castable = reach2 >= kManaTarget;
+
+    // ---- 4. ENABLERS and the Season tier (one copy each, net of board) ----------------------------
+    const int kept_season = (!b_season && !seasons.empty()) ? seasons.front() : -1;
+    const int kept_beast  = (!b_beast  && !beasts.empty())  ? beasts.front()  : -1;
+    const int kept_devour = (!b_devour && !devours.empty()) ? devours.front() : -1;
+    const int kept_fade   = (!b_fade   && !fades.empty())   ? fades.front()   : -1;
+
+    // ---- 5. THREATS: the core, net of board -------------------------------------------------------
+    auto first_threat = [&](auto pred) -> int
+    {
+        for (int i : threats) { if (defs[at(i)] != nullptr && pred(*defs[at(i)])) { return i; } }
+        return -1;
+    };
+    const int core_lord  = b_lord  ? -1 : first_threat(is_lord);
+    const int core_sower = b_sower ? -1 : first_threat(is_sower);
+    int core_one = -1;
+    if (!b_mycon)
+    {
+        core_one = first_threat(is_mycon);
+        if (core_one < 0 && !b_one_drop) { core_one = first_threat(is_one_drop); }
+    }
+
+    // ---- 6. the keep ladder ------------------------------------------------------------------------
+    std::vector<char> kept(at(n), 0);
+    std::vector<int> ladder;
+    ladder.reserve(at(n));
+    auto take = [&](int i) { if (i >= 0 && !kept[at(i)]) { kept[at(i)] = 1; ladder.push_back(i); } };
+    for (int k = 0; k < keep_lands; ++k) { take(lands[at(k)]); }
+    take(kept_accel);
+    auto take_tier = [&]() { take(kept_season); take(kept_devour); take(kept_fade); };
+    if (tier_castable) { take_tier(); }
+    take(core_one);
+    take(core_lord);
+    take(core_sower);
+    take(kept_beast);
+    if (!tier_castable) { take_tier(); }
+
+    // Beyond the core: the unkept threats plus the partner copies the tier did not take.
+    std::vector<int> beyond;
+    for (int i : threats) { if (!kept[at(i)]) { beyond.push_back(i); } }
+    for (int i : devours) { if (!kept[at(i)]) { beyond.push_back(i); } }
+    for (int i : fades)   { if (!kept[at(i)]) { beyond.push_back(i); } }
+    std::sort(beyond.begin(), beyond.end());
+    constexpr int kWardenRank = 9;
+    auto beyond_rank = [&](int i) -> int   // lower = kept first
+    {
+        const CardDefinition* d = defs[at(i)];
+        if (d == nullptr) { return 2; }
+        const CardParams& q = d->params;
+        if (is_lord(*d)) { return 0; }
+        if (is_sower(*d) || is_devour(q) || is_fade(q)) { return 1; }
+        if (d->card.IsCreature() && !is_fungus(d->card) && !CardHasSubtype(d->card, "Saproling")
+            && q.any_creature_enters_lifegain > 0)
+        { return kWardenRank; }
+        if (q.sac_outlet_draw > 0) { return 3; }
+        if (d->card.HasKeyword(Keyword::Defender)) { return 4; }
+        return 2;
+    };
+    std::stable_sort(beyond.begin(), beyond.end(), [&](int a, int b) { return beyond_rank(a) < beyond_rank(b); });
+    auto name_kept = [&](int i)
+    {
+        for (int j : ladder) { if (ap.hand[at(j)].m_name == ap.hand[at(i)].m_name) { return true; } }
+        return false;
+    };
+    for (int i : beyond) { if (beyond_rank(i) < kWardenRank && !name_kept(i)) { take(i); } }   // one of each name
+    for (int i : beyond) { if (beyond_rank(i) < kWardenRank) { take(i); } }                     // the duplicates
+    for (int i : beyond) { take(i); }                                                           // Essence Warden last
+
+    // ---- 7. emit the shed order -------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(at(n));
+    std::vector<char> listed(at(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[at(i)] || ap.hand[at(i)].m_is_staged) { return; }
+        listed[at(i)] = 1;
+        shed.push_back(i);
+    };
+    for (int i : dead) { put(i); }
+    for (auto it = lands.rbegin(); it != lands.rend(); ++it)   { if (!kept[at(*it)]) { put(*it); } }
+    for (auto it = accels.rbegin(); it != accels.rend(); ++it) { if (!kept[at(*it)]) { put(*it); } }
+    for (int i : beasts)  { if (!kept[at(i)]) { put(i); } }
+    for (int i : seasons) { if (!kept[at(i)]) { put(i); } }
+    for (auto it = ladder.rbegin(); it != ladder.rend(); ++it) { put(*it); }
+    for (int i = 0; i < n; ++i) { put(i); }   // defensive: every non-staged card has a class
+
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or

@@ -355,6 +355,7 @@ add_executable(mtg-test
     test/unit/test_breaching_dragonstorm_discard.cpp
     test/unit/test_angels_discard.cpp
     test/unit/test_critterlifegain_discard.cpp
+    test/unit/test_fungus_discard.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

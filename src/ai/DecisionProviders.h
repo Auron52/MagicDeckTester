@@ -2207,8 +2207,9 @@ public:
 // This is the same shape the Snow certificate was built for (Snow: 92.5% edge plans, 7 winnable of
 // 6,943) and the deck is, if anything, a cleaner case -- see the implementation's contract block.
 //
-// EVERYTHING ELSE IS INHERITED. Only Name() and the certificate are overridden, so every heuristic
-// this deck plays with is byte-for-byte the Generic one it played with before.
+// (That was its FIRST hook. It has since gained the measured / USER-ruled hooks declared below --
+// the sac-outlet rules, the devour ladder, the main-phase split and, 2026-10-09, the USER's
+// cleanup-discard buckets -- so "everything else is Generic" no longer holds.)
 // Decline attribution for the certificate below (MTG_WINLESS_STATS). Printed at exit AND on each
 // [progress] tick -- a straggler that never exits is exactly the game whose declines you need to
 // read, which is the same reason winlesscert's own counters grew a periodic dump.
@@ -2375,6 +2376,16 @@ public:
     // projected turn. Priced separately because AL measured this same hook's quality effect as a
     // REJECTION there (mixed semantics: filtered root candidates scored by unfiltered futures).
     bool PhaseFilterRootTurnOnly() const override;
+
+    // Cleanup discard: THE USER'S BUCKETS (2026-09-24) + the gaps the USER settled 2026-10-09
+    // (docs/design/fungus-cleanup-discard.md sections 5-6) -- MANA to 5 total counting the board
+    // (<= 3 lands, <= 1 accelerator, the 5 includes it), ENABLERS 1 Doubling Season + 1 Beastmaster,
+    // THREATS a mix around a core of one Sporecrown / Sporesower / Fungus 1-drop (Mycon preferred) /
+    // Mycoloth. The Season and its param-keyed combo partners (devour, fade-counter tokens) are kept
+    // TOGETHER above Beastmaster and the rest of the core unless 5 mana is out of reach for 2 turns.
+    // Behind MTG_FUNGUS_BUCKET_DISCARD (heurarm FUNGUS_BUCKET_DISCARD), default ON; =0 -> generic.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
