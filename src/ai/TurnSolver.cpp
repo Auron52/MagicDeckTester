@@ -54819,6 +54819,38 @@ inline bool LazyLeafOn()
     static const bool env = EnvOn("MTG_LAZY_LEAF", true);
     return heurarm::Flag(heurarm::LAZY_LEAF, env);
 }
+// DEFAULT OFF -- the budgeted extension of the lever above, under measurement (2026-10-09).
+//
+// WHY IT IS WANTED. The lever's whole value is that a decision whose win is provable inside the
+// horizon "pays for not a single rollout", and the keep generator is the workload where that matters
+// most: it runs at depth 1 / budget 3 ms and spends essentially the whole trial game beyond the
+// horizon, so the rollout IS its cost. Kitty v3's generation was abandoned at 9.4 h with 13.5-58 h
+// still to go, 75% of the machine inside 1.45% of the rollouts, worst single rollout 56.8 minutes.
+// Every artifact this deck needs is rollout-fed, so nothing downstream can be generated until the
+// rollout bill comes down -- which is why the budgeted case is worth measuring rather than assuming.
+//
+// WHY IT IS OFF BY DEFAULT, i.e. what the guard above was protecting. A probe consumes units and
+// units are the budget's currency, so under a finite budget the probe buys the rest of the search
+// less search: the answer at THIS node is unchanged but play downstream moves, and with it GT. The
+// comment on LazyLeafOn is explicit that the unlimited-budget guard is what keeps every regression
+// tier inert. So this is a play lever and it must be earned on a measurement, not switched on.
+//
+// WHY IT IS NOT A COMPLETENESS VIOLATION (USER 2026-10-09: "The 'never lossy' idea does not require
+// us to search everything exhaustively at every budget"). It re-ALLOCATES a finite budget; it never
+// refuses a line. At an unlimited budget the condition below is already satisfied by
+// `budget->Unlimited()`, so this flag changes nothing there -- adding budget keeps filling in lines
+// proportionally, which is the invariant.
+//
+// THE d1 CASE IS THE SAFEST AND IS THE FIRST TARGET (USER: "for d1, I can't see much drawback").
+// At depth 1 the leafless ladder is a single pass over one ply, so the probe is close to free: a hit
+// skips the entire leafed ladder and its rollouts, and a miss has spent almost nothing. The
+// budget-reallocation objection scales with the probe's own cost, so it is weakest exactly where the
+// generator lives.
+inline bool LazyLeafBudgetedOn()
+{
+    static const bool env = EnvOn("MTG_LAZY_LEAF_BUDGETED");
+    return heurarm::Flag(heurarm::LAZY_LEAF_BUDGETED, env);
+}
 // (Telemetry counters live with the rest of the rollout-stats block near the top of this file --
 //  the reporter is defined long before this point.)
 
@@ -59345,7 +59377,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // this node, different play downstream. Unbounded regimes -- the phase C matrix, label
     // generation -- have no such coupling, which is why they are the target (see LazyLeafOn).
     bool lazy_done = false;
-    if (LazyLeafOn() && !emul_done && depth >= 1 && (budget == nullptr || budget->Unlimited()))
+    // MTG_LAZY_LEAF_BUDGETED (default OFF) extends the same probe to a FINITE budget; see
+    // LazyLeafBudgetedOn for why that is a play lever and not a completeness question. The probe
+    // body below is already budget-safe: it passes `budget` to FSLineWin and BREAKS on
+    // `probe.truncated` without committing, so a probe the budget cut short proves nothing and the
+    // ordinary ladder runs untouched. That truncation path is what makes the extension a scope
+    // change rather than new machinery.
+    if (LazyLeafOn() && !emul_done && depth >= 1
+        && (budget == nullptr || budget->Unlimited() || LazyLeafBudgetedOn()))
     {
         const long long probe_before = budget ? budget->Used() : 0;
         // A LEAFLESS LADDER, 1..depth, not one cold pass at `depth` (the single-probe arm,
