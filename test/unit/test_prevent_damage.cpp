@@ -659,3 +659,183 @@ TEST_CASE("Prevent Damage pain deferral: casting Vito holds the painful lands to
     CHECK(Me(on_s) >= Me(off_s));
     CHECK(Opp(on_s) < Opp(off_s));      // ...and here strictly better: the Citadel's 3 drains after Vito
 }
+
+// ---- COLOUR-EXACT REST-OF-LINE CHECK (MTG_PD_LINE_OK_EXACT; claude-play sweep s61001 T5) ------------
+// Human-menu plan "land=City of Brass; cast: Rolling Earthquake (X=2), Tamanoa". The X spell keeps the
+// whole-turn prepay out (PP_XSPELL), so each cast pays per-cast; no gain engine is out, so the Quake's
+// {2}{R} takes the MINIMUM-damage assignment (Pool {R} + Forge {C} + Coliseum {C} = 0 pain) and leaves
+// Ancient Tomb ({C}{C}) + City of Brass -- ONE coloured source for Tamanoa's three coloured pips. The
+// rest-of-line check (`line_ok`, TapForCostSharedOnce) read that as payable because its per-colour
+// PRESENCE test credits City's one mana to W, R and G at once, so the historical assignment (Tomb
+// {C}{C} + Forge {R}, which keeps Coliseum / Pool / City for {R}{G}{W}) was never tried and Tamanoa
+// was silently dropped.
+#include "ai/PlanContext.h"
+namespace
+{
+struct LineOkExactArm
+{
+    std::int8_t prev;
+    explicit LineOkExactArm(bool on) : prev(heurarm::t_arm[heurarm::PD_LINE_OK_EXACT])
+    { heurarm::t_arm[heurarm::PD_LINE_OK_EXACT] = on ? 1 : 0; }
+    ~LineOkExactArm() { heurarm::t_arm[heurarm::PD_LINE_OK_EXACT] = prev; }
+};
+
+// The recorded T5 board after the City drop (s61001, decision 15): 14 life, no Tamanoa yet.
+GameState S61001T5Board()
+{
+    GameState s = Board();
+    s.turn_number = 5;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 14;
+    Put(s, "Grand Coliseum");
+    Put(s, "Ancient Tomb");
+    Put(s, "Vito, Thorn of the Dusk Rose");
+    Put(s, "Reflecting Pool");
+    Put(s, "Rhox Faithmender");
+    Put(s, "Battlefield Forge");
+    Put(s, "Spellshock");
+    Put(s, "City of Brass");
+    return s;
+}
+
+// What ComputePlanTraits records for the plan being applied: Quake X=2 ({2}{R}) + Tamanoa ({R}{G}{W}).
+PlanTraits QuakeThenTamanoa()
+{
+    PlanTraits t;
+    t.mana_casts    = 2;
+    t.cast_mv_total = 6;
+    t.cast_pips[0]  = 1;   // W
+    t.cast_pips[3]  = 2;   // R
+    t.cast_pips[4]  = 1;   // G
+    return t;
+}
+
+const ManaCost kQuakeX2   = Cost(2, 0, 0, /*r=*/1);
+const ManaCost kTamanoa   = Cost(0, /*w=*/1, 0, /*r=*/1, /*g=*/1);
+}   // namespace
+
+TEST_CASE("ColorFeasibility::PayablePips: one any-colour land is ONE pip, not one of every colour")
+{
+    // Tomb + City: presence reads W, R and G all >= 1 (City makes each) -- an assignment has one
+    // coloured unit for three coloured pips.
+    GameState s = Board();
+    Put(s, "Ancient Tomb");
+    Put(s, "City of Brass");
+    const int rgw[5] = { 1, 0, 0, 1, 1 };
+    const int r1[5]  = { 0, 0, 0, 1, 0 };
+    ColorFeasibility f = BuildColorFeasibility(s);
+    REQUIRE(f.usable);
+    CHECK_FALSE(f.PayablePips(rgw, ManaPool{}));
+    CHECK(f.PayablePips(r1, ManaPool{}));                 // a single pip is still City's to pay
+    ManaPool two_float; two_float.white = 1; two_float.wild = 1;
+    CHECK(f.PayablePips(rgw, two_float));                 // credit counts: {W} + one wild + City
+    // Coliseum + Pool + City: three distinct coloured sources -> assignable.
+    GameState t = Board();
+    Put(t, "Grand Coliseum");
+    Put(t, "Reflecting Pool");
+    Put(t, "City of Brass");
+    CHECK(BuildColorFeasibility(t).PayablePips(rgw, ManaPool{}));
+    // A colour no remaining source makes is short however many units there are.
+    GameState u = Board();
+    Put(u, "Battlefield Forge");
+    Put(u, "Battlefield Forge");
+    const int g1[5] = { 0, 0, 0, 0, 1 };
+    CHECK_FALSE(BuildColorFeasibility(u).PayablePips(g1, ManaPool{}));
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: the rest-of-line check is an ASSIGNMENT, not presence (s61001 T5)")
+{
+    PainPayArm pay(true);
+    // CONTROL ARM (presence alone, the pre-fix check): the Quake takes the painless minimum and
+    // strands Tamanoa. This arm MUST strand it, or the arm below has no power.
+    {
+        LineOkExactArm off(false);
+        GameState s = S61001T5Board();
+        const PlanTraits t = QuakeThenTamanoa();
+        PlanTraitsScope ts(&t);
+        REQUIRE(Pay(s, kQuakeX2));
+        CHECK(Me(s) == 14);                                   // 0 pain: Pool {R} + Forge {C} + Coliseum {C}
+        CHECK_FALSE(TappedNamed(s, "Ancient Tomb"));
+        CHECK_FALSE(TappedNamed(s, "City of Brass"));
+        CHECK_FALSE(Pay(s, kTamanoa));                        // the drop the sweep reported
+    }
+    // The fix: the minimum strands the line, so the historical assignment is taken -- it costs pain
+    // (Tomb's 2 + a coloured {R}) but leaves three coloured sources, and Tamanoa is paid.
+    LineOkExactArm on(true);
+    GameState s = S61001T5Board();
+    const PlanTraits t = QuakeThenTamanoa();
+    PlanTraitsScope ts(&t);
+    REQUIRE(Pay(s, kQuakeX2));
+    CHECK(Me(s) < 14);
+    CHECK_FALSE(SelfHasLost(s));
+    CHECK(Pay(s, kTamanoa));
+    CHECK_FALSE(SelfHasLost(s));
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: the exact check leaves a line that IS assignable alone")
+{
+    // Same plan with no Ancient Tomb and two Cities + a Brushland: every painless minimum for the
+    // Quake (Pool {R} + two of the Forge / Coliseum / Brushland {C} modes) leaves two Cities and a
+    // third coloured land -- a real {R}{G}{W} assignment. The exact check must NOT fire here: the
+    // minimum stands and no pain is taken for nothing.
+    PainPayArm pay(true);
+    LineOkExactArm on(true);
+    GameState s = Board();
+    s.turn_number = 5;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 14;
+    Put(s, "Grand Coliseum");
+    Put(s, "Reflecting Pool");
+    Put(s, "Battlefield Forge");
+    Put(s, "City of Brass");
+    Put(s, "City of Brass");
+    Put(s, "Brushland");
+    const PlanTraits t = QuakeThenTamanoa();
+    PlanTraitsScope ts(&t);
+    REQUIRE(Pay(s, kQuakeX2));
+    CHECK(Me(s) == 14);                                       // the painless minimum stood
+    CHECK(Pay(s, kTamanoa));
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: the LAST cast of a line owes nothing after it -- no fallback")
+{
+    // The demand half of the same lever, on a board captured from a lever-off PD game (seed 9101, d3:
+    // the same shape recurred dozens of times in 60 games). Line {1}{R} then {1}{R}; the first is
+    // paid, so the line's unpaid hold (g_line_unpaid_cost, as both apply paths bind it) owes only
+    // THIS {1}{R}. The legacy estimate (plan total minus this cost) still asks for the first cast's
+    // {R} and 2 mana: the minimum (City {R} + City, 2 pain) leaves only Ancient Tomb, which
+    // "strands" that phantom, so the legacy check falls back to the historical assignment -- City
+    // {R} + Tomb (3 pain, a {C} left floating) -- one life paid for a cast that does not exist.
+    auto run = [](bool exact) -> GameState
+    {
+        PainPayArm pay(true);
+        LineOkExactArm arm(exact);
+        GameState s = Board();
+        s.turn_number = 6;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 15;
+        Put(s, "City of Brass");
+        Put(s, "City of Brass");
+        Put(s, "Grand Coliseum");
+        s.battlefield.back().tapped = true;
+        Put(s, "Ancient Tomb");
+        Put(s, "Reflecting Pool");
+        s.battlefield.back().tapped = true;
+        PlanTraits t;
+        t.mana_casts    = 2;
+        t.cast_mv_total = 4;
+        t.cast_pips[3]  = 2;   // {1}{R} + {1}{R}
+        PlanTraitsScope ts(&t);
+        LineUnpaidCostScope owed(Cost(1, 0, 0, /*r=*/1));   // only this cast is still owed
+        REQUIRE(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+        return s;
+    };
+    // CONTROL ARM (legacy estimate): the phantom {R} drags the payment onto the Tomb. MUST differ.
+    const GameState off = run(false);
+    CHECK(Me(off) == 12);
+    CHECK(TappedNamed(off, "Ancient Tomb"));
+    // The fix: nothing is owed after this cast, so the minimum stands.
+    const GameState on = run(true);
+    CHECK(Me(on) == 13);
+    CHECK_FALSE(TappedNamed(on, "Ancient Tomb"));
+}

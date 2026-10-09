@@ -329,6 +329,19 @@ struct ColorFeasibility
     bool Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
                  const ManaPool& credit, bool noncreature_only = false,
                  const struct ColorDemandIndex* idx = nullptr) const;
+
+    // The same exact test for a plain per-colour pip DEMAND (`pips` indexed W,U,B,R,G) rather than a
+    // subset of candidate actions: can the sources this was built from, plus `credit`, be ASSIGNED to
+    // those pips -- each unit paying one pip -- or does some colour set ask for more than the units
+    // that can reach it? Unlike Payable there is no presence gate in front of it, so a single pip is
+    // tested too. Generic is not modelled (the caller checks the total). The Prevent Damage payer's
+    // rest-of-line check (TapForCostSharedOnce's `line_ok`, MTG_PD_LINE_OK_EXACT) is the caller.
+    bool PayablePips(const int pips[5], const ManaPool& credit) const;
+
+    // Hall's condition over a demand set keyed by colour MASK -- the shared tail of both entries
+    // above (defined in ManaPayment.cpp, its only user).
+    bool HallFeasible(const int* masks, const int* counts, int ndm, const ManaPool& credit,
+                      int prod_cost) const;
 };
 
 // PER-CANDIDATE DEMAND HOIST (perf; byte-identical verdicts).

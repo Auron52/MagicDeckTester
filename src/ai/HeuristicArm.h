@@ -333,6 +333,7 @@ enum Slot : int
     PD_PAIN_DEFER,            // MTG_PD_PAIN_DEFER          Prevent Damage: PAIN DEFERRAL -- when the spell(s) a pain-useful payment funds will ADD to our damage->lifegain->drain chain on resolution (a Faithmender, a Vito / Dina, a second Tamanoa, Manabarbs...), pay with the sources whose pain is worth least LATER and keep the painful lands for the end-of-main-1 sweep, where every hit is worth at least as much (dmgev::PainAwarePay). USER 2026-10-08 (s11 gi10 T5: Citadel's 3 spent before Rhox resolved). Default ON; =0 = the pain-first payer
     BOUNCE_SEARCH,            // MTG_BOUNCE_SEARCH          the Karoo bounce is a SEARCHED plan dimension (Plan::bounce_choice; KarooBounceSearchOn, EngineFlags.h): the provider narrows the returnable lands (DecisionProvider::BounceSearchCandidates -- one candidate in the easy cases, the 2-3 real options in a contested one) and the enumeration fans the contested ones, instead of BounceKarooLand taking the provider's front() inside the search window (a no-greedy-rule violation). USER 2026-10-08: "The Karoo decision should also be searched with heuristics. However, we may want to heuristic it more often than not, since the decision is usually an easy one."
     BOUNCE_FOLD,              // MTG_BOUNCE_FOLD            SOUND identity fold for the searched Karoo bounce (BounceFoldOn, EngineFlags.h): a bounce variant whose index resolves -- on the bounce state its applied sibling already measured -- to a candidate a sibling already applied is declined BEFORE the unit charge and the apply. The variant differs from that sibling only in bounce_choice, so its apply is the sibling's apply. DEFAULT ON; MTG_BOUNCE_FOLD_VERIFY applies it anyway and compares the post-apply key.
+    PD_LINE_OK_EXACT,         // MTG_PD_LINE_OK_EXACT       Prevent Damage: the pain-aware payer's REST-OF-LINE check (dmgev::PainAwarePay, harmful mode) is EXACT -- supply: the remaining mana sources must be ASSIGNABLE to the line's coloured pips and cover its mana value (ColorFeasibility::PayablePips), not merely present (one any-colour land covered every colour; a creature counted as a mana); demand: what is owed is the line's live unpaid hold, not the plan total that re-counted casts already paid. Claude-play sweep s61001 T5 (2026-10-08): Tamanoa dropped behind a Rolling Earthquake X=2. Default ON; =0 = the legacy estimate + presence test
     COUNT
 };
 
@@ -627,6 +628,7 @@ inline const char* Name(int slot)
         "MTG_PD_PAIN_DEFER",
         "MTG_BOUNCE_SEARCH",
         "MTG_BOUNCE_FOLD",
+        "MTG_PD_LINE_OK_EXACT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
