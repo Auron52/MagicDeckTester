@@ -347,6 +347,7 @@ enum Slot : int
     PD_BESEECH_TOMB,          // MTG_PD_BESEECH_TOMB        Prevent Damage: AMENDMENT DRAFT to the USER\'s Beseech rule -- an Ancient Tomb-shaped land not held (the deck\'s only acceleration) joins Beseech\'s list. Default OFF -- the USER decides
     BOUNCE_REPLAY_PRECISE,    // MTG_BOUNCE_REPLAY_PRECISE  the bounce ORDER (BounceLandCandidates) and the search narrowing (BounceSearchCandidates' "clean replay") predict a returned land's re-entry with BounceReplayEntersUntapped (a reveal land with nothing to reveal, a fastland past its count, a checkland without its type re-enter TAPPED) instead of the card's enters_tapped param alone. DEFAULT ON (2026-10-09); =0 = the enters_tapped param read
     BOUNCE_RULE_AMEND,        // MTG_BOUNCE_RULE_AMEND      the base Karoo rule's amendment (Dragons s7007 gi959): a land's CREATURE-ONLY colours (Haven of the Spirit Dragon, Unclaimed Territory, Cavern) are not colours it makes -- neither for its own coverage nor for covering another land; and the rule decides only when ONE land qualifies -- several different qualifying lands go to the search. DEFAULT ON (2026-10-09); =0 = the unamended rule
+    RESTRICTED_MANA_RANK,     // MTG_RESTRICTED_MANA_RANK   a colored_creature_only source whose restricted colours this deck's creature spells can use number at most ONE (DeckTraits: GameState::deck_creature_pip_colors) ranks as a {C} source plus one creature-only colour, below the mono tier (ManaSourceRankBase), instead of a rainbow held last of the lands; its rebuy activation's {T} source is held through the plan's casts and its own {2}. Dragons s7007 gi959 (Haven of the Spirit Dragon). DEFAULT ON; =0 restores the historical ladder
     COUNT
 };
 
@@ -655,6 +656,7 @@ inline const char* Name(int slot)
         "MTG_PD_BESEECH_TOMB",
         "MTG_BOUNCE_REPLAY_PRECISE",
         "MTG_BOUNCE_RULE_AMEND",
+        "MTG_RESTRICTED_MANA_RANK",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

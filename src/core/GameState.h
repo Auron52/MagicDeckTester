@@ -701,6 +701,16 @@ struct GameState
     static constexpr int          kM1HandCap = 16;
     std::array<int, kM1HandCap>   m1_hand{};
     std::uint8_t                  m1_hand_n    = 0;
+    // The COLOURS this deck's CREATURE SPELLS can spend (bit c = Color c, W..G), from every creature
+    // card's coloured pips -- mainboard + sideboard (a wish reaches it), hybrid halves included;
+    // Garth holds every bit. DECK CONSTANT, stamped by StampDeckTraits. Read by the mana-source
+    // ladder (ManaSourceRankBase, MTG_RESTRICTED_MANA_RANK): a colored_creature_only source's
+    // restricted colours can pay ONLY a creature spell, so a restricted colour no creature in the
+    // list carries is no flexibility at all (Haven of the Spirit Dragon's W/U/B/G in mono-red
+    // Dragons). Defaults to all five = "every restricted colour may matter" = the historical
+    // ladder, for any state not built through StampDeckTraits. Sits in the padding after
+    // m1_hand_n, so sizeof(GameState) does not move.
+    std::uint8_t                  deck_creature_pip_colors = 0x1F;
     int                           m1_hand_turn = -1;
     // CARD-DEPENDENCY-MAP pulls (GoldFishRunner::DeriveDependencyPulls, stamped by SetupGame; see
     // docs/design/card-dependency-map.md). Closure over the deck's dependency edges: an ENABLER

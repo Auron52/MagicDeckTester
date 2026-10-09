@@ -254,6 +254,26 @@ inline bool NeedsTapOrderOn()
     return heurarm::Flag(heurarm::NEEDS_TAP_ORDER, env_on);
 }
 
+// MTG_RESTRICTED_MANA_RANK -- DEFAULT ON; =0 restores the historical ladder. A colored_creature_only
+// source (Haven of the Spirit Dragon, Cavern of Souls, Unclaimed Territory, ...) whose RESTRICTED
+// colours this deck's creature spells can use number at most ONE is ranked as what it is: a {C}
+// source plus at most one creature-only colour -- below the mono tier, so it pays (generic, and the
+// coloured pip of a creature spell) before an unrestricted land that makes the same colour, which can
+// do everything it can and more. The historical ladder read its six-entry produces list as a rainbow
+// and held it LAST of the lands (59). USER 2026-10-08 on payment: "if there was something else we
+// could have tapped for mana then we should do so". Dragons s7007 gi959: Atsushi paid with a Mountain
+// beside an untapped Haven, one firebreath short of the T5 kill. Two companions ride the same lever,
+// because the earlier tap now reaches the Haven's OWN activation (its "{2}, {T}, sacrifice" rebuy): the
+// activation's {T} source is held through the plan's cast payments (ComputePlanTraits' act-line hold)
+// and through its own {2} (a source cannot pay mana toward an ability whose {T} it owes). Read by the
+// shared provider rank, the plan traits and both rebuy apply sites (executor + rollout lockstep).
+// heurarm slot so a pooled batch carries both arms.
+inline bool RestrictedManaRankOn()
+{
+    static const bool env_on = EnvOn("MTG_RESTRICTED_MANA_RANK", true);
+    return heurarm::Flag(heurarm::RESTRICTED_MANA_RANK, env_on);
+}
+
 // MTG_PAY_ROLLBACK -- DEFAULT OFF until measured. The same-turn mana-payment rollback: see
 // src/ai/PayRollback.h. Read in the shared payment entry and both dig-gate twins (lockstep).
 inline bool PayRollbackOn()

@@ -617,11 +617,11 @@ check_gt_logs consistent 685/685.
 
 ## Open for the USER
 
-* ~~The base bounce default is not adopted~~ -- ADOPTED amended (2026-10-09, above). Engine-side, not
-  fixed here: on a board holding Haven of the Spirit Dragon the payer spends a basic on a creature
-  spell's generic and keeps the Haven untapped (its {C} is the right source; its coloured mana cannot
-  pay an ability later), which is what made the unamended rule's board a turn slower. A payment change
-  touches every deck with a creature-only source (Dragons, Minotaur) and needs its own A/B.
+* ~~The base bounce default is not adopted~~ -- ADOPTED amended (2026-10-09, above). Engine-side: on a
+  board holding Haven of the Spirit Dragon the payer spent a basic on a creature spell's generic and
+  kept the Haven untapped, which is what made the unamended rule's board a turn slower. FIXED
+  2026-10-09 (`MTG_RESTRICTED_MANA_RANK`, default ON; `docs/design/restricted-mana-rank.md`): the
+  Mountain-returned gi959 board now wins T5 at d3/20 ms and at d8 unbounded.
 * ~~Adopt?~~ Adopted with the searched bounce (above).
 * The Hinata 2HG rows alone net +6 over 400 held-out games (all budget churn); Hinata as a deck nets
   -412. Counted as one deck here, as run #1 did -- say if 2HG should be judged as its own deck.

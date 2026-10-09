@@ -31,6 +31,25 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                           std::uint64_t reserved_mask, ManaPool* available,
                           bool honor_legacy_cco);
 
+// The battlefield bit of the active player's UNTAPPED permanent numbered `card_number`, for a
+// payment that must not tap the source of the very ability it is paying for -- that source owes its
+// {T} to the ability's own cost (Haven of the Spirit Dragon's "{2}, {T}, sacrifice": tap it for the
+// {2} and the rebuy is a no-op). Install with dmgev::PayHoldScope: every attempt of the payment,
+// the unrestricted one and the backtracker included, then leaves it untapped. 0 when the source is
+// absent, already tapped, or past the 64-slot mask (the hold then simply does nothing).
+inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_number)
+{
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n && i < 64; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.card.m_number != card_number) { continue; }
+        if (p.controller_index != state.active_player_index || p.tapped) { return 0; }
+        return 1ull << i;
+    }
+    return 0;
+}
+
 // THE effective spell cost (C1 unit 2): spectacle, splice-onto-Arcane combining, affinity,
 // Medallion-style colour reduction, and Hinata's per-target discount (fixed-cost spells only --
 // {X} spells apply the discount where the chosen X is known). Was a byte-identical twin pair

@@ -2856,6 +2856,31 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
 
+// MTG_RESTRICTED_MANA_RANK (RestrictedManaRankOn, EngineFlags.h). A colored_creature_only source
+// (Haven of the Spirit Dragon, Cavern of Souls, Unclaimed Territory, Secluded Courtyard, Sliver Hive)
+// makes an unrestricted {C} plus coloured mana that can pay ONLY a creature spell. Which of those
+// colours could ever be spent in this game is the deck's question -- the colours its creature spells
+// carry (GameState::deck_creature_pip_colors). Returns the usable restricted colours as a mask when
+// the source is NARROW -- at most ONE such colour -- and -1 otherwise (lever off, not such a source,
+// or two or more usable colours). A narrow source is DOMINATED by any unrestricted source of its one
+// colour (that source pays the same generic and coloured pips, and noncreature pips besides), and it
+// dominates a {C}-only source; that is the whole argument for its rung below. A WIDE one (Sliver Hive
+// in five-colour Slivers) carries real creature flexibility -- the count prior that holds a rainbow
+// back applies to it -- so it keeps the historical rank (the measured clamp-59 tier).
+static int NarrowRestrictedMask(const GameState& s, const CardDefinition& def,
+                                const std::vector<Color>& prod)
+{
+    if (!def.params.colored_creature_only || !RestrictedManaRankOn()) { return -1; }
+    int m = 0;
+    for (Color c : prod)
+    {
+        const int ci = static_cast<int>(c);
+        if (ci < 5) { m |= 1 << ci; }
+    }
+    m &= s.deck_creature_pip_colors;
+    return (m & (m - 1)) == 0 ? m : -1;   // zero or one bit set
+}
+
 // A mana CREATURE taps AFTER every land, and a still-GROWING one taps after that.
 //
 // `BatchPrepayMainCasts` already states the doctrine for the whole-turn reserve -- "a land has no
@@ -3170,6 +3195,9 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     if (IsManaConversionSource(def.params)) { return 25; }
     const std::vector<Color>& prod = EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);
+    // A NARROW restricted source (see NarrowRestrictedMask): -1 for every other source, so the
+    // ladder below is the historical one for them.
+    const int narrow = NarrowRestrictedMask(s, def, prod);
     // SOLE-COLOUR PROVIDER (MTG_SCARCE_COLOR_HOLD's rank half -- see ScarceColorHoldEnabled in
     // SpellEffects.h for the mw326 trace): a source that is the ONLY untapped provider of one of
     // its colours taps LAST OF THE LANDS (63: past every plain-land tier and the reserve tiers
@@ -3202,6 +3230,10 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     {
         int mine = 0;
         for (Color c : prod) { if (c != Color::Colorless) { mine |= 1 << static_cast<int>(c); } }
+        // A narrow restricted source provides only the restricted colour a creature spell here can
+        // spend: Haven's W/U/B/G in mono-red Dragons are not colours to protect (nor, below, colours
+        // that make another source a non-sole provider).
+        if (narrow >= 0) { mine = narrow; }
         if (mine != 0)
         {
             int counts[5] = {};
@@ -3214,11 +3246,14 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
                                   && CanTapNow(p, s.battlefield)
                                   && GraveyardFuelLive(s, active, *d);
                 if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+                const std::vector<Color>& dprod = EffectiveProduces(s, active, *d);
+                const int dn = NarrowRestrictedMask(s, *d, dprod);
                 int seen = 0;
-                for (Color c : EffectiveProduces(s, active, *d))
+                for (Color c : dprod)
                 {
                     const int ci = static_cast<int>(c);
                     if (ci >= 5 || (seen & (1 << ci))) { continue; }
+                    if (dn >= 0 && !(dn & (1 << ci))) { continue; }
                     seen |= (1 << ci);
                     ++counts[ci];
                 }
@@ -3232,7 +3267,7 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
         }
     }
     if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice
-    const int ncol = static_cast<int>(prod.size());
+    int ncol = static_cast<int>(prod.size());
     // A COLOURLESS-ONLY source is strictly LESS flexible than a mono-COLOURED one, so scarcity-first
     // must spend it EARLIER -- its mana pays generic pips only (no card in any deck has a {C} pip),
     // while a Forest's {G} pays generic AND green. Both read as "mono" (ncol == 1) and so both
@@ -3250,6 +3285,11 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // are all deliberately held back and are returned before this point.
     bool any_colored = false;
     for (Color c : prod) { if (c != Color::Colorless) { any_colored = true; break; } }
+    // A NARROW restricted source (NarrowRestrictedMask) is a {C} source plus at most one colour that
+    // only a creature spell can spend: with no such colour it IS a {C}-only source (both rungs below
+    // -- the human-play {C}-sink hold and "least flexible" 5 -- apply to it as to any other); with
+    // one, it reads as mono here and steps one rung BELOW the mono tier after the ladder (9).
+    if (narrow >= 0) { ncol = 1; any_colored = (narrow != 0); }
     // ...UNLESS A {C} SINK IS LIVE ON OUR BOARD, in which case rank 5 is exactly backwards and the
     // {C}-only source taps LAST OF THE LANDS instead (59). The rung above rests on one premise,
     // stated in its own words: "no card in any deck has a {C} pip". That premise is FALSE for this
@@ -3290,6 +3330,11 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     { return 59; }
     int rank = (!prod.empty() && !any_colored) ? 5                    // {C}-only: least flexible
              : (ncol <= 1 ? 10 : ncol * 10);                          // mono=10 dual=20 tri=30 rainbow=50
+    // The restricted-mono rung: below every unrestricted mono source (which pays all it pays, and a
+    // noncreature pip besides), above a {C}-only one (which pays a subset of it). Dragons s7007 gi959:
+    // Haven of the Spirit Dragon ranked 59 here, so Atsushi's {2} tapped a Mountain and the Haven
+    // stayed up -- its {C} unable to firebreathe -- and the T5 kill was one {R} short.
+    if (narrow > 0) { rank -= 1; }
     // A COLOUR-producing land must not sit in the colourless-manland RESERVE tier (60): its {C} mode
     // pushes ncol to 6 and collides with Mutavault's save-to-attack rank, stranding the manland's
     // attack. Keep it just below (docs/design/slivers-restricted-mana-tap-order-bug.md).

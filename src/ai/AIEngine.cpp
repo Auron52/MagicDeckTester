@@ -5056,8 +5056,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::GraveyardReturnAbility)
         {
-            // Haven of the Spirit Dragon (executor mirror of the rollout's trailing pass).
+            // Haven of the Spirit Dragon (executor mirror of the rollout's trailing pass). The Haven
+            // never pays its own {2} (MTG_RESTRICTED_MANA_RANK; lockstep with TurnSolver's site).
             ManaPool avail = AvailableManaPool(state);
+            dmgev::PayHoldScope _self_hold(dmgev::t_pay_hold
+                | (RestrictedManaRankOn() ? SelfTapSourceHoldBit(state, a.sac_source_id) : 0ull));
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
                 ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,

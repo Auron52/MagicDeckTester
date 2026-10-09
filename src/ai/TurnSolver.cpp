@@ -34082,6 +34082,20 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
                 if (!dup) { t.act_src_nums[t.act_src_count++] = a.sac_source_id; }
             }
         }
+        // Haven of the Spirit Dragon's rebuy ("{2}, {T}, sacrifice") taps its source as part of its
+        // cost, and since MTG_RESTRICTED_MANA_RANK ranks a narrow Haven FIRST for payment, a cast
+        // earlier in the same plan would otherwise tap it for mana and leave the rebuy a no-op. Held
+        // like any other {T} activation source (its {2} adds no coloured pips). Same lever, so the
+        // control arm is the historical traits exactly.
+        if (a.kind == Action::Kind::GraveyardReturnAbility && ActLineHoldEnabled()
+            && RestrictedManaRankOn() && a.sac_source_id > 0
+            && t.act_src_count < PlanTraits::kMaxActSrcs)
+        {
+            bool dup = false;
+            for (int k = 0; k < t.act_src_count; ++k)
+            { if (t.act_src_nums[k] == a.sac_source_id) { dup = true; break; } }
+            if (!dup) { t.act_src_nums[t.act_src_count++] = a.sac_source_id; }
+        }
         // Own-board hazard (PlanTraits::own_board_hazard): every kind but a plain cast, a land, a
         // Vial put or a pump can reach our own permanents (a ping, a sac outlet, a fling, ...).
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
@@ -39939,6 +39953,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Haven of the Spirit Dragon: pay {2}, then tap+sacrifice the land and return the chosen
             // Dragon. Same stranded-outlet safety as above (the land may have been tapped for mana
             // by an earlier cast in this very plan, or the target may already be gone).
+            // MTG_RESTRICTED_MANA_RANK: the Haven itself never pays its own {2} (it ranks FIRST
+            // now); lockstep with the executor's mirror in AIEngine.
+            dmgev::PayHoldScope _self_hold(dmgev::t_pay_hold
+                | (RestrictedManaRankOn() ? SelfTapSourceHoldBit(state, a.sac_source_id) : 0ull));
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,

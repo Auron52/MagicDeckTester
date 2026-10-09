@@ -368,6 +368,10 @@ static_assert(sizeof(Player) == 200,
 // +bool (2026-10-06, SelesnyaLifegain keep-gen bulk cost; no size change -- existing padding):
 // `deck_has_land_aura`. Classification: DECK CONSTANT, stamped once in StampDeckTraits and never
 // written again; it only skips land-Aura walks that provably find nothing -- nothing to fold.
+// +uint8 (2026-10-09, restricted-mana rank; no size change -- the padding after m1_hand_n):
+// `deck_creature_pip_colors`. Classification: DECK CONSTANT, stamped once in StampDeckTraits and
+// never written again, so it is identical across every pair of states Build() compares -- nothing to
+// fold. It decides only which source a payment taps; the tapped sources are already folded.
 static_assert(sizeof(GameState) == 1072,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
