@@ -22882,6 +22882,11 @@ static bool GiantsBucketDiscardEnabled()
     return heurarm::Flag(heurarm::GIANTS_BUCKET_DISCARD, on);
 }
 
+bool GiantsProvider::CleanupDiscardShedStable() const
+{
+    return !GiantsBucketDiscardEnabled();
+}
+
 std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -23056,8 +23061,9 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
             const Card& o = ap.hand[static_cast<std::size_t>(j)];
             if (!o.m_is_staged && o.m_name == hc.m_name) { ++copies; }
         }
-        for (const Permanent& p : s.battlefield)
-        { if (p.controller_index == me && p.card.m_name == hc.m_name) { ++copies; } }
+        // Copies AHEAD IN HAND only (proposal P3 "copies_ahead"): a copy already in play is paid for,
+        // so it adds nothing to this copy's distance (review finding 2026-10-09 -- charging it priced
+        // a hand Inferno Titan beside a resolved one at 12 mana and shed the deck's best Giant first).
         const int pos = value_pos(d->params);
         vpos[static_cast<std::size_t>(i)] = pos;
         ev[static_cast<std::size_t>(i)]   = p_play(eff * (1 + copies) - reach)
