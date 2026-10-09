@@ -1994,7 +1994,7 @@ finisher); Ancient Tomb is the deck's only acceleration. Every gate-tier slower 
 line Beseeched in the old line -- most for Rolling Earthquake, cast the same turn or the next as the
 kill.
 
-### Amendment drafts (default OFF; the USER decides)
+### Amendment drafts (measured 2026-10-09; FIN_ALWAYS + TOMB ADOPTED by the USER the same day -- see the decisions below)
 
 - `MTG_PD_BESEECH_FINISHER`: once a gain creature (Tamanoa) is on our battlefield and a drain creature
   (Vito / Dina) on it or in hand, the damage sources not held (Manabarbs, Spellshock, Rolling Earthquake,
@@ -2065,14 +2065,12 @@ searched play at ~0.65x units.
 
 ### Open USER decisions (Beseech / Wish, 2026-10-09; defaults taken in brackets)
 
-1. **The Beseech rule's cost in searched play.** As shipped it is cheapest (~0.6x units) but plays
-   +0.014 t/game slower than unpruned in searched games (pooled, 5,700) and most of its slower games do
-   not recover. Recommended amendment: **`MTG_PD_BESEECH_FIN_ALWAYS` + `MTG_PD_BESEECH_TOMB`** --
-   "engine creatures, the damage sources and Ancient Tomb; skip duplicates": searched -0.005 vs
-   unpruned at 0.65x units, 12 unrecovered of 33 (the shipped rule: 65 of 89). FIN_ALWAYS alone:
-   pooled -0.005 vs unpruned at 0.64x. Narrowest: `MTG_PD_BESEECH_FINISHER` (neutral at 0.59x). None of
-   them clears the recovery bar outright (the rest are Green Sun's Zenith and land fetches).
-   [shipped rule unchanged; amendments OFF]
+1. ~~The Beseech rule's cost in searched play~~ -- **DECIDED 2026-10-09 (USER: "Okay, we could do the
+   beseech rule you mentioned.")**: the doctrine is now "engine creatures, then the damage sources and an
+   Ancient Tomb-shaped land; skip duplicates", folded into `MTG_PD_BESEECH_USEFUL` (default ON; the
+   separate FINISHER / FIN_ALWAYS / TOMB levers are deleted -- FIN_ALWAYS subsumes FINISHER). Measured as
+   the `finAT` arm above: searched -0.005 t/game vs unpruned at 0.65x units, 12 unrecovered of 33 (the
+   remainder are Green Sun's Zenith and land fetches). Unit tests B1-B3. Gate + GT: see below.
 2. The all-duplicates fallback: the duplicates vs the whole library measured equal. [the duplicates]
 3. `MTG_PD_WISH_LAND_CAST` (the "always Battlefield Forge" counterexample): correct on s61013 (takes
    Brushland), 0 win-turn changes in 4,900 games. [OFF]

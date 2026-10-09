@@ -424,14 +424,15 @@ const std::vector<std::string> kBeseechLib = { "Tamanoa", kDinaW, kVitoW, kRhoxW
 const std::vector<std::string> kFourLands = { "City of Brass", "Grand Coliseum", "Ancient Tomb", "Brushland" };
 }
 
-TEST_CASE("PD beseech B1: the search offers Beseech only the engine creatures we do not already have")
+TEST_CASE("PD beseech B1: engine creatures, then the damage sources, each only if we do not already have one")
 {
-    // Tamanoa on the battlefield and Vito in hand are duplicates; Dina and Rhox (MV 4 <= 4 lands) stay.
+    // Tamanoa on the battlefield and Vito in hand are duplicates; Dina and Rhox (MV 4 <= 4 lands) stay,
+    // then the damage sources Manabarbs and Spellshock. Green Sun's Zenith and City of Brass go.
     std::vector<std::string> board = kFourLands;
     board.push_back("Tamanoa");
     const GameState s = MakeW({ "Beseech the Queen", kVitoW }, board, kBeseechLib);
     const std::vector<std::string> on = Beseech(s);
-    CHECK(on == std::vector<std::string>{ kDinaW, kRhoxW });
+    CHECK(on == std::vector<std::string>{ kDinaW, kRhoxW, "Manabarbs", "Spellshock" });
     // Control: the lever off -> every legal name (Tamanoa, Vito, the damage sources, the Zenith, a land).
     heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = 0;
     const std::vector<std::string> off = Beseech(s);
@@ -441,62 +442,35 @@ TEST_CASE("PD beseech B1: the search offers Beseech only the engine creatures we
     { CHECK(Pos(off, nm) >= 0); }
 }
 
-TEST_CASE("PD beseech B2: every fetchable engine creature a duplicate -> those duplicates; none fetchable -> every name")
+TEST_CASE("PD beseech B2: only duplicates left -> the engine duplicates; nothing fetchable -> every name")
 {
     std::vector<std::string> board = kFourLands;
     board.push_back("Tamanoa");
-    const GameState s = MakeW({ "Beseech the Queen", kVitoW, kDinaW, kRhoxW }, board, kBeseechLib);
+    // Every engine creature held, no damage source or Tomb left: the engine duplicates.
+    const GameState s = MakeW({ "Beseech the Queen", kVitoW, kDinaW, kRhoxW }, board,
+                              { "Tamanoa", kDinaW, kVitoW, kRhoxW, "City of Brass", "Green Sun's Zenith" });
     CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW, kVitoW, kRhoxW });
-    // No engine creature left in the library: the whole list (a Beseech is never made unfetchable).
+    // A damage source not held outranks the duplicates.
+    const GameState u = MakeW({ "Beseech the Queen", kVitoW, kDinaW, kRhoxW }, board, kBeseechLib);
+    CHECK(Beseech(u) == std::vector<std::string>{ "Manabarbs", "Spellshock" });
+    // No engine creature, damage source or Tomb fetchable: the whole list (never unfetchable).
     const GameState t = MakeW({ "Beseech the Queen" }, kFourLands,
-                              { "City of Brass", "Manabarbs", "Spellshock", "Green Sun's Zenith" });
+                              { "City of Brass", "Green Sun's Zenith", "Karplusan Forest" });
     heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = 0;
     const std::vector<std::string> off = Beseech(t);
     heurarm::t_arm[heurarm::PD_BESEECH_USEFUL] = -1;
     CHECK(Beseech(t) == off);
-    CHECK(off.size() == 4);
+    CHECK(off.size() == 3);
 }
 
-TEST_CASE("PD beseech B3: MTG_PD_BESEECH_FINISHER (amendment draft) -- an assembled engine adds the damage sources not held")
+TEST_CASE("PD beseech B3: an Ancient Tomb joins -- unless we already hold one")
 {
-    // Tamanoa on the battlefield, Vito in hand: the engine is assembled, so Manabarbs and Spellshock
-    // join after the engine creatures (Vito, held, stays out).
-    std::vector<std::string> board = kFourLands;
-    board.push_back("Tamanoa");
-    const GameState s = MakeW({ "Beseech the Queen", kVitoW }, board, kBeseechLib);
-    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = 1;
-    const std::vector<std::string> on = Beseech(s);
-    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = -1;
-    CHECK(on == std::vector<std::string>{ kDinaW, kRhoxW, "Manabarbs", "Spellshock" });
-    CHECK(Beseech(s) == std::vector<std::string>{ kDinaW, kRhoxW });   // control: the shipped rule
-    // No drain creature anywhere: not assembled, the amendment adds nothing.
-    const GameState t = MakeW({ "Beseech the Queen" }, board, kBeseechLib);
-    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = 1;
-    const std::vector<std::string> none = Beseech(t);
-    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = -1;
-    CHECK(Pos(none, "Manabarbs") < 0);
-}
-
-TEST_CASE("PD beseech B4: MTG_PD_BESEECH_FIN_ALWAYS / MTG_PD_BESEECH_TOMB (amendment drafts)")
-{
-    // Nothing assembled (no Tamanoa anywhere): FIN_ALWAYS still adds the damage sources; TOMB adds an
-    // Ancient Tomb in the library. Four lands -> MV <= 4.
+    // kFourLands holds an Ancient Tomb on the battlefield: the library's Tomb is a duplicate.
     const GameState s = MakeW({ "Beseech the Queen" }, kFourLands,
-                              { "Tamanoa", kDinaW, "Manabarbs", "Spellshock", "Ancient Tomb", "City of Brass" });
-    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW });            // control: the shipped rule
-    heurarm::t_arm[heurarm::PD_BESEECH_FIN_ALWAYS] = 1;
-    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW, "Manabarbs", "Spellshock" });
-    heurarm::t_arm[heurarm::PD_BESEECH_FIN_ALWAYS] = -1;
-    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = 1;                              // not assembled: nothing
-    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW });
-    heurarm::t_arm[heurarm::PD_BESEECH_FINISHER] = -1;
-    // kFourLands holds an Ancient Tomb on the battlefield -- a DUPLICATE, so TOMB adds nothing here...
-    heurarm::t_arm[heurarm::PD_BESEECH_TOMB] = 1;
-    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW });
-    // ...and adds it when none is held.
+                              { "Tamanoa", kDinaW, "Rolling Earthquake", "Ancient Tomb", "City of Brass" });
+    CHECK(Beseech(s) == std::vector<std::string>{ "Tamanoa", kDinaW, "Rolling Earthquake" });
+    // No Tomb held: it joins after the engine creatures, in library order with the damage sources.
     const GameState t = MakeW({ "Beseech the Queen" }, { "City of Brass", "Grand Coliseum", "Brushland", "Karplusan Forest" },
-                              { "Tamanoa", kDinaW, "Manabarbs", "Ancient Tomb", "City of Brass" });
-    CHECK(Beseech(t) == std::vector<std::string>{ "Tamanoa", kDinaW, "Ancient Tomb" });
-    heurarm::t_arm[heurarm::PD_BESEECH_TOMB] = -1;
-    CHECK(Beseech(t) == std::vector<std::string>{ "Tamanoa", kDinaW });
+                              { "Tamanoa", kDinaW, "Rolling Earthquake", "Ancient Tomb", "City of Brass" });
+    CHECK(Beseech(t) == std::vector<std::string>{ "Tamanoa", kDinaW, "Rolling Earthquake", "Ancient Tomb" });
 }
