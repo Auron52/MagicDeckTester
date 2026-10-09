@@ -16287,17 +16287,17 @@ bool FluctuatorProvider::DigResolveEvenOnLand(const GameState& s) const
 // That phantom told the stop-on-threat rule the deck already held its route, so it STOPPED
 // CYCLING a turn early, every time a Capital City was out. It is the same over-credit the flat
 // pool caps in AnyColorFilterFedSlots, in this rule's own currency.
-static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cost)
+// `extra_land` (optional) is one more land counted as ours -- the cleanup-discard policy's "lands in
+// play + an untapped land drop from hand" next-turn test; nullptr is the plain board question.
+static bool FluctuatorRouteReachableWith(const GameState& s, const CardDefinition* extra_land,
+                                         const ManaCost& cost)
 {
     const int me = s.active_player_index;
     int lands = 0;
     bool w=false,u=false,b=false,r=false,g=false;             // plain: colour costs one land
     bool cw=false,cu=false,cb=false,cr=false,cg=false;        // conversion: costs one land MORE
-    for (const Permanent& p : s.battlefield)
+    auto credit = [&](const CardDefinition* d)
     {
-        if (p.controller_index != me) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->card.IsLand()) { continue; }
         ++lands;
         const bool conv = IsManaConversionSource(d->params);
         for (Color c : d->params.produces)
@@ -16308,7 +16308,15 @@ static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cos
                          case Color::Red:   (conv?cr:r)=true; break;
                          case Color::Green: (conv?cg:g)=true; break; default: break; }
         }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        credit(d);
     }
+    if (extra_land != nullptr && extra_land->card.IsLand()) { credit(extra_land); }
     // Each required colour only a conversion source can make needs its OWN feed, so it costs one
     // extra land on top of the cost's mana value. Exactly the min(F, (F+S)/2) arithmetic restated:
     // {1}{R} off two lands where only a Capital City makes red wants 3 lands, and four Capital
@@ -16320,6 +16328,10 @@ static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cos
     if (cost.red   && !r) { if (!cr) { return false; } ++extra; }
     if (cost.green && !g) { if (!cg) { return false; } ++extra; }
     return lands >= cost.ManaValue() + extra;
+}
+static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cost)
+{
+    return FluctuatorRouteReachableWith(s, nullptr, cost);
 }
 
 // FluctuatorCanPayNow -- can the lands we can tap RIGHT NOW (untapped only) pay `cost`? The
@@ -16760,6 +16772,428 @@ const std::vector<std::string>* FluctuatorProvider::InterchangeableRequiredGroup
     static const std::vector<std::string> kEnablers = { "Fluctuator", "Enlightened Tutor" };
     if (name == "Fluctuator" || name == "Enlightened Tutor") { return &kEnablers; }
     return nullptr;
+}
+
+// ---- FluctuatorProvider::CleanupDiscardCandidates (USER design, 2026-10-09) ----------------------
+//
+// THE USER'S BUCKETS, docs/design/fluctuator-discard-policy-proposal.md "Fluctuator: SETTLED" (the
+// proposal below that section is background: card census, rationale). 55 of 60 cards cycle, so a
+// cleanup shed is a COST (1-for-0 against cycling's 1-for-1) and never cheapens Hollow One (its
+// counter resets at untap). Index 0 is the card whose loss costs least.
+//
+// KEEP (most-kept first; quotas count the board):
+//   1 ENABLER, one: a Fluctuator, else Enlightened Tutor; NONE once a Fluctuator is in play.
+//   2 Drannith Stinger (quota 1, the board fills it).
+//   3 Unearth, 1 always -- "half the wincon", even over an empty graveyard.
+//   4 a red + a black source (net of board).
+//   5 Hollow One, 1 (net of board) -- USER "keep 1 above surplus lands".
+//   6 lands to 3 counting board while a Fluctuator is in play or held (USER: a held Enlightened
+//     Tutor counts as held), 4 with no enabler anywhere -- USER: "Goldfish doesn't play more than 2-3
+//     lands, since you usually cast Fluctuator and then land the stinger next turn. Maybe 4 without
+//     fluctuator?". SKIPPED while HoldFuelWhileComboing (the land drop is skipped then, so a land is
+//     ammunition only): colours only.
+//   7 a 2nd Stinger, then a 2nd Unearth, under close-out failure (FluctuatorWantsSecondThreat, the
+//     dig side's own expression, so the two never disagree); the 2nd Unearth also needs a target
+//     (a Stinger in the graveyard or in hand).
+//   8 a W source while the Tutor is the kept enabler.
+//   Land keep order (rungs 4/6/8): Capital City > a land with a missing relevant colour (R, B; W only
+//   with the Tutor kept; U/G never) -- Canyon Slough first -- > untapped (Blasted Landscape) >
+//   tapped, colour covered > tapped, no relevant colour.
+// SHED (most expendable first): S0 a 2nd Fluctuator / spare Tutor (Fluctuator first) > S1 Forsake
+//   the Worldly (goldfish_inert) > S2 Stinger-for-Unearth > S2b Hollow One (no reachable enabler,
+//   reach < 5) > S3 lands past the count (no-colour tapped > covered tapped > untapped > missing
+//   colour > Capital City) > S4 spare Hollow One > S5 spare Unearth > S6 spare Stinger > the KEEP
+//   ladder read backwards. Ties: lowest m_number sheds first (the SelectDigSource lockstep).
+//
+// S2, USER (tightened): shed a Stinger ahead of surplus lands only when Unearth's {B} is payable (the
+// lands we control, FluctuatorCastRouteReachable), no Stinger-class target is in the graveyard, AND
+// the Stinger's {1}{R} cannot be paid NEXT turn either -- lands in play + one untapped land drop from
+// hand ("Capital City needs a feed, Blasted Landscape is colourless"). "If it can, hardcasting is as
+// fast and keeps Unearth." One Stinger only: one target is all the Unearth needs.
+// S2b, USER: Hollow One "drops below [surplus lands] only while no Fluctuator is in play or castable
+// and reach < 5 mana".
+//
+// AGENT READINGS (listed in the design doc's implementation notes for the USER to overturn):
+//   * colour COVERAGE is by a PLAIN source (non-conversion land) on our battlefield or already kept.
+//     Capital City (any_color_filter) is a conversion source -- its colour costs a feed -- so it
+//     covers a colour only when no plain source of that colour is in hand (it is then the rung-4
+//     fallback); it still ranks first among the count lands.
+//   * `reach` = lands on our battlefield + lands in hand. An enabler is "castable" within reach: a
+//     Fluctuator at reach >= 2; an Enlightened Tutor at reach >= 2 with a W source (or Capital City)
+//     among those lands -- the SHED list says "no reachable enabler", the Tutor being one.
+//   * W is relevant only while the Tutor is the KEPT enabler (a spare Tutor sheds first anyway).
+//   * rung 4 ties among single-colour R/B sources prefer one that also gives a missing W.
+//   * Hollow One's quota is net of board (a Hollow One in play fills it), per the proposal's B4.
+//   * S2 has no board condition (the SETTLED text names none); the 2nd Unearth's target is "a Stinger
+//     in the yard or in hand", without FluctuatorSecondThreatLive's route leg.
+//   * Enlightened Tutor counts as an enabler whatever the library holds (the USER rule is by role).
+static bool FluctBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_FLUCT_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::FLUCT_BUCKET_DISCARD, on);
+}
+static bool FluctIsEnabler(const CardDefinition* d)   // Fluctuator
+{ return d != nullptr && d->params.reduces_cycling_activation > 0; }
+static bool FluctIsEnablerFinder(const CardDefinition* d)   // Enlightened Tutor: finds an Artifact
+{
+    if (d == nullptr || !d->params.tutor_to_top) { return false; }
+    for (const std::string& t : d->params.tutor_types) { if (t == "Artifact") { return true; } }
+    return false;
+}
+
+// "exactly ONE of {Fluctuator, Enlightened Tutor} protected, Fluctuator first, and NONE once a
+// Fluctuator is in play" (USER). The profile (required_pieces [Fluctuator, Enlightened Tutor], no
+// discard_protect -> scope All) protects EVERY copy, which is also what the mulligan reads, so the
+// discard half is taken over here. Waived: any hand enabler while a Fluctuator is on our battlefield;
+// a Tutor while a Fluctuator is in hand; a copy while another copy of the same name is in hand. The
+// shed order then keeps exactly one (the KEEP ladder's rung 1, a Fluctuator first). What stays
+// protected is the lone enabler -- the one rung 1 keeps anyway.
+bool FluctuatorProvider::CleanupDiscardProtectionWaived(const GameState& s, const Card& c) const
+{
+    if (!FluctBucketDiscardEnabled()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    const bool is_f = FluctIsEnabler(d);
+    const bool is_t = !is_f && FluctIsEnablerFinder(d);
+    if (!is_f && !is_t) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && FluctIsEnabler(CardDatabase::Instance().LookupCached(p.card)))
+        { return true; }
+    }
+    int same_name = 0;
+    bool hand_fluct = false;
+    for (const Card& h : s.players[me].hand)
+    {
+        if (h.m_is_staged) { continue; }
+        if (h.m_name == c.m_name) { ++same_name; }
+        if (FluctIsEnabler(CardDatabase::Instance().LookupCached(h))) { hand_fluct = true; }
+    }
+    if (same_name >= 2) { return true; }
+    return is_t && hand_fluct;
+}
+
+bool FluctuatorProvider::CleanupDiscardShedStable() const
+{
+    return !FluctBucketDiscardEnabled();
+}
+
+std::vector<int> FluctuatorProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!FluctBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    enum : int { kW = 0, kB = 1, kR = 2 };   // the deck's relevant colours (U/G cast nothing)
+    auto colour_slot = [](Color c) -> int
+    { return c == Color::White ? kW : c == Color::Black ? kB : c == Color::Red ? kR : -1; };
+
+    // ---- 1. board census -----------------------------------------------------------------------
+    int  bf_fluct = 0, bf_sting = 0, bf_hollow = 0, board_lands = 0;
+    bool plain_cov[3] = { false, false, false };   // a PLAIN source of the colour, board or kept
+    bool conv_cov = false;                          // a conversion source (Capital City), board or kept
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand())
+        {
+            ++board_lands;
+            if (IsManaConversionSource(d->params)) { conv_cov = true; }
+            else { for (Color c : d->params.produces) { const int k = colour_slot(c); if (k >= 0) { plain_cov[k] = true; } } }
+        }
+        if (FluctIsEnabler(d))                                    { ++bf_fluct; }
+        if (d->params.cycle_trigger_damage_each_opponent > 0)     { ++bf_sting; }
+        if (d->params.cost_less_per_cycle_or_discard > 0)         { ++bf_hollow; }
+    }
+
+    // ---- 2. hand classification ----------------------------------------------------------------
+    enum Cls : char { C_NONE, C_FLUCT, C_TUTOR, C_STING, C_UNEARTH, C_HOLLOW, C_FODDER, C_LAND };
+    std::vector<char> cls(static_cast<std::size_t>(n), C_NONE);
+    std::vector<const CardDefinition*> defs(static_cast<std::size_t>(n), nullptr);
+    bool hand_plain[3] = { false, false, false };   // a plain source of the colour among hand lands
+    bool hand_conv = false;
+    int  hand_lands = 0, unearth_cap = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[static_cast<std::size_t>(i)] = d;
+        char& c = cls[static_cast<std::size_t>(i)];
+        if (CleanupDiscardIsLand(hc))
+        {
+            c = C_LAND; ++hand_lands;
+            if (d != nullptr)
+            {
+                if (IsManaConversionSource(d->params)) { hand_conv = true; }
+                else { for (Color col : d->params.produces) { const int k = colour_slot(col); if (k >= 0) { hand_plain[k] = true; } } }
+            }
+            continue;
+        }
+        if (d == nullptr)                                       { c = C_FODDER; continue; }
+        const CardParams& pp = d->params;
+        if (FluctIsEnabler(d))                                  { c = C_FLUCT; }
+        else if (FluctIsEnablerFinder(d))                       { c = C_TUTOR; }
+        else if (pp.cycle_trigger_damage_each_opponent > 0)     { c = C_STING; }
+        else if (pp.reanimate_creature_max_mv > 0)
+        { c = C_UNEARTH; unearth_cap = std::max(unearth_cap, pp.reanimate_creature_max_mv); }
+        else if (pp.cost_less_per_cycle_or_discard > 0)         { c = C_HOLLOW; }
+        else                                                    { c = C_FODDER; }   // Forsake (goldfish_inert) & any stray
+    }
+    // Per-class lists, SHED-first (lowest m_number, then hand index). The keep ladder takes from the
+    // BACK of each, so within a class the lowest m_number is always the most expendable copy.
+    auto shed_before = [&](int a, int b)
+    {
+        const int na = ap.hand[static_cast<std::size_t>(a)].m_number;
+        const int nb = ap.hand[static_cast<std::size_t>(b)].m_number;
+        return na != nb ? na < nb : a < b;
+    };
+    std::vector<int> flucts, tutors, stings, unearths, hollows, fodder, lands;
+    for (int i = 0; i < n; ++i)
+    {
+        switch (cls[static_cast<std::size_t>(i)])
+        {
+            case C_FLUCT:   flucts.push_back(i);   break;
+            case C_TUTOR:   tutors.push_back(i);   break;
+            case C_STING:   stings.push_back(i);   break;
+            case C_UNEARTH: unearths.push_back(i); break;
+            case C_HOLLOW:  hollows.push_back(i);  break;
+            case C_FODDER:  fodder.push_back(i);   break;
+            case C_LAND:    lands.push_back(i);    break;
+            default: break;
+        }
+    }
+    for (std::vector<int>* v : { &flucts, &tutors, &stings, &unearths, &hollows, &lands })
+    { std::sort(v->begin(), v->end(), shed_before); }
+    // goldfish_inert first inside S1 (an unknown card is still fodder, after it).
+    std::sort(fodder.begin(), fodder.end(), [&](int a, int b)
+    {
+        const CardDefinition* da = defs[static_cast<std::size_t>(a)];
+        const CardDefinition* db = defs[static_cast<std::size_t>(b)];
+        const bool ia = da != nullptr && da->params.goldfish_inert;
+        const bool ib = db != nullptr && db->params.goldfish_inert;
+        if (ia != ib) { return ia; }
+        return shed_before(a, b);
+    });
+
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  ladder;   // the KEEP ladder, in keep order
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; ladder.push_back(i); };
+    auto last_free = [&](const std::vector<int>& v) -> int   // the most-kept free copy
+    {
+        for (auto it = v.rbegin(); it != v.rend(); ++it)
+        { if (!keep[static_cast<std::size_t>(*it)]) { return *it; } }
+        return -1;
+    };
+
+    // ---- 3. state facts ------------------------------------------------------------------------
+    const int  reach        = board_lands + hand_lands;
+    const bool enabler_held = bf_fluct > 0 || !flucts.empty() || !tutors.empty();
+    const bool close_fail   = FluctuatorWantsSecondThreat(s);
+    const bool going_off    = HoldFuelWhileComboing(s, me);
+    bool yard_target = false;   // a Stinger-class creature card the held Unearth can return
+    for (const Card& g : ap.graveyard)
+    {
+        const CardDefinition* d = def_of(g);
+        if (d != nullptr && d->card.IsCreature() && d->params.cycle_trigger_damage_each_opponent > 0
+            && static_cast<int>(d->card.m_mana_cost.ManaValue()) <= (unearth_cap > 0 ? unearth_cap : 3))
+        { yard_target = true; break; }
+    }
+    // S2b: is an enabler reachable? (agent reading: "castable within reach")
+    const bool w_reach = plain_cov[kW] || hand_plain[kW] || conv_cov || hand_conv;
+    const bool enabler_reachable = bf_fluct > 0
+                                || (!flucts.empty() && reach >= 2)
+                                || (!tutors.empty() && reach >= 2 && w_reach);
+    const bool hollow_shed_early = !enabler_reachable && reach < 5;
+
+    // ---- 4. the KEEP ladder ----------------------------------------------------------------------
+    // Rung 1 -- the ENABLER: one, a Fluctuator first; none once one is in play.
+    bool kept_tutor = false;
+    if (bf_fluct == 0)
+    {
+        if (!flucts.empty())      { take(flucts.back()); }
+        else if (!tutors.empty()) { take(tutors.back()); kept_tutor = true; }
+    }
+    // S2 -- Stinger-for-Unearth (decided before the Stinger rung: the shed copy is not a keep).
+    int s2_idx = -1;
+    if (!stings.empty() && !yard_target)
+    {
+        bool rebuy_payable = false;
+        for (int i : unearths)
+        {
+            if (FluctuatorCastRouteReachable(s, defs[static_cast<std::size_t>(i)]->card.m_mana_cost))
+            { rebuy_payable = true; break; }
+        }
+        if (rebuy_payable)
+        {
+            const ManaCost& sc = defs[static_cast<std::size_t>(stings.front())]->card.m_mana_cost;
+            bool hardcast_next_turn = FluctuatorRouteReachableWith(s, nullptr, sc);
+            for (int i : lands)
+            {
+                if (hardcast_next_turn) { break; }
+                const CardDefinition* ld = defs[static_cast<std::size_t>(i)];
+                if (ld != nullptr && !ld->params.enters_tapped)   // a land that can tap the turn it drops
+                { hardcast_next_turn = FluctuatorRouteReachableWith(s, ld, sc); }
+            }
+            if (!hardcast_next_turn) { s2_idx = stings.front(); keep[static_cast<std::size_t>(s2_idx)] = 1; }
+        }
+    }
+    // Rung 2 -- the Stinger (the board fills the slot).
+    if (bf_sting < 1) { const int i = last_free(stings); if (i >= 0) { take(i); } }
+    // Rung 3 -- Unearth, 1 always.
+    { const int i = last_free(unearths); if (i >= 0) { take(i); } }
+
+    // Land helpers. covered(): a plain source on board / kept, or Capital City (board / kept) where no
+    // plain source of that colour is in hand at all. W is relevant only while the Tutor is the kept
+    // enabler (Forsake the Worldly is goldfish_inert; U/G cast nothing -- user ruling 2026-09-06).
+    const bool rel[3] = { kept_tutor, true, true };   // W, B, R
+    auto covered = [&](int k) { return plain_cov[k] || (conv_cov && !hand_plain[k]); };
+    auto credit_kept_land = [&](int i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { return; }
+        if (IsManaConversionSource(d->params)) { conv_cov = true; return; }
+        for (Color c : d->params.produces) { const int k = colour_slot(c); if (k >= 0) { plain_cov[k] = true; } }
+    };
+    auto missing_given = [&](int i, int k_from, int k_to) -> int   // relevant uncovered colours it adds
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr || IsManaConversionSource(d->params)) { return 0; }
+        int m = 0;
+        for (Color c : d->params.produces)
+        {
+            const int k = colour_slot(c);
+            if (k >= k_from && k <= k_to && rel[k] && !covered(k)) { ++m; }
+        }
+        return m;
+    };
+    auto produces_rel = [&](int i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { return false; }
+        for (Color c : d->params.produces) { const int k = colour_slot(c); if (k >= 0 && rel[k]) { return true; } }
+        return false;
+    };
+    auto untapped = [&](int i)
+    { const CardDefinition* d = defs[static_cast<std::size_t>(i)]; return d != nullptr && !d->params.enters_tapped; };
+    auto is_conv = [&](int i)
+    { const CardDefinition* d = defs[static_cast<std::size_t>(i)]; return d != nullptr && IsManaConversionSource(d->params); };
+    // Land keep rank, lower = keep first: 1 Capital City, 2 a missing relevant colour (more first),
+    // 3 untapped, 4 tapped with a covered relevant colour, 5 tapped with no relevant colour.
+    auto land_rank = [&](int i) -> int
+    {
+        if (is_conv(i)) { return 10; }
+        const int m = missing_given(i, kW, kR);
+        if (m > 0)        { return 20 + (3 - m); }
+        if (untapped(i))  { return 30; }
+        if (produces_rel(i)) { return 40; }
+        return 50;
+    };
+    auto best_land = [&](auto&& better) -> int   // the most-kept free land under `better`
+    {
+        int best = -1;
+        for (auto it = lands.rbegin(); it != lands.rend(); ++it)   // most-kept copy first on ties
+        {
+            const int i = *it;
+            if (keep[static_cast<std::size_t>(i)]) { continue; }
+            if (best < 0 || better(i, best)) { best = i; }
+        }
+        return best;
+    };
+    int kept_lands = board_lands;
+    auto take_land = [&](int i) { take(i); credit_kept_land(i); ++kept_lands; };
+
+    // Rung 4 -- a red and a black source, net of board.
+    for (;;)
+    {
+        if (covered(kR) && covered(kB)) { break; }
+        const int pick = best_land([&](int a, int b)
+        {
+            const int ma = missing_given(a, kB, kR), mb = missing_given(b, kB, kR);
+            if (ma != mb) { return ma > mb; }
+            const bool wa = kept_tutor && missing_given(a, kW, kW) > 0;   // agent tie-break: also W
+            const bool wb = kept_tutor && missing_given(b, kW, kW) > 0;
+            if (wa != wb) { return wa; }
+            return untapped(a) && !untapped(b);
+        });
+        if (pick >= 0 && missing_given(pick, kB, kR) > 0) { take_land(pick); continue; }
+        // No plain source left for a missing colour: Capital City is the fallback fixer.
+        const int city = best_land([&](int a, int b) { return is_conv(a) && !is_conv(b); });
+        if (city >= 0 && is_conv(city)) { take_land(city); continue; }
+        break;
+    }
+    // Rung 5 -- Hollow One, 1 net of board (shed early instead, S2b, with no reachable enabler).
+    if (!hollow_shed_early && bf_hollow < 1) { const int i = last_free(hollows); if (i >= 0) { take(i); } }
+    // Rung 6 -- lands to the count (skipped while going off: colours only).
+    if (!going_off)
+    {
+        const int count = enabler_held ? 3 : 4;
+        while (kept_lands < count)
+        {
+            const int pick = best_land([&](int a, int b) { return land_rank(a) < land_rank(b); });
+            if (pick < 0) { break; }
+            take_land(pick);
+        }
+    }
+    // Rung 7 -- the second finish, under close-out failure.
+    if (close_fail)
+    {
+        if (bf_sting < 2) { const int i = last_free(stings); if (i >= 0) { take(i); } }
+        const bool target = yard_target || !stings.empty();
+        if (target) { const int i = last_free(unearths); if (i >= 0) { take(i); } }
+    }
+    // Rung 8 -- a W source while the Tutor is kept.
+    if (kept_tutor && !covered(kW))
+    {
+        auto gives_w = [&](int i)
+        {
+            const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+            if (d == nullptr) { return false; }
+            for (Color c : d->params.produces) { if (c == Color::White) { return true; } }
+            return false;
+        };
+        const int pick = best_land([&](int a, int b)
+        {
+            const bool ga = gives_w(a), gb = gives_w(b);
+            if (ga != gb) { return ga; }
+            if (is_conv(a) != is_conv(b)) { return !is_conv(a); }   // a plain W source before the City
+            return untapped(a) && !untapped(b);
+        });
+        if (pick >= 0 && gives_w(pick)) { take_land(pick); }
+    }
+
+    // ---- 5. the shed order ---------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    std::vector<char> emitted(static_cast<std::size_t>(n), 0);
+    auto emit = [&](int i)
+    { if (i >= 0 && !emitted[static_cast<std::size_t>(i)]) { emitted[static_cast<std::size_t>(i)] = 1; shed.push_back(i); } };
+    auto emit_free = [&](const std::vector<int>& v)
+    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { emit(i); } } };
+    emit_free(flucts);                                   // S0: a 2nd Fluctuator first,
+    emit_free(tutors);                                   //     then the spare Tutor
+    for (int i : fodder) { emit(i); }                    // S1: Forsake the Worldly
+    emit(s2_idx);                                        // S2: Stinger-for-Unearth
+    if (hollow_shed_early) { emit_free(hollows); }       // S2b: Hollow One, no reachable enabler
+    {                                                    // S3: lands past the count, worst first
+        std::vector<int> over;
+        for (int i : lands) { if (!keep[static_cast<std::size_t>(i)]) { over.push_back(i); } }
+        std::stable_sort(over.begin(), over.end(), [&](int a, int b)
+        { return land_rank(a) > land_rank(b); });         // `lands` is already shed-first on ties
+        for (int i : over) { emit(i); }
+    }
+    emit_free(hollows);                                  // S4: spare Hollow One
+    emit_free(unearths);                                 // S5: spare Unearth
+    emit_free(stings);                                   // S6: spare Stinger
+    for (auto it = ladder.rbegin(); it != ladder.rend(); ++it) { emit(*it); }   // the ladder, backwards
+    for (int i = 0; i < n; ++i)                          // totality guard (nothing should reach it)
+    { if (!ap.hand[static_cast<std::size_t>(i)].m_is_staged) { emit(i); } }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // ---- DragonsProvider: the Mind Stone dig (searched axis) --------------------

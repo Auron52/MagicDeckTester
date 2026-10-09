@@ -1775,6 +1775,22 @@ public:
     // See DecisionProvider::HoldFuelWhileComboing for the argument; the exceptions the user named
     // -- library too short to finish, or no Stinger on board yet -- are exactly when this is false.
     bool        HoldFuelWhileComboing(const GameState& s, int controller) const override;
+    // The USER's cleanup-discard buckets (2026-10-09, docs/design/fluctuator-discard-policy-proposal.md
+    // "Fluctuator: SETTLED"): ENABLER one (Fluctuator > Enlightened Tutor, none once a Fluctuator is
+    // in play) > Stinger > Unearth > R + B source > Hollow One > lands to 3 (4 with no enabler) >
+    // 2nd Stinger / 2nd Unearth under close-out failure > W source while the Tutor is kept; every hand
+    // card named. MTG_FLUCT_BUCKET_DISCARD (default ON; =0 -> GenericProvider::CleanupDiscardCandidates
+    // with the profile's scope-All protection untouched).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // USER: "exactly ONE of {Fluctuator, Enlightened Tutor} protected, Fluctuator first, and NONE once
+    // a Fluctuator is in play". The profile's required_pieces (scope All) protects every copy and also
+    // gates the mulligan, so the discard half is waived here instead. Same flag as the buckets.
+    bool CleanupDiscardProtectionWaived(const GameState& s, const Card& c) const override;
+    // FALSE while the buckets are on: the Hollow One clause reads `reach` (lands on board + in hand),
+    // so shedding a surplus land can flip it -- re-rank after every shed, exactly as the executor's
+    // per-card cleanup loop does. =0 -> the generic (stable) ranking.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Mono-red Dragons ramp. Exists to hold ONE measured hook: the cleanup-discard bucket policy.
