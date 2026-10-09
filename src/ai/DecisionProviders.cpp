@@ -15675,14 +15675,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
     bool critter = false; // CritterLifegain -- routes ABOVE goblin (Ranger-Captain's sac outlet) and anti (its tutor)
     // Angels tribal (mono-white). MUST be detected and MUST return ABOVE `critter`: this deck runs
-    // 4 Archangel of Thune, whose lifegain_each_own_creature_counters ALONE sets the CritterLifegain
+    // Archangel of Thune (2 on the shipped v2 list; 4 on the archived v1), whose
+    // lifegain_each_own_creature_counters ALONE sets the CritterLifegain
     // signature -- the archetype-NEUTRAL-param misroute class that has now caught Mirrorwing
     // (Goblin Instigator), StompySurprise (Hornet Queen), Minotaur (Slaughter-Priest) and Dragons.
     // Landing on CritterLifegainProvider would hand Angels another deck's discard buckets, cast
-    // ordering AND its LegendKeepIndex override -- and this deck has 3 Lyra + 2 Giada + 2 Serra, so
-    // that last one is not hypothetical. Angels holds NO judgement hook: AngelsProvider is an empty
-    // DeckProvider derivation, so every heuristic is byte-for-byte the Generic one it rode before
-    // (verified play-neutral by the smoke audit, play-changed=0). What it adds is a place for a
+    // ordering AND its LegendKeepIndex override -- and this deck has 4 Lyra, Archangel of Dawn +
+    // 4 Giada + 2 Serra (+ 1 Lyra Dawnbringer), so that last one is not hypothetical. Angels' ONLY
+    // judgement hook is the USER's cleanup-discard buckets (MTG_ANGELS_BUCKET_DISCARD, 2026-10-09);
+    // every other heuristic is byte-for-byte the Generic one it rode before (the empty derivation was
+    // verified play-neutral by the smoke audit, play-changed=0). The provider is also the place for a
     // proof and a name in the audit -- see the always-own-a-provider block above the routing chain.
     bool angels = false;
     // BRUNA (Bant Aura voltron, 2026-10-05). MUST return ABOVE `anti`: Open the Armory's and
@@ -16186,7 +16188,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // --check closes the half the compiler cannot see (inheriting another deck's answer).
     // =========================================================================================
 
-    // Angels FIRST -- above critter, whose signature its 4 Archangel of Thune would otherwise set
+    // Angels FIRST -- above critter, whose signature its Archangels of Thune would otherwise set
     // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
     // Bruna: at the very top -- its signature is carried by no other card, so the position is free,
@@ -16720,6 +16722,349 @@ int CritterLifegainProvider::CastOrderRank(const GameState& s, const CardDefinit
         if (p.lifegain_self_counters > 0)                                              { return 9; }
     }
     return GenericProvider::CastOrderRank(s, def);
+}
+
+// ---- Angels / CritterLifegain cleanup-discard: shared helpers ---------------------------------
+//
+// Both USER designs (2026-10-09) shed duplicate legends right after the removal: Angels -- "Lyra,
+// Archangel of Dawn duplicates should be dropped and the same for other legendaries"; CritterLifegain
+// -- "duplicate legend (2nd Heliod / Daxos / Ajani, in play or in hand)". A legendary hand card is a
+// duplicate when its NAME is already on OUR battlefield, or when an EARLIER non-staged hand card has
+// the same name: the lowest-index copy stays live, every later one is dead. Name-keyed because the
+// legend rule itself is a name rule (CR 704.5j). Neither design exempts any legend -- the proposals'
+// "a redundant legend with entry/death trigger upside is kept" was DROPPED by the USER (Angels), and
+// the walker exemption (a fresh Ajani recharges a spent one) was overruled by naming Ajani (Critter).
+// `defs` is indexed like the hand (nullptr for a staged card); `dup` is written for every index.
+static void MarkDuplicateLegendsInHand(const GameState& s, const std::vector<const CardDefinition*>& defs,
+                                       std::vector<char>& dup)
+{
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const std::size_t ui = static_cast<std::size_t>(i);
+        dup[ui] = 0;
+        const CardDefinition* d = defs[ui];
+        const Card& hc = ap.hand[ui];
+        if (d == nullptr || hc.m_is_staged || !d->card.HasSupertype(Supertype::Legendary)) { continue; }
+        bool is_dup = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.m_name == hc.m_name) { is_dup = true; break; } }
+        for (int j = 0; j < i && !is_dup; ++j)
+        {
+            const Card& hj = ap.hand[static_cast<std::size_t>(j)];
+            if (!hj.m_is_staged && hj.m_name == hc.m_name) { is_dup = true; }
+        }
+        dup[ui] = is_dup ? 1 : 0;
+    }
+}
+
+// The removal both decks shed FIRST -- Unexpectedly Absent and Swords to Plowshares, 0 casts in
+// 9,000 Angels games (angels-new-cards-screen.md); USER 2026-08-19: "Swords and Unexpectedly are
+// essentially unused in goldfish". Keyed on the removal template, plus Unexpectedly Absent's own
+// tuck_to_library param, which also orders the class: the tuck leads (the USER's Angels order is
+// "Unexpectedly Absent, Swords").
+static bool BucketShedIsRemoval(const CardDefinition* d)
+{ return d != nullptr && (d->tmpl == CardTemplate::Removal || d->params.tuck_to_library); }
+
+// ---- AngelsProvider::CleanupDiscardCandidates -------------------------------
+//
+// THE USER'S DESIGN (2026-10-09; docs/design/angels-discard-policy-proposal.md, "Angels: SETTLED"),
+// which replaced the agent's four-bucket proposal below it in that doc. USER: "only 3 buckets, Mana,
+// Enablers and Angels where Bishop of Wings is on its own as a potential 1-of in the Enablers bucket
+// ... within the Angels bucket (3-5 depending on needs elsewhere) we want to keep a mixed set of
+// cheaper critters and powerful payoffs. The more variety the better. 5-drops are dropped first
+// after that." Righteous Valkyrie = payoff; Seraph Sanctuary = a land.
+//
+//   MANA      4 sources counting the board, >= 2 white, a 5th soft: Plains, Remote Farm (2 white,
+//             enters tapped), Seraph Sanctuary ({C}), Sol Ring, Giada. "Beyond the 2 white sources,
+//             Seraph Sanctuary is kept over a spare Plains."
+//               * Sol Ring: kept while none is in play -- protected OUTSIDE the ladder.
+//               * Giada: "ALWAYS kept (one copy) even when mana is full -- she counts toward our mana
+//                 total, but also has upside"; counts toward the 4 sources, NOT the 2 white (her
+//                 mana is Angel-only, so it never pays Bishop of Wings' {W}{W}). "If we have one on
+//                 the field we don't keep her" -- a duplicate legend. Protected OUTSIDE the ladder.
+//   ENABLERS  Bishop of Wings, 1. A Bishop in play makes a hand Bishop surplus.
+//   ANGELS    3 to 5, flexing with mana / Bishop needs: cheap critters (Lightstall Inquisitor,
+//             Youthful Valkyrie) + payoffs (Righteous Valkyrie, Lyra ArchDawn, Resplendent Angel,
+//             Archangel of Thune, Lyra Dawnbringer, Serra the Benevolent -- a planeswalker, counted
+//             as a payoff). Pick: one copy per name first ("variety WINS over 5-drop-first") ->
+//             >= 1 cheap and >= 1 payoff when the hand has both -> 5-drops shed first -> the
+//             measured value order (the proposal's section 6c table: Righteous Valkyrie > Lyra
+//             ArchDawn > Lightstall > Youthful Valkyrie > Resplendent > Serra > Thune > Dawnbringer).
+//
+// KEEP LADDER (Sol Ring + Giada protected outside it):
+//   white, white, Angel, Angel, Angel, 3rd source, Bishop, 4th source, 4th Angel, 5th Angel, 5th source
+// SHED ORDER, most expendable first:
+//   Unexpectedly Absent, Swords -> duplicate legends -> surplus lands -> Lightning Greaves -> surplus
+//   Bishop -> Angel overflow -> the ladder read backwards -> Sol Ring -> Giada.
+//
+// AGENT READINGS (the USER did not rule; each is listed in the doc's Implementation notes):
+//   (a) A source counts ONE toward the 4 (Remote Farm and Sol Ring included), but WHITE counts the
+//       white mana a land makes, so a Remote Farm is the USER's "2 white" and fills the floor alone.
+//   (b) The ANGEL slots are NOT netted against Angels in play, and variety / the cheap-payoff mix read
+//       the HAND only: the USER's flex is "with mana/Bishop needs" -- the share of a seven-card hand
+//       left after the mana and the Bishop -- and the board-netted land and Bishop slots already
+//       move the Angel count between 3 and 5.
+//   (c) The white slots take an UNTAPPED white land first (Plains over Remote Farm). Beyond the floor
+//       the source order is Seraph Sanctuary > Remote Farm > Plains (the USER's "Sanctuary over a
+//       spare Plains"; Remote Farm placed where the proposal measured it), and surplus lands shed in
+//       the reverse of that order.
+//   (d) A protected Sol Ring / Giada in HAND counts toward the 4 sources too; at the very end of the
+//       shed order Sol Ring goes before Giada (the USER's "ALWAYS kept").
+//   (e) Duplicate legends shed in hand order; a card no bucket names sheds with Lightning Greaves; a
+//       Sol Ring with one already in play (or a second creature mana source) sheds first among the
+//       surplus mana. None of the three is reachable on the shipped list (1 Sol Ring).
+//   (f) The value order is keyed on each card's signature PARAM, so a screening arm that swaps an
+//       Angel keeps the order's meaning; a param-less MV-1 Angel is Lightstall's rank.
+//   (g) "5-drops" = mana value 5 or more (Archangel of Thune, Lyra Dawnbringer); Serra (MV 4) is not.
+// No distance-to-castable term beyond "5-drops shed first": the SETTLED block names none.
+//
+// PREFIX-STABLE (DecisionProvider::CleanupDiscardShedStable's default holds): every early class is a
+// card the ladder did not take, the ladder takes the best candidate first at every slot, and the
+// ladder-read-backwards tail sheds the last-taken card first, so shedding index 0 and re-ranking
+// leaves the rest in order (test_angels_discard.cpp checks it shed by shed).
+static bool AngelsBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_ANGELS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::ANGELS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> AngelsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!AngelsBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    // Every characteristic read goes through the DEFINITION: a hand card is a name-only placeholder.
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // White mana a land / rock makes (0 = none). Creature mana restricted to a subtype (Giada: Angel
+    // spells only) never pays a {W} pip of Bishop of Wings, so it is a source but not a white one.
+    auto white_of = [](const CardDefinition* d) -> int
+    {
+        if (d == nullptr || d->params.creature_mana_only || !d->params.mana_only_subtype.empty()) { return 0; }
+        for (Color c : d->params.produces)
+        { if (c == Color::White) { return std::max(1, d->params.produces_amount); } }
+        return 0;
+    };
+    auto creature_mana = [](const CardDefinition* d)             // Giada
+    { return d != nullptr && d->card.IsCreature() && !d->params.produces.empty(); };
+    auto bishop_like = [](const CardDefinition* d)               // the ENABLER: Bishop of Wings
+    {
+        return d != nullptr && d->card.IsCreature() && !d->card.IsLand()
+            && d->params.own_creature_enters_lifegain > 0 && !CardHasSubtype(d->card, "Angel");
+    };
+    auto is_payoff = [](const CardParams& p)
+    {
+        return p.life_above_start_anthem_life > 0            // Righteous Valkyrie
+            || p.lifegain_each_own_creature_counters > 0     // Archangel of Thune, Lyra ArchDawn
+            || p.endstep_lifegain_tokens > 0                 // Resplendent Angel
+            || p.grants_lifelink                             // Lyra Dawnbringer
+            || p.loyalty_start > 0;                          // Serra the Benevolent
+    };
+
+    // ---- board census (net of board) ----------------------------------------------------------
+    int board_sources = 0, board_white = 0;
+    bool board_rock = false, board_bishop = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand()) { ++board_sources; board_white += white_of(d); continue; }
+        if (d == nullptr) { continue; }
+        if (d->params.mana_rock) { ++board_sources; board_white += white_of(d); board_rock = true; continue; }
+        if (creature_mana(d))    { ++board_sources; continue; }
+        if (bishop_like(d))      { board_bishop = true; }
+    }
+
+    // ---- partition the hand -------------------------------------------------------------------
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    for (int i = 0; i < n; ++i) { if (!ap.hand[at(i)].m_is_staged) { defs[at(i)] = def_of(ap.hand[at(i)]); } }
+    std::vector<char> dup(at(n), 0);
+    MarkDuplicateLegendsInHand(s, defs, dup);
+    std::vector<int> lands, removal, dead, spare_mana, greaves, other, bishops, angels;
+    int prot_rock = -1, prot_dork = -1;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = defs[at(i)];
+        if (CleanupDiscardIsLand(hc))  { lands.push_back(i); continue; }
+        if (d == nullptr)              { other.push_back(i); continue; }
+        if (BucketShedIsRemoval(d))    { removal.push_back(i); continue; }
+        if (dup[at(i)])                { dead.push_back(i); continue; }
+        if (d->params.mana_rock)
+        {
+            if (!board_rock && prot_rock < 0) { prot_rock = i; } else { spare_mana.push_back(i); }
+            continue;
+        }
+        if (creature_mana(d))
+        {
+            if (prot_dork < 0) { prot_dork = i; } else { spare_mana.push_back(i); }
+            continue;
+        }
+        if (d->params.is_equipment)    { greaves.push_back(i); continue; }
+        if (bishop_like(d))            { bishops.push_back(i); continue; }
+        if ((d->card.IsCreature() && CardHasSubtype(d->card, "Angel")) || is_payoff(d->params))
+        { angels.push_back(i); continue; }
+        other.push_back(i);
+    }
+
+    // ---- the ANGEL pick order (best kept first) -----------------------------------------------
+    auto value_rank = [&](int i) -> int   // the proposal's section 6c measured order, keyed on params
+    {
+        const CardParams& p = defs[at(i)]->params;
+        if (p.life_above_start_anthem_life > 0)                    { return 0; }  // Righteous Valkyrie
+        if (p.lifegain_each_own_creature_counters > 0
+            && !p.lifegain_counters_subtypes.empty())              { return 1; }  // Lyra, Archangel of Dawn
+        if (p.own_creature_enters_self_counters > 0)               { return 3; }  // Youthful Valkyrie
+        if (p.endstep_lifegain_tokens > 0)                         { return 4; }  // Resplendent Angel
+        if (p.loyalty_start > 0)                                   { return 5; }  // Serra the Benevolent
+        if (p.lifegain_each_own_creature_counters > 0)             { return 6; }  // Archangel of Thune
+        if (p.grants_lifelink)                                     { return 7; }  // Lyra Dawnbringer
+        if (CleanupDiscardManaValue(ap.hand[at(i)]) <= 1)          { return 2; }  // Lightstall Inquisitor
+        return 8;
+    };
+    std::vector<int> copy_ordinal(at(n), 0);   // 0 = the first copy of its name among the hand's Angels
+    for (std::size_t a = 0; a < angels.size(); ++a)
+    {
+        for (std::size_t b = 0; b < a; ++b)
+        { if (ap.hand[at(angels[b])].m_name == ap.hand[at(angels[a])].m_name) { ++copy_ordinal[at(angels[a])]; } }
+    }
+    std::vector<int> angel_order = angels;
+    std::sort(angel_order.begin(), angel_order.end(), [&](int a, int b)
+    {
+        if (copy_ordinal[at(a)] != copy_ordinal[at(b)]) { return copy_ordinal[at(a)] < copy_ordinal[at(b)]; }  // variety
+        const bool fa = CleanupDiscardManaValue(ap.hand[at(a)]) >= 5;
+        const bool fb = CleanupDiscardManaValue(ap.hand[at(b)]) >= 5;
+        if (fa != fb) { return !fa; }                                                                  // 5-drops last
+        const int va = value_rank(a), vb = value_rank(b);
+        if (va != vb) { return va < vb; }                                                              // value
+        return a < b;
+    });
+    // ">= 1 cheap and >= 1 payoff when the hand has both": it outranks 5-drop-first, so among the
+    // first copies the best card of the OTHER class is pulled up to second place when the top two
+    // would otherwise be the same class.
+    {
+        std::size_t t0 = 0;
+        while (t0 < angel_order.size() && copy_ordinal[at(angel_order[t0])] == 0) { ++t0; }
+        auto pay = [&](int i) { return is_payoff(defs[at(i)]->params); };
+        if (t0 >= 3 && pay(angel_order[0]) == pay(angel_order[1]))
+        {
+            for (std::size_t k = 2; k < t0; ++k)
+            {
+                if (pay(angel_order[k]) == pay(angel_order[0])) { continue; }
+                std::rotate(angel_order.begin() + 1, angel_order.begin() + static_cast<std::ptrdiff_t>(k),
+                            angel_order.begin() + static_cast<std::ptrdiff_t>(k) + 1);
+                break;
+            }
+        }
+    }
+
+    // ---- the keep ladder ------------------------------------------------------------------------
+    std::vector<char> keep(at(n), 0);
+    std::vector<int> taken;
+    taken.reserve(at(n));
+    auto take = [&](int i) { keep[at(i)] = 1; taken.push_back(i); };
+    int sources = board_sources + (prot_rock >= 0 ? 1 : 0) + (prot_dork >= 0 ? 1 : 0);
+    int white   = board_white + (prot_rock >= 0 ? white_of(defs[at(prot_rock)]) : 0);
+    auto beyond_rank = [&](int i) -> int   // source order beyond the white floor, best first
+    {
+        const CardDefinition* d = defs[at(i)];
+        if (d == nullptr) { return 3; }
+        if (d->params.own_creature_enters_lifegain > 0 || d->params.etb_lifegain > 0) { return 0; }  // Seraph Sanctuary
+        const int w = white_of(d);
+        return w >= 2 ? 1 : (w >= 1 ? 2 : 3);                                                         // Remote Farm, Plains
+    };
+    auto pick_white = [&]() -> int
+    {
+        int best = -1;
+        for (int i : lands)
+        {
+            if (keep[at(i)] || white_of(defs[at(i)]) <= 0) { continue; }
+            if (best < 0 || (defs[at(best)]->params.enters_tapped && !defs[at(i)]->params.enters_tapped)) { best = i; }
+        }
+        return best;
+    };
+    auto pick_source = [&]() -> int
+    {
+        int best = -1, best_rank = 99;
+        for (int i : lands)
+        {
+            if (keep[at(i)]) { continue; }
+            const int r = beyond_rank(i);
+            if (r < best_rank) { best = i; best_rank = r; }
+        }
+        return best;
+    };
+    auto take_land = [&](int i) { take(i); white += white_of(defs[at(i)]); ++sources; };
+    auto top_up_white = [&](int target)
+    { while (white < target) { const int i = pick_white(); if (i < 0) { break; } take_land(i); } };
+    auto top_up_sources = [&](int target)
+    { while (sources < target) { const int i = pick_source(); if (i < 0) { break; } take_land(i); } };
+    std::size_t next_angel = 0;
+    auto take_angel = [&]() { if (next_angel < angel_order.size()) { take(angel_order[next_angel++]); } };
+
+    top_up_white(1);                                                   // white
+    top_up_white(2);                                                   // white
+    take_angel(); take_angel(); take_angel();                          // Angel, Angel, Angel
+    top_up_sources(3);                                                 // 3rd source
+    if (!board_bishop && !bishops.empty()) { take(bishops.front()); }  // Bishop
+    top_up_sources(4);                                                 // 4th source
+    take_angel(); take_angel();                                        // 4th Angel, 5th Angel
+    top_up_sources(5);                                                 // 5th source (soft)
+
+    // ---- emit the shed order --------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(at(n));
+    std::vector<char> listed(at(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[at(i)] || ap.hand[at(i)].m_is_staged) { return; }
+        listed[at(i)] = 1;
+        shed.push_back(i);
+    };
+    for (int pass = 0; pass < 2; ++pass)                               // Unexpectedly Absent, then Swords
+    {
+        for (int i : removal) { if ((defs[at(i)]->params.tuck_to_library ? 0 : 1) == pass) { put(i); } }
+    }
+    for (int i : dead) { put(i); }                                     // duplicate legends
+    for (int i : spare_mana) { put(i); }                               // surplus mana (not a land) ...
+    {
+        std::vector<int> rest;                                         // ... then the surplus lands,
+        for (int i : lands) { if (!keep[at(i)]) { rest.push_back(i); } }   // the source order reversed
+        std::sort(rest.begin(), rest.end(), [&](int a, int b)
+        {
+            const int ra = beyond_rank(a), rb = beyond_rank(b);
+            if (ra != rb) { return ra > rb; }
+            return a > b;
+        });
+        for (int i : rest) { put(i); }
+    }
+    for (int i : greaves) { put(i); }                                  // Lightning Greaves
+    for (int i : other) { put(i); }
+    for (auto it = bishops.rbegin(); it != bishops.rend(); ++it) { if (!keep[at(*it)]) { put(*it); } }        // surplus Bishop
+    for (auto it = angel_order.rbegin(); it != angel_order.rend(); ++it) { if (!keep[at(*it)]) { put(*it); } } // Angel overflow
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }   // the ladder read backwards
+    put(prot_rock);                                                    // Sol Ring
+    put(prot_dork);                                                    // Giada, the very last
+    for (int i = 0; i < n; ++i) { put(i); }                            // defensive: cannot fire
+
+    // MTG_SHED_STATS firing counter: how often this policy's index 0 differs from the generic
+    // fallback's (the ranking the =0 hatch restores). Off by default = zero cost.
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // ---- MirrorwingProvider::LegendKeepIndex ------------------------------------

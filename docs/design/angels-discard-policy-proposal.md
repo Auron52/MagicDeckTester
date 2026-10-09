@@ -59,6 +59,48 @@ of Dawn duplicates should be dropped and the same for other legendaries."
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `AngelsProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`), behind
+`MTG_ANGELS_BUCKET_DISCARD` (heurarm slot `ANGELS_BUCKET_DISCARD`, default ON; `=0` returns exactly
+`GenericProvider::CleanupDiscardCandidates`). Tests: `test/unit/test_angels_discard.cpp`.
+
+What runs, exactly as the SETTLED block reads:
+- KEEP ladder: white, white, Angel, Angel, Angel, 3rd source, Bishop, 4th source, 4th Angel, 5th
+  Angel, 5th source -- each source / white slot "tops up" to its count, counting the board first.
+- SHED: Unexpectedly Absent, Swords -> duplicate legends (name on our battlefield, or a later copy
+  in hand) -> surplus lands -> Lightning Greaves -> surplus Bishop -> Angel overflow -> the ladder
+  backwards -> Sol Ring -> Giada. Every non-staged hand card is named.
+- Sol Ring (none in play) and one Giada (none in play) are protected outside the ladder; Giada counts
+  toward the 4 sources, never toward the 2 white; a Bishop in play makes every hand Bishop surplus.
+- Angel pick: variety (first copies of each name) -> >= 1 cheap and >= 1 payoff (the best card of the
+  missing class is pulled up to second) -> 5-drops last -> the section 6c value order.
+- Prefix-stable (shed index 0, re-rank: the rest is unchanged) -- tested shed by shed.
+
+Agent readings (the USER did not rule; each is pinned by a named test and is the USER's to overturn):
+- (a) A source counts ONE toward the 4 (Remote Farm and Sol Ring included), but WHITE counts the
+  white mana a land makes -- a Remote Farm is the USER's "2 white" and fills the floor alone (T7).
+- (b) The Angel slots are NOT netted against Angels in play, and variety and the cheap/payoff mix read
+  the hand only: the USER's flex is "with mana/Bishop needs", which the board-netted land and Bishop
+  slots already produce (3 Angels on an empty board, 5 once mana and Bishop are in play).
+- (c) The white slots take an untapped white land first (Plains before Remote Farm, T8). Beyond the
+  floor: Seraph Sanctuary > Remote Farm > Plains (the USER's Sanctuary-over-Plains; the Farm placed as
+  the proposal measured it); surplus lands shed in the reverse of that order.
+- (d) A protected Sol Ring / Giada in HAND counts toward the 4 sources (T5); Sol Ring sheds before
+  Giada at the very end ("ALWAYS kept").
+- (e) Duplicate legends shed in hand order; an unbucketed card sheds with Greaves; a Sol Ring with
+  one already in play sheds first among surplus mana (unreachable on the 1-Sol-Ring list).
+- (f) The value order is keyed on each card's signature param, not its name.
+- (g) "5-drops" = mana value 5+ (Thune, Dawnbringer); Serra (4) is not one. No further
+  distance-to-castable term: the SETTLED block names none.
+
+Housekeeping done: the stale v1 counts in `DecisionProviders.cpp`'s routing comments ("4 Archangel
+of Thune", "3 Lyra + 2 Giada") and the "Angels holds NO judgement hook" claim. NOT done (out of
+scope, `cards.json`): Bishop of Wings' note ("the deck's 3 Lyra Dawnbringer and 2 Giada"), Lyra
+Dawnbringer's ("LEGEND RULE is live at 3 copies"), Youthful Valkyrie's ("all four copies"), Seraph
+Sanctuary's ("4 of 24 lands" -- v2 runs 23).
+
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
