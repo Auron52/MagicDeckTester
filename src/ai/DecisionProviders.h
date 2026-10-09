@@ -1180,6 +1180,13 @@ public:
     // live attacker is needed -- it is lethal THIS turn (the death token would be summoning-sick) or there
     // is no other castable spell ("no gas"), so the banked mana buys nothing. Off-switch MTG_NO_GOBLIN_ECHO.
     bool PayEchoToKeep(const GameState&, const Permanent&) const override;
+    // The USER-settled cleanup-discard buckets (2026-10-09; docs/design/goblins-discard-policy-
+    // proposal.md, "Goblins: SETTLED"): MANA 3 sources net of board (flat) / ENGINES 1 (Lackey >
+    // Warchief > Skirk; Aether Vial only at the end of turn 1) / MULTIPLIERS capped by crowd 0/1/2 /
+    // CREATURES by EV = P(play) x value, with Muxus's one-in-hand and no-route rules. Every hand card
+    // named. MTG_GOBLIN_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
     // (A Goblin Matron tutor-target exclusion list was evaluated + REJECTED. The +0.0025 rollout regression
     // was NOT a clairvoyance artifact -- per-game diff (2026-07-31) showed the two slower games were the
     // "lone Lackey" exclusion misfiring: with a bomb IN HAND (Muxus/Krenko/Warchief), fetching Lackey to
