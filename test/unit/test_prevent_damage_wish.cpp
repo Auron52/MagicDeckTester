@@ -475,22 +475,25 @@ TEST_CASE("PD beseech B3: an Ancient Tomb joins -- unless we already hold one")
     CHECK(Beseech(t) == std::vector<std::string>{ "Tamanoa", kDinaW, "Rolling Earthquake", "Ancient Tomb" });
 }
 
-TEST_CASE("PD cast order: MTG_PD_CAST_ORDER draft -- tutors, gain, drains, fuel enablers, amplifier, finishers")
+TEST_CASE("PD cast order: the USER's order -- Tamanoa + Zenith, other creatures, Rhox, Spellshock, spells, finishers")
 {
     EnsureCardsPdw();
     const PreventDamageProvider pd;
     const GameState s;
     auto rank = [&](const char* nm) { return pd.CastOrderRank(s, *CardDatabase::Instance().Lookup(nm)); };
-    // Control (lever off = the generic order): Spellshock LAST (the self-ping tier), and Green Sun's
-    // Zenith TIED with Rolling Earthquake -- the s31016 gi15 sweeper-before-Tamanoa line.
+    // Control (=0, the generic order): Spellshock LAST (the self-ping tier), Zenith TIED with Earthquake.
+    heurarm::t_arm[heurarm::PD_CAST_ORDER] = 0;
     CHECK(rank("Spellshock") > rank("Rolling Earthquake"));
     CHECK(rank("Green Sun's Zenith") == rank("Rolling Earthquake"));
-    heurarm::t_arm[heurarm::PD_CAST_ORDER] = 1;
-    const std::vector<const char*> order = { "Green Sun's Zenith", "Living Wish", "Beseech the Queen", "Tamanoa",
-                                             kVitoW, "Spellshock", "Manabarbs", kRhoxW, "Rolling Earthquake",
-                                             "Pyrohemia" };
+    heurarm::t_arm[heurarm::PD_CAST_ORDER] = -1;   // the default is the USER's order
+    const std::vector<const char*> order = { "Tamanoa", kVitoW, kRhoxW, "Spellshock", "Living Wish",
+                                             "Rolling Earthquake", "Pyrohemia" };
     for (std::size_t i = 1; i < order.size(); ++i)
     { CHECK_MESSAGE(rank(order[i - 1]) < rank(order[i]), order[i - 1], " before ", order[i]); }
+    CHECK(rank("Green Sun's Zenith") == rank("Tamanoa"));
+    CHECK(rank("Purity") == rank("Tamanoa"));
     CHECK(rank(kVitoW) == rank(kDinaW));
-    heurarm::t_arm[heurarm::PD_CAST_ORDER] = -1;
+    CHECK(rank("Bilbo, Birthday Celebrant") == rank(kRhoxW));
+    CHECK(rank("Manabarbs") == rank("Living Wish"));
+    CHECK(rank("Beseech the Queen") == rank("Living Wish"));
 }

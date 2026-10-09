@@ -2186,6 +2186,42 @@ decides a game in this deck (the 09-28 ladder vs the generic rule moved 13 of 4,
 game, nothing to recover. **References:** 0 / 11 short, all 11 replays byte-identical to base
 (`logs/pd_opt/refbench/user.json`).
 
+## Cast order (USER, 2026-10-09) -- `MTG_PD_CAST_ORDER`, default ON
+
+Shown the minimal order (generic + Spellshock 15 + Rolling Earthquake 25 + Pyrohemia 26), the USER amended
+it: *"GSZ should go right after Tamanoa, since that is usually what it gets. Those should be cast early so
+that we get the full benefit. Rhox Faithmender should be after the other creatures because it going
+before would make little sense as it doesn't do anything on its own. The rest is probably fine."* --
+*"GSZ can be in the Tamanoa group I think."* (Purity with Tamanoa and Bilbo with Rhox: *"Sure, that sounds
+fine."*)
+
+| rank | cards |
+|---|---|
+| 10 | Tamanoa, Green Sun's Zenith, Purity |
+| 12 | the other creatures (Vito, Dina, the wishable bodies) |
+| 13 | Rhox Faithmender, Bilbo |
+| 15 | Spellshock |
+| 20 | Living Wish, Manabarbs, Beseech the Queen |
+| 25 | Rolling Earthquake |
+| 26 | Pyrohemia |
+
+Within a rank the search's plan order stands. My fuller draft (tutors first) and the temporary minimal
+slot are deleted; `=0` restores the generic order.
+
+**Measured** (`logs/pd_opt/multi9/`, ONE pooled batch, fresh seeds s200001/s201001 d5 b20 x600, 2HG
+s202001 x300, d3 b10 s203001 x400, d0 s204001 x3000; the USER's discard ladder on in every arm):
+
+| arm vs generic | delta t/game | faster / slower | sign p | units |
+|---|---|---|---|---|
+| **USER order** | **-0.0049 +/- 0.0023** (95% CI -0.0093..-0.0005) | 45 / 23 | 0.010 | 0.998x |
+| minimal order | -0.0020 +/- 0.0021 | 38 / 26 | 0.17 | 0.999x |
+
+USER order per cell: d5 s200001 +0.0033 (1/3), d5 s201001 -0.0083 (6/1), 2HG -0.0133 (5/1), d3 0.0000
+(4/4), d0 -0.0057 (29/14). Vs the minimal order: -0.0029 (18/8), mostly depth 0. **Recovery (two-stage):**
+all 9 slower searched games recover -- 7 at stage 1 (`--depth W --budget-ms 100`), the other 2 (d3 gi28,
+gi33) at stage 2 (`--depth 8 --budget-ms 0`) (`logs/pd_opt/ord_verify/`). **References:** 0 / 11 short,
+5.273 vs the human's 5.636 (`logs/pd_opt/refbench/user_order.json`).
+
 ## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
 
 | flag | defect | fix | reach |

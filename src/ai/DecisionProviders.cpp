@@ -12218,57 +12218,37 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
 }
 
 // ---- PreventDamageProvider::CastOrderRank ----------------------------------
-// The cast-order DRAFT for the USER's review (MTG_PD_CAST_ORDER, default OFF; ledger "Cast order").
-// One principle: a card goes AFTER everything that makes it worth more and BEFORE everything it makes
-// worth more. Damage is the fuel, a gain engine turns it into life, a drain turns life into the kill:
-//    3 Green Sun's Zenith  puts Tamanoa / Dina straight onto the battlefield, so everything after it
-//                          gains from that piece (s31016 gi15: Zenith and Rolling Earthquake TIED at
-//                          the generic 20 and the sweeper resolved before the tutored Tamanoa arrived)
-//    4 Living Wish, 5 Beseech  tutors ahead of the cards they fetch
-//   10 the gain engine (Tamanoa; Purity)
-//   11 the drains (Vito, Dina) -- out BEFORE the damage, or the gains it makes convert to nothing:
-//      with Tamanoa out, Vito-then-Spellshock drains Spellshock's payment pain; the reverse drains none
-//   12 Spellshock, 13 Manabarbs  -- every LATER cast (2) / land tap (1) becomes a gain and a drain.
-//      The generic order ranks Spellshock LAST (30, the Eidolon self-ping tier), which is backwards here
-//   14 the amplifiers (Rhox Faithmender, Bilbo) -- after the enablers: Rhox cast behind Spellshock
-//      yields Spellshock's 2 plus the pain of Rhox's own payment, which usually beats doubling one
-//      payment's pain
+// THE USER'S CAST ORDER (2026-10-09, MTG_PD_CAST_ORDER, default ON; ledger "Cast order"). USER: "GSZ
+// should go right after Tamanoa, since that is usually what it gets. Those should be cast early so that
+// we get the full benefit. Rhox Faithmender should be after the other creatures because it going before
+// would make little sense as it doesn't do anything on its own." "GSZ can be in the Tamanoa group."
+// The rest is the minimal order the USER reviewed ("the rest is probably fine"):
+//   10 the gain engine (Tamanoa; Purity) and Green Sun's Zenith -- out first, so every later damage
+//      event (a painland tap, a Spellshock trigger) is a gain
+//   12 the other creatures (Vito, Dina, the wishable bodies)
+//   13 the amplifiers (Rhox Faithmender, Bilbo) -- nothing to amplify on their own
+//   15 Spellshock -- after the creatures, before the noncreature spells it triggers on (the generic
+//      order ranks it LAST, 30, the Eidolon self-ping tier, which is backwards here)
+//   20 the other noncreature spells (Living Wish, Manabarbs, Beseech the Queen)
 //   25 Rolling Earthquake, 26 Pyrohemia -- the finishers, last, with the whole engine out.
-// Params only. Everything else keeps the generic rank.
+// Within a rank the search's plan order stands. Params only.
 int PreventDamageProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    static const bool s_env = EnvOn("MTG_PD_CAST_ORDER");
+    static const bool s_env = EnvOn("MTG_PD_CAST_ORDER", true);   // DEFAULT ON; =0 -> generic
     if (heurarm::Flag(heurarm::PD_CAST_ORDER, s_env))
     {
         const CardParams& p = def.params;
-        if (p.tutor_to_battlefield_single)                 { return 3; }
-        if (p.wish_from_sideboard)                         { return 4; }
-        if (p.tutor_max_mv_is_lands)                       { return 5; }
-        switch (PdEngineRole(&def))
+        if (p.tutor_to_battlefield_single)                 { return 10; }
+        if (def.card.IsCreature())
         {
-            case kPdGain:                return 10;
-            case kPdVito: case kPdDina:  return 11;
-            case kPdAmp:                 return 14;
-            default:                     break;
+            if (PdEngineRole(&def) == kPdGain || p.prevent_noncombat_to_self_gain) { return 10; }
+            if (PdEngineRole(&def) == kPdAmp || p.lifegain_plus > 0)               { return 13; }
+            return 12;
         }
-        if (p.prevent_noncombat_to_self_gain)              { return 10; }
-        if (def.card.IsCreature() && p.lifegain_plus > 0)  { return 14; }
-        if (p.on_cast_trigger_damage > 0)                  { return 12; }
-        if (p.land_tap_damage_each_player > 0)             { return 13; }
+        if (p.on_cast_trigger_damage > 0)                  { return 15; }
         if (p.x_damage_each_creature_and_player)           { return 25; }
         if (p.ping_all_cost.has_value())                   { return 26; }
-    }
-    // MINIMAL variant (TEMPORARY measurement slot MTG_PD_CAST_ORDER_MIN): the generic order with only
-    // its two defects for this deck fixed -- Spellshock out of the self-ping tier (30 -> 15: after
-    // the creatures, before the noncreature spells it triggers on) and the finishers last (Rolling
-    // Earthquake 25, Pyrohemia 26: behind the tutors, so a Zenith's Tamanoa is out first).
-    static const bool s_min_env = EnvOn("MTG_PD_CAST_ORDER_MIN");
-    if (heurarm::Flag(heurarm::PD_CAST_ORDER_MIN, s_min_env))
-    {
-        const CardParams& p = def.params;
-        if (p.on_cast_trigger_damage > 0)        { return 15; }
-        if (p.x_damage_each_creature_and_player) { return 25; }
-        if (p.ping_all_cost.has_value())         { return 26; }
+        return 20;
     }
     return GenericProvider::CastOrderRank(s, def);
 }

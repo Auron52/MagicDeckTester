@@ -345,8 +345,7 @@ enum Slot : int
     BOUNCE_REPLAY_PRECISE,    // MTG_BOUNCE_REPLAY_PRECISE  the bounce ORDER (BounceLandCandidates) and the search narrowing (BounceSearchCandidates' "clean replay") predict a returned land's re-entry with BounceReplayEntersUntapped (a reveal land with nothing to reveal, a fastland past its count, a checkland without its type re-enter TAPPED) instead of the card's enters_tapped param alone. DEFAULT ON (2026-10-09); =0 = the enters_tapped param read
     BOUNCE_RULE_AMEND,        // MTG_BOUNCE_RULE_AMEND      the base Karoo rule's amendment (Dragons s7007 gi959): a land's CREATURE-ONLY colours (Haven of the Spirit Dragon, Unclaimed Territory, Cavern) are not colours it makes -- neither for its own coverage nor for covering another land; and the rule decides only when ONE land qualifies -- several different qualifying lands go to the search. DEFAULT ON (2026-10-09); =0 = the unamended rule
     RESTRICTED_MANA_RANK,     // MTG_RESTRICTED_MANA_RANK   a colored_creature_only source whose restricted colours this deck's creature spells can use number at most ONE (DeckTraits: GameState::deck_creature_pip_colors) ranks as a {C} source plus one creature-only colour, below the mono tier (ManaSourceRankBase), instead of a rainbow held last of the lands; its rebuy activation's {T} source is held through the plan's casts and its own {2}. Dragons s7007 gi959 (Haven of the Spirit Dragon). DEFAULT ON; =0 restores the historical ladder
-    PD_CAST_ORDER,            // MTG_PD_CAST_ORDER          Prevent Damage: the cast-order DRAFT for the USER -- tutors (Green Sun's Zenith 3, Living Wish 4, Beseech 5), gain (Tamanoa 10), drains (Vito / Dina 11), fuel enablers (Spellshock 12, Manabarbs 13), amplifiers (Rhox / Bilbo 14), finishers (Rolling Earthquake 25, Pyrohemia 26). Default OFF -- the order is the USER's
-    PD_CAST_ORDER_MIN,        // MTG_PD_CAST_ORDER_MIN      TEMPORARY measurement slot (2026-10-09): the generic cast order with only Spellshock (30 -> 15) and the finishers (Rolling Earthquake 25, Pyrohemia 26) moved
+    PD_CAST_ORDER,            // MTG_PD_CAST_ORDER          Prevent Damage: the USER's cast order (2026-10-09) -- Tamanoa + Green Sun's Zenith 10, the other creatures 12, Rhox / Bilbo 13, Spellshock 15, other noncreatures 20, Rolling Earthquake 25, Pyrohemia 26. Default ON; =0 -> generic
     PD_DISCARD_USER,          // MTG_PD_DISCARD_USER        Prevent Damage: the USER's discard ladder (2026-10-09) -- lands to 4 (1 Ancient Tomb + 3 coloured, painful first) > 2 GAIN (Tamanoa, Tamanoa, Rhox) > 1 DRAIN > 1 damage spell (Earthquake first) > extra lands > a 2nd drain; tutors back up missing pieces (Zenith GAIN, Wish DRAIN, Beseech anywhere). Default ON; =0 -> the 09-28 ladder
     COUNT
 };
@@ -655,7 +654,6 @@ inline const char* Name(int slot)
         "MTG_BOUNCE_RULE_AMEND",
         "MTG_RESTRICTED_MANA_RANK",
         "MTG_PD_CAST_ORDER",
-        "MTG_PD_CAST_ORDER_MIN",
         "MTG_PD_DISCARD_USER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
