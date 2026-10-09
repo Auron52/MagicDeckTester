@@ -46,6 +46,55 @@ true)`; `=0` restores `GenericProvider::CleanupDiscardCandidates` (max-MV). Quot
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `CritterLifegainProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`,
+sharing the duplicate-legend and removal helpers with the Angels policy), behind
+`MTG_CRITTER_BUCKET_DISCARD` (heurarm slot `CRITTER_BUCKET_DISCARD`, default ON; `=0` returns exactly
+`GenericProvider::CleanupDiscardCandidates`). Tests: `test/unit/test_critterlifegain_discard.cpp`.
+
+What runs, exactly as the SETTLED block reads:
+- Core ladder: land, watcher, payoff, Ocelot, land, payoff, 2nd watcher, land -- lands / watchers /
+  payoffs top up to their counts counting the board; the Ocelot slot does NOT count Prides in play.
+  Then "creatures to fill", then the 4th land (only with a 4+ drop).
+- SHED: Unexpectedly Absent -> duplicate legends (2nd Heliod / Daxos / Ajani, in play or in hand) ->
+  surplus lands (Remote Farm first) -> creature overflow (repeats, then 4-5 drops, then value) ->
+  spare watchers -> the KEEP ladder backwards. Every non-staged hand card is named.
+- Watchers: Soul Warden / Soul's Attendant > Auriok Champion > Daxos. Payoff slots: Pridemate / Voice
+  > Archangel > Heliod > Serra, Serra first at 30+ life. Agent default kept: Prides are exempt from
+  the variety rule (T5 pins it).
+- Prefix-stable -- tested shed by shed.
+
+Agent readings (the USER did not rule; each is pinned by a named test and is the USER's to overturn):
+- (a) "Creatures to fill" fills the rest of the SEVEN-card hand: room = 7 - (core cards from hand) -
+  (1 when the 4th land is kept); creatures beyond that are the "creature overflow". This is the one
+  reading under which KEEP (fill above the 4th land), SHED (overflow below the spare watchers) and
+  MANA ("4 while holding a 4+ mana card") all hold as written.
+- (b) "Holding a 4+ mana card" is read on the hand that survives the cleanup: the 4th land is kept
+  when the core or the fill (sized with its slot reserved) keeps a 4+ card. A 4+ drop that is itself
+  overflow reserves nothing (T10); where the 4+ drop and the 4th land compete for the last slot,
+  KEEP's "creatures to fill -> 4th land" keeps the creature (T9). Reading it on the hand BEFORE the
+  shed was tried first: it is not prefix-stable (the overflow Archangel sheds before the land it
+  reserved, which then flips to surplus mid-cleanup) and it keeps a 4th land for a card it discards.
+- (c) Payoff slots count payoffs in play (the Ajani -2 token included), read from the USER's explicit
+  Ocelot exemption; they pick by variety then the USER's payoff order. "4-5 drops shed first" applies
+  to the fill, so Archangel > Heliod > Serra stays meaningful in the payoff slots.
+- (d) The fill's value order: Pridemate / Voice > Ocelot > Archangel > Heliod > Serra > Ajani >
+  Ranger-Captain (Serra first at 30+). The payoffs keep the USER's order; Ocelot sits right below the
+  first payoffs, as the ladder places it and as the profile measures it (first copy +0.306, second
+  +0.211); Ajani and Ranger-Captain, listed last, measure negative.
+- (e) Variety reads the hand; a Remote Farm is one land; surplus lands shed Remote Farm first, then
+  the highest hand index.
+- (f) An unbucketed card sheds right after the removal (unreachable on the shipped list). No further
+  distance-to-castable term: the SETTLED block names none.
+
+Housekeeping done (comments in `DecisionProviders.{h,cpp}`): the provider block's "Ajani x3" and
+"exactly ONE hook", and `LegendKeepIndex`'s "Three Ajani" (now marked as v1; on v2 it only sees
+Heliod x2). NOT done (out of scope): `DecisionProvider.h:1263` and `:2476` still say "its three
+Ajani"; `cards.json` -- Ranger-Captain of Eos's note names the v1 fetch pool (v2 adds Ocelot Pride,
+MV 1), Auriok Champion's says "4 Champions" and reasons about Orzhov Basilica (v2: 3, no Basilica).
+
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
