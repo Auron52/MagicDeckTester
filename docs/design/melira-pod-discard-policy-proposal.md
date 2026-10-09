@@ -77,42 +77,64 @@ USER aside: "True, Celes is not very good when in hand. She is much better in th
 Implemented as `MeliraPodProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`, after
 `ReviveCandidates`) behind `MTG_POD_BUCKET_DISCARD` (heurarm `POD_BUCKET_DISCARD`, default ON; `=0`
 returns exactly `GenericProvider::CleanupDiscardCandidates`). Tests: `test/unit/test_melira_pod_discard.cpp`
-(12 cases; every board's full shed order derived by hand from the SETTLED block, plus the generic control).
+(every board's full shed order derived by hand from the SETTLED block, plus the generic control).
 No profile, `cards.json`, decklist or engine change was needed (`required_pieces` stays empty, so the
-`CleanupDiscardProtectionWaived` hook is not used).
+`CleanupDiscardProtectionWaived` hook is not used). `CleanupDiscardShedStable()` is false while the
+policy is on, so a multi-card cleanup is re-ranked after every shed (see the review fixes below).
 
 As built (net of board throughout; classification by params):
 - KEEP: mana1 > enabler (or Chord) > mana2 > outlet (or Chord) > mana3 > persist1 (or Chord) > Pod >
-  mana4 > persist2 > mana5 (only with a Chord kept above it).
+  mana4 > persist2 > mana5 (with any Chord in hand); a kept piece's colour land sits just above it.
 - SHED: dead Karoo > Celes with no source of a colour she needs > duplicate legend (2nd Melira, in play or
   an earlier hand copy) > surplus lands (keep order reversed) > toolbox (Chupacabra > Severance Priest >
   Reclamation Sage > Celes with R > surplus dorks > Felidar > Reveillark > Ooze > Voice > Ranger >
   Recruiter) > extra Pods / the Pod with the combo assembled > surplus combo copies (spare enablers >
   spare persist, costlier first > Bloodthrone > spare Feeders) > extra Chords > Ranger / Recruiter while
-  a role is missing > the ladder reversed.
+  a role THEY can fetch is missing > the ladder reversed.
 - Mana order inside the bucket: greedy G/W/B coverage over board + hand (a hand Pathway counts both
   faces), then dorks (while a {G} source exists to cast them), then lands: fastlands that would enter
   tapped (board lands above `fastland_max_other_lands`) last, then more colours, then hand order.
   Painlands are not demoted. Dorks never shed as surplus mana.
 
+Review fixes (2026-10-09, after an independent review; one commit):
+- **FIX 1 -- COLOURS FIRST BEATS THE COUNT (integrator reading, 2026-10-09; surfaced to the USER;
+  consistent with EldraziFlicker's R6 and the USER's Prevent Damage ladder).** A land that supplies a
+  colour a KEPT piece needs, which no source in play or already kept supplies, is kept even past the mana
+  quota, just above that piece in the ladder. Castability -- the enabler / persist choice and the Pod's
+  "easily castable" test -- counts only lands actually kept (the quota's and these colour lands). The bug
+  it closes: with no {W} in play and the quota met by the board, the lone {W} land (Caves of Koilos) was
+  index 0 while the Pod was ruled surplus because the kept Vizier could be cast off that very land.
+- **FIX 2 -- agent reading 5 corrected** (below).
+- **FIX 3 -- agent reading 1 corrected, design-literal** (below): ANY Chord in hand raises the quota to 5.
+- **FIX 4 -- not prefix-stable.** Shedding an extra Chord turns the 5th land surplus, shedding a piece
+  releases its colour land, and the Pod / tutor tests read the hand -- so `CleanupDiscardShedStable()`
+  returns false while the policy is on (true under the `=0` hatch), as Fluctuator's does.
+
 Agent readings (the USER may overturn any):
-1. **Extra Chord placement / mana5.** An extra Chord sheds after the surplus combo copies (the SETTLED
-   SHED line), i.e. it is kept just above the toolbox, and it does NOT raise the mana quota: mana5 sits
-   above the extra-Chord slot in the KEEP line, so only a Chord kept for a missing piece activates it.
+1. **Extra Chord placement.** An extra Chord sheds after the surplus combo copies (the SETTLED SHED line),
+   i.e. it is kept just above the toolbox. Per the SETTLED mana line ("5 while a Chord is kept") it still
+   raises the quota to 5 -- corrected in the review (the first cut bumped it only for a Chord kept for a
+   missing piece, reasoning that the extra Chord sheds before the 5th land it justifies; with per-shed
+   re-ranking that land turns surplus the moment the Chord goes).
 2. **A Chord fills a missing slot only if the library still holds a creature of that role** (the PD
    "tutor with no legal target" class). Celes counts for the enabler role here because a Chord PUTS her
    onto the battlefield.
-3. **"Easily castable"** = each role not on the battlefield has a hand piece castable *on its own* from
-   the mana in play plus one *untapped* land drop, colour-exact (each pip takes a distinct source). Not
-   the sum of all pieces in one turn.
+3. **"Easily castable"** = each role not on the battlefield is held by the KEPT hand piece for it, castable
+   *on its own* from the mana in play plus one *untapped*, *kept* land drop, colour-exact (each pip takes
+   a distinct source). Not the sum of all pieces in one turn; a surplus land does not count (FIX 1).
 4. **Persist sub-role order.** persist1 / persist2 take the sub-role (Redcap payload / Finks body) not
    yet held on board or kept, then the copy castable next turn, then Redcap, then hand order. So with
    too little mana for Redcap, Finks is persist1 (and Pod, right after it, climbs Finks into Redcap).
    The enabler slot likewise takes the castable copy first.
 5. **"Recruiter / Ranger protected while a role is missing"** = they leave the toolbox and shed only
-   after every explicit shed class, ahead of the ladder; "missing" is `PutTargetPolicy`'s any_missing
-   (enabler / outlet / lifegain persist / damage persist absent from battlefield + hand). With nothing
-   missing they shed after Voice, Ranger first (the proposal's section 6 order).
+   after every explicit shed class, ahead of the ladder -- and only while a role is missing that THAT
+   tutor can fetch from the library by its own tutor params (`tutor_types`, `tutor_max_mv`,
+   `tutor_max_toughness`). The roles are enabler / outlet / persist, with persist ONE fungible role of 2
+   (USER: "Redcap 1 + Finks 1, fungible"), counted over battlefield + hand. Corrected in the review: the
+   first cut used `PutTargetPolicy`'s four roles (Redcap and Finks separate) and protected a tutor that
+   could not fetch the missing piece (Ranger of Eos, `tutor_max_mv 1`, protected when only a Redcap was
+   missing). So Recruiter is protected for any missing role; Ranger only for a missing outlet. Otherwise
+   they shed after Voice, Ranger first (the proposal's section 6 order).
 6. **Celes with an R source** sheds right after the three inert bodies, and a **surplus dork** right after
    her (both "above the inert bodies" in the proposal's P3 / B1).
 7. **Severance Priest vs Reclamation Sage** carry identical (empty) params; the USER's order (Priest
