@@ -393,13 +393,28 @@ peeked at, so lookahead "wins" for free. **Remove the peek and the table wins.**
   fresh shuffles; lookahead's library-specific deviations are blind-*worse* by 0.5–1.9t.
 So a low-R attribution "loss" to lookahead is mostly the peek confound plus fixable table R-noise, NOT a
 real defect. **Confirm each new profile with the CONFOUNDED A/B** (`MTG_CONFOUND_BOTTOM`) and check that
-blind ≥ lookahead. **This NO LONGER holds on every profile.** As of 2026-09-01 the gate FAILS
-decisively on **Dragons (+0.0641t, 0/16 seeds, mean/se +8.84)** and **Mirrorwing v3 (+0.1006t, 0/16
-seeds, mean/se +17.99)**, while Minotaur passes. Both failures are systematic rather than label
-noise, so the "raise R" half of the response below is **not** the answer for them; and the obvious
-gen-depth explanation is REFUTED (Minotaur generates at d1/b3 — shallower than Mirrorwing's d2/b3 —
-and passes). Mechanism unknown: read `docs/design/confounded-bottoming-gate-failures.md` before
-re-deriving a hypothesis. There is no ship-off escape hatch, so a
+blind ≥ lookahead. The 2026-09-01 failures on **Dragons (+0.0641t, 0/16)** and **Mirrorwing v3
+(+0.1006t, 0/16)** are **ROOT-CAUSED AND FIXED (2026-09-02)** — both were repaired in place, both
+gates now pass, and both are adopted. **This paragraph used to say "mechanism unknown"; it is not,
+and that stale line caused a later Snow run to be reported to the user as a coin-flip risk it was
+not.**
+
+The cause was a **journal-resume bug, not a modelling mystery**: `feed_sub()` sat inside the
+producer loop's `if (!refine)` branch, but a journal resume publishes `refs_ready` before the loop
+starts, so the floor branch never ran, the fused sub batches were **never drained**, and the run
+exited *successfully* with a bottoming table built from **1 rollout per cell** (the probe carry).
+Blind bottoming was then argmin-ing over noise.
+
+> **CHEAP PRE-CHECK — do this when a profile is written, not after a 26 h gate.** The sub-cell R
+> distribution is diagnostic by itself: `python3 scripts/mullgen_progress.py decks/<Deck>` ("SUB
+> bottoming" block). **Sub cells pinned at R=1 ⇒ the bug ⇒ the gate WILL fail.** A mean R near cap
+> means the table is real. R=**2** is legitimate (the adaptive floor; Goblins passed there) — it is
+> specifically **1** that is the signature. No deck with a properly-sampled sub-table has ever
+> failed this gate, now including Snow (mean R 22.83, pass −0.0771t 16/16) which generated across
+> **three journal resumes** and so exercises the fixed path directly.
+
+Read `docs/design/confounded-bottoming-gate-failures.md` before re-deriving any hypothesis. There
+is no ship-off escape hatch, so a
 profile that ever *failed* the confounded A/B would be a signal to fix the bottoming heuristic or raise R
 (a modeling/quality problem), NOT to disable bottoming. Note the GT tradeoff: because the *standard* (unconfounded) goldfish metric still rewards the peek, enabling blind
 bottoming shows a small win-turn *increase* on mulligan games — a deliberate, honest shift to accept via

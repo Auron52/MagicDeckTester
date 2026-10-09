@@ -128,9 +128,25 @@ had a journal to resume from and a probe to carry.
 | Goblins | **2** (= adaptive floor, legitimate) | pass |
 | **Dragons** | **1** — 100% of 156506 cell-sides | **fail +0.0641t, 0/16** |
 | **Mirrorwing** | **1** — 100% of 142464 cell-sides | **fail +0.1006t, 0/16** |
+| Snow (2026-10-08) | **mean 22.83**, 63.1% at cap 30, 19.8% at 18, 17.1% at floor 2 (162004 cell-sides) | pass **−0.0771t, 16/16, mean/se −22.84** |
 
 The two decks that failed are exactly the two whose bottoming half was never sampled. No deck with a
 properly-sampled sub-table has ever failed this gate.
+
+**Snow is a deliberate test of the fix, and it holds.** Snow generated across **three journal resumes**
+(a cross-machine handoff plus a hard-crash recovery), i.e. exactly the path that made `feed_sub()`
+unreachable — and `rollsub` climbed to 2,134,704 *after* a resume, with the sub side converging through
+five waves to `subwave=5 conv`. So the fused sub batches are now drained on the resume path, and the
+bottoming gate passes decisively on a deck that would have been a guaranteed failure before `feed_sub()`
+was hoisted out of the `!refine` branch.
+
+> **The cheap pre-check this gives you, which beats waiting ~26 h for the gate.** The sub-cell R
+> distribution is *diagnostic on its own*: `python3 scripts/mullgen_progress.py decks/<Deck>` prints it
+> (the "SUB bottoming" block). **Sub cells pinned at R=1 means the bug, and the bottoming gate WILL
+> fail; a mean R near cap means the table is real.** Check that the moment a profile is written rather
+> than inferring it from a failed A/B two days later. Note R=2 is *legitimate* (Goblins passed at the
+> adaptive floor) — it is specifically **1** that is the signature, because that is the probe-carry
+> sample alone.
 
 ## Why one rollout per candidate is worse than useless
 
