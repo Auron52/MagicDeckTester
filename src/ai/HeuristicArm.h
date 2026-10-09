@@ -346,7 +346,7 @@ enum Slot : int
     BOUNCE_RULE_AMEND,        // MTG_BOUNCE_RULE_AMEND      the base Karoo rule's amendment (Dragons s7007 gi959): a land's CREATURE-ONLY colours (Haven of the Spirit Dragon, Unclaimed Territory, Cavern) are not colours it makes -- neither for its own coverage nor for covering another land; and the rule decides only when ONE land qualifies -- several different qualifying lands go to the search. DEFAULT ON (2026-10-09); =0 = the unamended rule
     RESTRICTED_MANA_RANK,     // MTG_RESTRICTED_MANA_RANK   a colored_creature_only source whose restricted colours this deck's creature spells can use number at most ONE (DeckTraits: GameState::deck_creature_pip_colors) ranks as a {C} source plus one creature-only colour, below the mono tier (ManaSourceRankBase), instead of a rainbow held last of the lands; its rebuy activation's {T} source is held through the plan's casts and its own {2}. Dragons s7007 gi959 (Haven of the Spirit Dragon). DEFAULT ON; =0 restores the historical ladder
     PD_CAST_ORDER,            // MTG_PD_CAST_ORDER          Prevent Damage: the cast-order DRAFT for the USER -- tutors (Green Sun's Zenith 3, Living Wish 4, Beseech 5), gain (Tamanoa 10), drains (Vito / Dina 11), fuel enablers (Spellshock 12, Manabarbs 13), amplifiers (Rhox / Bilbo 14), finishers (Rolling Earthquake 25, Pyrohemia 26). Default OFF -- the order is the USER's
-    PD_SHED_FAR_TUTOR,        // MTG_PD_SHED_FAR_TUTOR      Prevent Damage: discard DRAFT for the USER -- a far tutor (distance >= 2) gets no DIG1 protection and sheds first in the overflow (s50001 gi0: a far Beseech kept over a second Manabarbs). Default OFF
+    PD_CAST_ORDER_MIN,        // MTG_PD_CAST_ORDER_MIN      TEMPORARY measurement slot (2026-10-09): the generic cast order with only Spellshock (30 -> 15) and the finishers (Rolling Earthquake 25, Pyrohemia 26) moved
     COUNT
 };
 
@@ -654,7 +654,7 @@ inline const char* Name(int slot)
         "MTG_BOUNCE_RULE_AMEND",
         "MTG_RESTRICTED_MANA_RANK",
         "MTG_PD_CAST_ORDER",
-        "MTG_PD_SHED_FAR_TUTOR",
+        "MTG_PD_CAST_ORDER_MIN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

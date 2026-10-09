@@ -323,22 +323,3 @@ TEST_CASE("PD discard: an unused drop with only a DEAD Reflecting Pool in hand i
     CHECK(off.front() == 2);   // S0 (c) sheds the dead Pool anyway
     heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = -1;
 }
-
-TEST_CASE("PD discard: MTG_PD_SHED_FAR_TUTOR draft -- a FAR Beseech is not protected (s50001 gi0)")
-{
-    // A T4-shaped cleanup at two lands with one black source: Beseech costs 5 here (two twobrid pips
-    // still generic) -- far. Tamanoa and Vito fill the engine slots themselves, so no tutor is needed
-    // as a wildcard.
-    const GameState s = MakePd({ "Beseech the Queen", "Manabarbs", "Manabarbs", "Tamanoa",
-                                 "Vito, Thorn of the Dusk Rose", "Spellshock", "Rolling Earthquake",
-                                 "Rhox Faithmender" },
-                               { "City of Brass", "Ancient Tomb" });
-    const std::vector<int> off = Pd(s);
-    CheckPermutation(s, off);
-    CHECK(off.front() != 0);                       // control: DIG1 protects the far Beseech
-    heurarm::t_arm[heurarm::PD_SHED_FAR_TUTOR] = 1;
-    const std::vector<int> on = Pd(s);
-    heurarm::t_arm[heurarm::PD_SHED_FAR_TUTOR] = -1;
-    CheckPermutation(s, on);
-    CHECK(on.front() == 0);                        // the far Beseech sheds first
-}

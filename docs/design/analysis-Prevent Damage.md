@@ -2079,6 +2079,56 @@ searched play at ~0.65x units.
    axis costs far less; recommendation: keep it searched (paying more mana with painful lands can be
    worth MORE drain, so the choice is not dominated). [searched]
 
+### Landed (2026-10-09, `a31d01a8`)
+
+The approved rule's gate: full smoke 114/118 and full regression 160/166 byte-identical (only pd / pd2hg
+keys move), 556 references clean, mtg-test 549/549. Vs the engine-only rule's GT: overnight searched 31
+faster / 11 slower (-20 turns), regression 3 faster / 1 slower. Rebased over upstream `fb831a13`
+(restricted mana rank): the merged GT (upstream's keys + PD's) re-verified on the rebased binary -- smoke
+118/118, PD regression 6/6, PD overnight 16/16, all byte-identical. **Cost: PD's worst regression row 65.2K
+units/game vs Hinata's 61.0K (1.07x) -- with NO value leaf or keep table (Hinata has both).**
+
+## References matched (2026-10-09; USER: "verify that the references are matched before generating any artifacts")
+
+`scripts/ref_bench.py --deck prevent_damage` on `a31d01a8` (each hand-played reference's exact opening
+hand via `--force-mulligan`, the shipped play policy): **0 / 11 short** -- the search equals the human's
+win turn on 7 and is a turn faster on 4 (s3 gi2, s4 gi3, s7 gi6, s9 gi8); average 5.273 vs the human's
+5.636. Artifact `logs/pd_opt/refbench/base.json`.
+
+## Cast order and discard (USER request 2026-10-09: "I would also like to hear your suggestion for the discard heuristic and cast order")
+
+Both are USER decisions; everything below is input to them. Every arm is a heurarm flag in ONE pooled batch
+per round; fresh seeds; paired per game, losses scored 9.
+
+| arm | what it changes vs the generic order (creatures 10, noncreatures 20, `on_cast_trigger_damage` 30) |
+|---|---|
+| `order` (`MTG_PD_CAST_ORDER`, full draft) | tutors first (GSZ 3, Living Wish 4, Beseech 5), then gain engine 10, Vito/Dina 11, Spellshock 12, Manabarbs 13, Rhox/amp 14, Rolling Earthquake 25, Pyrohemia 26 |
+| `omin` (`MTG_PD_CAST_ORDER_MIN`, minimal) | Spellshock 30 -> 15 (after creatures, before the other noncreatures, so later spells trigger it); Rolling Earthquake 25 and Pyrohemia 26 (after the rest) |
+
+**Round 1** (`logs/pd_opt/multi6/`, s170001+, 4,900 games): `order` +0.0016 t/game (d5 7 faster / 15
+slower, d3 9 / 2). Mechanism: the rank drives the greedy rollout past the horizon, so the order changes
+VALUATION, not just the cast sequence -- tutors-first makes rollouts spend T2/T3 mana on a tutor before the
+engine. That is why the minimal arm keeps the generic tiers and fixes only the two clear defects.
+Discard: the generic discard vs the §5i bucket policy moved 13 games, -0.0008 -- the choice barely matters.
+The far-tutor discard exception (`MTG_PD_SHED_FAR_TUTOR`) fired in 2 of 4,900 games and was deleted.
+
+**Round 2** (`logs/pd_opt/multi7/`, s180001/s181001 d5 b20 x600, 2HG s182001 x300, d3 b10 s183001 x400, d0
+s184001 x3000):
+
+| arm vs base | delta t/game | faster / slower | sign p | units |
+|---|---|---|---|---|
+| `omin` | **-0.0053 +/- 0.0022** (95% CI -0.0096..-0.0010) | 50 / 25 | 0.005 | 0.997x |
+| `order` | +0.0006 +/- 0.0025 | 40 / 42 | 0.91 | 0.996x |
+
+`omin` per cell: d5 s180001 -0.0067 (4/0), d5 s181001 -0.0083 (6/1), 2HG -0.0133 (5/1), d0 -0.0043
+(31/19), d3 0.0000 (4/4). **Recovery (two-stage):** all 6 slower searched games recover at stage 1
+(`--depth W --budget-ms 100`), so stage 2 had nothing to run (`logs/pd_opt/omin_verify/`). **References
+under `omin`:** 0 / 11 short, identical win turns to base (5.273 vs the human's 5.636); one reference's
+log differs (s11 gi10, same turn), so the flag is live (`logs/pd_opt/refbench/omin.json`).
+
+**Recommendation (awaiting the USER):** adopt the minimal order (default ON, PD only); drop the full
+draft; keep the §5i bucket discard policy as shipped.
+
 ## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
 
 | flag | defect | fix | reach |

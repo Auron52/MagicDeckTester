@@ -12258,6 +12258,18 @@ int PreventDamageProvider::CastOrderRank(const GameState& s, const CardDefinitio
         if (p.x_damage_each_creature_and_player)           { return 25; }
         if (p.ping_all_cost.has_value())                   { return 26; }
     }
+    // MINIMAL variant (TEMPORARY measurement slot MTG_PD_CAST_ORDER_MIN): the generic order with only
+    // its two defects for this deck fixed -- Spellshock out of the self-ping tier (30 -> 15: after
+    // the creatures, before the noncreature spells it triggers on) and the finishers last (Rolling
+    // Earthquake 25, Pyrohemia 26: behind the tutors, so a Zenith's Tamanoa is out first).
+    static const bool s_min_env = EnvOn("MTG_PD_CAST_ORDER_MIN");
+    if (heurarm::Flag(heurarm::PD_CAST_ORDER_MIN, s_min_env))
+    {
+        const CardParams& p = def.params;
+        if (p.on_cast_trigger_damage > 0)        { return 15; }
+        if (p.x_damage_each_creature_and_player) { return 25; }
+        if (p.ping_all_cost.has_value())         { return 26; }
+    }
     return GenericProvider::CastOrderRank(s, def);
 }
 
@@ -12824,20 +12836,7 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
                 }
                 break;
             case DIG1:
-            {
-                // FAR-TUTOR EXCEPTION (MTG_PD_SHED_FAR_TUTOR, default OFF -- a DRAFT for the USER's review,
-                // ledger "Discard: the far-tutor exception"): a tutor at distance >= 2 (Beseech at two
-                // lands and one black source) is not protected by DIG1 -- s50001 gi0 kept such a
-                // Beseech and shed a second Manabarbs, then spent T7 casting it. A far tutor can still
-                // fill an empty GAIN1 / DRAIN1 slot above, where it is the only route to the piece.
-                static const bool s_far_tutor = EnvOn("MTG_PD_SHED_FAR_TUTOR");
-                int i = -1;
-                if (heurarm::Flag(heurarm::PD_SHED_FAR_TUTOR, s_far_tutor))
-                { for (int j : digs) { if (!keep[static_cast<std::size_t>(j)] && !far(j)) { i = j; break; } } }
-                else { i = first_free(digs); }
-                if (i >= 0) { take(i); }
-                break;
-            }
+            { const int i = first_free(digs); if (i >= 0) { take(i); } break; }
             case FUEL1:
             { const int i = first_free(fuels); if (i >= 0) { take(i); } break; }
             case GAIN2:
@@ -12929,13 +12928,6 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
         if (fa && da != db) { return da > db; }
         return value_less(b, a);
     };
-    // FAR-TUTOR EXCEPTION, shed side: an unkept far tutor goes at the head of the overflow, ahead of
-    // the unkept fuel (MTG_PD_SHED_FAR_TUTOR; see DIG1).
-    {
-        static const bool s_far_tutor = EnvOn("MTG_PD_SHED_FAR_TUTOR");
-        if (heurarm::Flag(heurarm::PD_SHED_FAR_TUTOR, s_far_tutor))
-        { for (int i : digs) { if (!keep[static_cast<std::size_t>(i)] && far(i)) { put(i); } } }
-    }
     for (std::vector<int>* v : { &fuels, &drains, &amps, &digs, &gains })
     {
         std::vector<int> over;
