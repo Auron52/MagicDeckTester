@@ -138,36 +138,99 @@ TEST_CASE("WhiteKnights discard: a 2nd Adeline in hand and a Basri with a copy i
     CHECK(Gen(s).front() == 0);
 }
 
-TEST_CASE("WhiteKnights discard: Remote Farm counts as 2 mana -- one Farm fills the 2 the hand owes")
+TEST_CASE("WhiteKnights discard: Remote Farm counts as ONE source; its 2 mana go into the fill")
 {
-    // Board 1 Plains; target 3 -> the hand owes 2 mana. The Farm makes {W}{W}, so it alone fills the
-    // quota (the bigger source is kept: fewer cards for the same mana) and BOTH hand Plains are
-    // surplus, worst first (2, 1). The Farm is the last card.
+    // Review fix (2026-10-09, the Angels precedent): each mana source counts ONE toward the land
+    // quota. Board 1 Plains, target 3 -> the hand owes 2 sources. Both kept pairs give the same fill
+    // -- {Farm, Plains} makes 1 / 4 / 4 (the Farm enters tapped), {Plains, Plains} 2 / 3 / 3, and each
+    // casts Venerable, Worthy + Accorder and Benalish (4 creatures, 1 lord) -- so the keep order
+    // decides: the Farm (the bigger source) and the first Plains are kept, the second Plains (2) is
+    // surplus. Exemplar (6) is the creature outside the fill. The fill, latest-scheduled first:
+    // Benalish (5) on turn 3, Accorder (7) then Worthy (4) on turn 2, Venerable (3) on turn 1; then the
+    // kept sources, Plains (1) before the Farm (0). The old rule (Farm = 2 toward the quota) shed BOTH
+    // Plains: { 2, 1, ... }.
     const GameState s = MakeWk({ kFarm, "Plains", "Plains", kVen, kWorthy, kBenalish, kExemplar, kAccorder },
                                { "Plains" }, 2);
-    const std::vector<int> o = Wk(s);
-    REQUIRE(o.size() == 8);
-    CHECK(o[0] == 2);
-    CHECK(o[1] == 1);
-    CHECK(o[7] == 0);
-    CheckPermutation(s, o);
+    CHECK(Wk(s) == std::vector<int>{ 2, 6, 5, 7, 4, 3, 1, 0 });
     CHECK(Gen(s).front() == 5);
 }
 
-TEST_CASE("WhiteKnights discard: Sol Ring counts as mana -- it fills the slot and the Plains is surplus")
+TEST_CASE("WhiteKnights discard: a Plains over Sol Ring when a W pip depends on it (Benalish Marshal)")
 {
-    // Board 2 Plains; target 3 -> the hand owes 1. Sol Ring (2 mana, no land drop) fills it, so the
-    // hand Plains (1) is surplus -> index 0, and the Ring is kept to the end. The Knights rule (no
-    // extras) does not count a rock as mana: it keeps the Plains and sheds the Ring as unclassified.
+    // The reviewer's board (2026-10-09). Board 2 Plains, target 3 -> the hand owes ONE source: Sol
+    // Ring or the Plains. Keeping the Plains gives 3 W a turn and the fill Venerable + Worthy, Benalish,
+    // Exemplar (4 creatures, 2 lords); keeping Sol Ring leaves two W sources, so Benalish ({W}{W}{W})
+    // can never be cast and the best fill has 1 lord -- the Plains is kept and the Ring (0) is surplus.
+    // Outside the fill, lowest value first: Accorder (6), Silverblade (7); the fill latest-scheduled
+    // first: Exemplar (5), Benalish (4), Venerable (2), Worthy (3); the Plains (1) last. The old rule
+    // kept the Ring (2 toward the quota) and shed the Plains first, stranding Benalish.
     const GameState s = MakeWk({ kSolRing, "Plains", kVen, kWorthy, kBenalish, kExemplar, kAccorder, kSilver },
                                { "Plains", "Plains" }, 3);
+    CHECK(Wk(s) == std::vector<int>{ 0, 6, 7, 5, 4, 2, 3, 1 });
+    CHECK(Gen(s).front() == 4);
+
+    // Control: with no W-hungry card the Ring's extra mana wins. Board 2 Plains; hand Sol Ring, Plains,
+    // four 2-drops, Exemplar, Silverblade. The Plains keeps 3 / 3 / 3 (3 creatures); the Ring makes
+    // 3 / 4 / 4 (4 creatures: three 2-drops and Exemplar) -> the Plains (1) is surplus, the Ring kept.
+    const GameState t = MakeWk({ kSolRing, "Plains", kWorthy, kAccorder, kWorthy, kAccorder, kExemplar, kSilver },
+                               { "Plains", "Plains" }, 3);
+    const std::vector<int> u = Wk(t);
+    REQUIRE(u.size() == 8);
+    CHECK(u[0] == 1);
+    CHECK(u[7] == 0);
+    CheckPermutation(t, u);
+}
+
+TEST_CASE("WhiteKnights discard: a Remote Farm IN PLAY counts only the uses it has left")
+{
+    // Review fix (2026-10-09). Board Plains + a Remote Farm on its LAST depletion counter: it makes
+    // {W}{W} once more (turn 1 of the window) and is then sacrificed, so it does not count toward the
+    // land quota (agent reading: a depletion source counts while it has 2+ uses -- most of the window).
+    // The hand owes 2 sources -> BOTH hand Plains are kept. Mana 4 / 3 / 3 (the Farm's last {W}{W} on
+    // turn 1): the fill casts 4 -- Venerable + a 3-drop, then a 3-drop on each later turn; with both
+    // lords in, the third 3-drop is the most valuable body left, Silverblade (5 cards would cost 11 >
+    // 10) -- so Accorder (6) then Worthy (3) are outside -> shed first, lowest value first. The old rule
+    // counted the Farm as 2 mana every turn and 2 toward the quota, so it shed both Plains first:
+    // { 1, 0, ... }.
+    GameState s = MakeWk({ "Plains", "Plains", kVen, kWorthy, kBenalish, kExemplar, kAccorder, kSilver },
+                         { "Plains", kFarm });
+    s.battlefield.back().counters.Add(Counter::Type::Depletion, 1);
     const std::vector<int> o = Wk(s);
     REQUIRE(o.size() == 8);
-    CHECK(o[0] == 1);
+    CHECK(o[0] == 6);
+    CHECK(o[1] == 3);
+    CHECK(o[6] == 1);
     CHECK(o[7] == 0);
     CheckPermutation(s, o);
     CHECK(Gen(s).front() == 4);
-    CHECK(KnightsRule(s).front() == 0);
+
+    // A Farm with both counters still counts as one source: the hand owes 1, the second Plains (1)
+    // is surplus.
+    GameState t = MakeWk({ "Plains", "Plains", kVen, kWorthy, kBenalish, kExemplar, kAccorder, kSilver },
+                         { "Plains", kFarm });
+    t.battlefield.back().counters.Add(Counter::Type::Depletion, 2);
+    CHECK(Wk(t).front() == 1);
+}
+
+TEST_CASE("WhiteKnights discard: casting Sol Ring spends a mana from that turn's pool")
+{
+    // Review fix (2026-10-09). Board 2 Plains, Sol Ring the only mana in hand (kept: the hand owes one
+    // source). On the turn it is cast the Ring is paid from a Plains, so that turn holds {W} + {C}{C},
+    // not {W}{W} + {C}: the window is 1W+2C / 2W+2C / 2W+2C, five W in all. Four creatures fit
+    // (Venerable; Venerable + Accorder; Exemplar) but both Exemplars together need too much white, so
+    // the 2nd Exemplar (4) is outside with Silverblade (6) and Benalish (5) -> lowest value first:
+    // 6, 4, 5. The old pool (both Plains kept for the Ring's turn) fit both Exemplars and shed the 2nd
+    // Venerable first.
+    const GameState s = MakeWk({ kSolRing, kVen, kVen, kExemplar, kExemplar, kBenalish, kSilver, kAccorder },
+                               { "Plains", "Plains" }, 3);
+    const std::vector<int> o = Wk(s);
+    REQUIRE(o.size() == 8);
+    CHECK(o[0] == 6);
+    CHECK(o[1] == 4);
+    CHECK(o[2] == 5);
+    CHECK(o[7] == 0);
+    CheckPermutation(s, o);
+    CHECK(Gen(s).front() == 3);
 }
 
 TEST_CASE("WhiteKnights discard: a held 4-drop (Hero of Bladehold) keeps a 4th land")
