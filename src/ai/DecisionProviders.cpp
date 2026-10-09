@@ -13525,8 +13525,11 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
 {
     if (!CgBucketDiscardEnabled())
     {
-        // The DotH-last patch, byte-for-byte as shipped 2026-08-06 (see the header).
+        // The DotH-last patch, byte-for-byte as shipped 2026-08-06 (see the header). MTG_CG_DOTH_LAST=0
+        // drops it too -> the generic ranking: the third arm of the USER's A/B (generic / patch / buckets).
+        static const bool s_doth_last = EnvOn("MTG_CG_DOTH_LAST", true);
         std::vector<int> base = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        if (!heurarm::Flag(heurarm::CG_DOTH_LAST, s_doth_last)) { return base; }
         const Player& ap = s.players[s.active_player_index];
         std::vector<int> out, doth;
         for (int i : base)

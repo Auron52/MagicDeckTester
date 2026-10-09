@@ -353,6 +353,21 @@ TEST_CASE("CG discard: =0 is exactly the shipped DotH-last patch; the three arms
     CHECK(Cg(c6).front() == 6);
     CHECK(Gen(c6).front() == 4);
     CHECK(DothLast(c6).front() == 2);
+    // The third arm at RUNTIME: buckets off AND MTG_CG_DOTH_LAST=0 -> exactly the generic ranking,
+    // so a pooled batch can run generic / patch / buckets as per-job flags.
+    for (const GameState& s : boards)
+    {
+        const std::vector<int> want_gen = Gen(s), want_patch = DothLast(s);   // before pinning the arms
+        heurarm::t_arm[heurarm::CG_BUCKET_DISCARD] = 0;
+        heurarm::t_arm[heurarm::CG_DOTH_LAST]      = 0;
+        const std::vector<int> got_gen = Prov().CleanupDiscardCandidates(s, nullptr);
+        heurarm::t_arm[heurarm::CG_DOTH_LAST]      = 1;
+        const std::vector<int> got_patch = Prov().CleanupDiscardCandidates(s, nullptr);
+        heurarm::t_arm[heurarm::CG_DOTH_LAST]      = -1;
+        heurarm::t_arm[heurarm::CG_BUCKET_DISCARD] = -1;
+        CHECK(got_gen == want_gen);
+        CHECK(got_patch == want_patch);
+    }
 }
 
 TEST_CASE("CG discard: every non-staged index named exactly once; a staged card goes last")
