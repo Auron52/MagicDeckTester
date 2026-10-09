@@ -15,6 +15,9 @@
 # accepted-with-regressions (smoke, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
 # accepted-with-regressions (regression, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
 # accepted-with-regressions (overnight, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
+# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
+# accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
+# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -115,7 +118,7 @@ critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
 melira2hg_smoke_d3_s1001=4.8400/15182cf23a0ec013
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=5.0200/17792659b430d2f9
-pd2hg_smoke_d3_s1001=5.9333/68c6b4a2640b9137
+pd2hg_smoke_d3_s1001=5.9333/8a689057398127eb
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.5400/fe8f95f9362334e7
 fluctuator_smoke_d5_s1001=3.5067/7b3eeadf188dfa29
@@ -131,9 +134,9 @@ selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
 soldiers_smoke_d0_s1001=4.4320/0c7926df614c90b5
 soldiers_smoke_d3_s1001=4.2800/50e56ed79872f3b3
 soldiers_smoke_d5_s1001=4.2933/abf388e9f9e0a413
-pd_smoke_d0_s1001=7.6080/ba05dc984be37e92
-pd_smoke_d3_s1001=5.7200/c0fbff2b58d8c525
-pd_smoke_d5_s1001=5.7333/c6387af419c44964
+pd_smoke_d0_s1001=7.6130/c92f14ee30c3726c
+pd_smoke_d3_s1001=5.6800/fcf43d50fa0e787c
+pd_smoke_d5_s1001=5.8000/7772773084cf3c71
 snow_smoke_d0_s1001=6.4660/ae25442a03503915
 snow_smoke_d3_s1001=6.0000/13ce3a7e1c79588b
 snow_smoke_d5_s1001=6.0000/d90c911f6a435617
@@ -269,7 +272,7 @@ whiteknights2hg_regression_d3_s2002=4.5800/1b2753b651882581
 fivecolour2hg_regression_d3_s2002=5.3400/25d5cd76cbc94442
 fluctuator2hg_regression_d3_s2002=3.5600/c22ef90f0e87aabc
 angels2hg_regression_d3_s2002=5.1667/2b9e249e4b93bbe9
-pd2hg_regression_d3_s2002=5.8800/78c5c7126d074ca2
+pd2hg_regression_d3_s2002=5.8400/af7a7a62a32354d4
 fluctuator_regression_d0_s2002=5.1670/d028d0e755828667
 fluctuator_regression_d3_s2002=3.5867/ec64f45c11055934
 fluctuator_regression_d3_s3003=3.5200/170ba9de5a232dc1
@@ -295,11 +298,11 @@ soldiers_regression_d3_s2002=4.2400/557e65914a556944
 soldiers_regression_d3_s3003=4.2600/a3977f7005460030
 soldiers_regression_d5_s2002=4.2400/3b4c36f18f7cf84c
 soldiers_regression_d5_s3003=4.2800/cc9dbdf77c219ad0
-pd_regression_d0_s2002=7.5180/1a04da995f12a75d
-pd_regression_d3_s2002=5.7000/808517bc619dc91e
-pd_regression_d3_s3003=5.7750/d6cb58790e99c78d
-pd_regression_d5_s2002=5.6800/d41da46d29625103
-pd_regression_d5_s3003=5.8000/16315a93497c07ca
+pd_regression_d0_s2002=7.5230/019b72d0175b4996
+pd_regression_d3_s2002=5.6750/fef1264d97d294d2
+pd_regression_d3_s3003=5.7500/1ca36ce9e96fa661
+pd_regression_d5_s2002=5.7200/5bd5ba9d9097c8d4
+pd_regression_d5_s3003=5.8000/18b86603d8ff25a1
 snow_regression_d0_s2002=6.4410/db2a18d6a341b2e9
 snow_regression_d3_s2002=6.0000/7bc7feadd0c2313a
 snow_regression_d3_s3003=5.8167/5f24e959ffddfd0c
@@ -619,18 +622,18 @@ soldiers_overnight_d5_s4004=4.2400/8176740359fd349a
 soldiers_overnight_d5_s5005=4.2440/1dec09d137ee5490
 soldiers_overnight_d5_s6006=4.2420/8ca5b88ccf73d32a
 soldiers_overnight_d5_s7007=4.2780/37698003de31ea44
-pd_overnight_d0_s4004=7.5205/1eba5858e4956ded
-pd_overnight_d0_s6006=7.5265/e2c176da0f776854
-pd_overnight_d0_s8008=7.5740/b6cf18586fc72136
-pd_overnight_d0_s10010=7.5635/5bb0382a014e89d0
-pd_overnight_d3_s4004=5.6800/a6fc20d3dee654f4
-pd_overnight_d3_s5005=5.6800/4ce053dc6f622a2c
-pd_overnight_d3_s6006=5.6200/ec9c21685ad0a0bb
-pd_overnight_d3_s7007=5.6000/2666c450b36527d9
-pd_overnight_d5_s4004=5.6000/516fbbea16674519
-pd_overnight_d5_s5005=5.6800/3acd5d2c5c3e085e
-pd_overnight_d5_s6006=5.6267/995b33d0e1938efa
-pd_overnight_d5_s7007=5.6267/c4217ae99c573c67
+pd_overnight_d0_s4004=7.5220/381e0a5236fb9034
+pd_overnight_d0_s6006=7.5280/bb8ecfabfacbf185
+pd_overnight_d0_s8008=7.5735/7ffdb5b50ee4fca1
+pd_overnight_d0_s10010=7.5640/f842fd5470f63acd
+pd_overnight_d3_s4004=5.6600/95b5c263fe8e4d7a
+pd_overnight_d3_s5005=5.6500/20cdb98cab91d7bb
+pd_overnight_d3_s6006=5.6200/8a71d63770027919
+pd_overnight_d3_s7007=5.5600/f0d9a6008c224ce1
+pd_overnight_d5_s4004=5.5733/f7f96bf018ec8b0b
+pd_overnight_d5_s5005=5.6267/278395ef38669495
+pd_overnight_d5_s6006=5.6133/9a3452d3f06dce4d
+pd_overnight_d5_s7007=5.6000/579bfd94a249a21f
 giants_overnight_d0_s4004=6.0765/2ef74be2b70bf355
 giants_overnight_d0_s6006=6.0790/cf2bf7092289312e
 giants_overnight_d0_s8008=6.0740/48f6ab21086490b3
@@ -683,10 +686,10 @@ pirates2hg_overnight_d5_s4004=5.1067/1f5990fb1fe0a6c7
 pirates2hg_overnight_d5_s5005=4.9800/85d4c768a38b5473
 pirates2hg_overnight_d5_s6006=5.1133/d73e2546ffdd227e
 pirates2hg_overnight_d5_s7007=4.9667/cb89df74217aa351
-pd2hg_overnight_d5_s4004=5.8000/c5caa48103d479d2
-pd2hg_overnight_d5_s5005=5.8200/f61bff46625fe056
-pd2hg_overnight_d5_s6006=5.6600/fff89f1b5b4a7029
-pd2hg_overnight_d5_s7007=5.8000/f22e2cf1fbecd653
+pd2hg_overnight_d5_s4004=5.8400/f14d3151f59a0ea7
+pd2hg_overnight_d5_s5005=5.7400/fdc1d2e97c57baac
+pd2hg_overnight_d5_s6006=5.6600/7018cf8dc075753c
+pd2hg_overnight_d5_s7007=5.8000/767f7c12fb56cb22
 fluctuator_overnight_d0_s4004=5.1455/ae9e09ca79a5b57b
 fluctuator_overnight_d0_s6006=5.2175/5a94065d77b441d4
 fluctuator_overnight_d0_s8008=5.1040/4116c85f96cb1a14
