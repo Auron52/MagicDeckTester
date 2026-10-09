@@ -9713,6 +9713,243 @@ std::vector<int> DragonstormProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- BreachingDragonstormProvider: cleanup discard ----------------------------------------------
+//
+// THE USER'S DESIGN (2026-10-09), docs/design/breaching-dragonstorm-discard-policy-proposal.md
+// "### BreachingDragonstorm: SETTLED" (the proposal under it is background):
+//   Buckets MANA (5 counting the board, >= 1 red; count mana, not cards; a feederless filter is the
+//   first land shed; burst > Mountain) / ENABLERS (1 + a 2nd if room, the 2nd preferring the other name;
+//   the board never counts) / PAYOFFS (1 + a 2nd if colour-payable).
+//   KEEP: only red source -> enabler 1 -> mana to 5 -> enabler 2 -> castable payoff 1 -> payoff 2.
+//   SHED: Maelstrom Wanderer duplicates (a copy in play OR a 2nd in hand -- the Angels legend ruling)
+//         -> payoffs whose colours can't be paid -> lands beyond the target -> extra castable payoffs
+//         -> spare enabler (Breaching Dragonstorm before Creative Technique) -> protected.
+// USER: "Essentially, the enablers + sufficient mana are all that really matter." The mana target is 5
+// with a red source, flat: the proposal's raise toward 8 for a castable payoff is DROPPED, as is its
+// "+1 land while every board land is depleting" quota. A SECOND ENABLER is kept ahead of a castable
+// payoff (USER; the proposal had the payoff first). Payoff order: Boarding Party > Sakashima's Protege
+// > Maelstrom Wanderer > Call Forth the Tempest > Annoyed Altisaur (USER: "easiest to cast first") --
+// a per-card value order no param expresses, so it is a NAME table (the precedent is Dragonstorm's
+// Karrthus-over-Kolaghan put rule); a payoff it does not name ranks after it, cheapest first.
+// AGENT READINGS (listed in the doc's implementation notes):
+//   (a) Mana = each land's yield, the board first: a depletion land 2, any other land 1 (a sac land's
+//       one-shot crack is not standing mana), a filter 1 only with a feeder -- any other land on the
+//       board or in hand (the engine's ramp_filter_live), else 0 and never counted.
+//   (b) Land order, best kept first: depletion burst (2 per tap) > sac burst (Dwarven Ruins /
+//       Svyelunite Temple: "burst > Mountain") > plain drop > live filter > feederless filter.
+//   (c) "The only red source" = the first red-making land in that order when the BOARD has none.
+//   (d) "Colour-payable" = every coloured pip covered, per colour, by the board plus the lands this
+//       ladder KEEPS (a sac land counts its crack in its colour, a live filter 1 of each colour). The
+//       proposal said board + every hand land; a land the order is about to shed cannot make a payoff
+//       castable, and counting it would let one shed strand the payoff it was counted for.
+//   (e) A legend duplicate is dead whatever the legend (only Wanderer is one here); an unrecognised card
+//       sheds after the spare enablers, last of the overflow.
+// Classification is by PARAMS on the definition (a hand card is a name-only placeholder): enabler =
+// etb_exile_until_nonland || shuffle_reveal_freecast, payoff = cascade_max_mv > 0. The return routes
+// through CleanupDiscardRankingWithOrder (required_pieces is empty for this deck).
+static bool BreachBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_BREACH_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::BREACH_BUCKET_DISCARD, on);
+}
+
+std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!BreachBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- 1. mana census ------------------------------------------------------------------------
+    int board_lands = 0, hand_lands = 0;
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == me && p.card.IsLand()) { ++board_lands; } }
+    for (const Card& hc : ap.hand) { if (!hc.m_is_staged && CleanupDiscardIsLand(hc)) { ++hand_lands; } }
+    const bool filter_live = board_lands + hand_lands >= 2;   // any OTHER land pays the {1}
+    auto yield = [&](const CardDefinition* d) -> int
+    {
+        if (d == nullptr) { return 1; }
+        if (d->params.ramp_filter) { return filter_live ? 1 : 0; }
+        return std::max(1, d->params.produces_amount);
+    };
+    static const char kWubrg[5] = { 'W', 'U', 'B', 'R', 'G' };
+    auto colour_amount = [&](const CardDefinition* d, int c) -> int   // c: 0..4 = W U B R G
+    {
+        if (d == nullptr) { return 0; }
+        const std::vector<Color>& pr = d->params.produces;
+        if (std::find(pr.begin(), pr.end(), static_cast<Color>(c)) == pr.end()) { return 0; }
+        if (d->params.ramp_filter) { return filter_live ? 1 : 0; }   // {1},{T}: one of EACH colour
+        int amt = std::max(1, d->params.produces_amount);
+        const std::string& sc = d->params.sac_for_mana_color;
+        if (d->params.sac_for_mana_amount > amt && (sc.empty() || sc[0] == kWubrg[c]))
+        { amt = d->params.sac_for_mana_amount; }                      // the one-shot crack
+        return amt;
+    };
+    constexpr int kRed = static_cast<int>(Color::Red);
+    int mana = 0;
+    int avail[5] = { 0, 0, 0, 0, 0 };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        mana += yield(d);
+        for (int c = 0; c < 5; ++c) { avail[c] += colour_amount(d, c); }
+    }
+    const bool board_red = avail[kRed] > 0;
+
+    // ---- 2. classify the hand ------------------------------------------------------------------
+    std::vector<const CardDefinition*> defs(static_cast<std::size_t>(n), nullptr);
+    std::vector<char> dead(static_cast<std::size_t>(n), 0), other(static_cast<std::size_t>(n), 0);
+    std::vector<int> lands, enablers, payoffs;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[static_cast<std::size_t>(i)] = d;
+        if (CleanupDiscardIsLand(hc)) { lands.push_back(i); continue; }
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary))
+        {
+            bool dup = false;
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == me && p.card.m_name == hc.m_name) { dup = true; break; } }
+            for (int j = 0; j < i && !dup; ++j)
+            {
+                const Card& o = ap.hand[static_cast<std::size_t>(j)];
+                if (!o.m_is_staged && o.m_name == hc.m_name) { dup = true; }
+            }
+            if (dup) { dead[static_cast<std::size_t>(i)] = 1; continue; }
+        }
+        if (d != nullptr && (d->params.etb_exile_until_nonland || d->params.shuffle_reveal_freecast))
+        { enablers.push_back(i); }
+        else if (d != nullptr && d->params.cascade_max_mv > 0) { payoffs.push_back(i); }
+        else { other[static_cast<std::size_t>(i)] = 1; }
+    }
+    auto def_at = [&](int i) { return defs[static_cast<std::size_t>(i)]; };
+
+    auto land_rank = [&](int i)   // agent reading (b)
+    {
+        const CardDefinition* d = def_at(i);
+        if (yield(d) <= 0) { return 4; }
+        if (d == nullptr) { return 2; }
+        if (d->params.produces_amount >= 2)     { return 0; }
+        if (d->params.sac_for_mana_amount >= 2) { return 1; }
+        if (d->params.ramp_filter)              { return 3; }
+        return 2;
+    };
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b) { return land_rank(a) < land_rank(b); });
+    // Creative Technique (two free casts with demonstrate, uncapped) > Breaching Dragonstorm.
+    std::stable_sort(enablers.begin(), enablers.end(), [&](int a, int b)
+    {
+        const bool ca = def_at(a)->params.shuffle_reveal_freecast, cb = def_at(b)->params.shuffle_reveal_freecast;
+        return ca && !cb;
+    });
+    static const std::string kPayoffOrder[] = {
+        "Boarding Party", "Sakashima's Protege", "Maelstrom Wanderer", "Call Forth the Tempest",
+        "Annoyed Altisaur" };
+    auto payoff_rank = [&](int i)
+    {
+        const InternedName& nm = ap.hand[static_cast<std::size_t>(i)].m_name;
+        for (int k = 0; k < 5; ++k) { if (nm == kPayoffOrder[k]) { return k; } }
+        return 5;
+    };
+    std::stable_sort(payoffs.begin(), payoffs.end(), [&](int a, int b)
+    {
+        const int ra = payoff_rank(a), rb = payoff_rank(b);
+        if (ra != rb) { return ra < rb; }
+        return CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)])
+             < CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+    });
+
+    // ---- 3. the keep ladder ----------------------------------------------------------------------
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken;
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
+    auto take_land = [&](int i)
+    {
+        take(i);
+        const CardDefinition* d = def_at(i);
+        mana += yield(d);
+        for (int c = 0; c < 5; ++c) { avail[c] += colour_amount(d, c); }
+    };
+    auto first_free = [&](const std::vector<int>& v) -> int
+    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
+
+    // R1 the only red source (reading (c)).
+    if (!board_red)
+    { for (int i : lands) { if (colour_amount(def_at(i), kRed) > 0) { take_land(i); break; } } }
+    // E1 the best enabler.
+    const int e1 = first_free(enablers);
+    if (e1 >= 0) { take(e1); }
+    // M mana to 5, flat, counting the board.
+    for (int i : lands)
+    {
+        if (mana >= 5) { break; }
+        if (!keep[static_cast<std::size_t>(i)] && yield(def_at(i)) > 0) { take_land(i); }
+    }
+    // E2 a second enabler, preferring the other name.
+    {
+        int e2 = -1;
+        for (int i : enablers)
+        {
+            if (keep[static_cast<std::size_t>(i)]) { continue; }
+            if (e1 < 0 || ap.hand[static_cast<std::size_t>(i)].m_name != ap.hand[static_cast<std::size_t>(e1)].m_name)
+            { e2 = i; break; }
+        }
+        if (e2 < 0) { e2 = first_free(enablers); }
+        if (e2 >= 0) { take(e2); }
+    }
+    // P1 / P2: colour-payable payoffs, by the USER's order (reading (d)).
+    std::vector<char> payable(static_cast<std::size_t>(n), 0);
+    for (int i : payoffs)
+    {
+        const ManaCost& mc = def_at(i)->card.m_mana_cost;
+        payable[static_cast<std::size_t>(i)] =
+            (mc.white <= avail[0] && mc.blue <= avail[1] && mc.black <= avail[2]
+             && mc.red <= avail[3] && mc.green <= avail[4]) ? 1 : 0;
+    }
+    {
+        int kept_payoffs = 0;
+        for (int i : payoffs)
+        {
+            if (kept_payoffs >= 2) { break; }
+            if (payable[static_cast<std::size_t>(i)]) { take(i); ++kept_payoffs; }
+        }
+    }
+
+    // ---- 4. the shed order -----------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[static_cast<std::size_t>(i)].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto unkept = [&](int i) { return !keep[static_cast<std::size_t>(i)]; };
+    for (int i = 0; i < n; ++i) { if (dead[static_cast<std::size_t>(i)]) { put(i); } }   // Wanderer dupes
+    for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it)                         // stranded payoffs
+    { if (unkept(*it) && !payable[static_cast<std::size_t>(*it)]) { put(*it); } }
+    for (auto it = lands.rbegin(); it != lands.rend(); ++it) { if (unkept(*it)) { put(*it); } }   // surplus lands
+    for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it) { if (unkept(*it)) { put(*it); } } // extra castable
+    for (auto it = enablers.rbegin(); it != enablers.rend(); ++it) { if (unkept(*it)) { put(*it); } } // spare enabler
+    for (int i = 0; i < n; ++i) { if (other[static_cast<std::size_t>(i)]) { put(i); } }
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }   // the keep ladder, backwards
+    for (int i = 0; i < n; ++i) { put(i); }                                  // defensive: cannot fire
+
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- Goblins ---------------------------------------------------------------
 
 // Defer the creature-sac outlets (Siege-Gang damage / Pashalik tokens / Skirk's sac-for-mana and its

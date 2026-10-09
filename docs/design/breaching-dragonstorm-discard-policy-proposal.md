@@ -44,6 +44,43 @@ true)`; `=0` restores `GenericProvider::CleanupDiscardCandidates` (max-MV). Quot
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `BreachingDragonstormProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`;
+the provider's first behavioural override), behind `MTG_BREACH_BUCKET_DISCARD` (default ON; heurarm
+slot `BREACH_BUCKET_DISCARD`); `=0` restores `GenericProvider::CleanupDiscardCandidates`. Tests:
+`test/unit/test_breaching_dragonstorm_discard.cpp`. `required_pieces` is empty for this deck, so
+nothing is engine-protected.
+
+**Emitted shed order** (most expendable first): legend duplicates (a Wanderer with a copy on our
+battlefield or an earlier copy in hand) -> payoffs whose colours can't be paid, the USER's order
+reversed (Altisaur, Call Forth, Wanderer, Protege, Boarding Party) -> lands beyond the target (dead
+filter, live filter, plain drop, sac burst, depletion burst) -> extra colour-payable payoffs (same
+order) -> spare enablers (Breaching Dragonstorm before Creative Technique) -> unrecognised -> the keep
+ladder backwards (payoff 2 -> payoff 1 -> enabler 2 -> the mana-to-5 lands -> enabler 1 -> the only red
+source).
+
+**Agent readings (USER may overturn):**
+1. Mana = each land's yield, the board first: a depletion land 2, any other land 1 (a sac land's
+   one-shot crack is not standing mana), a filter 1 only when fed -- any other land on the board or in
+   hand, the engine's `ramp_filter_live` -- and 0 (never counted, never a red source) otherwise.
+2. Land order, best kept first: depletion burst (Peat Bog / Remote Farm / Saprazzan Skerry) > sac burst
+   (Dwarven Ruins / Svyelunite Temple, read into "burst > Mountain") > plain drop (Mountain) > live
+   filter > feederless filter. The proposal grouped Dwarven Ruins with Mountain; this ranks it above.
+3. "The only red source" = the first red-making land in that order, kept first, when the BOARD makes no
+   red.
+4. **"Colour-payable" counts the board plus the lands this ladder KEEPS**, not every hand land (the
+   proposal's colour_ok). A land the order is about to shed as surplus cannot make a payoff castable --
+   counting it would let one shed strand the payoff it was counted for. So a payoff payable only off a
+   surplus land is "stranded" and sheds before that land (consistent with "payoffs whose colours can't
+   be paid -> lands beyond target"). A sac land counts its crack in its colour; a fed filter 1 of each
+   colour.
+5. No colour-payable payoff -> no payoff is kept (KEEP says "castable payoff 1"); the stranded ones shed
+   in the USER's order reversed, so the best stranded payoff is the last of them.
+6. The payoff order is a NAME table (no param expresses "easiest to cast"); an unnamed payoff ranks after
+   the five, cheapest first. A legend duplicate is dead for any legend (only Wanderer is one here); an
+   unrecognised card sheds after the spare enablers.
+
 
 ---
 
