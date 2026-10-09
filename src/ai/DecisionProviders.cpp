@@ -12217,6 +12217,50 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     return all;
 }
 
+// ---- PreventDamageProvider::CastOrderRank ----------------------------------
+// The cast-order DRAFT for the USER's review (MTG_PD_CAST_ORDER, default OFF; ledger "Cast order").
+// One principle: a card goes AFTER everything that makes it worth more and BEFORE everything it makes
+// worth more. Damage is the fuel, a gain engine turns it into life, a drain turns life into the kill:
+//    3 Green Sun's Zenith  puts Tamanoa / Dina straight onto the battlefield, so everything after it
+//                          gains from that piece (s31016 gi15: Zenith and Rolling Earthquake TIED at
+//                          the generic 20 and the sweeper resolved before the tutored Tamanoa arrived)
+//    4 Living Wish, 5 Beseech  tutors ahead of the cards they fetch
+//   10 the gain engine (Tamanoa; Purity)
+//   11 the drains (Vito, Dina) -- out BEFORE the damage, or the gains it makes convert to nothing:
+//      with Tamanoa out, Vito-then-Spellshock drains Spellshock's payment pain; the reverse drains none
+//   12 Spellshock, 13 Manabarbs  -- every LATER cast (2) / land tap (1) becomes a gain and a drain.
+//      The generic order ranks Spellshock LAST (30, the Eidolon self-ping tier), which is backwards here
+//   14 the amplifiers (Rhox Faithmender, Bilbo) -- after the enablers: Rhox cast behind Spellshock
+//      yields Spellshock's 2 plus the pain of Rhox's own payment, which usually beats doubling one
+//      payment's pain
+//   25 Rolling Earthquake, 26 Pyrohemia -- the finishers, last, with the whole engine out.
+// Params only. Everything else keeps the generic rank.
+int PreventDamageProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    static const bool s_env = EnvOn("MTG_PD_CAST_ORDER");
+    if (heurarm::Flag(heurarm::PD_CAST_ORDER, s_env))
+    {
+        const CardParams& p = def.params;
+        if (p.tutor_to_battlefield_single)                 { return 3; }
+        if (p.wish_from_sideboard)                         { return 4; }
+        if (p.tutor_max_mv_is_lands)                       { return 5; }
+        switch (PdEngineRole(&def))
+        {
+            case kPdGain:                return 10;
+            case kPdVito: case kPdDina:  return 11;
+            case kPdAmp:                 return 14;
+            default:                     break;
+        }
+        if (p.prevent_noncombat_to_self_gain)              { return 10; }
+        if (def.card.IsCreature() && p.lifegain_plus > 0)  { return 14; }
+        if (p.on_cast_trigger_damage > 0)                  { return 12; }
+        if (p.land_tap_damage_each_player > 0)             { return 13; }
+        if (p.x_damage_each_creature_and_player)           { return 25; }
+        if (p.ping_all_cost.has_value())                   { return 26; }
+    }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
 // ---- PreventDamageProvider::PutTargetPolicy / PutTargetOk ------------------
 // Green Sun's Zenith (the Chord-class put-tutor enumerator, SEARCH ONLY -- human play un-narrows):
 // USER 2026-09-29, "we can also skip getting Dina with Green Sun's Zenith when one is out already
@@ -12780,7 +12824,20 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
                 }
                 break;
             case DIG1:
-            { const int i = first_free(digs); if (i >= 0) { take(i); } break; }
+            {
+                // FAR-TUTOR EXCEPTION (MTG_PD_SHED_FAR_TUTOR, default OFF -- a DRAFT for the USER's review,
+                // ledger "Discard: the far-tutor exception"): a tutor at distance >= 2 (Beseech at two
+                // lands and one black source) is not protected by DIG1 -- s50001 gi0 kept such a
+                // Beseech and shed a second Manabarbs, then spent T7 casting it. A far tutor can still
+                // fill an empty GAIN1 / DRAIN1 slot above, where it is the only route to the piece.
+                static const bool s_far_tutor = EnvOn("MTG_PD_SHED_FAR_TUTOR");
+                int i = -1;
+                if (heurarm::Flag(heurarm::PD_SHED_FAR_TUTOR, s_far_tutor))
+                { for (int j : digs) { if (!keep[static_cast<std::size_t>(j)] && !far(j)) { i = j; break; } } }
+                else { i = first_free(digs); }
+                if (i >= 0) { take(i); }
+                break;
+            }
             case FUEL1:
             { const int i = first_free(fuels); if (i >= 0) { take(i); } break; }
             case GAIN2:
@@ -12872,6 +12929,13 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
         if (fa && da != db) { return da > db; }
         return value_less(b, a);
     };
+    // FAR-TUTOR EXCEPTION, shed side: an unkept far tutor goes at the head of the overflow, ahead of
+    // the unkept fuel (MTG_PD_SHED_FAR_TUTOR; see DIG1).
+    {
+        static const bool s_far_tutor = EnvOn("MTG_PD_SHED_FAR_TUTOR");
+        if (heurarm::Flag(heurarm::PD_SHED_FAR_TUTOR, s_far_tutor))
+        { for (int i : digs) { if (!keep[static_cast<std::size_t>(i)] && far(i)) { put(i); } } }
+    }
     for (std::vector<int>* v : { &fuels, &drains, &amps, &digs, &gains })
     {
         std::vector<int> over;
