@@ -260,7 +260,50 @@ TEST_CASE("slivers discard: MTG_SLIVERS_BUCKET_DISCARD=0 restores the generic ra
                                { kCavern, kCourt });
     CHECK(Sv(s, 0) == Gen(s));
     CHECK(Sv(s, 1) != Gen(s));
-    CHECK(VialProvider().CleanupDiscardShedStable());   // the shared base keeps the batched path
+}
+
+TEST_CASE("slivers discard: not prefix-stable while on -- a multi-card cleanup re-asks; Soldiers keeps batching")
+{
+    // Review fix (2026-10-09): shedding the soft 4th re-shapes the fill and shedding the first
+    // Cloudshredder / Hatchery makes the 2nd copy live, so the rule declares itself unstable while
+    // MTG_SLIVERS_BUCKET_DISCARD is on (the generic fallback stays batched). SoldiersProvider derives
+    // from VialProvider and pins its own batched path, so its cleanup is untouched.
+    heurarm::t_arm[heurarm::SLIVERS_BUCKET_DISCARD] = 1;
+    CHECK_FALSE(VialProvider().CleanupDiscardShedStable());
+    CHECK(SoldiersProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::SLIVERS_BUCKET_DISCARD] = 0;
+    CHECK(VialProvider().CleanupDiscardShedStable());
+    CHECK(SoldiersProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::SLIVERS_BUCKET_DISCARD] = -1;
+}
+
+TEST_CASE("slivers discard: the soft 4th is kept while the fill needs it -- 2 lords a turn on 4 lands")
+{
+    // The reviewer's board (2026-10-09). Board Cavern + Courtyard (both coloured), turn 3; the hand
+    // Cavern is the 3rd land, the hand Courtyard the soft 4th. With the 4th the window's mana is
+    // 3 / 4 / 4 and the whole hand fits (10 MV): Muscle + Galerider, then Predatory + Sinew ("2 lords on
+    // 4"), then Hatchery + Plated. Shedding the 4th leaves 3 / 3 / 3, which deploys at most 8 MV
+    // (2+1, 2+1, 2); shedding Plated instead keeps 9 MV (Muscle + Galerider, Predatory + Sinew,
+    // Hatchery) -- so Plated (7) goes first, not the land. Next, Galerider (6): without the 4th the
+    // rest deploys 7 MV, with the 4th and without Galerider 8 -- still keep the land. With the rest of
+    // the fill gone the 4th (1) sits right above the 3rd land (0); then the fill lords latest-scheduled
+    // first (Hatchery 5 on turn 3, Sinew 4 then Predatory 3 on turn 2) and the anthem slot (Muscle 2).
+    // The old order shed the Courtyard first: { 1, 7, 6, 0, 5, 4, 3, 2 }.
+    const GameState s = MakeSv({ kCavern, kCourt, kMuscle, kPred, kSinew, kHatch, kGale, kPlated },
+                               { kCavern, kCourt });
+    CHECK(Sv(s) == std::vector<int>{ 7, 6, 1, 0, 5, 4, 3, 2 });
+    CHECK(Gen(s).front() == 2);
+
+    // Control: with only 1-drops beside one anthem the 4th land adds nothing the fill can use, so it
+    // still sheds first among the kept cards (the USER's "soft" default).
+    const GameState t = MakeSv({ kCavern, kCourt, kMuscle, kPlated, kGale, kStrike, kVial, kVial },
+                               { kCavern, kCourt });
+    const std::vector<int> u = Sv(t);
+    REQUIRE(u.size() == 8);
+    CHECK(u[0] == 6);
+    CHECK(u[1] == 7);
+    CHECK(u[2] == 1);
+    CheckPermutation(t, u);
 }
 
 TEST_CASE("slivers discard: a staged card is never named by the rule and sorts last")

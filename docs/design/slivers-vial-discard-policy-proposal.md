@@ -102,9 +102,23 @@ What runs, compactly:
   Ziggurat creature-only, one Vial put per turn at MV == charge), objective = (mana value deployed,
   lords = anthems + a live Hatchery, real anthems, value-lex), computed around the slotted first
   anthem and first grant whenever they fit. Hivepool costs 6 - Slivers in play.
-- The batched multi-shed path is kept (`CleanupDiscardShedStable()` default): the rule is not strictly
-  prefix-stable past the soft 4th, but this deck measured 1.00 sheds per cleanup, and declaring the
-  shared base unstable would also re-route SoldiersProvider's cleanup.
+- ~~The batched multi-shed path is kept~~ -- superseded by review fix 2 below.
+
+Review fixes (2026-10-09, after the integration review):
+1. THE SOFT 4TH IS PART OF THE OPTIMISATION (was a design mismatch). The fill is computed with the
+   soft 4th's mana, and the old order shed that land ahead of every fill card -- keeping creatures that
+   only fit because of it over the land itself (USER: "4 if we have space, since casting 2 lords on 4
+   ... is an easy way to end the game"). Now the land is held over each card of the rest of the fill
+   (latest-scheduled first) while losing that card costs the fill less than losing the land: compare
+   the best kept set WITHOUT the 4th (nothing else shed) against the best kept set WITH it once that
+   card is gone; ties shed the land (the ladder's "soft" default). It never rises above the 3rd land.
+   Reviewer's board: board Cavern + Courtyard, hand Cavern, Courtyard, Muscle, Predatory, Sinew,
+   Hatchery, Galerider, Plated -> index 0 was the Courtyard (3/3/3, 8 MV deployed); it is now Plated
+   (3/4/4, 9 MV, Predatory + Sinew on one turn).
+2. NOT PREFIX-STABLE: shedding the soft 4th re-shapes the fill and shedding the first Cloudshredder /
+   Hatchery makes the 2nd copy live, so `VialProvider::CleanupDiscardShedStable()` is false while the
+   rule is on (true at =0) and a multi-card cleanup re-asks after each shed. `SoldiersProvider` pins
+   its own `true`, so Soldiers' cleanup stays byte-identical.
 
 Agent readings (surfaced for the USER):
 1. The land targets' DERIVATION (dominant MV + 1 / 2 x dominant MV / dominant MV); the numbers on
