@@ -90,7 +90,17 @@ GameState MakePd(const std::vector<std::string>& hand, const std::vector<std::st
     return s;
 }
 
-std::vector<int> Pd(const GameState& s)  { return PreventDamageProvider().CleanupDiscardCandidates(s, nullptr); }
+// Pd: the 09-28 agent ladder the proposal boards T1-T11 were derived for (MTG_PD_DISCARD_USER=0).
+// PdU: the USER's ladder (2026-10-09, the default).
+std::vector<int> PdArm(const GameState& s, int user)
+{
+    heurarm::t_arm[heurarm::PD_DISCARD_USER] = user;
+    std::vector<int> v = PreventDamageProvider().CleanupDiscardCandidates(s, nullptr);
+    heurarm::t_arm[heurarm::PD_DISCARD_USER] = -1;
+    return v;
+}
+std::vector<int> Pd(const GameState& s)  { return PdArm(s, 0); }
+std::vector<int> PdU(const GameState& s) { return PdArm(s, 1); }
 std::vector<int> Gen(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
 
 // Every non-staged hand index exactly once, staged ones last (tier C of the shared ranking).
@@ -322,4 +332,56 @@ TEST_CASE("PD discard: an unused drop with only a DEAD Reflecting Pool in hand i
     CHECK(Pd(s) == off);
     CHECK(off.front() == 2);   // S0 (c) sheds the dead Pool anyway
     heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = -1;
+}
+
+// ---- the USER's ladder (2026-10-09): lands to 4 > GAIN1 > DRAIN1 > GAIN2 > SPELL1 > extra lands > DRAIN2
+
+TEST_CASE("PD discard USER U1: lands need 4 spots -> 4 lands (3 coloured + 1 Tomb, Citadel first) + Tamanoa + Vito + Earthquake")
+{
+    const GameState s = MakePd(
+        { "Tarnished Citadel", "Brushland", "Battlefield Forge", "Ancient Tomb", "City of Brass", "Tamanoa",
+          kVito, "Rolling Earthquake" },
+        {});
+    // keep: Citadel, City, Brushland, Tomb | Tamanoa, Vito, Earthquake | the 5th land is the shed
+    CHECK(PdU(s) == std::vector<int>{ 2, 7, 6, 5, 3, 1, 4, 0 });
+    CHECK(PdU(s) == PreventDamageProvider().CleanupDiscardCandidates(s, nullptr));   // the default
+}
+
+TEST_CASE("PD discard USER U2: lands need 3 spots -> 2 Gain (Tamanoa, then Rhox) + 1 Drain + 1 spell; the 4th hand land goes")
+{
+    const GameState s = MakePd(
+        { "Tarnished Citadel", "Brushland", "Ancient Tomb", "Karplusan Forest", "Tamanoa", "Rhox Faithmender",
+          kVito, "Rolling Earthquake" },
+        { "City of Brass" });
+    CHECK(PdU(s) == std::vector<int>{ 3, 7, 5, 6, 4, 2, 1, 0 });
+}
+
+TEST_CASE("PD discard USER U3: tutors back up missing pieces -- Zenith for the 2nd GAIN place; Wish and Beseech spare")
+{
+    const GameState s = MakePd(
+        { "Green Sun's Zenith", "Living Wish", "Beseech the Queen", "Rhox Faithmender", kDina, "Manabarbs",
+          "Pyrohemia", "Karplusan Forest" },
+        { "City of Brass", "Tarnished Citadel", "Brushland", "Battlefield Forge" });
+    // GAIN1 Rhox (real first), DRAIN1 Dina, GAIN2 Zenith, SPELL Manabarbs, extra land Karplusan;
+    // overflow: Pyrohemia, then the spare tutors Beseech > Wish
+    CHECK(PdU(s) == std::vector<int>{ 6, 2, 1, 7, 5, 0, 4, 3 });
+}
+
+TEST_CASE("PD discard USER U4: Living Wish backs up the missing DRAIN ahead of Zenith; one Ancient Tomb before extra coloured lands")
+{
+    const GameState s = MakePd(
+        { "Living Wish", "Green Sun's Zenith", "Beseech the Queen", "Rolling Earthquake", "Spellshock",
+          "Karplusan Forest", "Grand Coliseum", "Ancient Tomb" },
+        { "City of Brass", "Tarnished Citadel", "Brushland", "Battlefield Forge", "Tamanoa",
+          "Rhox Faithmender" });
+    CHECK(PdU(s) == std::vector<int>{ 4, 2, 1, 6, 5, 7, 3, 0 });
+}
+
+TEST_CASE("PD discard USER U5: Rhox is below a second Tamanoa; extra lands outrank a second drain")
+{
+    const GameState s = MakePd(
+        { "Tamanoa", "Tamanoa", kVito, kDina, "Rolling Earthquake", "Karplusan Forest", "Grand Coliseum",
+          "Rhox Faithmender" },
+        { "City of Brass", "Tarnished Citadel", "Brushland", "Battlefield Forge" });
+    CHECK(PdU(s) == std::vector<int>{ 7, 3, 6, 5, 4, 1, 2, 0 });
 }

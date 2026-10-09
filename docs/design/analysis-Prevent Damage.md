@@ -2127,7 +2127,64 @@ under `omin`:** 0 / 11 short, identical win turns to base (5.273 vs the human's 
 log differs (s11 gi10, same turn), so the flag is live (`logs/pd_opt/refbench/omin.json`).
 
 **Recommendation (awaiting the USER):** adopt the minimal order (default ON, PD only); drop the full
-draft; keep the §5i bucket discard policy as shipped.
+draft; keep the §5i bucket discard policy as shipped. *(Superseded the same day: the §5i policy was
+agent-authored, not the USER's; the USER then gave the discard doctrine below.)*
+
+## Discard policy (USER doctrine, 2026-10-09) -- `MTG_PD_DISCARD_USER`, default ON
+
+The USER, on the agent-authored §5i buckets: *"those buckets are not the greatest."* Their doctrine, verbatim:
+
+- *"I agree with Gain and Drain, but Rhox should go under the Tamanoa bucket, but worse than the second
+  Tamanoa. We should keep 2 if possible."*
+- *"Tutors should be backups for missing pieces they can get and fill those places. So GSZ can be Tamanoa
+  for 4 mana, which is worth keeping. Living Wish can get Vito or Dina, but is worse than just having a
+  Vito in that bucket. Beseech is the worst tutor for most things, but can go in any open spot."*
+- *"Typically Rolling Earthquake is the card to keep if we can keep a damage spell, but that area can be
+  cut as needed for higher priority items."*
+- *"For mana we should prioritize painlands and especially Tarnished Citadel as it is very powerful in
+  this deck."*
+- *"If lands need 4 spots we keep 2 Gain 1 Drain. If it needs 3 spots we keep 2 Gain 1 Drain and 1 spell.
+  We should always have at least 4 mana between hand and board that we try to keep (possibly a bit more
+  if Ancient Tomb and we need colours). Either way, no need to have more than 4 land. 1 Ancient Tomb + 3
+  coloured lands that produce what we need should generally be sufficient for everything. That said,
+  extra spots can be filled with more land for flexibility, after we have 2 gain 1 drain and 1 spell."*
+
+**The ladder** (`PreventDamageProvider::CleanupDiscardCandidates`, the block "THE USER'S LADDER"):
+`lands to 4 (hand + board) > GAIN1 > DRAIN1 > GAIN2 > SPELL1 > the extra lands > DRAIN2 > the rest`.
+
+| place | filled by (net of board) | tutor backup, only when no real card fills it |
+|---|---|---|
+| lands to 4 | 3 coloured lands covering the kept spells' colours, then ONE Ancient Tomb; painful first: Tarnished Citadel (3) > the 1-damage lands (City of Brass, Brushland, Battlefield Forge, Karplusan Forest; Grand Coliseum after them, it enters tapped) > Reflecting Pool | -- |
+| GAIN x2 | Tamanoa > Purity > Rhox Faithmender > Bilbo (2 minus the gain/amp permanents on board) | Green Sun's Zenith > Living Wish > Beseech |
+| DRAIN x1 | Vito > Dina (open only with no drainer on board) | Living Wish > Green Sun's Zenith > Beseech |
+| SPELL x1 | Rolling Earthquake > Manabarbs > Spellshock > Pyrohemia (passive fuel last with no gain engine reachable) | Beseech only |
+| extra lands | every other land, same order | -- |
+| DRAIN2 | the other drain name | -- |
+
+The rest is shed first, before the kept cards in reverse: dead cards (a duplicate legend, a target-less
+tutor, a dead Reflecting Pool), then the unwanted sideboard bodies, then spare fuel, spare tutors
+(Beseech first), spare drains and gain pieces. The 09-28 unplayed-land rule
+(`MTG_PD_SHED_UNPLAYED_LAND`) is unchanged: a skipped land drop still makes a land the first discard.
+
+**Readings the agent chose (USER to confirm):**
+1. "1 spell" = one damage spell; Beseech may stand in for it, Zenith and Wish cannot reach one.
+2. "Backups for missing pieces": a tutor takes a place only when no real card fills it, so a real Rhox
+   keeps the second GAIN place over a Zenith. The opposite reading (Zenith = "a Tamanoa for 4" outranks
+   Rhox) was measured as a temporary slot and played IDENTICALLY in all 4,900 games (same digests, same
+   units), so the slot was deleted.
+3. GAIN1 > DRAIN1 > GAIN2: with one tutor and neither piece, it goes to the first GAIN place; the DRAIN
+   place comes before the second GAIN place so a second tutor backs up the drain.
+4. "Lands to 4" counts lands, not mana; the Tomb is the 4th land when 3 coloured lands are available.
+
+Unit tests U1-U5 (`test/unit/test_prevent_damage_discard.cpp`); the 09-28 boards T1-T11 pin `=0`.
+
+**Measured** (`logs/pd_opt/multi8/`, ONE pooled batch, fresh seeds s190001/s191001 d5 b20 x600, 2HG s192001
+x300, d3 b10 s193001 x400, d0 s194001 x3000; paired, losses 9): the USER's ladder vs the 09-28 ladder
+**-0.0010 +/- 0.0006 t/game, 3 faster / 0 slower** (d5 s190001 1/0, d0 2/0; every other cell
+score-identical), units 1.0006x. Every job's digest differs, so the ladder is live; the discard rarely
+decides a game in this deck (the 09-28 ladder vs the generic rule moved 13 of 4,900). Recovery: no slower
+game, nothing to recover. **References:** 0 / 11 short, all 11 replays byte-identical to base
+(`logs/pd_opt/refbench/user.json`).
 
 ## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
 

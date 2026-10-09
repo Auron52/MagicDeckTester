@@ -12354,10 +12354,14 @@ bool PreventDamageProvider::PutTargetOk(const PutPolicy& pol, const CardDefiniti
 
 // ---- PreventDamageProvider::CleanupDiscardCandidates ------------------------
 //
+// THE USER'S LADDER (2026-10-09, MTG_PD_DISCARD_USER, default ON) replaces the agent-authored keep
+// ladder below: lands to 4 > 2 GAIN > 1 DRAIN > 1 damage spell > extra lands > a second drain, with
+// tutors as backups for missing pieces -- see the block at "THE USER'S LADDER". The census, the S0
+// dead cards and the shed emission are shared; =0 restores the 09-28 ladder that follows.
+//
 // AUTHORED role-bucket policy (analyze-deck 5i), implementing
-// docs/design/prevent-damage-discard-policy-proposal.md faithfully. PROVISIONAL: the proposal's
-// section 8 "Doubts" (fuel placement, land target 5/6, colour cover before Ancient Tomb, the
-// overflow precedence, the tutor order) await the user's review.
+// docs/design/prevent-damage-discard-policy-proposal.md faithfully. Its section 8 "Doubts" were
+// answered by the USER on 2026-10-09 with the ladder above.
 //
 // WHY THIS DECK NEEDS ONE. The shared fallback's tier B is descending mana value, which here is
 // backwards three ways: Beseech the Queen is MV 6 ({2/B}x3, CR 202.3f) so it sheds FIRST although it
@@ -12580,7 +12584,7 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
     if (avail & colour_bit(Color::Black)) { b_sources += refl_count_live; }
 
     // ---- 4. tutor reach: one zone pass per distinct held tutor NAME -----------------------------
-    struct Reach { bool gain = false, drain = false, amp = false, any = false; int min_engine = 99, min_any = 99; };
+    struct Reach { bool gain = false, drain = false, amp = false, fuel = false, any = false; int min_engine = 99, min_any = 99; };
     std::vector<Reach> reach_of(static_cast<std::size_t>(n));
     std::vector<int> tutor_src(static_cast<std::size_t>(n), -1);   // index whose reach this copies
     const int beseech_cap = board_lands + (hand_has_land ? 1 : 0);
@@ -12622,6 +12626,7 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
             if (is_gain(lp))  { r.gain = true;  r.min_engine = std::min(r.min_engine, mv); }
             if (is_drain(lp)) { r.drain = true; r.min_engine = std::min(r.min_engine, mv); }
             if (is_amp(lp))   { r.amp = true; }
+            if (is_fuel(lp))  { r.fuel = true; }
         };
         if (pp.wish_from_sideboard)       { for (const Card& lc : ap.sideboard) { visit(lc); } }
         else if (pp.tutor_from_graveyard) { for (const Card& lc : ap.graveyard) { visit(lc); } }
@@ -12727,128 +12732,305 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
     for (std::vector<int>* v : { &gains, &drains, &amps, &fuels, &digs })
     { std::stable_sort(v->begin(), v->end(), slot_less); }
 
-    // ---- 5. land keep order: greedy colour cover, then the section-4 keys -----------------------
+    // ---- 5-6. the keep ladder ------------------------------------------------------------------
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken_order;
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken_order.push_back(i); };
+    auto first_free = [&](const std::vector<int>& v) -> int
+    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
+    static const bool s_user = EnvOn("MTG_PD_DISCARD_USER", true);   // DEFAULT ON; =0 -> the 09-28 ladder
+    const bool user_ladder = heurarm::Flag(heurarm::PD_DISCARD_USER, s_user);
+    if (user_ladder)
     {
-        auto land_key_less = [&](int a, int b)
+        // THE USER'S LADDER (USER doctrine 2026-10-09):
+        //   lands to 4 between hand and board > GAIN1 > DRAIN1 > GAIN2 > SPELL1 > the extra lands
+        //   (flexibility) > DRAIN2 > the rest.
+        // "If lands need 4 spots we keep 2 Gain 1 Drain. If it needs 3 spots we keep 2 Gain 1 Drain and
+        // 1 spell." "No need to have more than 4 land" -- "1 Ancient Tomb + 3 coloured lands that produce
+        // what we need should generally be sufficient for everything" -- "extra spots can be filled with
+        // more land for flexibility, after we have 2 gain 1 drain and 1 spell."
+        // GAIN: the Tamanoa-type engines, then the amplifiers (Rhox Faithmender) below a second Tamanoa;
+        // keep 2, net of board. DRAIN: Vito over Dina, distinct names. SPELL: one damage spell, Rolling
+        // Earthquake first. Tutors are BACKUPS: a place no real card fills goes to a tutor that reaches
+        // that piece -- Green Sun's Zenith first for GAIN (a Tamanoa for 4), Living Wish first for DRAIN
+        // (worse than a real Vito), Beseech last everywhere but able to fill any open place, SPELL too.
+        // Mana: Tarnished Citadel, then the other painful lands -- every damage tap is a Tamanoa event.
+        auto by_rank = [&](std::vector<int>& v, auto rank)
+        {
+            std::stable_sort(v.begin(), v.end(), [&](int a, int b)
+            {
+                const int ra = rank(a), rb = rank(b);
+                if (ra != rb) { return ra < rb; }
+                return slot_less(a, b);
+            });
+        };
+        auto gain_rank = [&](int i) -> int
+        {
+            const CardParams& p = defs[static_cast<std::size_t>(i)]->params;
+            return p.noncreature_damage_lifegain ? 0 : p.prevent_noncombat_to_self_gain ? 1
+                 : p.lifegain_multiplier > 1 ? 2 : 3;
+        };
+        std::vector<int> gain_bucket = gains;
+        gain_bucket.insert(gain_bucket.end(), amps.begin(), amps.end());
+        by_rank(gain_bucket, gain_rank);
+        std::vector<int> drain_bucket = drains, fuel_bucket = fuels;
+        by_rank(drain_bucket, value_rank);
+        by_rank(fuel_bucket, value_rank);
+
+        // A tutor backs up a place only when it reaches that piece. Order: Zenith > Wish > Beseech for
+        // GAIN, Wish > Zenith > Beseech for DRAIN, Beseech alone for SPELL; nearer first on a tie.
+        enum Place { P_GAIN, P_DRAIN, P_SPELL };
+        auto tutor_pref = [&](int i, Place pl) -> int
+        {
+            const CardParams& p = defs[static_cast<std::size_t>(i)]->params;
+            if (p.tutor_max_mv_is_lands)       { return 2; }
+            if (p.tutor_to_battlefield_single) { return pl == P_DRAIN ? 1 : 0; }
+            if (p.wish_from_sideboard)         { return pl == P_DRAIN ? 0 : 1; }
+            return 3;
+        };
+        auto backup = [&](Place pl) -> int
+        {
+            int best = -1, best_key = 99;
+            for (int i : digs)
+            {
+                if (keep[static_cast<std::size_t>(i)]) { continue; }
+                const Reach& r = reach_of[static_cast<std::size_t>(i)];
+                const bool ok = pl == P_GAIN  ? (r.gain || r.amp)
+                              : pl == P_DRAIN ? r.drain
+                              : (defs[static_cast<std::size_t>(i)]->params.tutor_max_mv_is_lands && r.fuel);
+                if (!ok) { continue; }
+                const int key = tutor_pref(i, pl) * 2 + (far(i) ? 1 : 0);
+                if (key < best_key) { best = i; best_key = key; }
+            }
+            return best;
+        };
+        auto mark = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; };
+
+        // A real Rhox keeps a GAIN place over a Zenith (the tutor is the backup). The opposite reading
+        // (Zenith = "a Tamanoa for 4" outranks Rhox) played identically in 4,900 paired games
+        // (multi8, 2026-10-09), so it was not kept as a lever.
+        std::vector<int> core;   // the kept pieces, in ladder order
+        auto fill_gain = [&]()
+        {
+            int pick = first_free(gain_bucket);
+            if (pick < 0) { pick = backup(P_GAIN); }
+            if (pick >= 0) { mark(pick); core.push_back(pick); }
+        };
+        std::vector<std::string> kept_drain_names;
+        auto name_used = [&](int i)
+        {
+            const std::string nm = ap.hand[static_cast<std::size_t>(i)].m_name.str();
+            return std::find(board_drain_names.begin(), board_drain_names.end(), nm) != board_drain_names.end()
+                || std::find(kept_drain_names.begin(), kept_drain_names.end(), nm) != kept_drain_names.end();
+        };
+        auto fill_drain = [&](bool real_only) -> int
+        {
+            int pick = -1;
+            for (int i : drain_bucket)
+            { if (!keep[static_cast<std::size_t>(i)] && !name_used(i)) { pick = i; break; } }
+            if (pick >= 0) { kept_drain_names.push_back(ap.hand[static_cast<std::size_t>(pick)].m_name.str()); }
+            else if (!real_only) { pick = backup(P_DRAIN); }
+            if (pick >= 0) { mark(pick); }
+            return pick;
+        };
+
+        const int gain_places = std::max(0, 2 - board_gain - board_amp);
+        if (gain_places >= 1) { fill_gain(); }
+        if (board_drain_names.empty()) { const int i = fill_drain(false); if (i >= 0) { core.push_back(i); } }
+        if (gain_places >= 2) { fill_gain(); }
+        {
+            int i = first_free(fuel_bucket);
+            if (i < 0) { i = backup(P_SPELL); }
+            if (i >= 0) { mark(i); core.push_back(i); }
+        }
+
+        // Land order: the colours the kept pieces need, covered greedily from the coloured lands (the
+        // painful ones first on a tie); then 3 coloured lands, ONE Ancient Tomb, the other coloured
+        // lands, the other Tombs. A live Reflecting Pool is coloured but painless, so it sorts last.
+        auto is_tomb = [&](const CardDefinition* d)
+        { return d != nullptr && !d->params.reflecting && land_bits(d) == 0 && land_mana(d) >= 2; };
+        auto land_pref_less = [&](int a, int b)
         {
             const CardDefinition* da = defs[static_cast<std::size_t>(a)];
             const CardDefinition* db = defs[static_cast<std::size_t>(b)];
-            const bool ra = da && da->params.reflecting, rb = db && db->params.reflecting;
-            if (ra != rb) { return !ra; }
-            const int ma = land_mana(da), mb = land_mana(db);
-            if (ma != mb) { return ma > mb; }
+            const int pa = da ? da->params.tap_self_damage : 0, pb = db ? db->params.tap_self_damage : 0;
+            if (pa != pb) { return pa > pb; }
             const bool ta = da && da->params.enters_tapped, tb = db && db->params.enters_tapped;
             if (ta != tb) { return !ta; }
             const int ca = popcount32(land_bits(da)), cb = popcount32(land_bits(db));
             if (ca != cb) { return ca > cb; }
             return a < b;
         };
-        std::vector<int> rest = lands, ordered;
-        std::uint32_t missing = unmet(needed_reqs, board_bits);
-        unsigned have = board_bits;
-        while (missing != 0 && !rest.empty())
+        int board_tomb = 0, board_coloured = 0;
+        for (const Permanent& p : s.battlefield)
         {
-            int best = -1, best_gain = 0;
-            for (int i : rest)
+            if (p.controller_index != me || !p.card.IsLand()) { continue; }
+            if (is_tomb(def_of(p.card))) { ++board_tomb; } else { ++board_coloured; }
+        }
+        std::uint32_t need = 0;
+        for (int i : core) { need |= cost_reqs(defs[static_cast<std::size_t>(i)]); }
+        if (core.empty()) { need = needed_reqs; }
+        std::vector<int> coloured, tombs;
+        for (int i : lands) { (is_tomb(defs[static_cast<std::size_t>(i)]) ? tombs : coloured).push_back(i); }
+        std::vector<int> cov;
+        {
+            std::vector<int> rest = coloured;
+            std::uint32_t missing = unmet(need, board_bits);
+            unsigned have = board_bits;
+            while (missing != 0 && !rest.empty())
             {
-                const int g = popcount32(missing & ~unmet(missing, land_bits(defs[static_cast<std::size_t>(i)])));
-                if (g > best_gain || (g == best_gain && g > 0 && best >= 0 && land_key_less(i, best)))
-                { best = i; best_gain = g; }
-            }
-            if (best < 0) { break; }
-            ordered.push_back(best);
-            have |= land_bits(defs[static_cast<std::size_t>(best)]);
-            missing = unmet(needed_reqs, have);
-            rest.erase(std::find(rest.begin(), rest.end(), best));
-        }
-        std::stable_sort(rest.begin(), rest.end(), land_key_less);
-        ordered.insert(ordered.end(), rest.begin(), rest.end());
-        lands.swap(ordered);
-    }
-
-    // ---- 6. the interleaved keep ladder ------------------------------------------------------
-    const int land_target = 5 + ((board_sink || hand_sink) ? 1 : 0);
-    int land_need = std::max(0, land_target - board_lands);
-    std::vector<char> keep(static_cast<std::size_t>(n), 0);
-    std::vector<int>  taken_order;
-    std::vector<std::string> kept_drain_names;
-    bool kept_vito = false;
-    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken_order.push_back(i); };
-    auto first_free = [&](const std::vector<int>& v) -> int
-    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
-    auto name_used = [&](int i)
-    {
-        const std::string nm = ap.hand[static_cast<std::size_t>(i)].m_name.str();
-        return std::find(board_drain_names.begin(), board_drain_names.end(), nm) != board_drain_names.end()
-            || std::find(kept_drain_names.begin(), kept_drain_names.end(), nm) != kept_drain_names.end();
-    };
-    auto take_drain = [&](int i)
-    {
-        take(i);
-        kept_drain_names.push_back(ap.hand[static_cast<std::size_t>(i)].m_name.str());
-        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
-        if (d && d->params.lifegain_target_opp_loses_that_much) { kept_vito = true; }
-    };
-    // GAIN1 / DRAIN1: non-far real card > non-far reaching tutor > far real card > far tutor.
-    auto fill_engine_slot = [&](bool gain_slot)
-    {
-        int real_near = -1, real_far = -1, tut_near = -1, tut_far = -1;
-        for (int i : (gain_slot ? gains : drains))
-        {
-            if (keep[static_cast<std::size_t>(i)] || (!gain_slot && name_used(i))) { continue; }
-            if (!far(i)) { if (real_near < 0) { real_near = i; } }
-            else if (real_far < 0) { real_far = i; }
-        }
-        for (int i : digs)
-        {
-            if (keep[static_cast<std::size_t>(i)]) { continue; }
-            const Reach& r = reach_of[static_cast<std::size_t>(i)];
-            if (!(gain_slot ? r.gain : r.drain)) { continue; }
-            if (!far(i)) { if (tut_near < 0) { tut_near = i; } }
-            else if (tut_far < 0) { tut_far = i; }
-        }
-        const int pick = real_near >= 0 ? real_near : tut_near >= 0 ? tut_near
-                       : real_far >= 0 ? real_far : tut_far;
-        if (pick < 0) { return; }
-        if (cls[static_cast<std::size_t>(pick)] == C_DRAIN) { take_drain(pick); } else { take(pick); }
-    };
-
-    enum Slot { L, GAIN1, DRAIN1, DRAIN2, DIG1, FUEL1, GAIN2, AMP1, FUEL2 };
-    static const Slot kFill[] = { L, GAIN1, L, DRAIN1, L, DRAIN2, L, DIG1, FUEL1, GAIN2, AMP1, L, FUEL2, L };
-    for (Slot slot : kFill)
-    {
-        switch (slot)
-        {
-            case L:
-                if (land_need > 0) { const int i = first_free(lands); if (i >= 0) { take(i); --land_need; } }
-                break;
-            case GAIN1:
-                if (board_gain == 0) { fill_engine_slot(true); }
-                break;
-            case DRAIN1:
-                if (board_drain_names.empty()) { fill_engine_slot(false); }
-                break;
-            case DRAIN2:
-                if (board_drain_names.size() < 2)
+                int best = -1, best_gain = 0;
+                for (int i : rest)
                 {
-                    for (int i : drains)
-                    { if (!keep[static_cast<std::size_t>(i)] && !name_used(i)) { take_drain(i); break; } }
+                    const int g = popcount32(missing & ~unmet(missing, land_bits(defs[static_cast<std::size_t>(i)])));
+                    if (g > best_gain || (g == best_gain && g > 0 && best >= 0 && land_pref_less(i, best)))
+                    { best = i; best_gain = g; }
                 }
-                break;
-            case DIG1:
-            { const int i = first_free(digs); if (i >= 0) { take(i); } break; }
-            case FUEL1:
-            { const int i = first_free(fuels); if (i >= 0) { take(i); } break; }
-            case GAIN2:
-                if (board_gain <= 1) { const int i = first_free(gains); if (i >= 0) { take(i); } }
-                break;
-            case AMP1:
-                if (board_amp == 0 && (board_vito || kept_vito))
-                { const int i = first_free(amps); if (i >= 0) { take(i); } }
-                break;
-            case FUEL2:
-                if (board_fuel_perm == 0) { const int i = first_free(fuels); if (i >= 0) { take(i); } }
-                break;
+                if (best < 0) { break; }
+                cov.push_back(best);
+                have |= land_bits(defs[static_cast<std::size_t>(best)]);
+                missing = unmet(need, have);
+                rest.erase(std::find(rest.begin(), rest.end(), best));
+            }
+            std::stable_sort(rest.begin(), rest.end(), land_pref_less);
+            cov.insert(cov.end(), rest.begin(), rest.end());
+        }
+        std::vector<int> ordered;
+        const std::size_t col_first = static_cast<std::size_t>(std::max(0, 3 - board_coloured));
+        std::size_t ci = 0, ti = 0;
+        for (; ci < cov.size() && ci < col_first; ++ci) { ordered.push_back(cov[ci]); }
+        if (board_tomb == 0 && ti < tombs.size()) { ordered.push_back(tombs[ti++]); }
+        for (; ci < cov.size(); ++ci) { ordered.push_back(cov[ci]); }
+        for (; ti < tombs.size(); ++ti) { ordered.push_back(tombs[ti]); }
+        lands.swap(ordered);
+
+        int land_need = std::max(0, 4 - board_lands);
+        for (int i : lands) { if (land_need <= 0) { break; } take(i); --land_need; }
+        for (int i : core) { taken_order.push_back(i); }
+        for (int i : lands) { if (!keep[static_cast<std::size_t>(i)]) { take(i); } }   // flexibility
+        if (board_drain_names.size() + kept_drain_names.size() < 2)
+        { const int i = fill_drain(true); if (i >= 0) { taken_order.push_back(i); } }
+    }
+    else
+    {
+        // ---- 5. land keep order: greedy colour cover, then the section-4 keys -----------------------
+        {
+            auto land_key_less = [&](int a, int b)
+            {
+                const CardDefinition* da = defs[static_cast<std::size_t>(a)];
+                const CardDefinition* db = defs[static_cast<std::size_t>(b)];
+                const bool ra = da && da->params.reflecting, rb = db && db->params.reflecting;
+                if (ra != rb) { return !ra; }
+                const int ma = land_mana(da), mb = land_mana(db);
+                if (ma != mb) { return ma > mb; }
+                const bool ta = da && da->params.enters_tapped, tb = db && db->params.enters_tapped;
+                if (ta != tb) { return !ta; }
+                const int ca = popcount32(land_bits(da)), cb = popcount32(land_bits(db));
+                if (ca != cb) { return ca > cb; }
+                return a < b;
+            };
+            std::vector<int> rest = lands, ordered;
+            std::uint32_t missing = unmet(needed_reqs, board_bits);
+            unsigned have = board_bits;
+            while (missing != 0 && !rest.empty())
+            {
+                int best = -1, best_gain = 0;
+                for (int i : rest)
+                {
+                    const int g = popcount32(missing & ~unmet(missing, land_bits(defs[static_cast<std::size_t>(i)])));
+                    if (g > best_gain || (g == best_gain && g > 0 && best >= 0 && land_key_less(i, best)))
+                    { best = i; best_gain = g; }
+                }
+                if (best < 0) { break; }
+                ordered.push_back(best);
+                have |= land_bits(defs[static_cast<std::size_t>(best)]);
+                missing = unmet(needed_reqs, have);
+                rest.erase(std::find(rest.begin(), rest.end(), best));
+            }
+            std::stable_sort(rest.begin(), rest.end(), land_key_less);
+            ordered.insert(ordered.end(), rest.begin(), rest.end());
+            lands.swap(ordered);
+        }
+
+        // ---- 6. the interleaved keep ladder ------------------------------------------------------
+        const int land_target = 5 + ((board_sink || hand_sink) ? 1 : 0);
+        int land_need = std::max(0, land_target - board_lands);
+        std::vector<std::string> kept_drain_names;
+        bool kept_vito = false;
+        auto name_used = [&](int i)
+        {
+            const std::string nm = ap.hand[static_cast<std::size_t>(i)].m_name.str();
+            return std::find(board_drain_names.begin(), board_drain_names.end(), nm) != board_drain_names.end()
+                || std::find(kept_drain_names.begin(), kept_drain_names.end(), nm) != kept_drain_names.end();
+        };
+        auto take_drain = [&](int i)
+        {
+            take(i);
+            kept_drain_names.push_back(ap.hand[static_cast<std::size_t>(i)].m_name.str());
+            const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+            if (d && d->params.lifegain_target_opp_loses_that_much) { kept_vito = true; }
+        };
+        // GAIN1 / DRAIN1: non-far real card > non-far reaching tutor > far real card > far tutor.
+        auto fill_engine_slot = [&](bool gain_slot)
+        {
+            int real_near = -1, real_far = -1, tut_near = -1, tut_far = -1;
+            for (int i : (gain_slot ? gains : drains))
+            {
+                if (keep[static_cast<std::size_t>(i)] || (!gain_slot && name_used(i))) { continue; }
+                if (!far(i)) { if (real_near < 0) { real_near = i; } }
+                else if (real_far < 0) { real_far = i; }
+            }
+            for (int i : digs)
+            {
+                if (keep[static_cast<std::size_t>(i)]) { continue; }
+                const Reach& r = reach_of[static_cast<std::size_t>(i)];
+                if (!(gain_slot ? r.gain : r.drain)) { continue; }
+                if (!far(i)) { if (tut_near < 0) { tut_near = i; } }
+                else if (tut_far < 0) { tut_far = i; }
+            }
+            const int pick = real_near >= 0 ? real_near : tut_near >= 0 ? tut_near
+                           : real_far >= 0 ? real_far : tut_far;
+            if (pick < 0) { return; }
+            if (cls[static_cast<std::size_t>(pick)] == C_DRAIN) { take_drain(pick); } else { take(pick); }
+        };
+
+        enum Slot { L, GAIN1, DRAIN1, DRAIN2, DIG1, FUEL1, GAIN2, AMP1, FUEL2 };
+        static const Slot kFill[] = { L, GAIN1, L, DRAIN1, L, DRAIN2, L, DIG1, FUEL1, GAIN2, AMP1, L, FUEL2, L };
+        for (Slot slot : kFill)
+        {
+            switch (slot)
+            {
+                case L:
+                    if (land_need > 0) { const int i = first_free(lands); if (i >= 0) { take(i); --land_need; } }
+                    break;
+                case GAIN1:
+                    if (board_gain == 0) { fill_engine_slot(true); }
+                    break;
+                case DRAIN1:
+                    if (board_drain_names.empty()) { fill_engine_slot(false); }
+                    break;
+                case DRAIN2:
+                    if (board_drain_names.size() < 2)
+                    {
+                        for (int i : drains)
+                        { if (!keep[static_cast<std::size_t>(i)] && !name_used(i)) { take_drain(i); break; } }
+                    }
+                    break;
+                case DIG1:
+                { const int i = first_free(digs); if (i >= 0) { take(i); } break; }
+                case FUEL1:
+                { const int i = first_free(fuels); if (i >= 0) { take(i); } break; }
+                case GAIN2:
+                    if (board_gain <= 1) { const int i = first_free(gains); if (i >= 0) { take(i); } }
+                    break;
+                case AMP1:
+                    if (board_amp == 0 && (board_vito || kept_vito))
+                    { const int i = first_free(amps); if (i >= 0) { take(i); } }
+                    break;
+                case FUEL2:
+                    if (board_fuel_perm == 0) { const int i = first_free(fuels); if (i >= 0) { take(i); } }
+                    break;
+            }
         }
     }
 
@@ -12928,7 +13110,11 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
         if (fa && da != db) { return da > db; }
         return value_less(b, a);
     };
-    for (std::vector<int>* v : { &fuels, &drains, &amps, &digs, &gains })
+    // The USER's ladder: tutors with no open place go before the spare engine pieces, Beseech first.
+    const std::vector<std::vector<int>*> overflow_buckets = user_ladder
+        ? std::vector<std::vector<int>*>{ &fuels, &digs, &drains, &amps, &gains }
+        : std::vector<std::vector<int>*>{ &fuels, &drains, &amps, &digs, &gains };
+    for (std::vector<int>* v : overflow_buckets)
     {
         std::vector<int> over;
         for (int i : *v) { if (!keep[static_cast<std::size_t>(i)]) { over.push_back(i); } }
