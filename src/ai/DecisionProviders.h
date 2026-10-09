@@ -561,6 +561,9 @@ public:
     // fallback (the A/B hatch).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // NOT prefix-stable while the buckets are on (the land tie-break reads the HELD payoffs, and a filter
+    // loses its feeder when the last other land goes), so a multi-card cleanup is re-ranked per shed.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
