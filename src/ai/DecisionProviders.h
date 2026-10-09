@@ -454,7 +454,8 @@ public:
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
-// Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.
+// Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider until its first
+// judgement hook, the USER's cleanup-discard buckets below; every other heuristic is still Generic.
 class AngelsProvider : public DeckProvider
 {
 public:
@@ -464,6 +465,13 @@ public:
                "turn's attackers are exactly CanAttackFull now' shortcut does NOT hold here and a "
                "certificate must price the equip." }; }
     const char* Name() const override { return "Angels"; }
+    // The USER's cleanup-discard design (2026-10-09, docs/design/angels-discard-policy-proposal.md
+    // "Angels: SETTLED"): MANA (4 sources counting the board, >= 2 white, a 5th soft; Sol Ring and
+    // one Giada protected outside the ladder) / ENABLERS (Bishop of Wings, 1) / ANGELS (3-5, variety
+    // first), interleaved keep ladder, every hand card named. MTG_ANGELS_BUCKET_DISCARD (default ON;
+    // =0 -> GenericProvider::CleanupDiscardCandidates, the max-MV fallback).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Bruna, Light of Alabaster (Bant Auras/Equipment voltron, Glittering Wish sideboard; onboarded
