@@ -533,6 +533,31 @@ The rule decided 1,083 real and 4.19M searched bounces, 2.75M of them with more 
 <= 0 on held-out (-30, -7) and every slower game recovers. Live through
 `HinataProvider::BounceUserRuleActive` whatever the base default says.
 
+### The amendment, measured: the bounce ORDER predicts re-entry off the board (MTG_BOUNCE_REPLAY_PRECISE)
+
+**What it changes.** `BounceLandCandidates`' "re-enters untapped" bonus and `BounceSearchCandidates`'
+"clean replay" (the input to its tapped_clean / dominated / replay-fold rules) read
+`BounceReplayEntersUntapped` -- the board's answer (a reveal land with no Forest / Mountain to reveal, a
+fastland past its count, a checkland without its type, a shock without the life re-enter TAPPED) --
+instead of the card's `enters_tapped` param alone, which ranks every conditional land as a basic.
+About ten lines in `DecisionProviders.cpp` behind a heurarm lever (local branch `karoo-order-precise`).
+
+**Measurement.** One pooled batch on the same rows and seeds (423 jobs, 295,810 games), paired with the
+first batch's tip / rule / Hinata-A arms (the tip arm is byte-identical to GT, so the pairing is exact):
+
+| arm vs | held-out (overnight) | train (smoke + regression) |
+|---|---|---|
+| precise order vs tip | melira **-23** (32 / 14), mirrorwing **-26** (45 / 24), every other deck 0 | melira -6, mirrorwing -17, others 0 |
+| rule + precise vs tip | dragons +1, hinata +1, melira -23, mirrorwing -26, others 0 | dragons +1, hinata -1, melira -6, mirrorwing -17 |
+| rule + precise vs rule | melira -23, mirrorwing -27, others 0 | |
+| Hinata A + precise vs Hinata A | 0 moved (Hinata's rule already reads the board) | 0 moved |
+
+Every move is a d0 game (the runner takes the order's front); searched play keeps every win turn
+(units -0.06% mirrorwing, +0.02% melira). All 46 slower games (38 held-out, 8 train) recover at both
+escalation stages. The census barely moves (real contested 1,195 -> 1,206; search 4.36M -> 4.39M): the
+searched width hardly changes; what changed is the ORDER's front, which only the d0 runner (and the
+playout beyond the horizon) takes.
+
 ## Open for the USER
 
 * **The base bounce default (`MTG_BOUNCE_USER_RULE`) is NOT adopted -- your call.** Held-out: +1 each on
@@ -543,7 +568,11 @@ The rule decided 1,083 real and 4.19M searched bounces, 2.75M of them with more 
   bounces, -3.4% in the search); (c) the amendment the Mirrorwing game points at: let the provider's
   ORDER use the same re-entry predicate (`BounceReplayEntersUntapped`) instead of `enters_tapped`
   alone, so a reveal land with nothing to reveal stops tying with a basic -- a correctness fix to the
-  order the d0 runner and the playouts already use, measured on its own. The branch keeps the rule ON.
+  order the d0 runner and the playouts already use. **Measured (below): it clears the bar on its own
+  (melira -23, mirrorwing -26 held-out, every other deck 0, all 46 slower games recover); with the
+  rule on top, dragons and hinata stay +1.** Recommendation: adopt (c); leave the rule OFF unless you
+  want it for its own sake. The branch keeps the rule ON; (c) is on the local branch
+  `karoo-order-precise` (default OFF there), and both are described here in full.
 * ~~Adopt?~~ Adopted with the searched bounce (above).
 * The Hinata 2HG rows alone net +6 over 400 held-out games (all budget churn); Hinata as a deck nets
   -412. Counted as one deck here, as run #1 did -- say if 2HG should be judged as its own deck.

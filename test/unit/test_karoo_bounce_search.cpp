@@ -473,6 +473,11 @@ TEST_CASE("Karoo bounce, HINATA rule: 1 Island + 1 Mountain -> the Mountain (red
         Hand(s, "Ponder", 20);
         CHECK(HinataCands(s, hp, self, &why) == std::vector<std::string>{ "Mountain" });
         CHECK(why == DecisionProvider::kBounceUserRule);
+        // ...and the apply returns it with its {R} FLOATING (tapped in response), not thrown away.
+        GameState t = s;
+        BounceKarooLand(t, 0, self);
+        CHECK(InHand(t, "Mountain"));
+        CHECK(t.floating_mana.red == 1);
     }
 }
 
