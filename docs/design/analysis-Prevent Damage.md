@@ -2044,14 +2044,35 @@ Tomb + the creature tutors + a fuel / tempo land) at ~0.82x units. The tutors sl
 aggregate (-0.0002) and was deleted; FINISHER, FIN_ALWAYS and TOMB stay as default-OFF levers (unit tests
 B3-B4).
 
+**Third fresh-seed batch: damage sources ALWAYS + Ancient Tomb** (s160001/s161001 x600 d5 b20, 2HG
+s162001 x300, d3 b10 s163001 x400, d0 s164001 x3000, vs UNPRUNED; `logs/pd_opt/multi5/`, recovery
+`logs/pd_opt/rec5/`):
+
+| arm | searched turns vs unpruned (1,900) | all 4,900 | units | slower | recovered (st.1 + st.2) | NOT recovered |
+|---|---|---|---|---|---|---|
+| the USER's rule (shipped) | **+46 (+0.024 / game; d5 p 0.003 / 0.019)** | -0.0104 | 0.59x | 89 | 16 + 8 | 64-65 |
+| + FIN_ALWAYS | -3 (-0.002) | -0.0200 | 0.64x | 40 | 19 + 2 | 18-19 |
+| + FIN_ALWAYS + TOMB | -9 (-0.005) | -0.0212 | 0.65x | 33 | 19 + 2 | 11-12 |
+
+(one T7 game, s160001 gi406, was still searching at d8 b0 for all three arms when this was written.)
+FIN_ALWAYS vs the shipped rule: -0.0096 +/- 0.0020 overall, every searched cell better (d3 p 0.008,
+d5 p < 0.001). TOMB on top: -0.0012 +/- 0.0008 (10 / 4) and a third fewer unrecovered games.
+
+**Pooled verdict, three fresh-seed batches:** the shipped rule plays +80 turns over 5,700 searched games
+(+0.014 t/game) slower than unpruned Beseech -- better overall only via the depth-0 runner. Engine
+creatures + damage sources (+ Ancient Tomb), skip duplicates, is at least as good as unpruned in
+searched play at ~0.65x units.
+
 ### Open USER decisions (Beseech / Wish, 2026-10-09; defaults taken in brackets)
 
 1. **The Beseech rule's cost in searched play.** As shipped it is cheapest (~0.6x units) but plays
-   +0.009 t/game slower than unpruned in searched games (pooled, 3,800) and 43 of 68 slower games do not
-   recover. Recommended amendment: **`MTG_PD_BESEECH_FIN_ALWAYS`** -- "engine creatures AND the damage
-   sources, skip duplicates": searched -0.008 vs unpruned (better than unpruned) at 0.63x units, 18
-   unrecovered of 34. Narrower alternative: `MTG_PD_BESEECH_FINISHER` (damage sources once the engine is
-   assembled; neutral vs unpruned at 0.59x). [shipped rule unchanged; amendments OFF]
+   +0.014 t/game slower than unpruned in searched games (pooled, 5,700) and most of its slower games do
+   not recover. Recommended amendment: **`MTG_PD_BESEECH_FIN_ALWAYS` + `MTG_PD_BESEECH_TOMB`** --
+   "engine creatures, the damage sources and Ancient Tomb; skip duplicates": searched -0.005 vs
+   unpruned at 0.65x units, 11-12 unrecovered of 33 (the shipped rule: 64-65 of 89). FIN_ALWAYS alone:
+   pooled -0.005 vs unpruned at 0.64x. Narrowest: `MTG_PD_BESEECH_FINISHER` (neutral at 0.59x). None of
+   them clears the recovery bar outright (the rest are Green Sun's Zenith and land fetches).
+   [shipped rule unchanged; amendments OFF]
 2. The all-duplicates fallback: the duplicates vs the whole library measured equal. [the duplicates]
 3. `MTG_PD_WISH_LAND_CAST` (the "always Battlefield Forge" counterexample): correct on s61013 (takes
    Brushland), 0 win-turn changes in 4,900 games. [OFF]
