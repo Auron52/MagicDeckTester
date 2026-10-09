@@ -2620,7 +2620,8 @@ public:
 //   * WHICH CREATURE to blink and HOW MANY TIMES -- targets x counts, seen at 12 variants per
 //     outlet and multiplying across outlets.
 //
-// Everything else is Generic.
+// Everything else is Generic, apart from the judgement hooks declared below (the go-off model, the
+// cast order, the tutor ranking, the plan value and the USER's cleanup-discard buckets).
 class EldraziFlickerProvider : public DeckProvider
 {
 public:
@@ -2722,6 +2723,15 @@ public:
     // 2x2 attributes which one (if either) is load-bearing.
     bool ComboCardValue(const GameState& s, const CardDefinition& def,
                         int dmg_unit, int& out) const override;
+
+    // Cleanup discard: the USER-settled buckets (2026-10-09,
+    // docs/design/eldrazi-flicker-discard-policy-proposal.md "EldraziDisplacerFlicker: SETTLED") --
+    // size-1 FLICKER / UNTAPPER / WIN CON slots (Living Wish fills a missing one), then 2 lands
+    // covering {W}+{U}, land Auras up to the mana target, Training Grounds, an extra Living Wish and
+    // the 3rd-4th land; every quota net of board, every hand card named. MTG_EDF_BUCKET_DISCARD
+    // (default ON; =0 -> GenericProvider::CleanupDiscardCandidates, the max-MV fallback).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

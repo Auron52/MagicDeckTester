@@ -31721,6 +31721,607 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
     return out;
 }
 
+// ---- EldraziFlickerProvider::CleanupDiscardCandidates -----------------------
+//
+// THE USER'S BUCKETS (2026-10-09; docs/design/eldrazi-flicker-discard-policy-proposal.md, section
+// "EldraziDisplacerFlicker: SETTLED", which SUPERSEDES the 2026-09-23 proposal below it).
+// MTG_EDF_BUCKET_DISCARD (default ON); =0 restores GenericProvider::CleanupDiscardCandidates (the
+// max-MV ranking) -- the A/B hatch. EDF is NOT in the regression suite, so the hatch is the only
+// measurement route: a direct paired A/B on this deck.
+//
+// USER: "a size 1 bucket for each combo piece. Flicker source (Displacer and Emiel), untapper, win con
+// (this includes any draw source) and then a bucket for mana where we prioritize fast land enchantments
+// + having at least 2 land and colours, particularly white and blue. If we don't get black it is not
+// the end of the world. ... Living wish is primarily really good because it can fill any slot we are
+// missing for the combo and should be kept even if the other spots are filled, but we have space."
+//
+// KEEP LADDER (most-kept first; every quota NET OF BOARD -- a piece or land in play fills its slot):
+//   FLICKER (1)   an outlet (blink_cost creature) in play fills it. Else a {C}-PIP outlet (Eldrazi
+//                 Displacer {2}{C}) when we hold 2+ colourless sources, otherwise a pip-free one
+//                 (Emiel {3}) -- "worth paying the extra mana".
+//   UNTAPPER (1)  the CHEAPEST untapper whose untap refunds 4+ mana on today's board (top-N land yields,
+//                 Auras included -- FlickerTopLandYields) or with Training Grounds available: Cloud of
+//                 Faeries; otherwise the one with the MOST untaps: Peregrine Drake, "when the lands are
+//                 mostly plain".
+//   WIN CON (1)   a {T}-less finisher (comborules::IsTlessFinisher), Shivan Gorge with red reachable, OR
+//                 ANY repeatable DRAW SOURCE -- "these are lands that fill this slot" (Mariposa,
+//                 Conservatory, Kitchen). Nearest to castable first; finisher > Gorge > draw land on a tie.
+//   A MISSING slot is filled by a tutor that reaches the role: Eladamri's Call first (library
+//   creatures only -- it can fill FLICKER / UNTAPPER and nothing else), then Living Wish ("fills
+//   whichever combo slot is missing", read off the sideboard), each in ladder order.
+//   2 LANDS       at least two counting the board, covering {W} and {U} ({B} optional).
+//   AURAS         land Auras up to the mana TARGET -- "enough to cast untapper + flicker source + one
+//                 flicker in a turn": the flicker source's mana value + its blink (Displacer 3+3 = 6,
+//                 Emiel 4+3 = 7), "2 less with Training Grounds" (the one-mana floor kept).
+//   TRAINING GROUNDS  once the mana kept so far reaches its threshold: outlet + one reduced flicker
+//                 (4 Displacer / 5 Emiel).
+//   EXTRA LIVING WISH -- "should be kept even if the other spots are filled".
+//   3rd-4th LAND  "I rarely use more than 3 or 4 actual lands".
+// SHED ORDER (index 0 first): a card in no bucket (Vexing Shusher: `parameters: {}`) > a duplicate
+//   legend (a copy on our battlefield or an earlier hand copy -- Emiel, Shivan Gorge) > a 2nd Training
+//   Grounds (one copy already hits the one-mana floor) > a hostless Aura / a self-bouncing karoo >
+//   Eladamri's Call with both pieces covered > lands past the 4th > Auras past the target (Overgrowth >
+//   Trace > Fertile > Wild Growth) > spare flicker sources / untappers (less suitable first) > spare win
+//   cons > Training Grounds below its threshold > then the keep ladder read BACKWARDS (3rd-4th land,
+//   extra Living Wish, Training Grounds, Auras, the 2 lands, win con, untapper, flicker).
+//
+// AGENT READINGS (the USER has not ruled; each is listed in the design doc's implementation notes):
+//   R1  "2+ colourless sources" counts the board's {C} sources (comborules::ColorlessSourceCount) plus
+//       the {C}-capable hand lands this ladder KEEPS (the win-con land, the 2 lands, the 3rd-4th) --
+//       a land past the 4th is about to be shed, so it does not swing the outlet choice.
+//   R2  Cloud's "can untap 4+ mana" reads TODAY's board (the untap refunds lands in play); "Training
+//       Grounds is available" = one on our battlefield or a non-dead copy in hand. The same
+//       availability gives the target its "2 less".
+//   R3  The mana TARGET keeps the USER's per-outlet numbers even when the outlet is already in play
+//       (board mana counts toward it -- that is the net-of-board part). The outlet it is read off is
+//       the slot's: the board's preferred one, the hand's, or what a slot-filling tutor would fetch;
+//       with no outlet anywhere, the preferred one in library/sideboard.
+//   R4  "Mana" for the target and for Training Grounds' threshold = board land yields (Auras on them
+//       included) + the win-con land + the 2 lands + the Auras kept so far. The 3rd-4th lands sit
+//       BELOW Training Grounds on the ladder, so they do not count toward its threshold.
+//   R5  The SHED list's "Training Grounds below its threshold -> extra Living Wish -> protected" and
+//       the KEEP ladder's "extra Living Wish -> 3rd-4th land" are reconciled by shedding the 3rd-4th
+//       lands between the two (the keep ladder says the extra Wish is kept over them).
+//   R6  {W}/{U} coverage outranks the 4-land cap: a land that supplies a missing {W}/{U} is kept in
+//       the 2-lands step even as a 5th land. A board Aura that makes any colour covers a colour.
+//   R7  Call before Wish for a missing FLICKER/UNTAPPER slot (the Wish can also reach the win con; the
+//       Call cannot). A tutor whose zone holds no card for a missing slot does not fill it; a Call
+//       that fills nothing, and a Wish whose zone holds no legal target at all, shed with the
+//       "Call with both pieces covered" tier.
+//   R8  Shivan Gorge's "with red" = red on our board (comborules::HasRedSource) or a red-capable land /
+//       any-colour Aura in hand. A spare draw land or Gorge is a LAND (land pool), not a spare win con;
+//       spare win cons are the finisher creatures (a finisher that is not live -- an Infiltrator with
+//       no opponent library -- first, then farther from castable first).
+//   R9  "Less suitable first" spans both roles: every spare for which a strictly better kind is in
+//       play or in hand goes first (outlets before untappers, the proposal's O9 shape), then the rest.
+//   R10 Lands keep {C}-capable first, then more of {W,U,B,G}, then untapped, then hand order; Auras
+//       keep lowest mana value first, a shroud-granting one after a plain one -- the param rule that
+//       evaluates to the USER's shed order Overgrowth > Trace > Fertile > Wild Growth.
+//
+// Classification is by PARAMS through the combo route's own role predicates (comboroute::IsOutlet /
+// IsUntapper / IsDrainer / IsExiler / IsWish / IsCall / IsLandAura / IsReducer / IsGorge / draw-land
+// tests), so the discard and the go-off can never disagree about what a piece is. Every read goes
+// through the definition because a hand card is a name-only placeholder. Runs inside rollouts: no
+// GameState copy, no RNG, ties by hand index. Routed through CleanupDiscardRankingWithOrder so the
+// staged-card and required-piece protections stay engine-enforced (this deck's required_pieces is
+// empty, so nothing is vetoed).
+static bool EdfBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_EDF_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::EDF_BUCKET_DISCARD, on);
+}
+
+std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!EdfBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const std::size_t un = static_cast<std::size_t>(n);
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // Colour bits: 1 << Color (W U B R G = bits 0-4), {C} = bit 5.
+    constexpr unsigned kW = 1u << static_cast<int>(Color::White);
+    constexpr unsigned kU = 1u << static_cast<int>(Color::Blue);
+    constexpr unsigned kB = 1u << static_cast<int>(Color::Black);
+    constexpr unsigned kR = 1u << static_cast<int>(Color::Red);
+    constexpr unsigned kG = 1u << static_cast<int>(Color::Green);
+    constexpr unsigned kC = 1u << static_cast<int>(Color::Colorless);
+    constexpr unsigned kWUBRG = kW | kU | kB | kR | kG;
+    auto bits_of = [](const std::vector<Color>& v)
+    { unsigned b = 0; for (Color c : v) { b |= 1u << static_cast<int>(c); } return b; };
+    auto popc = [](unsigned v) { int k = 0; while (v) { v &= v - 1; ++k; } return k; };
+    auto aura_bits = [&](const CardDefinition* d) -> unsigned
+    {
+        if (d == nullptr || !d->params.is_land_aura || d->params.land_aura_extra_mana <= 0) { return 0u; }
+        return d->params.land_aura_produces.empty() ? kWUBRG : bits_of(d->params.land_aura_produces);
+    };
+
+    // ---- 1. board census ----------------------------------------------------------------------
+    int board_lands = 0, board_mana = 0, board_reducer_amt = 0;
+    unsigned board_bits = 0;   // colours our board can make (lands, and the Auras on them)
+    bool board_host = false, board_outlet = false, board_untapper = false, board_reducer = false;
+    bool board_gorge = false;
+    std::vector<const CardDefinition*> board_outlets, board_untappers;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (p.card.IsLand())
+        {
+            ++board_lands;
+            board_mana += PermanentManaYield(s, p, *d);
+            board_bits |= bits_of(EffectiveProducesFor(s, me, *d, &p));
+            if (!LandHasShroud(p, s)) { board_host = true; }
+            if (comboroute::IsGorge(d)) { board_gorge = true; }
+            continue;
+        }
+        board_bits |= aura_bits(d);
+        if (comboroute::IsOutlet(d))   { board_outlet = true;   board_outlets.push_back(d); }
+        if (comboroute::IsUntapper(d)) { board_untapper = true; board_untappers.push_back(d); }
+        if (comboroute::IsReducer(d))
+        { board_reducer = true; board_reducer_amt = std::max(board_reducer_amt, d->params.reduces_creature_activation); }
+    }
+    auto on_our_board = [&](const Card& hc)
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.m_name == hc.m_name) { return true; } }
+        return false;
+    };
+
+    // ---- 2. classify the hand ---------------------------------------------------------------------
+    enum Cls : char { K_NONE, K_ROLELESS, K_LAND, K_OUTLET, K_UNTAP, K_FINISHER, K_WISH, K_CALL, K_AURA, K_REDUCER };
+    enum Dead : char { D_NO, D_LEGEND, D_TG2, D_BLANK };   // D_BLANK: hostless Aura / self-bouncing karoo
+    std::vector<char> cls(un, K_NONE), dead(un, D_NO);
+    std::vector<const CardDefinition*> defs(un, nullptr);
+    std::vector<unsigned> lbits(un, 0u);   // a hand land's colours ({C} included), as it would be played
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[static_cast<std::size_t>(i)] = d;
+        char& c = cls[static_cast<std::size_t>(i)];
+        if (CleanupDiscardIsLand(hc))
+        {
+            c = K_LAND;
+            if (d != nullptr) { lbits[static_cast<std::size_t>(i)] = bits_of(EffectiveProduces(s, me, *d, /*in_hand=*/true)); }
+        }
+        else if (d == nullptr)                { c = K_ROLELESS; }
+        else if (comboroute::IsOutlet(d))     { c = K_OUTLET; }
+        else if (comboroute::IsUntapper(d))   { c = K_UNTAP; }
+        else if (comboroute::IsDrainer(d) || comboroute::IsExiler(d)) { c = K_FINISHER; }
+        else if (comboroute::IsWish(d))       { c = K_WISH; }
+        else if (comboroute::IsCall(d))       { c = K_CALL; }
+        else if (comboroute::IsLandAura(d))   { c = K_AURA; }
+        else if (comboroute::IsReducer(d))    { c = K_REDUCER; }
+        else                                  { c = K_ROLELESS; }   // in no bucket (Vexing Shusher)
+        // A duplicate legend is dead: one on our battlefield, or an earlier (kept) hand copy.
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary))
+        {
+            bool dup = on_our_board(hc);
+            for (int j = 0; j < i && !dup; ++j)
+            {
+                const Card& o = ap.hand[static_cast<std::size_t>(j)];
+                if (!o.m_is_staged && o.m_name == hc.m_name) { dup = true; }
+            }
+            if (dup) { dead[static_cast<std::size_t>(i)] = D_LEGEND; }
+        }
+    }
+    auto live = [&](int i)
+    { return cls[static_cast<std::size_t>(i)] != K_NONE && dead[static_cast<std::size_t>(i)] == D_NO; };
+    auto is_karoo = [&](int i)
+    { const CardDefinition* d = defs[static_cast<std::size_t>(i)]; return d != nullptr && d->params.etb_bounce_land; };
+
+    // Self-bouncing karoo: nothing else to return -- no land of ours in play and no other non-karoo
+    // land in hand. Then the Aura hosts: a non-shrouded land in play, or a playable land in hand.
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[static_cast<std::size_t>(i)] != K_LAND || !live(i) || !is_karoo(i) || board_lands > 0) { continue; }
+        bool other = false;
+        for (int j = 0; j < n && !other; ++j)
+        { if (j != i && cls[static_cast<std::size_t>(j)] == K_LAND && live(j) && !is_karoo(j)) { other = true; } }
+        if (!other) { dead[static_cast<std::size_t>(i)] = D_BLANK; }
+    }
+    bool hand_host = false;
+    for (int i = 0; i < n; ++i) { if (cls[static_cast<std::size_t>(i)] == K_LAND && live(i)) { hand_host = true; } }
+    int the_tg = -1;   // the one hand Training Grounds that can matter
+    for (int i = 0; i < n; ++i)
+    {
+        const char c = cls[static_cast<std::size_t>(i)];
+        if (c == K_AURA && live(i) && !board_host && !hand_host) { dead[static_cast<std::size_t>(i)] = D_BLANK; }
+        if (c == K_REDUCER && live(i))
+        {
+            if (board_reducer || the_tg >= 0) { dead[static_cast<std::size_t>(i)] = D_TG2; }
+            else                              { the_tg = i; }
+        }
+    }
+    const bool tg_available = board_reducer || the_tg >= 0;
+    const int  tg_amt = std::max(board_reducer_amt,
+                                 the_tg >= 0 ? defs[static_cast<std::size_t>(the_tg)]->params.reduces_creature_activation : 0);
+
+    // ---- 3. reach + colours (distance to castable) ------------------------------------------------
+    unsigned hand_land_bits = 0, hand_aura_bits = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (!live(i)) { continue; }
+        const char c = cls[static_cast<std::size_t>(i)];
+        if (c == K_LAND) { hand_land_bits |= lbits[static_cast<std::size_t>(i)]; }
+        if (c == K_AURA) { hand_aura_bits |= aura_bits(defs[static_cast<std::size_t>(i)]); }
+    }
+    const unsigned avail_bits = board_bits | hand_land_bits | hand_aura_bits;
+    const bool red_reachable = comborules::HasRedSource(s, me) || ((hand_land_bits | hand_aura_bits) & kR) != 0;
+    const int  reach = board_mana + (hand_host ? 1 : 0);
+    auto colour_short = [&](const ManaCost& mc)
+    {
+        int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
+        {
+            const int a = mc.hybrid_pair[k] >> 4, b = mc.hybrid_pair[k] & 0xF;
+            unsigned m = 0;
+            if (a >= 0 && a < 5) { --flat[a]; m |= 1u << a; }
+            if (b >= 0 && b < 5) { m |= 1u << b; }
+            if (m != 0 && (avail_bits & m) == 0) { return true; }
+        }
+        for (int c = 0; c < 5; ++c) { if (flat[c] > 0 && (avail_bits & (1u << c)) == 0) { return true; } }
+        return mc.colorless > 0 && (avail_bits & kC) == 0;
+    };
+    auto dist_of = [&](int i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr || cls[static_cast<std::size_t>(i)] == K_LAND) { return 0; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        return std::max(0, mc.ManaValue() - reach) + (colour_short(mc) ? 1 : 0);
+    };
+
+    // ---- 4. WIN CON slot (net of board) -----------------------------------------------------------
+    auto is_draw_land = [](const CardDefinition* d)
+    { return comboroute::IsTapDrawLand(d) || comboroute::IsInvestigateLand(d); };
+    const bool board_win = comborules::FinisherInPlay(s, me) || (board_gorge && red_reachable)
+                        || comborules::HasRepeatableDrawSource(s, me);
+    auto win_rank = [&](int i) -> int   // -1 = not a live win con; else finisher 0 < Gorge 1 < draw land 2
+    {
+        if (!live(i)) { return -1; }
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        const char c = cls[static_cast<std::size_t>(i)];
+        if (c == K_FINISHER) { return comborules::IsTlessFinisher(s, d) ? 0 : -1; }
+        if (c != K_LAND) { return -1; }
+        if (comboroute::IsGorge(d) && red_reachable) { return 1; }
+        return is_draw_land(d) ? 2 : -1;
+    };
+    int win_slot = -1;
+    if (!board_win)
+    {
+        int best_d = 0, best_r = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            const int r = win_rank(i);
+            if (r < 0) { continue; }
+            const int dd = dist_of(i);
+            if (win_slot < 0 || dd < best_d || (dd == best_d && r < best_r)) { win_slot = i; best_d = dd; best_r = r; }
+        }
+    }
+    const bool win_is_land = win_slot >= 0 && cls[static_cast<std::size_t>(win_slot)] == K_LAND;
+
+    // ---- 5. the land keep order: 2 lands covering {W}+{U}, then the 3rd-4th, the rest surplus -------
+    auto land_mana = [&](int i)
+    { const CardDefinition* d = defs[static_cast<std::size_t>(i)]; return d != nullptr ? ManaProducedPerTap(*d) : 1; };
+    auto land_better = [&](int a, int b)   // a is kept before b (R10)
+    {
+        const unsigned ba = lbits[static_cast<std::size_t>(a)], bb = lbits[static_cast<std::size_t>(b)];
+        const bool ca = (ba & kC) != 0, cb = (bb & kC) != 0;
+        if (ca != cb) { return ca; }
+        const int na = popc(ba & (kW | kU | kB | kG)), nb = popc(bb & (kW | kU | kB | kG));
+        if (na != nb) { return na > nb; }
+        const CardDefinition* da = defs[static_cast<std::size_t>(a)];
+        const CardDefinition* db = defs[static_cast<std::size_t>(b)];
+        const bool ta = da != nullptr && da->params.enters_tapped, tb = db != nullptr && db->params.enters_tapped;
+        if (ta != tb) { return !ta; }
+        return a < b;
+    };
+    std::vector<int> pool;
+    for (int i = 0; i < n; ++i)
+    { if (cls[static_cast<std::size_t>(i)] == K_LAND && live(i) && i != win_slot) { pool.push_back(i); } }
+    int      have_lands = board_lands + (win_is_land ? 1 : 0);
+    unsigned have_bits  = board_bits | (win_is_land ? lbits[static_cast<std::size_t>(win_slot)] : 0u);
+    // Greedy: the land covering most of `need`, the land keep order on a tie. Returns a pool position.
+    auto pick = [&](unsigned need, int* cov_out) -> std::size_t
+    {
+        std::size_t best = 0;
+        int best_cov = -1;
+        for (std::size_t k = 0; k < pool.size(); ++k)
+        {
+            const int cov = popc(lbits[static_cast<std::size_t>(pool[k])] & need);
+            if (cov > best_cov || (cov == best_cov && land_better(pool[k], pool[best]))) { best = k; best_cov = cov; }
+        }
+        *cov_out = best_cov;
+        return best;
+    };
+    std::vector<int> land2, land34;
+    while (!pool.empty())
+    {
+        const unsigned need = (kW | kU) & ~have_bits;
+        if (have_lands >= 2 && need == 0) { break; }
+        int cov = 0;
+        const std::size_t k = pick(need, &cov);
+        if (have_lands >= 2 && cov <= 0) { break; }   // R6: only a missing {W}/{U} takes a land past 2
+        const int i = pool[k];
+        land2.push_back(i);
+        ++have_lands;
+        have_bits |= lbits[static_cast<std::size_t>(i)];
+        pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(k));
+    }
+    while (!pool.empty() && have_lands < 4)
+    {
+        int cov = 0;
+        const std::size_t k = pick((kW | kU | kB) & ~have_bits, &cov);   // {B} optional: a tie-break
+        const int i = pool[k];
+        land34.push_back(i);
+        ++have_lands;
+        have_bits |= lbits[static_cast<std::size_t>(i)];
+        pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(k));
+    }
+    std::stable_sort(pool.begin(), pool.end(), land_better);   // surplus, best first
+
+    // ---- 6. FLICKER / UNTAPPER slots (net of board) -------------------------------------------------
+    int c_sources = comborules::ColorlessSourceCount(s, me);   // R1
+    if (win_is_land && (lbits[static_cast<std::size_t>(win_slot)] & kC)) { ++c_sources; }
+    for (int i : land2)  { if (lbits[static_cast<std::size_t>(i)] & kC) { ++c_sources; } }
+    for (int i : land34) { if (lbits[static_cast<std::size_t>(i)] & kC) { ++c_sources; } }
+    const bool want_c_outlet = c_sources >= 2;   // "Displacer if 2+ colourless sources, else Emiel"
+    auto outlet_key = [&](const CardDefinition* d) -> int   // lower = more suitable
+    { return ((d->params.blink_cost->colorless > 0) == want_c_outlet) ? 0 : 1; };
+    int refund_cache[kFlickerMaxUntaps + 1];
+    for (int& r : refund_cache) { r = -1; }
+    auto untap_key = [&](const CardDefinition* d) -> int    // lower = more suitable (R2)
+    {
+        const int u = std::min(d->params.etb_untap_lands, kFlickerMaxUntaps);
+        if (refund_cache[u] < 0) { refund_cache[u] = FlickerTopLandYields(s, me, u); }
+        const bool viable = tg_available || refund_cache[u] >= 4;
+        return viable ? d->card.m_mana_cost.ManaValue() : 100 - u;   // viable: cheapest; else most untaps
+    };
+    auto best_hand = [&](char want, auto key) -> int
+    {
+        int best = -1, best_k = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            if (cls[static_cast<std::size_t>(i)] != want || !live(i)) { continue; }
+            const int k = key(defs[static_cast<std::size_t>(i)]);
+            if (best < 0 || k < best_k) { best = i; best_k = k; }
+        }
+        return best;
+    };
+    int flick_slot = board_outlet   ? -1 : best_hand(K_OUTLET, outlet_key);
+    int untap_slot = board_untapper ? -1 : best_hand(K_UNTAP, untap_key);
+
+    // ---- 7. tutors fill the missing slots: Call first, then Wish, each in ladder order (R7) --------
+    enum Role { R_FLICKER, R_UNTAP, R_WIN };
+    auto takes = [&](const CardDefinition* td, const Card& zc, const CardDefinition* zd)
+    {
+        const Card& card = zd != nullptr ? zd->card : zc;
+        if (!td->params.tutor_types.empty())
+        {
+            bool ok = false;
+            for (const std::string& t : td->params.tutor_types)
+            { if (CardMatchesTypeName(card, t)) { ok = true; break; } }
+            if (!ok) { return false; }
+        }
+        return CardHasColorNamed(card, td->params.tutor_color) && TutorNumericFilterOk(card, td->params);
+    };
+    auto plays_role = [&](const CardDefinition* zd, int role)
+    {
+        if (zd == nullptr) { return false; }
+        if (role == R_FLICKER) { return comboroute::IsOutlet(zd); }
+        if (role == R_UNTAP)   { return comboroute::IsUntapper(zd); }
+        if (role == R_WIN)     { return comborules::IsTlessFinisher(s, zd) || is_draw_land(zd)
+                                     || (comboroute::IsGorge(zd) && red_reachable); }
+        return true;   // -1: any legal target
+    };
+    // Does the tutor's zone hold a legal target playing `role` (-1 = any)? With `best_outlet`, also
+    // reports the most suitable outlet there (the def the mana TARGET reads, R3).
+    auto reaches = [&](const CardDefinition* td, int role, const CardDefinition** best_outlet) -> bool
+    {
+        bool found = false;
+        int  bk = 0;
+        auto visit = [&](const Card& zc)
+        {
+            const CardDefinition* zd = def_of(zc);
+            if (!takes(td, zc, zd) || !plays_role(zd, role)) { return false; }
+            found = true;
+            if (best_outlet == nullptr) { return true; }
+            const int k = outlet_key(zd);
+            if (*best_outlet == nullptr || k < bk) { *best_outlet = zd; bk = k; }
+            return bk == 0;   // keep looking only while a more suitable outlet could exist
+        };
+        if (td->params.wish_from_sideboard) { for (const Card& zc : ap.sideboard) { if (visit(zc)) { break; } } }
+        else                                { for (const Card& zc : ap.library)   { if (visit(zc)) { break; } } }
+        return found;
+    };
+    bool miss_flick = !board_outlet && flick_slot < 0;
+    bool miss_untap = !board_untapper && untap_slot < 0;
+    bool miss_win   = !board_win && win_slot < 0;
+    std::vector<char> used(un, 0);
+    auto fill = [&](char kind, int role, bool& missing, int& slot)
+    {
+        if (!missing) { return; }
+        for (int i = 0; i < n; ++i)
+        {
+            if (cls[static_cast<std::size_t>(i)] != kind || !live(i) || used[static_cast<std::size_t>(i)]) { continue; }
+            if (!reaches(defs[static_cast<std::size_t>(i)], role, nullptr)) { continue; }
+            used[static_cast<std::size_t>(i)] = 1; slot = i; missing = false;
+            return;
+        }
+    };
+    fill(K_CALL, R_FLICKER, miss_flick, flick_slot);
+    fill(K_CALL, R_UNTAP,   miss_untap, untap_slot);
+    fill(K_WISH, R_FLICKER, miss_flick, flick_slot);
+    fill(K_WISH, R_UNTAP,   miss_untap, untap_slot);
+    fill(K_WISH, R_WIN,     miss_win,   win_slot);
+    // (win_slot filled by a Wish is not a land, so win_is_land and the land steps above stand.)
+
+    // ---- 8. the mana TARGET and the Auras up to it (R3, R4) -------------------------------------
+    const CardDefinition* target_outlet = nullptr;
+    if (board_outlet)
+    {
+        int bk = 0;
+        for (const CardDefinition* d : board_outlets)
+        { const int k = outlet_key(d); if (target_outlet == nullptr || k < bk) { target_outlet = d; bk = k; } }
+    }
+    else if (flick_slot >= 0 && cls[static_cast<std::size_t>(flick_slot)] == K_OUTLET)
+    { target_outlet = defs[static_cast<std::size_t>(flick_slot)]; }
+    else if (flick_slot >= 0)
+    { reaches(defs[static_cast<std::size_t>(flick_slot)], R_FLICKER, &target_outlet); }
+    else
+    {
+        // No outlet anywhere we can name: the most suitable one still in library / sideboard. Stops
+        // at the first fully suitable one (key 0), so the usual early-game case is a short walk.
+        int bk = 0;
+        auto consider = [&](const Card& zc)
+        {
+            const CardDefinition* zd = def_of(zc);
+            if (!comboroute::IsOutlet(zd)) { return false; }
+            const int k = outlet_key(zd);
+            if (target_outlet == nullptr || k < bk) { target_outlet = zd; bk = k; }
+            return bk == 0;
+        };
+        bool done = false;
+        for (const Card& zc : ap.library)   { if (consider(zc)) { done = true; break; } }
+        if (!done) { for (const Card& zc : ap.sideboard) { if (consider(zc)) { break; } } }
+    }
+    auto target_for = [&](bool with_tg) -> int
+    {
+        if (target_outlet == nullptr) { return with_tg ? 4 : 6; }   // the USER's Displacer numbers
+        const int blink = target_outlet->params.blink_cost->ManaValue();
+        const int eff   = with_tg ? std::max(1, blink - std::max(tg_amt, 0)) : blink;
+        return target_outlet->card.m_mana_cost.ManaValue() + eff;
+    };
+    const int target       = target_for(tg_available);
+    const int tg_threshold = target_for(true);
+    int mana_have = board_mana + (win_is_land ? land_mana(win_slot) : 0);
+    for (int i : land2) { mana_have += land_mana(i); }
+    std::vector<int> auras;
+    for (int i = 0; i < n; ++i) { if (cls[static_cast<std::size_t>(i)] == K_AURA && live(i)) { auras.push_back(i); } }
+    std::stable_sort(auras.begin(), auras.end(), [&](int a, int b)   // kept first (R10)
+    {
+        const CardDefinition* da = defs[static_cast<std::size_t>(a)];
+        const CardDefinition* db = defs[static_cast<std::size_t>(b)];
+        const int ma = da->card.m_mana_cost.ManaValue(), mb = db->card.m_mana_cost.ManaValue();
+        if (ma != mb) { return ma < mb; }
+        if (da->params.land_aura_grants_shroud != db->params.land_aura_grants_shroud)
+        { return !da->params.land_aura_grants_shroud; }
+        return a < b;
+    });
+    std::vector<int> auras_kept, auras_over;
+    for (int i : auras)
+    {
+        if (mana_have < target)
+        { auras_kept.push_back(i); mana_have += defs[static_cast<std::size_t>(i)]->params.land_aura_extra_mana; }
+        else { auras_over.push_back(i); }
+    }
+    const bool tg_kept = the_tg >= 0 && mana_have >= tg_threshold;
+
+    // ---- 9. emit the shed order -----------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(un);
+    std::vector<char> listed(un, 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[static_cast<std::size_t>(i)].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_if = [&](auto pred) { for (int i = 0; i < n; ++i) { if (pred(i)) { put(i); } } };
+    // (1) in no bucket; (2) duplicate legends; (3) a 2nd Training Grounds; (4) hostless Aura /
+    // self-bouncing karoo -- each in hand order.
+    put_if([&](int i) { return cls[static_cast<std::size_t>(i)] == K_ROLELESS && dead[static_cast<std::size_t>(i)] == D_NO; });
+    put_if([&](int i) { return dead[static_cast<std::size_t>(i)] == D_LEGEND; });
+    put_if([&](int i) { return dead[static_cast<std::size_t>(i)] == D_TG2; });
+    put_if([&](int i) { return dead[static_cast<std::size_t>(i)] == D_BLANK; });
+    // (5) Eladamri's Call with both pieces covered (it fills no slot), and a tutor with nothing to find.
+    put_if([&](int i)
+    {
+        if (!live(i) || used[static_cast<std::size_t>(i)]) { return false; }
+        const char c = cls[static_cast<std::size_t>(i)];
+        if (c == K_CALL) { return true; }
+        return c == K_WISH && !reaches(defs[static_cast<std::size_t>(i)], -1, nullptr);
+    });
+    // (6) lands past the 4th, worst first.
+    for (auto it = pool.rbegin(); it != pool.rend(); ++it) { put(*it); }
+    // (7) Auras past the target: the keep order reversed (Overgrowth > Trace > Fertile > Wild Growth).
+    for (auto it = auras_over.rbegin(); it != auras_over.rend(); ++it) { put(*it); }
+    // (8) spare flicker sources / untappers, less suitable first (R9).
+    {
+        int best_o = 2, best_u = 1 << 20;
+        for (const CardDefinition* d : board_outlets)   { best_o = std::min(best_o, outlet_key(d)); }
+        for (const CardDefinition* d : board_untappers) { best_u = std::min(best_u, untap_key(d)); }
+        std::vector<int> so, su;   // spares
+        for (int i = 0; i < n; ++i)
+        {
+            if (!live(i) || i == flick_slot || i == untap_slot) { continue; }
+            const char c = cls[static_cast<std::size_t>(i)];
+            if (c == K_OUTLET) { so.push_back(i); best_o = std::min(best_o, outlet_key(defs[static_cast<std::size_t>(i)])); }
+            if (c == K_UNTAP)  { su.push_back(i); best_u = std::min(best_u, untap_key(defs[static_cast<std::size_t>(i)])); }
+        }
+        if (flick_slot >= 0 && cls[static_cast<std::size_t>(flick_slot)] == K_OUTLET)
+        { best_o = std::min(best_o, outlet_key(defs[static_cast<std::size_t>(flick_slot)])); }
+        if (untap_slot >= 0 && cls[static_cast<std::size_t>(untap_slot)] == K_UNTAP)
+        { best_u = std::min(best_u, untap_key(defs[static_cast<std::size_t>(untap_slot)])); }
+        auto worst_first = [&](std::vector<int>& v, auto key)
+        {
+            std::stable_sort(v.begin(), v.end(), [&](int a, int b)
+            { return key(defs[static_cast<std::size_t>(a)]) > key(defs[static_cast<std::size_t>(b)]); });
+        };
+        worst_first(so, outlet_key);
+        worst_first(su, untap_key);
+        for (int i : so) { if (outlet_key(defs[static_cast<std::size_t>(i)]) > best_o) { put(i); } }
+        for (int i : su) { if (untap_key(defs[static_cast<std::size_t>(i)])  > best_u) { put(i); } }
+        for (int i : so) { put(i); }
+        for (int i : su) { put(i); }
+    }
+    // (9) spare win cons: a finisher that is not live first, then farther from castable first.
+    {
+        std::vector<int> sw;
+        for (int i = 0; i < n; ++i)
+        { if (cls[static_cast<std::size_t>(i)] == K_FINISHER && live(i) && i != win_slot) { sw.push_back(i); } }
+        std::stable_sort(sw.begin(), sw.end(), [&](int a, int b)
+        {
+            const bool la = win_rank(a) >= 0, lb = win_rank(b) >= 0;
+            if (la != lb) { return !la; }
+            return dist_of(a) > dist_of(b);
+        });
+        for (int i : sw) { put(i); }
+    }
+    // (10) Training Grounds below its threshold.
+    if (the_tg >= 0 && !tg_kept) { put(the_tg); }
+    // (11) the keep ladder read backwards: 3rd-4th land, extra Living Wish, Training Grounds, the Auras
+    // up to the target, the 2 lands, win con, untapper, flicker (R5).
+    for (auto it = land34.rbegin(); it != land34.rend(); ++it) { put(*it); }
+    for (int i = n - 1; i >= 0; --i)
+    { if (cls[static_cast<std::size_t>(i)] == K_WISH && live(i) && !used[static_cast<std::size_t>(i)]) { put(i); } }
+    if (tg_kept) { put(the_tg); }
+    for (auto it = auras_kept.rbegin(); it != auras_kept.rend(); ++it) { put(*it); }
+    for (auto it = land2.rbegin(); it != land2.rend(); ++it) { put(*it); }
+    put(win_slot);
+    put(untap_slot);
+    put(flick_slot);
+    // Defensive: anything not yet named (cannot happen -- every non-staged card has a tier above).
+    for (int i = 0; i < n; ++i) { put(i); }
+
+    // MTG_SHED_STATS firing counter: how often this policy's index 0 differs from the generic
+    // fallback's (the ranking the =0 hatch restores). Off by default = zero cost.
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- MeliraPodProvider ------------------------------------------------------
 
 int MeliraPodProvider::FlickerTarget(const GameState& s, int controller, int self_num) const
