@@ -13303,7 +13303,10 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 //           Wurm)": lands covering a colour the hand's spells still lack go first, then Orchard >
 //           City > fetch > shock > Forest/Tree > Reflecting Pool > Chancery. One Birds while none is
 //           in play. One land-tutor slot, Crop Rotation > Sylvan Scrying (Crop Rotation live only
-//           with a land in play).
+//           with a land in play) -- MANA, so SURPLUS once the 5 sources are met at its place in the
+//           ladder. COLOURS FIRST BEATS THE COUNT (integrator reading, 2026-10-09): a land that
+//           supplies a colour a KEPT spell needs and that no board / already-kept source supplies
+//           is kept even past the 5-source quota.
 //   DRAIN   Suture Priest ONLY, quota 1 (USER). Massacre Wurm is a payoff kept only if room.
 //   FUEL    Hunted Phantasm > Varchild's War-Riders, 1, FILLED once opponent creatures + our
 //           Orchards + War-Riders age counters reach 3; inside the bucket a card two or more mana
@@ -13324,13 +13327,16 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 //     cards.json "flexible colour source in hand" convention), a Reflecting Pool adds no colour.
 //   * A Karoo (Chancery) is dead with no other land on the board and no other non-Karoo land in hand;
 //     a Reflecting Pool is "lone" with no non-reflecting land on the board or in hand (proposal 4).
-//   * The land-tutor slot is filled whatever the source count (a slot, not a source -- proposal D9);
-//     a Crop Rotation with no land in play is a surplus land tutor.
+//   * The land-tutor slot is open only while the 5 sources are not yet met by the board + the lands /
+//     Birds the ladder kept BEFORE it (it is MANA; review fix 2026-10-09, design-literal -- the old
+//     "filled whatever the source count" reading is reversed). It does not itself count as a
+//     source. A Crop Rotation with no land in play is a surplus land tutor.
 //   * Enlightened Tutor fills the ENGINE slot only with no Defense on the board or in hand AND a
 //     Defense it can find still in the library; otherwise it is the "spare Enlightened Tutor".
-//   * Distance (proposal 6): deficit = max(MV - reach, worst colour shortfall), reach = board sources
-//     + live hand lands + hand dorks; "far" = deficit >= 2. Applied inside FUEL only, the one bucket
-//     with two different cards.
+//   * Distance (proposal 6): deficit = max(MV - reach, worst colour shortfall) over the KEPT sources
+//     only -- board + kept lands / Birds + the colour lands the giver itself would keep (integrator
+//     reading, 2026-10-09); "far" = deficit >= 2. Applied inside FUEL only, the one bucket with two
+//     different cards.
 //   * The Wardens' blank class requires no lifegain payoff on our board or in hand (counter payoffs,
 //     lifegain-to-drain payoffs) -- inert on this list, keeps a screening arm honest.
 // Classification is by PARAMS (taps_spawn_opp_token, etb_bounce_land, reflecting, fetch_land_types,
@@ -13563,35 +13569,6 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
         return p.tutor_land_to_battlefield ? 0 : 1;
     };
     std::stable_sort(ltutors.begin(), ltutors.end(), [&](int a, int b) { return tutor_rank(a) < tutor_rank(b); });
-    // Fuel: near before far (colour-exact distance), then Hunted Phantasm (a 5-token burst alone
-    // turns Defense on) before the ramping War-Riders.
-    {
-        int reach = board_sources, src[5] = { have[0], have[1], have[2], have[3], have[4] };
-        auto credit = [&](const CardDefinition* d)
-        {
-            ++reach;
-            const unsigned b = land_bits(d);
-            for (int c = 0; c < 5; ++c) { if ((b >> c) & 1u) { ++src[c]; } }
-        };
-        for (int i : live_lands) { credit(hdef(i)); }
-        for (int i : dorks)      { credit(hdef(i)); }
-        auto far = [&](int i)
-        {
-            const CardDefinition* d = hdef(i);
-            int deficit = d->card.m_mana_cost.ManaValue() - reach;
-            for (int c = 0; c < 5; ++c) { deficit = std::max(deficit, pips(d, c) - src[c]); }
-            return deficit >= 2;
-        };
-        std::stable_sort(fuels.begin(), fuels.end(), [&](int a, int b)
-        {
-            const bool fa = far(a), fb = far(b);
-            if (fa != fb) { return !fa; }
-            const bool ba = hdef(a)->params.etb_opp_creates_tokens > 0;
-            const bool bb = hdef(b)->params.etb_opp_creates_tokens > 0;
-            if (ba != bb) { return ba; }
-            return a < b;
-        });
-    }
     // Enlightened Tutor finds the engine only while a Defense it can reach is left in the library.
     bool finder_live = false;
     if (!finders.empty())
@@ -13611,40 +13588,141 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
     std::vector<char> keep(static_cast<std::size_t>(n), 0);
     std::vector<int> ladder;
     ladder.reserve(static_cast<std::size_t>(n));
-    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; ladder.push_back(i); };
     auto first_free = [&](const std::vector<int>& v) -> int
     { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
-    int src_need = std::max(0, kSourceQuota - board_sources);
     enum Slot { S_LAND, S_DRAIN, S_DORK, S_ENGINE, S_TUTOR, S_FUEL };
     static const Slot kLadder[] = { S_LAND, S_DRAIN, S_DORK, S_ENGINE, S_LAND, S_TUTOR, S_LAND,
                                     S_FUEL, S_LAND, S_LAND };
-    for (Slot slot : kLadder)
+    constexpr int kSlots = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
+
+    // Pass 1 -- MANA, which depends on no spell: the land / Birds each mana slot takes under the
+    // 5-source quota counting the board, and whether the land-tutor slot is still open. The land
+    // tutor BELONGS TO MANA ("land tutor slot" is listed under MANA in the USER block): once the 5
+    // sources are met at its place in the ladder it is SURPLUS MANA (design-literal, review fix
+    // 2026-10-09; it does not itself count as a source).
+    int slot_pick[kSlots];
+    for (int k = 0; k < kSlots; ++k) { slot_pick[k] = -1; }
+    bool tutor_open = false;
     {
-        switch (slot)
+        int src_need = std::max(0, kSourceQuota - board_sources);
+        for (int k = 0; k < kSlots; ++k)
+        {
+            int i = -1;
+            if (kLadder[k] == S_LAND && src_need > 0)                        { i = first_free(land_order); }
+            else if (kLadder[k] == S_DORK && board_dorks == 0 && src_need > 0) { i = first_free(dorks); }
+            else if (kLadder[k] == S_TUTOR)                                  { tutor_open = src_need > 0; }
+            if (i >= 0) { keep[static_cast<std::size_t>(i)] = 1; slot_pick[k] = i; --src_need; }
+        }
+    }
+    // The KEPT sources (board + the lands / Birds pass 1 kept + the colour lands below).
+    int ksrc[5] = { have[0], have[1], have[2], have[3], have[4] };
+    int kreach = board_sources;
+    auto credit = [&](int i)
+    {
+        ++kreach;
+        const unsigned b = land_bits(hdef(i));
+        for (int c = 0; c < 5; ++c) { if ((b >> c) & 1u) { ++ksrc[c]; } }
+    };
+    for (int i = 0; i < n; ++i)
+    { if (keep[static_cast<std::size_t>(i)] && (cl(i) == C_LAND || cl(i) == C_DORK)) { credit(i); } }
+
+    // COLOURS FIRST BEATS THE COUNT -- integrator reading (2026-10-09), surfaced to the USER;
+    // consistent with EldraziFlicker R6 and the USER's Prevent Damage "coloured lands that produce
+    // what we need": a land that supplies a colour a KEPT spell needs, and that no board / already
+    // kept source supplies, is kept even past the 5-source quota. (Review finding: the quota alone
+    // shed the hand's only blue source first while Phantasm held the fuel slot because of it.) The
+    // best such land is the first in the colour-first land order; it joins the ladder right behind
+    // the spell that needs it, so it gives way just before that spell does.
+    auto colour_lands = [&](int spell, std::vector<int>& out)
+    {
+        int s2[5] = { ksrc[0], ksrc[1], ksrc[2], ksrc[3], ksrc[4] };
+        for (int c = 0; c < 5; ++c)
+        {
+            if (pips(hdef(spell), c) <= 0 || s2[c] > 0) { continue; }
+            for (int li : land_order)
+            {
+                if (keep[static_cast<std::size_t>(li)]
+                    || std::find(out.begin(), out.end(), li) != out.end()) { continue; }
+                const unsigned b = land_bits(hdef(li));
+                if (((b >> c) & 1u) == 0) { continue; }
+                out.push_back(li);
+                for (int cc = 0; cc < 5; ++cc) { if ((b >> cc) & 1u) { ++s2[cc]; } }
+                break;
+            }
+        }
+    };
+    std::vector<int> ext;
+    auto cover = [&](int spell)
+    {
+        ext.clear();
+        colour_lands(spell, ext);
+        for (int li : ext) { keep[static_cast<std::size_t>(li)] = 1; ladder.push_back(li); credit(li); }
+    };
+    auto take_spell = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; ladder.push_back(i); cover(i); };
+
+    // Fuel: near before far, then Hunted Phantasm (a 5-token burst alone turns Defense on) before the
+    // ramping War-Riders. The distance counts ONLY the sources actually kept -- the kept sources so far
+    // plus the colour lands this giver would itself keep (integrator reading, 2026-10-09; it used to
+    // count every live hand land, surplus ones included).
+    auto fuel_far = [&](int i)
+    {
+        std::vector<int> mine;
+        colour_lands(i, mine);
+        int reach = kreach + static_cast<int>(mine.size());
+        int src[5] = { ksrc[0], ksrc[1], ksrc[2], ksrc[3], ksrc[4] };
+        for (int li : mine)
+        {
+            const unsigned b = land_bits(hdef(li));
+            for (int c = 0; c < 5; ++c) { if ((b >> c) & 1u) { ++src[c]; } }
+        }
+        const CardDefinition* d = hdef(i);
+        int deficit = d->card.m_mana_cost.ManaValue() - reach;
+        for (int c = 0; c < 5; ++c) { deficit = std::max(deficit, pips(d, c) - src[c]); }
+        return deficit >= 2;
+    };
+
+    // Pass 2 -- the ladder in order: the mana picks from pass 1, the spells, each spell's colour lands.
+    for (int k = 0; k < kSlots; ++k)
+    {
+        switch (kLadder[k])
         {
             case S_LAND:
-                if (src_need > 0) { const int i = first_free(land_order); if (i >= 0) { take(i); --src_need; } }
-                break;
-            case S_DRAIN:
-                if (!board_drain) { const int i = first_free(drains); if (i >= 0) { take(i); } }
+                if (slot_pick[k] >= 0) { ladder.push_back(slot_pick[k]); }
                 break;
             case S_DORK:
-                if (board_dorks == 0 && src_need > 0)
-                { const int i = first_free(dorks); if (i >= 0) { take(i); --src_need; } }
+                if (slot_pick[k] >= 0) { ladder.push_back(slot_pick[k]); cover(slot_pick[k]); }
+                break;
+            case S_DRAIN:
+                if (!board_drain) { const int i = first_free(drains); if (i >= 0) { take_spell(i); } }
                 break;
             case S_ENGINE:
                 if (!board_engine)
                 {
                     int i = first_free(engines);
                     if (i < 0 && finder_live) { i = first_free(finders); }
-                    if (i >= 0) { take(i); }
+                    if (i >= 0) { take_spell(i); }
                 }
                 break;
             case S_TUTOR:
-            { const int i = first_free(ltutors); if (i >= 0 && tutor_rank(i) < 2) { take(i); } break; }
-            case S_FUEL:
-                if (opp_projected < kFuelFilledAt) { const int i = first_free(fuels); if (i >= 0) { take(i); } }
+                if (tutor_open)
+                { const int i = first_free(ltutors); if (i >= 0 && tutor_rank(i) < 2) { take_spell(i); } }
                 break;
+            case S_FUEL:
+            {
+                std::vector<char> far(static_cast<std::size_t>(n), 0);
+                for (int i : fuels) { far[static_cast<std::size_t>(i)] = fuel_far(i) ? 1 : 0; }
+                std::stable_sort(fuels.begin(), fuels.end(), [&](int a, int b)
+                {
+                    const char fa = far[static_cast<std::size_t>(a)], fb = far[static_cast<std::size_t>(b)];
+                    if (fa != fb) { return fa == 0; }
+                    const bool ba = hdef(a)->params.etb_opp_creates_tokens > 0;
+                    const bool bb = hdef(b)->params.etb_opp_creates_tokens > 0;
+                    if (ba != bb) { return ba; }
+                    return a < b;
+                });
+                if (opp_projected < kFuelFilledAt) { const int i = first_free(fuels); if (i >= 0) { take_spell(i); } }
+                break;
+            }
         }
     }
 
