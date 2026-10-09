@@ -1019,10 +1019,11 @@ public:
 
 // Dragonstorm (mono-red ritual-storm combo): a {8}{R} Storm sorcery puts min(storm+1, Dragons
 // left) Dragons onto the battlefield, each firing its ETB (Scourge ping / Lathliss token) and, with
-// a haste-Dragon out, swinging the same turn. The one override is the tutor-to-battlefield put ORDER
-// + SELECTION heuristic (Lathliss-first / Scourge-second, haste-Dragon reserved for the alpha
+// a haste-Dragon out, swinging the same turn. The headline override is the tutor-to-battlefield put
+// ORDER + SELECTION heuristic (Lathliss-first / Scourge-second, haste-Dragon reserved for the alpha
 // strike); the engine keeps the put + reshuffle mechanism and MTG_UNPRUNED(tutor) reverts to the
-// full library-order enumeration. Inherits Generic for everything else.
+// full library-order enumeration. The search opt-ins, the go-off lethal model and the USER's
+// cleanup-discard buckets are listed below; everything else is inherited from Generic.
 class DragonstormProvider : public DeckProvider
 {
 public:
@@ -1081,6 +1082,19 @@ public:
     // copies CUMULATIVELY (storm count + float), so a "spare" Rite of Flame is next turn's mana
     // and storm. The discard-analysis labels agree (band 85.8% optimal vs the base MV rule's 99%
     // over 401 decisions). See docs/design/per-deck-discard-analysis-phase.md.
+    // (The USER's 2026-10-09 bucket design below keeps that: every ritual copy is kept, unlimited.)
+    //
+    // Cleanup discard: the USER-settled bucket policy (2026-10-09,
+    // docs/design/dragonstorm-discard-policy-proposal.md "Dragonstorm: SETTLED") -- fast mana over
+    // Apex and Dragons, exactly ONE of {Dragonstorm, Apex} hard-protected (Dragonstorm if held), one
+    // cheap Dragon only when mana is very limited or no payoff is held. MTG_DRAGONSTORM_BUCKET_DISCARD=0
+    // restores GenericProvider's max-MV fallback AND the profile's last-copy-of-EACH protection.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
+    // The protection half of that design: required_pieces [Apex of Power, Dragonstorm] protect the last
+    // hand copy of EACH; the USER wants one OR the other ("We only must keep one or the other,
+    // prioritizing dragonstorm"), so Apex's protection is waived while a Dragonstorm is in hand.
+    bool CleanupDiscardProtectionWaived(const GameState&, const Card&) const override;
 
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /

@@ -9378,6 +9378,341 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
 // restrictor (18) tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one
 // implementation, and any future ritual/reducer deck inherits them from its card data.
 
+// ---- DragonstormProvider: cleanup discard ------------------------------------------------------
+//
+// THE USER'S DESIGN (2026-10-09), docs/design/dragonstorm-discard-policy-proposal.md "#### Dragonstorm:
+// SETTLED" (the proposal under it is background -- card census, predicates, the ritual EV):
+//   KEEP: land -> Lotus Bloom (end of turn 1 only) -> Dragonstorm (else Apex) -> fast mana: rituals,
+//         Medallion, lands to 4 (3 with a Medallion in play), interleaved -> no Dragonstorm: every
+//         Apex -> one cheap Dragon (Scourge > Lathliss) if mana is very limited or no Dragonstorm/Apex
+//         is held -> Apex alongside a Dragonstorm -> soft 2nd Medallion.
+//   SHED: Karrthus / Kolaghan -> other Dragons beyond the exception (Utvara > Lathliss > Scourge) ->
+//         2nd Dragonstorm -> Lotus Bloom after turn 1 -> Apex alongside a Dragonstorm -> 3rd+
+//         Medallion -> surplus lands -> rituals (practically never) -> protected.
+// The USER rulings behind the non-obvious parts:
+//   * "We only must keep one or the other, prioritizing dragonstorm ... There is no card more
+//     crucial." -> exactly ONE of {Dragonstorm, Apex} is protected: CleanupDiscardProtectionWaived
+//     waives Apex while a Dragonstorm is held, and the order names that one payoff LAST.
+//   * Without a Dragonstorm keep EVERY Apex ("they can chain off each other"); with one, a 2nd
+//     Dragonstorm is useless and Apex "ranks below fast mana, and below a cheap Dragon when mana is
+//     limited". FAST MANA IS THE PRIORITY (rituals, Bloom, Medallion, lands) over Apex and Dragons.
+//   * Dragons are never required except that one cheap Dragon; haste Dragons are hard to cast and go
+//     first, with NO "haste left in library" exception.
+//   * "Very limited mana" = cannot reach 9 mana within 2 turns (lands in play + two more land drops +
+//     rituals' net mana + a ready Bloom, Medallion discount); the Dragon pivot never displaces the
+//     protected payoff ("one dragon takes quite a bit of time to deal 20").
+// AGENT READINGS (each listed in the doc's implementation notes for the USER to overturn):
+//   (a) The two SETTLED lines disagree at the tail: KEEP has "Apex alongside a Dragonstorm" ABOVE the
+//       soft 2nd Medallion, SHED sheds that Apex BEFORE the 3rd+ Medallion and the surplus lands. With
+//       interchangeable Medallion copies both can only hold if a 3rd copy is worth more than a 2nd, so
+//       the SHED list (and "fast mana over Apex") wins: the Apex goes before the 3rd+ Medallion, the
+//       surplus lands and the soft 2nd Medallion.
+//   (b) The protected payoff is named LAST -- after land 1 and the turn-1 Bloom, which KEEP lists above
+//       it -- because SHED ends "-> protected" and the engine already sheds a protected sole copy last;
+//       a two-Dragonstorm hand (neither copy engine-protected) then reads the same order.
+//   (c) The fast-mana interleave is the proposal's ladder minus the slots the USER moved: ritual, land,
+//       ritual, Medallion, ritual, ritual, land, ritual, land, then every other ritual (no quota).
+//   (d) "Cheap Dragon" = a non-haste Dragon of mana value <= 6, cheapest first: Scourge (5) > Lathliss
+//       (6) -- the USER's "Linvala" read as Lathliss, the next-cheapest. Utvara (8) is never the one.
+//   (e) Net of board: a Bloom on the battlefield or suspended fills the turn-1 Bloom slot, and a
+//       Medallion on the battlefield fills the Medallion slot (the hand's first is then the soft 2nd).
+//   (f) "Very limited": each land in play at max(1, its yield) (a Needle 2, a charged battery its
+//       counters), the two drops at 1 each whether or not a land is held, every ritual's net
+//       (Medallion-adjusted), 3 per Bloom on the battlefield or arriving off suspend within 2 turns;
+//       against 9 - Medallions in play.
+//   (g) Ritual order is the proposal's EV ("proposal kept"): value = net float, +1 if spliceable, +1 per
+//       copy already in a graveyard (Rite of Flame); Irencrag + its shortfall when >= 3 short of the
+//       protected payoff's cost, 0 when not short at all; times a 1/3-per-mana decay in the distance to
+//       castable next turn (the board's mana + 1 when a land is kept, red pips against red sources).
+//   (h) A staged (Apex-exiled) card is never named and never counts as a HELD payoff: it expires.
+//   (i) A dead legend duplicate goes first (the brief's rule); an unrecognised card sheds after the
+//       surplus lands (the proposal's S6: "no opinion is a reason to protect a card, not to pitch it").
+// Classification is by PARAMS on the definition (a hand card is a name-only placeholder). The return
+// routes through CleanupDiscardRankingWithOrder, so staged cards and the remaining required-piece
+// protection stay engine-enforced. Prefix-stable except that a shed Rite of Flame raises a surviving
+// Rite's graveyard credit -- which only moves that Rite LATER, never into the prefix already shed.
+static bool DragonstormBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_DRAGONSTORM_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::DRAGONSTORM_BUCKET_DISCARD, on);
+}
+
+// Apex of Power (impulse_exile) loses its last-copy protection while a Dragonstorm
+// (tutor_to_battlefield) is in hand, so exactly one of the two required pieces is protected:
+//   {DS} -> DS; {DS, Apex} -> DS only; {DS, DS} -> neither by the engine (a duplicate is spare under
+//   "hand" scope) -- the shed order keeps one, last; {Apex} -> Apex; {Apex, Apex} -> neither by the
+//   engine -- the order keeps both, one last.
+bool DragonstormProvider::CleanupDiscardProtectionWaived(const GameState& s, const Card& c) const
+{
+    if (!DragonstormBucketDiscardEnabled()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr || d->params.impulse_exile <= 0) { return false; }
+    for (const Card& h : s.players[s.active_player_index].hand)
+    {
+        if (h.m_is_staged) { continue; }   // agent reading (h): an expiring staged copy is not held
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (hd != nullptr && hd->params.tutor_to_battlefield) { return true; }
+    }
+    return false;
+}
+
+std::vector<int> DragonstormProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!DragonstormBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    // A red source for a SPELL: Unclaimed Territory's coloured mana is creature-only, {C} otherwise.
+    auto makes_red = [](const CardDefinition* d)
+    {
+        if (d == nullptr || d->params.colored_creature_only) { return false; }
+        const std::vector<Color>& pr = d->params.produces;
+        return std::find(pr.begin(), pr.end(), Color::Red) != pr.end();
+    };
+
+    // ---- 1. board census (net of board) -------------------------------------------------------
+    int board_lands = 0, board_mana = 0, board_red = 0, board_meds = 0, lands_floor_mana = 0;
+    int blooms_out = 0, ready_blooms = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand())
+        {
+            ++board_lands;
+            const int y = d != nullptr ? PermanentManaYield(s, p, *d) : 1;
+            board_mana       += y;
+            lands_floor_mana += std::max(1, y);
+            if (makes_red(d)) { board_red += y; }
+            continue;
+        }
+        if (d == nullptr) { continue; }
+        if (!d->params.reduces_spell_color.empty()) { ++board_meds; }
+        if (d->params.sac_for_mana_amount > 0)          // a resolved Lotus Bloom: 3 of any one colour
+        {
+            ++blooms_out; ++ready_blooms;
+            board_mana += d->params.sac_for_mana_amount;
+            board_red  += d->params.sac_for_mana_amount;
+        }
+    }
+    for (const SuspendedCard& sc : ap.suspended_cards)
+    {
+        const CardDefinition* d = def_of(sc.card);
+        if (d == nullptr || d->params.sac_for_mana_amount <= 0) { continue; }
+        ++blooms_out;
+        if (sc.arrive_turn <= s.turn_number + 2) { ++ready_blooms; }
+    }
+
+    // ---- 2. classify the hand ------------------------------------------------------------------
+    enum DsCls : char { K_NONE, K_LAND, K_BLOOM, K_MED, K_FUEL, K_STORM, K_APEX, K_DRAGON, K_OTHER };
+    std::vector<char> cls(static_cast<std::size_t>(n), K_NONE), dead(static_cast<std::size_t>(n), 0);
+    std::vector<const CardDefinition*> defs(static_cast<std::size_t>(n), nullptr);
+    std::vector<int> lands, blooms, meds, fuels, storms, apexes, dragons;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[static_cast<std::size_t>(i)] = d;
+        char c = K_OTHER;
+        if (CleanupDiscardIsLand(hc))                    { c = K_LAND; }
+        else if (d == nullptr)                           { c = K_OTHER; }
+        else if (d->params.tutor_to_battlefield)         { c = K_STORM; }    // Dragonstorm
+        else if (d->params.impulse_exile > 0)            { c = K_APEX; }     // Apex of Power
+        else if (IsManaRitual(*d))                       { c = K_FUEL; }     // the five rituals
+        else if (!d->params.reduces_spell_color.empty()) { c = K_MED; }      // Ruby Medallion
+        else if (d->params.suspend_time_counters > 0 || d->params.sac_for_mana_amount > 0) { c = K_BLOOM; }
+        else if (d->card.IsCreature())                   { c = K_DRAGON; }   // every creature here is a Dragon
+        cls[static_cast<std::size_t>(i)] = c;
+        // Agent reading (i): a legend we already control, or a 2nd copy in hand, is dead.
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary))
+        {
+            bool dup = false;
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == me && p.card.m_name == hc.m_name) { dup = true; break; } }
+            for (int j = 0; j < i && !dup; ++j)
+            {
+                const Card& o = ap.hand[static_cast<std::size_t>(j)];
+                if (!o.m_is_staged && o.m_name == hc.m_name) { dup = true; }
+            }
+            if (dup) { dead[static_cast<std::size_t>(i)] = 1; continue; }
+        }
+        switch (c)
+        {
+            case K_LAND:   lands.push_back(i);   break;
+            case K_BLOOM:  blooms.push_back(i);  break;
+            case K_MED:    meds.push_back(i);    break;
+            case K_FUEL:   fuels.push_back(i);   break;
+            case K_STORM:  storms.push_back(i);  break;
+            case K_APEX:   apexes.push_back(i);  break;
+            case K_DRAGON: dragons.push_back(i); break;
+            default: break;
+        }
+    }
+    auto def_at = [&](int i) { return defs[static_cast<std::size_t>(i)]; };
+
+    // Lands, best kept first (the proposal's 6.2, unchanged by the USER): Sandstone Needle (two mana
+    // per tap) > an untapped basic > a storage battery (pays nothing for two turns) > Unclaimed
+    // Territory (only {C} for every non-creature spell in the deck).
+    auto land_rank = [&](int i)
+    {
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { return 1; }
+        if (d->params.colored_creature_only) { return 3; }
+        if (d->params.storage_land)          { return 2; }
+        if (d->params.produces_amount >= 2)  { return 0; }
+        return 1;
+    };
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b) { return land_rank(a) < land_rank(b); });
+    int land_need = std::max(0, (board_meds > 0 ? 3 : 4) - board_lands);
+
+    // Effective cost: a Medallion takes 1 GENERIC off a red spell per copy (pips never).
+    auto eff_cost = [&](const CardDefinition* d)
+    {
+        const ManaCost& mc = d->card.m_mana_cost;
+        return mc.ManaValue() - (mc.red > 0 ? std::min(mc.generic, board_meds) : 0);
+    };
+    auto gross_float = [&](int i)
+    {
+        const CardDefinition* d = def_at(i);
+        int g = d->params.ritual_floating_mana;
+        if (d->params.ritual_float_gy_self_bonus)
+        {
+            const InternedName& nm = ap.hand[static_cast<std::size_t>(i)].m_name;
+            for (const Player& pl : s.players)
+            { for (const Card& gc : pl.graveyard) { if (gc.m_name == nm) { ++g; } } }
+        }
+        return g;
+    };
+    auto net_float = [&](int i) { return gross_float(i) - eff_cost(def_at(i)); };
+
+    // "Very limited mana" (USER definition; agent reading (f)).
+    int ritual_net = 0;
+    for (int i : fuels) { ritual_net += std::max(0, net_float(i)); }
+    const int nine = 9 - std::min(8, board_meds);
+    const bool very_limited = lands_floor_mana + 2 + ritual_net + 3 * ready_blooms < nine;
+
+    // ---- 3. the keep ladder ----------------------------------------------------------------------
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken;   // keep order (most valuable first), the protected payoff excluded
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
+    auto first_free = [&](const std::vector<int>& v) -> int
+    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
+
+    // K1 land.
+    int k1 = -1;
+    if (land_need > 0) { k1 = first_free(lands); if (k1 >= 0) { take(k1); --land_need; } }
+    // K2 Lotus Bloom, end of turn 1 only ("from end of turn 2 on it can be dropped": suspended T3 ->
+    // usable T6), net of board (agent reading (e)).
+    if (s.turn_number <= 1 && blooms_out == 0) { const int i = first_free(blooms); if (i >= 0) { take(i); } }
+    // K3 the protected payoff: Dragonstorm, else Apex -- named LAST in the shed order (reading (b)).
+    const int prot = !storms.empty() ? storms.front() : (!apexes.empty() ? apexes.front() : -1);
+    if (prot >= 0) { keep[static_cast<std::size_t>(prot)] = 1; }
+
+    // K4 fast mana. Rituals by the proposal's EV (agent reading (g)).
+    const int reach   = board_mana + (k1 >= 0 ? 1 : 0);
+    const int red_src = board_red + (k1 >= 0 && makes_red(def_at(k1)) ? 1 : 0);
+    const int shortfall = (prot >= 0 ? eff_cost(def_at(prot)) : nine) - reach;
+    std::vector<int> score(static_cast<std::size_t>(n), 0), gross(static_cast<std::size_t>(n), 0);
+    for (int i : fuels)
+    {
+        static constexpr int kDecay[5] = { 81, 27, 9, 3, 1 };   // 1/3 per mana (or red pip) short
+        const CardDefinition* d = def_at(i);
+        int v = net_float(i) + (d->params.splice_onto_arcane ? 1 : 0);
+        if (d->params.max_casts_after >= 0)        // Irencrag Feat: best far short, worst when not short
+        {
+            if (shortfall >= 3)      { v += shortfall; }
+            else if (shortfall <= 0) { v = 0; }
+        }
+        const int dist = std::max(0, eff_cost(d) - reach)
+                       + std::max(0, d->card.m_mana_cost.red - red_src);
+        score[static_cast<std::size_t>(i)] = v * kDecay[std::min(dist, 4)];
+        gross[static_cast<std::size_t>(i)] = gross_float(i);
+    }
+    std::stable_sort(fuels.begin(), fuels.end(), [&](int a, int b)
+    {
+        const int sa = score[static_cast<std::size_t>(a)], sb = score[static_cast<std::size_t>(b)];
+        if (sa != sb) { return sa > sb; }
+        return gross[static_cast<std::size_t>(a)] > gross[static_cast<std::size_t>(b)];
+    });
+    bool med_taken = false;
+    static const char kFast[] = { 'F', 'L', 'F', 'M', 'F', 'F', 'L', 'F', 'L' };   // reading (c)
+    for (char slot : kFast)
+    {
+        if (slot == 'F') { const int i = first_free(fuels); if (i >= 0) { take(i); } }
+        else if (slot == 'L')
+        { if (land_need > 0) { const int i = first_free(lands); if (i >= 0) { take(i); --land_need; } } }
+        else if (board_meds == 0) { const int i = first_free(meds); if (i >= 0) { take(i); med_taken = true; } }
+    }
+    for (int i : fuels) { if (!keep[static_cast<std::size_t>(i)]) { take(i); } }   // unlimited quota
+    // K5 no Dragonstorm: every Apex.
+    if (storms.empty()) { for (int i : apexes) { if (!keep[static_cast<std::size_t>(i)]) { take(i); } } }
+    // K6 one cheap Dragon, when mana is very limited or no Dragonstorm / Apex is held (reading (d)).
+    auto is_haste = [&](int i)
+    { const CardDefinition* d = def_at(i); return d->params.grants_haste || d->card.HasKeyword(Keyword::Haste); };
+    if (very_limited || (storms.empty() && apexes.empty()))
+    {
+        int best = -1, best_mv = 99;
+        for (int i : dragons)
+        {
+            const int mv = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(i)]);
+            if (is_haste(i) || mv > 6) { continue; }
+            if (mv < best_mv) { best = i; best_mv = mv; }
+        }
+        if (best >= 0) { take(best); }
+    }
+    // K7 "Apex alongside a Dragonstorm": shed explicitly below, ahead of the 3rd+ Medallion (reading (a)).
+    // K8 the soft 2nd Medallion (board copies count).
+    if (board_meds + (med_taken ? 1 : 0) < 2) { const int i = first_free(meds); if (i >= 0) { take(i); } }
+
+    // ---- 4. the shed order -----------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[static_cast<std::size_t>(i)].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto unkept = [&](int i) { return !keep[static_cast<std::size_t>(i)]; };
+    for (int i = 0; i < n; ++i) { if (dead[static_cast<std::size_t>(i)]) { put(i); } }
+    // Karrthus / Kolaghan, then the other Dragons beyond the exception: Utvara > Lathliss > Scourge.
+    {
+        std::vector<int> drg;
+        for (int i : dragons) { if (unkept(i)) { drg.push_back(i); } }
+        std::stable_sort(drg.begin(), drg.end(), [&](int a, int b)
+        {
+            const bool ha = is_haste(a), hb = is_haste(b);
+            if (ha != hb) { return ha; }
+            return CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)])
+                 > CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+        });
+        for (int i : drg) { put(i); }
+    }
+    for (int i : storms) { if (i != prot) { put(i); } }               // 2nd+ Dragonstorm
+    for (int i : blooms) { if (unkept(i)) { put(i); } }               // Lotus Bloom after turn 1
+    for (int i : apexes) { if (unkept(i)) { put(i); } }               // Apex alongside a Dragonstorm
+    for (int i : meds)   { if (unkept(i)) { put(i); } }               // 3rd+ Medallion
+    for (auto it = lands.rbegin(); it != lands.rend(); ++it) { if (unkept(*it)) { put(*it); } }   // surplus lands
+    for (int i = 0; i < n; ++i) { if (cls[static_cast<std::size_t>(i)] == K_OTHER) { put(i); } }
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }   // the keep ladder, backwards
+    put(prot);                                                        // the one protected payoff
+    for (int i = 0; i < n; ++i) { put(i); }                           // defensive: cannot fire
+
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- Goblins ---------------------------------------------------------------
 
 // Defer the creature-sac outlets (Siege-Gang damage / Pashalik tokens / Skirk's sac-for-mana and its
