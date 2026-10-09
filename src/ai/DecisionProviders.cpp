@@ -7796,10 +7796,12 @@ int KnightsCurveValue(const GameState& s, const CardDefinition* d)
 //          also Hero of Bladehold / Kinsbaile Cavalier. The fixer clause may EXTEND the kept lands by
 //          one when the board already fills the 3 (keeping the land that makes the held card castable
 //          at all); "a Vial able to reach it" = a Vial in play with charge <= MV <= charge + 3.
-//          WK: Sol Ring and Remote Farm "count as mana (2)" -- the quota counts mana UNITS
-//          (produces_amount), a rock counts as a source, and among kept sources the bigger one is
-//          preferred (fewer cards for the same mana); a kept Sol Ring is cast on the first turn it is
-//          affordable and nets its output less its cost that turn (agent).
+//          WK: Sol Ring and Remote Farm "count as mana" -- each counts ONE source toward the quota
+//          (the Angels precedent; AGENT CORRECTION 2026-10-09 of the first reading, "2 toward the
+//          quota"), its real output (2; the Ring's colourless) goes into the fill, and when the quota
+//          must choose between different sources the one the fill's colours need wins. A kept Sol Ring
+//          is cast on the first affordable turn, paid out of that turn's pool; a depletion land pays
+//          only for the counters it has left.
 //   VIAL   surplus after turn 1 (kept as an engine only at the end of turn 1); a 2nd always shed.
 //          AGENT READING: the turn-1 Vial is the last NONLAND card shed (Goblins' "engine, a sub-role
 //          of mana" precedent) -- after every creature, before the kept lands.
@@ -7822,8 +7824,13 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
     auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
 
     // ---- 1. board census (net of board) -------------------------------------------------------
+    // Each source in play counts ONE toward the land quota (review fix 2026-10-09, the Angels
+    // precedent for "count as mana"); its real output goes into the fill's mana. A DEPLETION land
+    // (Remote Farm) pays only on the uses it has left -- one per turn, read off its counters -- and
+    // counts toward the quota only while it has 2+ of them (agent reading: on its last counter it is
+    // gone after next turn).
     Mana mana{};
-    int board_units = 0;
+    int board_units = 0;          // sources toward the quota
     unsigned board_colours = 0;   // colours a source in play can make (a wild source makes all five)
     int vial_charge = -1;         // the most-charged Vial in play (-1: none)
     for (const Permanent& perm : s.battlefield)
@@ -7834,8 +7841,17 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
         if (perm.card.IsLand() || rock)
         {
             const Source src = ClassifySource(d);
-            AddFrom(mana, src, src.units, 0);
-            board_units += src.units;
+            if (d != nullptr && d->params.enters_tapped_with_depletion > 0)
+            {
+                const int uses = DepletionCountersOn(perm);
+                for (int k = 0; k < std::min(uses, kTurns); ++k) { AddAt(mana, src, src.units, k); }
+                if (uses >= 2) { ++board_units; }
+            }
+            else
+            {
+                AddFrom(mana, src, src.units, 0);
+                ++board_units;
+            }
             if (src.kind == Kind::Wild)        { board_colours |= 0x1Fu; }
             else if (src.kind == Kind::Single) { board_colours |= 1u << src.colour; }
         }
@@ -7920,52 +7936,9 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
         if (ta != tb) { return !ta; }
         return a < b;
     });
-    char kept_mana[kHandMax] = {};
-    {
-        const int need = std::max(0, target - board_units);
-        int have = 0;
-        bool kept_fixer = false;
-        for (int t = 0; t < nm && have < need; ++t)
-        {
-            const int i = mana_idx[t];
-            kept_mana[i] = 1;
-            have += msrc[i].units;
-            if (msrc[i].kind == Kind::Wild) { kept_fixer = true; }
-        }
-        if (fixer_needed && !kept_fixer)
-        {
-            for (int t = 0; t < nm; ++t)
-            {
-                const int i = mana_idx[t];
-                if (!kept_mana[i] && msrc[i].kind == Kind::Wild) { kept_mana[i] = 1; break; }
-            }
-        }
-    }
-
     // ---- 5. the curve fill ----------------------------------------------------------------------
-    // Kept lands enter one per turn in keep order; a kept rock (WK's Sol Ring) is cast on the first
-    // turn it is affordable.
-    int drop = 0;
-    for (int t = 0; t < nm; ++t)
-    {
-        const int i = mana_idx[t];
-        if (!kept_mana[i] || !CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
-        if (drop < kTurns) { AddFrom(mana, msrc[i], msrc[i].units, drop + (enters_tapped(i) ? 1 : 0)); }
-        ++drop;
-    }
-    for (int t = 0; t < nm; ++t)
-    {
-        const int i = mana_idx[t];
-        if (!kept_mana[i] || CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
-        const int rmv = defs[i] != nullptr ? defs[i]->card.m_mana_cost.ManaValue() : 0;
-        for (int k = 0; k < kTurns; ++k)
-        {
-            if (mana.total[k] < rmv) { continue; }
-            AddAt(mana, msrc[i], msrc[i].units - rmv, k);
-            AddFrom(mana, msrc[i], msrc[i].units, k + 1);
-            break;
-        }
-    }
+    // The pool and its value ranks first: the kept-mana choice below scores candidate manabases with
+    // the fill itself.
     int pool_hand[kHandMax], value[kHandMax], rank[kHandMax], slot_of[kHandMax];
     int np = 0;
     for (int i = 0; i < n; ++i)
@@ -7987,17 +7960,136 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
         if (d != nullptr && IsLordPermanent(*d) && d->params.power_bonus > 0) { lord_bits |= 1u << t; }
     }
     Fill& F = t_fill;
-    F.Build(spells, dp.n, mana, vial_charge);
-    unsigned best = 0;
-    std::uint64_t best_score = 0;
-    for (unsigned M = 0; M < F.Full(); ++M)
+    // The fill's best kept set for one manabase: the most creatures cast, then lords, then value.
+    auto fill_best = [&](const Mana& m, std::uint64_t* score_out) -> unsigned
     {
-        if (!F.Feasible(M)) { continue; }
-        const std::uint64_t sc = (static_cast<std::uint64_t>(std::popcount(M)) << 40)
-                               | (static_cast<std::uint64_t>(std::popcount(M & lord_bits)) << 32)
-                               | ValueKey(M, dp);
-        if (sc > best_score) { best = M; best_score = sc; }
+        F.Build(spells, dp.n, m, vial_charge);
+        unsigned best_m = 0;
+        std::uint64_t best_sc = 0;
+        for (unsigned M = 0; M < F.Full(); ++M)
+        {
+            if (!F.Feasible(M)) { continue; }
+            const std::uint64_t sc = (static_cast<std::uint64_t>(std::popcount(M)) << 40)
+                                   | (static_cast<std::uint64_t>(std::popcount(M & lord_bits)) << 32)
+                                   | ValueKey(M, dp);
+            if (sc > best_sc) { best_m = M; best_sc = sc; }
+        }
+        if (score_out != nullptr) { *score_out = best_sc; }
+        return best_m;
+    };
+    // The window's mana for a set of kept hand sources: the board's, plus the kept lands entering one
+    // per turn in keep order (an enters-tapped land pays from the next turn; a depletion land for its
+    // counters' worth of turns), plus a kept rock (WK's Sol Ring) cast on the first turn it is
+    // affordable. HONEST POOL on the cast turn (review fix 2026-10-09): the rock's cost is paid out of
+    // that turn's units -- colourless first, then the most plentiful single colour, then wild -- and
+    // its whole output is added from that turn on, instead of netting the output against the cost
+    // while keeping the coloured source that paid.
+    auto mana_for = [&](const char* kept) -> Mana
+    {
+        Mana m = mana;   // the board's
+        int drop = 0;
+        for (int t = 0; t < nm; ++t)
+        {
+            const int i = mana_idx[t];
+            if (!kept[i] || !CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
+            if (drop < kTurns)
+            {
+                const int from = drop + (enters_tapped(i) ? 1 : 0);
+                const int dep  = defs[i] != nullptr ? defs[i]->params.enters_tapped_with_depletion : 0;
+                if (dep > 0) { for (int k = from; k < std::min(kTurns, from + dep); ++k) { AddAt(m, msrc[i], msrc[i].units, k); } }
+                else         { AddFrom(m, msrc[i], msrc[i].units, from); }
+            }
+            ++drop;
+        }
+        for (int t = 0; t < nm; ++t)
+        {
+            const int i = mana_idx[t];
+            if (!kept[i] || CleanupDiscardIsLand(ap.hand[static_cast<std::size_t>(i)])) { continue; }
+            const int rmv = defs[i] != nullptr ? defs[i]->card.m_mana_cost.ManaValue() : 0;
+            for (int k = 0; k < kTurns; ++k)
+            {
+                if (m.total[k] - m.restricted[k] < rmv) { continue; }
+                for (int u = 0; u < rmv; ++u)
+                {
+                    int single_sum = 0;
+                    for (int c = 0; c < 5; ++c) { single_sum += m.single[k][c]; }
+                    if (m.total[k] - m.wild[k] - single_sum > 0) { --m.total[k]; continue; }   // colourless
+                    int best_c = -1;
+                    for (int c = 0; c < 5; ++c)
+                    { if (m.single[k][c] > 0 && (best_c < 0 || m.single[k][c] > m.single[k][best_c])) { best_c = c; } }
+                    if (best_c >= 0) { --m.single[k][best_c]; --m.total[k]; continue; }
+                    --m.wild[k]; --m.total[k];
+                }
+                AddFrom(m, msrc[i], msrc[i].units, k);
+                break;
+            }
+        }
+        return m;
+    };
+
+    // ---- 4b. which hand sources are kept ------------------------------------------------------------
+    // Each counts ONE toward the quota (review fix 2026-10-09). Knights: the keep order decides (a
+    // fixer dominates a Plains, so no choice is ever closer than that). WhiteKnights (the extras):
+    // when the quota must choose between DIFFERENT sources -- a Plains or Sol Ring, a Plains or Remote
+    // Farm -- the choice the fill's colours need wins: every distinct choice is scored by the fill
+    // (USER's Benalish Marshal {W}{W}{W} needs the Plains, not a colourless Ring), ties to the keep
+    // order. AGENT CORRECTION of the first implementation, which counted a 2-mana source as 2 toward
+    // the quota and kept it over a Plains on that count alone.
+    char kept_mana[kHandMax] = {};
+    {
+        const int need = std::max(0, target - board_units);
+        const int take = std::min(need, nm);
+        bool chosen = false;
+        if (wk_extras && take > 0 && take < nm && nm <= 12)
+        {
+            unsigned best_set = 0;
+            std::uint64_t best_sc = 0;
+            for (unsigned set = 1; set < (1u << nm); ++set)
+            {
+                if (std::popcount(set) != take) { continue; }
+                // Identical cards are interchangeable: take a name's copies in keep order only.
+                bool canonical = true;
+                for (int a = 0; a < nm && canonical; ++a)
+                {
+                    if (!((set >> a) & 1u)) { continue; }
+                    for (int b = 0; b < a; ++b)
+                    {
+                        if (!((set >> b) & 1u)
+                            && ap.hand[static_cast<std::size_t>(mana_idx[b])].m_name
+                               == ap.hand[static_cast<std::size_t>(mana_idx[a])].m_name)
+                        { canonical = false; break; }
+                    }
+                }
+                if (!canonical) { continue; }
+                char trial[kHandMax] = {};
+                for (int a = 0; a < nm; ++a) { if ((set >> a) & 1u) { trial[mana_idx[a]] = 1; } }
+                std::uint64_t sc = 0;
+                fill_best(mana_for(trial), &sc);
+                // Ties: the set holding the earliest keep-order source (the lowest differing bit).
+                const unsigned diff = set ^ best_set;
+                const bool earlier = best_set == 0 || ((set & diff & (0u - diff)) != 0);
+                if (best_set == 0 || sc > best_sc || (sc == best_sc && earlier)) { best_set = set; best_sc = sc; }
+            }
+            for (int a = 0; a < nm; ++a) { if ((best_set >> a) & 1u) { kept_mana[mana_idx[a]] = 1; } }
+            chosen = best_set != 0;
+        }
+        if (!chosen)
+        {
+            for (int t = 0; t < take; ++t) { kept_mana[mana_idx[t]] = 1; }
+        }
+        bool kept_fixer = false;
+        for (int t = 0; t < nm; ++t) { if (kept_mana[mana_idx[t]] && msrc[mana_idx[t]].kind == Kind::Wild) { kept_fixer = true; } }
+        if (fixer_needed && !kept_fixer)
+        {
+            for (int t = 0; t < nm; ++t)
+            {
+                const int i = mana_idx[t];
+                if (!kept_mana[i] && msrc[i].kind == Kind::Wild) { kept_mana[i] = 1; break; }
+            }
+        }
     }
+
+    const unsigned best = fill_best(mana_for(kept_mana), nullptr);
     int turn_of[kMaxPool];
     F.Schedule(best, dp.rank_bit, turn_of);
 
@@ -8067,7 +8159,8 @@ bool KnightsProvider::CleanupDiscardShedStable() const { return !KnightsBucketDi
 // ---- WhiteKnightsProvider::CleanupDiscardCandidates ---------------------------------------------
 // USER (2026-10-09, docs/design/whiteknights-discard-policy.md): "Knights curve rule + the extras" --
 // Swords / Unexpectedly Absent shed first (removal is inert against the goldfish), Sol Ring and Remote
-// Farm count as mana (2 each), duplicate legends (2nd Adeline / Basri, in play or in hand) shed early,
+// Farm count as mana (one source each toward the quota, 2 mana in the fill -- the review correction),
+// duplicate legends (2nd Adeline / Basri, in play or in hand) shed early,
 // Vial surplus after turn 1. The extras key on params Knights' mainboard never carries (removal
 // template, mana_rock, produces_amount 2), so they could equally live in the shared rule; they are
 // passed as `wk_extras` to keep the Knights rule literal. MTG_WK_BUCKET_DISCARD=0 -> the generic

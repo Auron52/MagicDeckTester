@@ -805,8 +805,8 @@ public:
     const char* Name() const override { return "WhiteKnights"; }
     // The USER-settled WhiteKnights cleanup-discard rule (2026-10-09,
     // docs/design/whiteknights-discard-policy.md): the Knights curve rule plus the extras -- Swords /
-    // Unexpectedly Absent shed first, Sol Ring and Remote Farm count as (2) mana, duplicate legends
-    // shed early. MTG_WK_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking,
+    // Unexpectedly Absent shed first, Sol Ring and Remote Farm count as mana (one source each toward the
+    // land quota, their 2-mana output in the fill), duplicate legends shed early. MTG_WK_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking,
     // independent of MTG_KNIGHTS_BUCKET_DISCARD). This is the first judgement hook this class holds,
     // so the "misroute between the two Knight providers is play-neutral" note above no longer holds
     // for the cleanup discard: the two rules differ by the extras.

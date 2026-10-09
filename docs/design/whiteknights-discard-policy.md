@@ -33,10 +33,9 @@ which calls the shared Knights rule (`KnightsCurveShed`, see
 
 The extras, as implemented (all param-keyed; Knights' mainboard carries none of them):
 - Swords to Plowshares / Unexpectedly Absent (`CardTemplate::Removal`) shed FIRST, hand order.
-- Sol Ring (`mana_rock`) and Remote Farm (`produces_amount` 2) count as mana: the land quota counts
-  mana UNITS (3, or 4 with a held 4-drop), a rock is a mana source, and among kept sources the bigger
-  one is preferred (fewer cards for the same mana). In the fill a kept Sol Ring is cast on the first
-  turn it is affordable and nets its output less its cost that turn; Remote Farm enters tapped.
+- Sol Ring (`mana_rock`) and Remote Farm (`produces_amount` 2) count as mana -- as corrected in
+  review (below): each counts ONE source toward the land quota (3, or 4 with a held 4-drop), and its
+  real output goes into the fill's mana.
 - 2nd Adeline / Basri (copy in play, or an earlier hand copy) shed right after the removal.
 - Vial surplus after turn 1 -- the shared Knights rule.
 
@@ -49,7 +48,23 @@ Agent readings (surfaced for the USER):
    > Contender without > the 2/1s (Basri = Venerable Knight, measured play-identical).
 3. "Lords" for the fill's tie-break are the P/T anthems (Benalish Marshal, Knight Exemplar);
    Kinsbaile's double-strike grant is valued, not counted as a lord.
-4. Remote Farm's depletion is not modelled (a fresh Farm lasts exactly the 3-turn window).
+4. ~~Remote Farm's depletion is not modelled~~ -- modelled since review fix 3 below.
+
+Review fixes (2026-10-09, after the integration review):
+1. "COUNT AS MANA" = ONE SOURCE each (AGENT CORRECTION, the Angels precedent; was a design mismatch).
+   The first implementation counted Sol Ring and Remote Farm as 2 toward the 3-land quota and kept
+   them over a Plains on that count, so on board 2 Plains + hand Sol Ring, Plains, Venerable, Worthy,
+   Benalish, Exemplar, Accorder, Silverblade the Plains shed first and Benalish Marshal ({W}{W}{W},
+   the USER's #2 lord) was stranded. Now each source counts one toward the quota, its real output (2;
+   the Ring's colourless) goes into the fill, and when the quota must choose between DIFFERENT
+   sources the fill scores every distinct choice -- the one the fill's colours need wins (there: the
+   Plains), ties to the keep order (fixer, more mana, untapped, hand order).
+2. A REMOTE FARM IN PLAY pays only for the depletion counters it has left (one {W}{W} per turn, read
+   off the Permanent), not 2 every turn of the window. Toward the quota it counts one source while it
+   has 2+ uses left and none on its last counter (agent reading: it is gone after next turn).
+3. THE SOL RING TURN IS HONEST: its {1} is paid out of that turn's pool (colourless first, then the
+   most plentiful single colour, then wild) and its {C}{C} is added from that turn on -- previously the
+   fill netted +1 colourless while keeping the white source that paid for it.
 
 Note for the routing comment in `DecisionProviders.h`: WhiteKnights now holds a judgement hook of its
 own, so a misroute onto KnightsProvider would lose these extras (it is no longer play-neutral).
