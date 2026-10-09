@@ -2405,8 +2405,11 @@ public:
     // RE-ENTERS UNTAPPED when replayed (a basic; a fastland / checkland / shock / reveal land only if it
     // really would, on the board the bounce leaves), and (3) makes no colour that no OTHER land staying
     // on the battlefield makes (the Karoo included; colourless makes no colour) loses nothing by being
-    // returned, so it is returned with NO search. Several qualifying: identical copies fold, else the
-    // provider's order (BounceLandCandidates). Returns the battlefield index, or -1 when none qualifies.
+    // returned, so it is returned with NO search. AMENDED (MTG_BOUNCE_RULE_AMEND, default ON,
+    // 2026-10-09): a CREATURE-ONLY colour (Haven of the Spirit Dragon, Unclaimed Territory) is not a
+    // colour the land makes, on either side of the test; and the rule decides only when ONE land
+    // qualifies (identical copies fold) -- two DIFFERENT qualifying lands are a real choice and go to
+    // the search (unamended: the provider's order). Returns the battlefield index, or -1.
     // `qualifying_names` (optional) receives how many DISTINCT names qualified (the census). Used by
     // BounceLandCandidates (it becomes the front: the d0 / beyond-horizon pick and the prompt default)
     // and BounceSearchCandidates (the whole candidate set).

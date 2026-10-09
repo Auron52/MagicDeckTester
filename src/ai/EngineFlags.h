@@ -183,12 +183,38 @@ inline bool KarooTapInResponseOn()
 // there is a tapped land that comes into play untapped [...]" / "I mean that it doesn't generate
 // colours any other land doesn't." A returnable land that is TAPPED, re-enters UNTAPPED on its replay,
 // and makes no colour that no other land we keep makes, is returned with no search
-// (DecisionProvider::BounceUserRulePick). Rides the lever: in a legacy replay (no `karoo_float`
-// stamp) the lever is off in human play, so an old recording's defaults are untouched.
+// (DecisionProvider::BounceUserRulePick) -- AMENDED by MTG_BOUNCE_RULE_AMEND below. DEFAULT ON
+// (2026-10-09, with the amendment and MTG_BOUNCE_REPLAY_PRECISE): held-out vs the tip, every Karoo
+// deck 0 except melira -23 / mirrorwing -26 (the precise order's d0 games), 0 searched games slower,
+// all 46 slower d0 games recover (docs/design/karoo-tap-in-response.md). Rides the lever: in a legacy
+// replay (no `karoo_float` stamp) the lever is off in human play, so an old recording is untouched.
 inline bool BounceUserRuleOn()
 {
-    static const bool env_on = EnvOn("MTG_BOUNCE_USER_RULE");
+    static const bool env_on = EnvOn("MTG_BOUNCE_USER_RULE", true);
     return heurarm::Flag(heurarm::BOUNCE_USER_RULE, env_on) && KarooTapInResponseOn();
+}
+
+// MTG_BOUNCE_RULE_AMEND -- the base rule's amendment (DecisionProvider::BounceUserRulePick), DEFAULT ON.
+// Root cause (Dragons s7007 gi959): Haven of the Spirit Dragon's creature-only rainbow counted as real
+// colours, so a kept Haven "covered" everything and the rule returned the tapped Mountain -- a T6 board
+// even for an unbounded depth-8 search, against T5 with the Haven returned. (1) Creature-only colours are
+// not colours, on either side of the coverage test. (2) The rule decides only when ONE land qualifies;
+// two different qualifying lands are a real choice (gi888 needed the Mountain returned with the same two
+// lands on offer) and go to the search. =0 restores the unamended rule.
+inline bool BounceRuleAmendOn()
+{
+    static const bool env_on = EnvOn("MTG_BOUNCE_RULE_AMEND", true);
+    return heurarm::Flag(heurarm::BOUNCE_RULE_AMEND, env_on);
+}
+
+// MTG_BOUNCE_REPLAY_PRECISE -- the bounce order and the search narrowing read a returned land's re-entry
+// off the board (BounceReplayEntersUntapped: a reveal land with nothing to reveal, a fastland past its
+// count, a checkland without its type re-enter TAPPED) rather than off enters_tapped alone. DEFAULT ON
+// (2026-10-09): held-out melira -23, mirrorwing -26, every other deck 0; =0 restores the param read.
+inline bool BounceReplayPreciseOn()
+{
+    static const bool env_on = EnvOn("MTG_BOUNCE_REPLAY_PRECISE", true);
+    return heurarm::Flag(heurarm::BOUNCE_REPLAY_PRECISE, env_on);
 }
 
 // MTG_HINATA_BOUNCE_RULE -- the USER's Hinata Karoo rule (HinataProvider::BounceUserRulePick; live

@@ -345,6 +345,8 @@ enum Slot : int
     PD_BESEECH_FINISHER,      // MTG_PD_BESEECH_FINISHER    Prevent Damage: AMENDMENT DRAFT to the USER's Beseech rule -- once a gain creature (Tamanoa) is on our battlefield and a drain creature (Vito / Dina) is on it or in hand, the damage sources not already held (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia) join Beseech's list after the engine creatures (gate 2026-10-09: T5 Beseech -> Rolling Earthquake kills became T6). Default OFF -- the doctrine is the USER's
     PD_BESEECH_FIN_ALWAYS,    // MTG_PD_BESEECH_FIN_ALWAYS  Prevent Damage: AMENDMENT DRAFT to the USER\'s Beseech rule -- the damage sources not held (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia) join Beseech\'s list ALWAYS, after the engine creatures (the recovery check\'s unrecovered games fetched Rolling Earthquake on T3, before anything was assembled). Fresh seeds: searched -0.008 t/game vs unpruned at 0.63x units. Default OFF -- the USER decides
     PD_BESEECH_TOMB,          // MTG_PD_BESEECH_TOMB        Prevent Damage: AMENDMENT DRAFT to the USER\'s Beseech rule -- an Ancient Tomb-shaped land not held (the deck\'s only acceleration) joins Beseech\'s list. Default OFF -- the USER decides
+    BOUNCE_REPLAY_PRECISE,    // MTG_BOUNCE_REPLAY_PRECISE  the bounce ORDER (BounceLandCandidates) and the search narrowing (BounceSearchCandidates' "clean replay") predict a returned land's re-entry with BounceReplayEntersUntapped (a reveal land with nothing to reveal, a fastland past its count, a checkland without its type re-enter TAPPED) instead of the card's enters_tapped param alone. DEFAULT ON (2026-10-09); =0 = the enters_tapped param read
+    BOUNCE_RULE_AMEND,        // MTG_BOUNCE_RULE_AMEND      the base Karoo rule's amendment (Dragons s7007 gi959): a land's CREATURE-ONLY colours (Haven of the Spirit Dragon, Unclaimed Territory, Cavern) are not colours it makes -- neither for its own coverage nor for covering another land; and the rule decides only when ONE land qualifies -- several different qualifying lands go to the search. DEFAULT ON (2026-10-09); =0 = the unamended rule
     COUNT
 };
 
@@ -651,6 +653,8 @@ inline const char* Name(int slot)
         "MTG_PD_BESEECH_FINISHER",
         "MTG_PD_BESEECH_FIN_ALWAYS",
         "MTG_PD_BESEECH_TOMB",
+        "MTG_BOUNCE_REPLAY_PRECISE",
+        "MTG_BOUNCE_RULE_AMEND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -1613,6 +1613,9 @@ std::vector<int> DecisionProvider::SacrificeLandCandidates(
     return out;
 }
 
+static bool BounceReplayEntersUntapped(const GameState& s, int controller, int idx,
+                                       const CardDefinition& d);
+
 std::vector<int> DecisionProvider::BounceLandCandidates(
     const GameState& s, int controller, int /*self_index*/,
     const std::vector<int>& legal) const
@@ -1627,6 +1630,7 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
     const bool spare_aura = heurarm::Flag(heurarm::BOUNCE_SPARE_AURA, s_spare_aura_env);
     // KAROO TAP-IN-RESPONSE + the USER's order, ONE lever (KarooTapInResponseOn, EngineFlags.h).
     const bool tap_in_response = KarooTapInResponseOn();
+    const bool precise_replay  = BounceReplayPreciseOn();
     auto carries_aura = [&](const Permanent& land) -> bool {
         for (const Permanent& q : s.battlefield)
         { if (q.aura_attached_to != 0 && q.aura_attached_to == land.card.m_number) { return true; } }
@@ -1636,8 +1640,11 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
         const Permanent& p = s.battlefield[i];
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         const bool is_karoo = d && d->params.etb_bounce_land;
-        const bool enters_untapped =
-            !(d && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
+        // MTG_BOUNCE_REPLAY_PRECISE: the replay as the board will see it (a reveal land with nothing
+        // to reveal re-enters tapped) instead of the enters_tapped param alone.
+        const bool enters_untapped = precise_replay
+            ? (d != nullptr && BounceReplayEntersUntapped(s, controller, i, *d))
+            : !(d && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
         long v = 0;
         if (is_karoo)        { v -= 1000; }   // never re-trigger the bounce loop
         if (tap_in_response)
@@ -1736,12 +1743,19 @@ int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, con
                                          const std::vector<int>& order, int* qualifying_names) const
 {
     if (qualifying_names != nullptr) { *qualifying_names = 0; }
+    // AMENDMENT (MTG_BOUNCE_RULE_AMEND; Dragons s7007 gi959). Haven of the Spirit Dragon's colours are
+    // CREATURE-ONLY: counting them as colours it "makes" let a kept Haven cover every colour, so the
+    // rule returned the tapped Mountain and kept the Haven -- and from that board even an unbounded
+    // depth-8 search wins a turn later (T6, against T5 with the Haven returned). Amended: a land's
+    // USABLE colours exclude creature-only ones, on both sides of the coverage test.
+    const bool amend = BounceRuleAmendOn();
     // The colours one land makes, as a WUBRG bitmask (colourless makes none) -- INCLUDING what a land
     // Aura on it adds (Wild Growth's {G}): an enchanted land stays, so its whole output covers.
     auto colours = [&](const Permanent& p) -> unsigned {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { return 0u; }
         unsigned m = static_cast<unsigned>(LandAuraColorMask(s, p)) & 31u;
+        if (amend && d->params.colored_creature_only) { return m; }   // creature-only colours: not usable
         for (Color c : EffectiveProducesFor(s, controller, *d, &p))
         {
             switch (c)
@@ -1764,12 +1778,12 @@ int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, con
         const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
         return d != nullptr && d->params.etb_bounce_land;
     };
-    auto has_aura = [&](int i) {
-        if (!spare_aura) { return false; }
+    auto enchanted = [&](int i) {
         const int num = s.battlefield[static_cast<std::size_t>(i)].card.m_number;
         for (const Permanent& q : s.battlefield) { if (q.aura_attached_to != 0 && q.aura_attached_to == num) { return true; } }
         return false;
     };
+    auto has_aura = [&](int i) { return spare_aura && enchanted(i); };
     std::vector<int> pool = legal;
     auto drop_if_others = [&](auto pred) {
         bool other = false;
@@ -1780,19 +1794,14 @@ int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, con
     drop_if_others(has_aura);
     std::vector<std::string> names;   // distinct qualifying names
     int pick = -1;
-    for (int i : order)   // the provider's order decides among several
+    for (int i : order)   // the provider's order decides among several (amended: several -> the search)
     {
         if (std::find(pool.begin(), pool.end(), i) == pool.end()) { continue; }
         const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
         if (!p.tapped) { continue; }                                                   // (1)
         // USER: "we need an exemption for cases where the land has an aura on it of course." Never
         // the rule's pick, whatever the exclusions above left (the Aura would die with the bounce).
-        {
-            bool enchanted = false;
-            for (const Permanent& a : s.battlefield)
-            { if (a.aura_attached_to != 0 && a.aura_attached_to == p.card.m_number) { enchanted = true; break; } }
-            if (enchanted) { continue; }
-        }
+        if (enchanted(i)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !BounceReplayEntersUntapped(s, controller, i, *d)) { continue; }   // (2)
         unsigned kept = 0u;                                                            // (3)
@@ -1808,6 +1817,14 @@ int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, con
         if (pick < 0) { pick = i; }
     }
     if (qualifying_names != nullptr) { *qualifying_names = static_cast<int>(names.size()); }
+    // Amended: the rule decides only when ONE land (identical copies fold) qualifies. When two
+    // DIFFERENT lands both qualify, which one goes is a real decision -- it is next turn's board,
+    // since the returned land usually waits behind another land drop -- and no fixed order gets it
+    // right: Dragons s7007 gi959 needed the Haven returned (T5; the Mountain gives T6 even at d8
+    // unbounded), s7007 gi888 needed the Mountain returned with the same two lands on offer (T5 vs
+    // T6 at d8 unbounded), and a "fewest colours" order sent Selesnya's Blighted Steppe back over
+    // Branchloft Pathway (s7007 gi75 / gi404, a turn each). Those boards go to the search.
+    if (amend && names.size() > 1) { return -1; }
     return pick;
 }
 
@@ -1932,7 +1949,9 @@ std::vector<int> DecisionProvider::BounceSearchCandidates(
             { if (q.aura_attached_to != 0 && q.aura_attached_to == p.card.m_number) { f.aura = true; break; } }
         }
         f.tapped = p.tapped;
-        f.clean  = !(d != nullptr && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
+        f.clean  = BounceReplayPreciseOn()
+                 ? (d != nullptr && BounceReplayEntersUntapped(s, controller, i, *d))
+                 : !(d != nullptr && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
         f.dep    = 0;
         for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { f.dep += c.count; } }
         // A spent DEPLETION land the replay would refresh (Remote Farm on its last counter): returning

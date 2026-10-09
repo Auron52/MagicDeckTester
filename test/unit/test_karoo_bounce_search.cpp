@@ -116,6 +116,7 @@ TEST_CASE("Karoo bounce search: a tapped land with a clean replay is the ONE can
 {
     LoadCards();
     Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm norule(heurarm::BOUNCE_USER_RULE, false);   // these pin the narrowing rules below the user rule
     GameState s = Fresh();
     Put(s, "Forest", 10, /*tapped=*/false);
     Put(s, "Mountain", 11, /*tapped=*/true);
@@ -132,6 +133,7 @@ TEST_CASE("Karoo bounce search: identical lands fold; with no other land in hand
 {
     LoadCards();
     Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm norule(heurarm::BOUNCE_USER_RULE, false);   // these pin the narrowing rules below the user rule
     {
         GameState s = Fresh();
         Put(s, "Forest", 10, true);
@@ -163,6 +165,7 @@ TEST_CASE("Karoo bounce search: an untapped land that re-enters tapped is domina
 {
     LoadCards();
     Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm norule(heurarm::BOUNCE_USER_RULE, false);   // these pin the narrowing rules below the user rule
     GameState s = Fresh();
     Put(s, "Mystic Monastery", 10, /*tapped=*/true);    // spent, re-enters tapped
     Put(s, "Thundering Falls", 11, /*tapped=*/false);  // unspent AND re-enters tapped: dominated
@@ -190,6 +193,7 @@ TEST_CASE("Karoo bounce search: another Karoo is offered only when nothing else 
 {
     LoadCards();
     Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm norule(heurarm::BOUNCE_USER_RULE, false);   // these pin the narrowing rules below the user rule
     GameState s = Fresh();
     Put(s, "Gruul Turf", 10, /*tapped=*/true);
     Put(s, "Forest", 11, /*tapped=*/false);
@@ -201,6 +205,7 @@ TEST_CASE("Karoo bounce search: Dragons s4004 gi47 -- a floatable Mountain vs Ha
 {
     LoadCards();
     Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm norule(heurarm::BOUNCE_USER_RULE, false);   // these pin the narrowing rules below the user rule
     Arm search(heurarm::BOUNCE_SEARCH, true);
     // T4 of the held-out game: Lightning Greaves was paid by Sol Ring, so every land is untapped when
     // Gruul Turf's bounce resolves. The lever's order returns the Mountain (its {R} floats -- and dies
@@ -434,11 +439,15 @@ TEST_CASE("Karoo bounce, HINATA rule: 2 Islands + 1 Mountain + Forbidden Orchard
     const std::vector<std::string> got = HinataCands(s, hp, self, &why);
     CHECK(got == std::vector<std::string>{ "Island" });
     CHECK(why == DecisionProvider::kBounceUserRule);
-    // ...and the same board with the rule OFF falls through to the base rule (a pick, but the
-    // base order's, not the Hinata ranking).
+    // ...and the same board with the Hinata rule OFF falls through to the base rule: the Island and
+    // the Mountain both qualify there -- two different lands -- so the amended base rule leaves the
+    // board to the search (unamended, it would pick by the base order).
     {
         Arm off(heurarm::HINATA_BOUNCE_RULE, false);
         int why2 = -1;
+        HinataCands(s, hp, self, &why2);
+        CHECK(why2 != DecisionProvider::kBounceUserRule);
+        Arm unamended(heurarm::BOUNCE_RULE_AMEND, false);
         HinataCands(s, hp, self, &why2);
         CHECK(why2 == DecisionProvider::kBounceUserRule);
     }
@@ -511,5 +520,88 @@ TEST_CASE("Karoo bounce, HINATA rule: an enchanted land is never the pick; a lan
         Hand(s, "Ponder", 20);
         CHECK(HinataCands(s, hp, self, &why) == std::vector<std::string>{ "Forbidden Orchard" });
         CHECK(why == DecisionProvider::kBounceUserRule);
+    }
+}
+
+TEST_CASE("Karoo bounce, PRECISE replay: a reveal land with nothing to reveal ranks behind a basic (Mirrorwing d0 s4004 gi1865)")
+{
+    LoadCards();
+    Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm rule(heurarm::BOUNCE_USER_RULE, false);
+    GameState s = Fresh();
+    Put(s, "Game Trail", 10, true);   // no Mountain / Forest in hand: it re-enters TAPPED
+    Put(s, "Forest", 11, true);
+    const int self = Put(s, "Gruul Turf", 13, true);
+    Hand(s, "Mirrorwing Dragon", 20);
+    {
+        Arm off(heurarm::BOUNCE_REPLAY_PRECISE, false);   // the enters_tapped param alone: a tie, lowest index
+        const std::vector<int> ranked = ResolveProvider(s).BounceLandCandidates(s, 0, self, LegalExcept(s, self));
+        CHECK(s.battlefield[static_cast<std::size_t>(ranked.front())].card.m_name.str() == "Game Trail");
+    }
+    Arm on(heurarm::BOUNCE_REPLAY_PRECISE, true);
+    const std::vector<int> ranked = ResolveProvider(s).BounceLandCandidates(s, 0, self, LegalExcept(s, self));
+    CHECK(s.battlefield[static_cast<std::size_t>(ranked.front())].card.m_name.str() == "Forest");
+    int why = -1;
+    CHECK(CandsAt(s, self, &why) == std::vector<std::string>{ "Forest" });   // the tapped clean land alone
+    CHECK(why == DecisionProvider::kBounceTappedClean);
+}
+
+// ---- THE BASE RULE'S AMENDMENT (MTG_BOUNCE_RULE_AMEND; Dragons s7007 gi959) --------------------------
+TEST_CASE("Karoo bounce, USER rule AMENDED: creature-only colours are not colours (Dragons s7007 gi959)")
+{
+    LoadCards();
+    Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);
+    Arm on(heurarm::BOUNCE_USER_RULE, true);
+    Arm hin(heurarm::HINATA_BOUNCE_RULE, false);
+    int why = -1;
+    {
+        // The gi959 board at the bounce: Haven and the Mountain both tapped (Fire Diamond), Gruul Turf
+        // entering. Unamended: Haven's creature-only rainbow is "uncovered", so the Mountain goes and
+        // the Haven stays -- a T6 board even for an unbounded depth-8 search. Amended: Haven makes no
+        // usable colour, qualifies, and has the fewest usable colours: it goes (the T5 board).
+        GameState s = Fresh();
+        Put(s, "Haven of the Spirit Dragon", 10, true);
+        Put(s, "Mountain", 11, true);
+        const int self = Put(s, "Gruul Turf", 13, true);
+        Hand(s, "Mountain", 20);
+        {
+            Arm off(heurarm::BOUNCE_RULE_AMEND, false);
+            CHECK(CandsAt(s, self, &why) == std::vector<std::string>{ "Mountain" });
+            CHECK(why == DecisionProvider::kBounceUserRule);
+        }
+        Arm amend(heurarm::BOUNCE_RULE_AMEND, true);
+        // Both now qualify -- two DIFFERENT lands -- so the rule stays out and the search decides
+        // between them (it returns the Haven here; gi888's board needed the Mountain).
+        CHECK(CandsAt(s, self, &why) == std::vector<std::string>{ "Haven of the Spirit Dragon", "Mountain" });
+        CHECK(why != DecisionProvider::kBounceUserRule);
+    }
+    {
+        // Two TAPPED clean lands that both qualify: a real choice, so the search decides (a "fewest
+        // colours" order sent the colourless UTILITY land Blighted Steppe back over Branchloft
+        // Pathway -- Selesnya s7007 gi75 / gi404, a turn each).
+        GameState s = Fresh();
+        Put(s, "Branchloft Pathway", 10, true);
+        Put(s, "Blighted Steppe", 11, true);
+        const int self = Put(s, "Selesnya Sanctuary", 13, true);
+        Hand(s, "Forest", 20);
+        Arm amend(heurarm::BOUNCE_RULE_AMEND, true);
+        CHECK(CandsAt(s, self, &why).size() == 2);
+        CHECK(why != DecisionProvider::kBounceUserRule);
+    }
+    {
+        // A kept Haven no longer "covers" a tapped Forest's {G}.
+        GameState s = Fresh();
+        Put(s, "Forest", 10, true);
+        Put(s, "Haven of the Spirit Dragon", 11, true);
+        const int self = Put(s, "Azorius Chancery", 13, true);
+        Hand(s, "Mountain", 20);
+        {
+            Arm off(heurarm::BOUNCE_RULE_AMEND, false);
+            CandsAt(s, self, &why);
+            CHECK(why == DecisionProvider::kBounceUserRule);
+        }
+        Arm amend(heurarm::BOUNCE_RULE_AMEND, true);
+        // Haven (no usable colour) is the amended pick, not the Forest whose {G} nothing else makes.
+        CHECK(CandsAt(s, self, &why) == std::vector<std::string>{ "Haven of the Spirit Dragon" });
     }
 }

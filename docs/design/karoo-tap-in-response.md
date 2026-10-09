@@ -4,9 +4,10 @@ Status: **ADOPTED 2026-10-08 -- `MTG_BOUNCE_UNTAPPED_FIRST` and `MTG_BOUNCE_SEAR
 first held-out run found one game the ORDER half lost and no budget recovered (the bounce was not
 searched); the USER asked for the bounce to be searched, and the second held-out run (lever + searched
 bounce) clears the bar on every deck. Human play floats the returned land regardless (2026-10-08).
-The USER's Hinata bounce rule (`MTG_HINATA_BOUNCE_RULE`) is ADOPTED (default ON); the USER's base
-bounce default (`MTG_BOUNCE_USER_RULE`) did not clear the held-out bar and ships default OFF, pending
-the user (branch `karoo-user-tapland` holds it ON).
+The USER's Hinata bounce rule (`MTG_HINATA_BOUNCE_RULE`) is ADOPTED (default ON). The USER's base bounce
+default (`MTG_BOUNCE_USER_RULE`) failed its first held-out run, was ROOT-CAUSED (Haven of the Spirit
+Dragon's creature-only colours) and AMENDED, and is ADOPTED with the amendment (`MTG_BOUNCE_RULE_AMEND`)
+and the precise re-entry order (`MTG_BOUNCE_REPLAY_PRECISE`), all default ON (2026-10-09).
 
 ## What the user asked for
 
@@ -495,12 +496,11 @@ real bounces and 10.8M searched ones, but mostly where an existing rule already 
 10.8M search firings (31%) had more than one distinct qualifying name, so the order decided. Units:
 -0.26% (dragons) to +0.33% (minotaur2hg).
 
-**Base rule verdict: does NOT clear the bar** (dragons, hinata and mirrorwing each +1 on held-out;
-*"+1 is not neutral"*). Not pushed: it is committed on the local branch `karoo-user-tapland` with
-`MTG_BOUNCE_USER_RULE` default ON, and in the pushed tree default OFF (the code ships because the Hinata
-rule falls back to it). No board was found where the rule's choice is worse than the search's: all
-four losses are budget churn or the d0 runner's cast order, and every one recovers. See "Open for the
-USER" for the proposals.
+**First verdict (2026-10-08): did NOT clear the bar** (dragons, hinata and mirrorwing each +1 on
+held-out). The USER rejected "just turn it off" -- *"Why did the general rule fail."* -- and the losses
+were root-caused, the rule amended and re-measured: see "The base rule, root-caused and amended" below.
+(The "no board where the rule's choice is worse" reading above was WRONG -- the escalation re-solved
+whole games from turn 1, not the bounce board itself.)
 
 Hinata A vs the tip (and vs the base rule), Hinata rows only:
 
@@ -540,7 +540,7 @@ The rule decided 1,083 real and 4.19M searched bounces, 2.75M of them with more 
 `BounceReplayEntersUntapped` -- the board's answer (a reveal land with no Forest / Mountain to reveal, a
 fastland past its count, a checkland without its type, a shock without the life re-enter TAPPED) --
 instead of the card's `enters_tapped` param alone, which ranks every conditional land as a basic.
-About ten lines in `DecisionProviders.cpp` behind a heurarm lever (local branch `karoo-order-precise`).
+About ten lines in `DecisionProviders.cpp` behind a heurarm lever; ADOPTED default ON with the amended rule (2026-10-09).
 
 **Measurement.** One pooled batch on the same rows and seeds (423 jobs, 295,810 games), paired with the
 first batch's tip / rule / Hinata-A arms (the tip arm is byte-identical to GT, so the pairing is exact):
@@ -558,21 +558,70 @@ escalation stages. The census barely moves (real contested 1,195 -> 1,206; searc
 searched width hardly changes; what changed is the ORDER's front, which only the d0 runner (and the
 playout beyond the horizon) takes.
 
+## The base rule, root-caused and amended (MTG_BOUNCE_RULE_AMEND, 2026-10-09)
+
+**Root cause.** The rule counted Haven of the Spirit Dragon's creature-only rainbow as colours the
+land makes. So a kept Haven "covered" every colour (any tapped basic beside it qualified), while the
+Haven itself could never qualify (its W/U/B were "uncovered"): the rule returned the tapped Mountain
+and kept the Haven -- the land whose mana cannot pay firebreathing or a non-creature spell. **Dragons
+s7007 gi959, solved from the bounce itself** (`--claude-play` replay to the T3 bounce decision, then
+`--choices-then-auto`): Haven returned -> **T5** at d3/20 ms AND at d8 unbounded; Mountain returned (the
+rule's pick) -> **T6** at d3/20 ms AND at d8 unbounded. Not budget noise: the boards are not equal.
+(On the Mountain-returned board the T5 kill needs Atsushi paid with the Haven's {C}, keeping both
+Mountains for two firebreaths; the payer spends a Mountain and leaves the Haven untapped -- the
+engine-side half, noted under "Open".) Haven is in Dragons; Minotaur's Unclaimed Territory / Secluded
+Courtyard / Cavern of Souls carry the same flag.
+
+**The first amendment was wrong, and why.** Restricted colours not counting makes the Haven qualify
+too, so the rule then had to choose between two different lands. Two fixed tie-breaks were measured and
+both lost games: "fewest usable colours first" sent Selesnya's Blighted Steppe (a colourless UTILITY
+land) back over Branchloft Pathway (s7007 gi75 and gi404, a turn each; selesnya +4 held-out), and
+"creature-only land first" returned a Haven at Dragons s7007 gi888 T4 where the search returned the
+Mountain -- from the same T1 board, the tip engine wins T5 at d8 unbounded and that engine T6. The same
+two lands needed opposite answers in gi959 and gi888: which one goes is next turn's board (the returned
+land usually waits behind another land drop), a real decision.
+
+**The amendment.** (1) A creature-only colour is not a colour the land makes, on either side of the
+coverage test. (2) The rule decides only when ONE land qualifies (identical copies fold); when two
+DIFFERENT lands qualify the board goes to the search's narrowing, exactly as with the rule off.
+Shipped with `MTG_BOUNCE_REPLAY_PRECISE` (the order and the narrowing read re-entry off the board).
+
+**Measurement.** One pooled batch of the ship configuration (rule + amendment + precise order + the
+Hinata rule; 140,780 games, every Karoo deck's smoke + regression + overnight rows, d0 + searched),
+paired with the tip arm of the preceding pooled batch (the tip arm reproduced GT on all 140,780 games,
+win turn AND digest):
+
+| vs the tip | held-out (overnight) | train (smoke + regression) |
+|---|---|---|
+| unamended rule + precise + Hinata | dragons **+1** (gi959), melira -23, mirrorwing -26, hinata 0 (gi245 gone), rest 0 | dragons +1 (gi195), melira -6, mirrorwing -17 |
+| **amended rule + precise + Hinata (SHIPPED)** | melira **-23** (32 / 14), mirrorwing **-26** (45 / 24), **every other deck 0** | melira -6, mirrorwing -17, every other deck 0 |
+
+Against the precise order alone, the amended rule changes **no win turn in any non-Hinata deck** on
+140,780 games: every move is the precise order's (d0 games, where the runner takes the order's front).
+0 searched games slower; all 46 slower d0 games (38 held-out, 8 train) recover at both escalation
+stages. Play changes at the same win turn in creature_giving (40 games), melira, mirrorwing and one
+mirrorwing2hg game; Dragons play is byte-identical to the tip.
+
+Census (all Karoo rows, real game and search): contested real bounces **812 -> 773** (-4.8%), contested
+searched bounces **3.088M -> 3.048M** (-1.3%); the general rule decides ~4,360 real and ~5.36M searched
+bounces (most of them already one-wide under the older narrowing: tapped_clean 3.90M -> 0.87M, replay
+fold 3.63M -> 1.77M in the search) and hands ~2.58M searched multi-land boards to the search. Units:
+melira +0.08%, mirrorwing -0.2%, every other deck +-0.0%.
+
+**Gates and ground truth.** On the rebased tree (onto the Prevent Damage Beseech work): mtg-test 543/543,
+scenarios 158/158, smoke and regression pass every case outside creature_giving / melira / mirrorwing
+(+ mirrorwing2hg) -- whose rows are byte-identical to the A/B ship arm on all three tiers -- searched
+0 slower in every tier, d0 slower 7 + 1 + 38 = the 46 escalated games; viewer protocol --strict 556
+refs, 0 drift; viewer_client_check green. GT accepted deck-scoped (every other note kept),
+check_gt_logs consistent 685/685.
+
 ## Open for the USER
 
-* **The base bounce default (`MTG_BOUNCE_USER_RULE`) is NOT adopted -- your call.** Held-out: +1 each on
-  dragons, hinata and mirrorwing, 0 elsewhere, and no game faster anywhere. All four slower games
-  recover when escalated and none is a board where the rule's choice is worse (three budget churn, one
-  d0 cast-order miss after the rule gave the runner MORE mana). Options: (a) adopt it as is on your
-  word; (b) leave it OFF -- the narrowing it adds over the existing rules is small (-8.1% contested real
-  bounces, -3.4% in the search); (c) the amendment the Mirrorwing game points at: let the provider's
-  ORDER use the same re-entry predicate (`BounceReplayEntersUntapped`) instead of `enters_tapped`
-  alone, so a reveal land with nothing to reveal stops tying with a basic -- a correctness fix to the
-  order the d0 runner and the playouts already use. **Measured (below): it clears the bar on its own
-  (melira -23, mirrorwing -26 held-out, every other deck 0, all 46 slower games recover); with the
-  rule on top, dragons and hinata stay +1.** Recommendation: adopt (c); leave the rule OFF unless you
-  want it for its own sake. The branch keeps the rule ON; (c) is on the local branch
-  `karoo-order-precise` (default OFF there), and both are described here in full.
+* ~~The base bounce default is not adopted~~ -- ADOPTED amended (2026-10-09, above). Engine-side, not
+  fixed here: on a board holding Haven of the Spirit Dragon the payer spends a basic on a creature
+  spell's generic and keeps the Haven untapped (its {C} is the right source; its coloured mana cannot
+  pay an ability later), which is what made the unamended rule's board a turn slower. A payment change
+  touches every deck with a creature-only source (Dragons, Minotaur) and needs its own A/B.
 * ~~Adopt?~~ Adopted with the searched bounce (above).
 * The Hinata 2HG rows alone net +6 over 400 held-out games (all budget churn); Hinata as a deck nets
   -412. Counted as one deck here, as run #1 did -- say if 2HG should be judged as its own deck.
