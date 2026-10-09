@@ -87,7 +87,7 @@ played earlier than a lord."
 `GoblinsProvider::CleanupDiscardCandidates` (src/ai/DecisionProviders.cpp, after `PayEchoToKeep`;
 `IsSubtypeCostReducer` is forward-declared there), behind `MTG_GOBLIN_BUCKET_DISCARD` (heurarm
 `GOBLIN_BUCKET_DISCARD`, default ON; `=0` is exactly `GenericProvider`'s max-MV ranking). Tests:
-`test/unit/test_goblins_discard.cpp`, 15 cases.
+`test/unit/test_goblins_discard.cpp`, 17 cases.
 
 As implemented. KEEP ladder `L C L E M C L C M C..` (land / creature / engine / multiplier); land
 slots = max(0, 3 - lands in play), Mountain > Cavern > Three Tree City; engine slot 1 unless a Lackey
@@ -95,9 +95,16 @@ slots = max(0, 3 - lands in play), Mountain > Cavern > Three Tree City; engine s
 - multipliers in play, Chieftain > Hordemaster = Piledriver (Piledriver first through T2) > King,
 Chieftain with King when a Goblin haste granter is in play; creatures by EV, value order Muxus >
 Siege-Gang > Krenko > Pashalik > Mogg > Matron > Twinshot > Chainwhirler > Bolt > surplus engines >
-Stingscourger, with a no-route Muxus forced last. SHED = dead colourless land > 2nd+ hand Muxus and
-other duplicate legends > surplus lands (worst first, so colourless first) > surplus Vials > lords
-over the cap (King first) > the ladder backwards.
+Stingscourger; a no-route Muxus is SURPLUS (no ladder slot). SHED = dead colourless land > 2nd+ hand
+Muxus and other duplicate legends > surplus lands (worst first, so colourless first) > surplus Vials >
+lords over the cap (King first) > a no-route Muxus > the ladder backwards. Not prefix-stable, so
+`CleanupDiscardShedStable()` is false while the rule is on (a multi-card cleanup re-ranks per shed).
+
+Review fixes (2026-10-09): (1) a no-route Muxus used to take a creature ladder slot when the hand held
+<= 3 other creatures (board Mountain + Mogg, T3; hand Muxus, Siege-Gang, Matron, Chieftain,
+Hordemaster, Warchief, 2 Mountain shed Hordemaster first) -- now it is surplus and sheds first;
+(2) the hand's Lackey count sets how many creatures get the put discount, so a batched 3-card
+cleanup diverged from per-card re-ranking -- now declared not prefix-stable.
 
 Agent readings (each also in the code comment; the USER may overturn any):
 1. **">= 1 land always"** is read as the proposal's land sub-role floor (an engine never takes a land
