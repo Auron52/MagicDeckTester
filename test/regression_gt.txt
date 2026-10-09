@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 42128b93  date 2026-10-09
+# Regression ground truth -- commit db5eb35d  date 2026-10-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -18,6 +18,9 @@
 # accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
+# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
+# accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
+# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -134,7 +137,7 @@ selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
 soldiers_smoke_d0_s1001=4.4320/0c7926df614c90b5
 soldiers_smoke_d3_s1001=4.2800/50e56ed79872f3b3
 soldiers_smoke_d5_s1001=4.2933/abf388e9f9e0a413
-pd_smoke_d0_s1001=7.6130/c92f14ee30c3726c
+pd_smoke_d0_s1001=7.6130/4e67f841d74bb306
 pd_smoke_d3_s1001=5.6800/fcf43d50fa0e787c
 pd_smoke_d5_s1001=5.8000/7772773084cf3c71
 bruna2hg_smoke_d3_s1001=5.5000/774533ea4ce7f561
