@@ -839,3 +839,238 @@ TEST_CASE("Prevent Damage pain-aware payment: the LAST cast of a line owes nothi
     CHECK(Me(on) == 13);
     CHECK_FALSE(TappedNamed(on, "Ancient Tomb"));
 }
+
+// ---- BATCH TIMING (MTG_PD_BATCH_TIMING) + PAIN DEFERRAL {C} AS GENERIC (MTG_PD_DEFER_C_GENERIC) ------
+// Claude-play sweep 2026-10-08. The whole-turn batch prepay (TurnSolver::BatchPrepayMainCasts) pays a
+// multi-cast plan before its first cast resolves, so a later cast's pain lands while an earlier cast
+// that grows the gain chain is still on the stack. Driven through the real rollout apply
+// (TurnSolver::ApplyPlan -> ApplyPlanDirect), which shares the prepay with the executor.
+namespace
+{
+struct BatchTimingArm
+{
+    std::int8_t prev;
+    explicit BatchTimingArm(bool on) : prev(heurarm::t_arm[heurarm::PD_BATCH_TIMING])
+    { heurarm::t_arm[heurarm::PD_BATCH_TIMING] = on ? 1 : 0; }
+    ~BatchTimingArm() { heurarm::t_arm[heurarm::PD_BATCH_TIMING] = prev; }
+};
+struct DeferCArm
+{
+    std::int8_t prev;
+    explicit DeferCArm(bool on) : prev(heurarm::t_arm[heurarm::PD_DEFER_C_GENERIC])
+    { heurarm::t_arm[heurarm::PD_DEFER_C_GENERIC] = on ? 1 : 0; }
+    ~DeferCArm() { heurarm::t_arm[heurarm::PD_DEFER_C_GENERIC] = prev; }
+};
+
+bool OnBf3Pd(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return true; } }
+    return false;
+}
+
+void HandPd(GameState& s, const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    REQUIRE_MESSAGE(d != nullptr, "card not in cards.json: ", name);
+    Card c = d->card; c.m_number = g_num++; s.players[0].hand.push_back(c);
+}
+
+// The plan that casts exactly `names`, in that order, and does nothing else.
+const TurnSolver::Plan* FindCastPlan(const std::vector<TurnSolver::Plan>& plans,
+                                     const std::vector<std::string>& names)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        std::vector<std::string> casts;
+        bool other = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand) { casts.push_back(a.card_name.str()); }
+            else { other = true; }
+        }
+        if (!other && casts == names) { return &p; }
+    }
+    return nullptr;
+}
+
+// s61005 T5 after the City of Brass drop: Dina + Pyrohemia out, NO Tamanoa yet; 11 vs 18.
+GameState S61005T5Board()
+{
+    GameState s = Board();
+    s.turn_number = 5;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 11;
+    s.players[1].life = 18;
+    Put(s, "Ancient Tomb");
+    Put(s, "Dina, Soul Steeper");
+    Put(s, "Reflecting Pool");
+    Put(s, "Grand Coliseum");
+    Put(s, "Pyrohemia");
+    Put(s, "Grand Coliseum");
+    Put(s, "City of Brass");
+    HandPd(s, "Tamanoa");
+    HandPd(s, "Vito, Thorn of the Dusk Rose");
+    return s;
+}
+
+// s61013 T4 after the Reflecting Pool drop: Tamanoa out; 14 vs 20.
+GameState S61013T4Board()
+{
+    GameState s = Board();
+    s.turn_number = 4;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 14;
+    s.players[1].life = 20;
+    Put(s, "City of Brass");
+    Put(s, "Ancient Tomb");
+    Put(s, "Tamanoa");
+    Put(s, "Brushland");
+    Put(s, "Reflecting Pool");
+    HandPd(s, "Vito, Thorn of the Dusk Rose");
+    HandPd(s, "Dina, Soul Steeper");
+    return s;
+}
+
+GameState ApplyNamedPlan(const GameState& board, const std::vector<std::string>& names)
+{
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(board, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* p = FindCastPlan(plans, names);
+    REQUIRE_MESSAGE(p != nullptr, "plan not enumerated");
+    GameState after = board;
+    TurnSolver::ApplyPlan(after, *p, /*is_pre_combat=*/true);
+    return after;
+}
+}   // namespace
+
+TEST_CASE("Prevent Damage batch timing: Tamanoa then Vito pays Vito AFTER Tamanoa resolves (s61005 T5)")
+{
+    // Same five lands, same modes either way -- only WHEN Vito's share of the pain lands differs.
+    // CONTROL ARM (the batch): every tap before Tamanoa exists -> no gain, no Dina drain. MUST differ.
+    {
+        BatchTimingArm off(false);
+        const GameState s = ApplyNamedPlan(S61005T5Board(), { "Tamanoa", "Vito, Thorn of the Dusk Rose" });
+        CHECK(Me(s) == 6);
+        CHECK(Opp(s) == 18);
+    }
+    // The fix: Tamanoa's own payment (2 pain) is still before it, Vito's (Tomb 2 + City 1) is after:
+    // Tamanoa gains each event back and Dina drains once per gain.
+    BatchTimingArm on(true);
+    const GameState s = ApplyNamedPlan(S61005T5Board(), { "Tamanoa", "Vito, Thorn of the Dusk Rose" });
+    CHECK(Me(s) == 9);
+    CHECK(Opp(s) == 16);
+    CHECK(OnBf3Pd(s, "Tamanoa"));
+    CHECK(OnBf3Pd(s, "Vito, Thorn of the Dusk Rose"));
+}
+
+TEST_CASE("Prevent Damage batch timing: the decline is the batch prepay's, and only on a dominated timing")
+{
+    // Direct: the shared prepay declines this plan (state untouched) under the lever, prepays it without.
+    const GameState board = S61005T5Board();
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(board, true);
+    const TurnSolver::Plan* p = FindCastPlan(plans, { "Tamanoa", "Vito, Thorn of the Dusk Rose" });
+    REQUIRE(p != nullptr);
+    {
+        BatchTimingArm off(false);
+        GameState s = board;
+        CHECK(TurnSolver::BatchPrepayMainCasts(s, p->actions));
+        CHECK(s.floating_mana.Total() > 0);
+    }
+    {
+        BatchTimingArm on(true);
+        GameState s = board;
+        CHECK_FALSE(TurnSolver::BatchPrepayMainCasts(s, p->actions));
+        CHECK(s.floating_mana.Total() == 0);
+        for (const Permanent& q : s.battlefield) { CHECK_FALSE(q.tapped); }
+    }
+    // ORDER-INDEPENDENT: the same two casts reversed (built by hand -- the enumeration's cast order
+    // does not offer it) get the same verdict, because the predicate never guesses the apply's order.
+    {
+        std::vector<Action> rev = p->actions;
+        std::reverse(rev.begin(), rev.end());
+        REQUIRE(rev.front().card_name.str() == "Vito, Thorn of the Dusk Rose");
+        BatchTimingArm on(true);
+        GameState s = board;
+        CHECK_FALSE(TurnSolver::BatchPrepayMainCasts(s, rev));
+    }
+    // The batch STANDS when nothing in it grows the chain: Vito + Spellshock with no Tamanoa anywhere
+    // (pain is not gained, so a Vito drains nothing).
+    {
+        GameState b = board;
+        b.players[0].hand.clear();
+        HandPd(b, "Vito, Thorn of the Dusk Rose");
+        HandPd(b, "Spellshock");
+        const std::vector<TurnSolver::Plan> ps = TurnSolver::EnumerateMainPlans(b, true);
+        const TurnSolver::Plan* vs = FindCastPlan(ps, { "Vito, Thorn of the Dusk Rose", "Spellshock" });
+        if (vs == nullptr) { vs = FindCastPlan(ps, { "Spellshock", "Vito, Thorn of the Dusk Rose" }); }
+        REQUIRE(vs != nullptr);
+        BatchTimingArm on(true);
+        CHECK(TurnSolver::BatchPrepayMainCasts(b, vs->actions));
+    }
+    // ...and when the batch holds a NON-monotone card: a Manabarbs makes the later land taps worse
+    // before a Tamanoa is out and better after, so the realised order would decide -- keep the batch.
+    {
+        GameState b = board;
+        Put(b, "City of Brass");   // seven mana: Tamanoa {R}{G}{W} + Manabarbs {3}{R}
+        b.players[0].hand.clear();
+        HandPd(b, "Tamanoa");
+        HandPd(b, "Manabarbs");
+        const std::vector<TurnSolver::Plan> ps = TurnSolver::EnumerateMainPlans(b, true);
+        const TurnSolver::Plan* tm = FindCastPlan(ps, { "Tamanoa", "Manabarbs" });
+        if (tm == nullptr) { tm = FindCastPlan(ps, { "Manabarbs", "Tamanoa" }); }
+        REQUIRE(tm != nullptr);
+        BatchTimingArm on(true);
+        CHECK(TurnSolver::BatchPrepayMainCasts(b, tm->actions));
+    }
+}
+
+TEST_CASE("Prevent Damage batch timing + deferral: Vito then Dina with Tamanoa out (s61013 T4)")
+{
+    const std::vector<std::string> line = { "Vito, Thorn of the Dusk Rose", "Dina, Soul Steeper" };
+    // CONTROL ARM 1 (the batch): all three pain taps before Vito resolves -> no drain. MUST differ.
+    {
+        BatchTimingArm off(false);
+        const GameState s = ApplyNamedPlan(S61013T4Board(), line);
+        CHECK(Opp(s) == 20);
+    }
+    // CONTROL ARM 2 (per-cast, but the deferral's {C}-aware test): Vito is paid pain-first with City +
+    // Tomb before it exists; Dina's Brushland tap is the only drained event. MUST differ.
+    {
+        BatchTimingArm on(true);
+        DeferCArm off(false);
+        const GameState s = ApplyNamedPlan(S61013T4Board(), line);
+        CHECK(Opp(s) == 19);
+    }
+    // Both: Vito is paid with Pool {B} + Tomb (City held for Dina), and Dina's City + Brushland taps
+    // land after Vito resolved -> two gains, two drains.
+    BatchTimingArm on(true);
+    DeferCArm c_on(true);
+    const GameState s = ApplyNamedPlan(S61013T4Board(), line);
+    CHECK(Opp(s) == 18);
+    CHECK(Me(s) == 14);
+}
+
+TEST_CASE("Prevent Damage pain deferral: {C} is generic while no {C} pip is live (s61013 T4, lone Vito)")
+{
+    const CardDefinition* vito = CardDatabase::Instance().Lookup("Vito, Thorn of the Dusk Rose");
+    REQUIRE(vito != nullptr);
+    auto pay = [&](bool c_generic) -> GameState
+    {
+        PainPayArm pay_on(true);
+        DeferCArm arm(c_generic);
+        GameState s = S61013T4Board();
+        SpellSubtypePayScope sc(&vito->card);
+        REQUIRE(Pay(s, Cost(2, 0, /*b=*/1)));
+        return s;
+    };
+    // CONTROL ARM: the Pool reflects the Tomb's / Brushland's {C} and City cannot, so the superset test
+    // refuses to hold City -- the pain-first payment spends City before Vito exists. MUST differ.
+    const GameState off = pay(false);
+    CHECK(TappedNamed(off, "City of Brass"));
+    CHECK_FALSE(TappedNamed(off, "Reflecting Pool"));
+    // The fix: nothing this turn has a {C} pip, so City may stand in for the Pool: the painless Pool
+    // pays {B}, City and Brushland are held for after Vito resolves.
+    const GameState on = pay(true);
+    CHECK(TappedNamed(on, "Reflecting Pool"));
+    CHECK_FALSE(TappedNamed(on, "City of Brass"));
+    CHECK_FALSE(TappedNamed(on, "Brushland"));
+}

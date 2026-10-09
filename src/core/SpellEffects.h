@@ -29503,6 +29503,28 @@ inline void PaymentDeferralDP(const GameState& state, const ManaCost& cost, cons
 //   * pending = the spell being paid for (PayingSpellCard) and the whole-turn batch's casts
 //     (dmgev::t_pending_casts): PERMANENT spells only (they stay on the battlefield through the
 //     sweep), a legendary one we already control excluded (the legend rule kills it), each card once.
+// Can anything this turn spend a {C} PIP (as opposed to generic)? The line's unpaid hold, a {C}-pip
+// activation on our battlefield, or a card in hand / the wishable sideboard whose mana cost or
+// activation carries one. Conservative: a "yes" only keeps the deferral's historical {C}-aware test.
+inline bool ColorlessPipLiveThisTurn(const GameState& s, int ctrl)
+{
+    if (g_line_unpaid_cost.colorless > 0) { return true; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == ctrl && CardHasColorlessPipActivation(s, ctrl, p.card)) { return true; }
+    }
+    auto needs_c = [&](const Card& c) -> bool
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr
+            && (d->card.m_mana_cost.colorless > 0 || CardHasColorlessPipActivation(s, ctrl, c));
+    };
+    const Player& pl = s.players[ctrl];
+    for (const Card& c : pl.hand)      { if (needs_c(c)) { return true; } }
+    for (const Card& c : pl.sideboard) { if (needs_c(c)) { return true; } }
+    return false;
+}
+
 inline void PainDeferQuery(const GameState& s, const ManaCost& cost, const ManaPool& floating,
                            std::uint64_t reserved_mask, dmgev::DeferPlan& q)
 {
@@ -29536,6 +29558,10 @@ inline void PainDeferQuery(const GameState& s, const ManaCost& cost, const ManaP
     if (q.after == q.now) { return; }
     q.live = true;
     PaymentDeferralDP(s, cost, floating, reserved_mask, q);
+    // {C} IS GENERIC while no {C} pip is live (dmgev::DeferCGenericEnabled): the deferral's payability
+    // test (CapabilityCovers) must not ask the held sources for a colour no cost this turn can spend.
+    if (q.exact && dmgev::DeferCGenericEnabled() && !ColorlessPipLiveThisTurn(s, ctrl))
+    { for (int i = 0; i < 64; ++i) { q.cols[i] &= 0x1Fu; } }
 }
 
 inline int UntappedManaUpperBound(const GameState& state, bool for_creature,

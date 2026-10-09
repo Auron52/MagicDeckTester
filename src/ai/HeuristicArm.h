@@ -339,6 +339,8 @@ enum Slot : int
     GSZ_SHUFFLE_COPY_ID,      // MTG_GSZ_SHUFFLE_COPY_ID    Green Sun's Zenith's self-shuffle in the APPLY path (search lookahead / human-play apply) puts the CAST COPY (its m_number) into the library instead of the definition's template (m_number 0): Library::ShuffleByKey ranks cards by m_number, so the template landed at a different depth than the executor's real copy and shifted every predicted draw past it (claude-play sweep s61005, 2026-10-08). A lockstep fix, DEFAULT ON; =0 = the template
     POST_ENTRY_PING_ALL,      // MTG_POST_ENTRY_PING_ALL    breakpoint site 9's fan-out predicate (CardHasPostEntryActivation, TurnSolver.cpp) covers a PingAll source (Pyrohemia, ping_all_cost): a plan that CASTS one gets bp_choice variants, so "cast Pyrohemia, then {R}: ping in the same main" is a searched continuation. Without it the apply-time gate accepted the key but nothing ever fanned the plan, so the continuation was unreachable at any depth/budget (PD claude-play sweep s61003 T5, 2026-10-08). DEFAULT ON; =0 restores the old predicate
     PD_LINE_OK_EXACT,         // MTG_PD_LINE_OK_EXACT       Prevent Damage: the pain-aware payer's REST-OF-LINE check (dmgev::PainAwarePay, harmful mode) is EXACT -- supply: the remaining mana sources must be ASSIGNABLE to the line's coloured pips and cover its mana value (ColorFeasibility::PayablePips), not merely present (one any-colour land covered every colour; a creature counted as a mana); demand: what is owed is the line's live unpaid hold, not the plan total that re-counted casts already paid. Claude-play sweep s61001 T5 (2026-10-08): Tamanoa dropped behind a Rolling Earthquake X=2. Default ON; =0 = the legacy estimate + presence test
+    PD_BATCH_TIMING,          // MTG_PD_BATCH_TIMING        Prevent Damage: the whole-turn batch prepay DECLINES (PP_PD_TIMING) a multi-cast plan that casts something growing the value of every pain / Manabarbs event (Tamanoa; Vito / Dina / Faithmender / Bilbo with a gain engine out), when every chain-relevant cast is monotone (no Purity, no Manabarbs) and two casts pay mana -- paying the whole plan up front deals the later casts' pain before that amplifier resolves, a dominated timing; the casts then pay one at a time. Order-independent (PdBatchTimingDominated). Claude-play sweep s61005 T5 / s61013 T4 (2026-10-08). Default ON; =0 = the batch on every multi-cast plan
+    PD_DEFER_C_GENERIC,       // MTG_PD_DEFER_C_GENERIC     Prevent Damage: the pain deferral's payability test (CapabilityCovers) treats {C} as generic while no {C} pip is live this turn, so a held City of Brass may stand in for a Reflecting Pool that could also reflect {C} (s61013 T4: Vito paid pain-first before it could drain). Default ON; =0 = the WUBRG + C superset test
     COUNT
 };
 
@@ -639,6 +641,8 @@ inline const char* Name(int slot)
         "MTG_GSZ_SHUFFLE_COPY_ID",
         "MTG_POST_ENTRY_PING_ALL",
         "MTG_PD_LINE_OK_EXACT",
+        "MTG_PD_BATCH_TIMING",
+        "MTG_PD_DEFER_C_GENERIC",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

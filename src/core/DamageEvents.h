@@ -497,6 +497,44 @@ inline bool LineOkExactEnabled()
     return heurarm::Flag(heurarm::PD_LINE_OK_EXACT, v);
 }
 
+// BATCH TIMING (TurnSolver::BatchPrepayMainCasts, PdBatchTimingDominated). DEFAULT ON; =0 restores
+// the whole-turn prepay on every multi-cast plan. The batch taps for the WHOLE plan before its first
+// cast resolves, so the pain of a later cast's share is dealt while an earlier cast that grows the
+// damage -> lifegain -> drain chain (a Tamanoa, a Vito / Dina once a Tamanoa is out, a Faithmender...)
+// is still on the stack. Legal (mana abilities may be activated in advance) but strictly dominated by
+// the plan's own sequential realisation -- each spell paid during its casting (CR 601.2g-h), i.e.
+// after the ones before it resolved: claude-play sweep s61005 T5 "Tamanoa, Vito" (Dina out) lost every
+// trigger, 11 -> 6 / opp 18 against 9 / 16; s61013 T4 "Vito, Dina" (Tamanoa out) opp 20 against 19,
+// and the autonomous search's own T5 kill there landed at exactly 0. ON, the batch DECLINES such a
+// plan (PP_PD_TIMING) and its casts pay one at a time -- the per-cast pain-aware payer, whose
+// rest-of-line check is exact (LineOkExactEnabled). Decided by the chain alone and independent of the
+// apply's cast order (PdBatchTimingDominated, TurnSolver.cpp): every cast that stays must be MONOTONE
+// for the chain (anything but a Purity or a Manabarbs, which can make a later tap worth less), one of
+// them must make a pain event worth strictly more by itself, and two casts must pay mana -- then paying
+// one at a time is never worse in any realised order, and better unless that cast is realised last.
+// Shared by the executor and the rollout (one function), so lockstep holds by construction.
+inline bool BatchTimingEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_BATCH_TIMING", true);
+    return heurarm::Flag(heurarm::PD_BATCH_TIMING, v);
+}
+
+// PAIN DEFERRAL'S PAYABILITY TEST treats {C} as generic (CapabilityCovers, via PainDeferQuery).
+// DEFAULT ON; =0 restores the WUBRG + C superset test. A source's {C} mode can pay only a {C} PIP
+// or a generic one, and generic is already compared by yield -- so while nothing this turn carries a
+// {C} pip, demanding that a deferred payment's leftovers can still make {C} rejects deferrals for a
+// colour no cost asks for. Claude-play sweep s61013 T4 (also s61008 T4, s61011 T5): Vito {2}{B} with
+// Tamanoa out, the deferral's Reflecting Pool {B} + Ancient Tomb (City of Brass held for after Vito
+// resolves) was refused because the Pool -- reflecting Tomb / Brushland -- can make {C} and City
+// cannot; the pain-first payment spent City before Vito existed, one drain lost. The bit is dropped
+// only when no {C} pip is live: none in hand, none in the wishable sideboard, none in the line's
+// unpaid hold, no {C}-pip activation on our battlefield (CardHasColorlessPipActivation).
+inline bool DeferCGenericEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_DEFER_C_GENERIC", true);
+    return heurarm::Flag(heurarm::PD_DEFER_C_GENERIC, v);
+}
+
 struct PayDmgCap
 {
     bool live       = false;     // a policy is running this payment (nested payers just enforce)

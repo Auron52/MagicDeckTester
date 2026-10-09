@@ -33878,7 +33878,7 @@ namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
-                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_N };
+                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -33887,7 +33887,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: wild -> pip pinning ambiguous",
     "PREPAID mixed two-stage (MTG_PREPAY_MIXED)",
     "declined: every hold failed on a mint line (MTG_MINT_CREDIT_EXACT)",
-    "declined: big-spell-only mana + a non-qualifying cast (Troyan)" };
+    "declined: big-spell-only mana + a non-qualifying cast (Troyan)",
+    "declined: an earlier cast grows the pain chain (MTG_PD_BATCH_TIMING)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -33930,6 +33931,80 @@ inline bool Pp(PrepayOutcome o)
 {
     if (g_prepay_probe_on) { g_prepay_probe.n[o].fetch_add(1, std::memory_order_relaxed); }
     return false;   // every decline site returns false, so `return Pp(...)` reads as the decline
+}
+
+// PREVENT DAMAGE BATCH TIMING (dmgev::BatchTimingEnabled has the case and the rule). Is paying this
+// batch's casts ONE AT A TIME, each after the ones before it resolved, never worse than paying them all
+// up front -- and better? The taps are the same set either way (every land gets tapped once this main
+// phase, by a payment or by the end-of-main sweep), so what moves is WHEN each pain / Manabarbs event
+// lands, and an event is worth what the damage -> lifegain -> drain chain in force makes of it
+// (dmgev::TapEventsValue). The batch values every cast's events on the PRE-plan chain c0; paying one
+// at a time values cast j's on c0 plus the casts realised before it.
+//
+// ORDER-INDEPENDENT on purpose. Which casts come before j is the APPLY's order -- the vector for a
+// searched-order plan, otherwise CastOrderLess, the range ladder and ApplyPayableCastOrder -- and
+// predicting it here with separate logic is the lockstep hazard BpPrepayPrefix's note warns about.
+// The chain's value is MONOTONE in everything but two params: adding a Tamanoa, a Vito / Dina, a
+// Faithmender or a Bilbo to ANY chain never makes an event worth less to either life total (g >= a,
+// so a Tamanoa gains at least the damage; the watchers and replacements only add). Purity (prevented
+// damage no longer triggers a Tamanoa) and Manabarbs (one more hit per land tap) are not. So when
+// every cast that stays is monotone, every realised prefix weakly dominates c0 -- per-cast is never
+// worse, in ANY order -- and it is strictly better as soon as a cast that improves c0 by itself is
+// realised before another mana-paying cast; the one value-neutral case is that cast landing last.
+// A Purity or a Manabarbs in the batch, no improving cast, fewer than two paying casts, or no tap of
+// ours that can deal damage: the batch stands.
+bool PdBatchTimingDominated(const GameState& s, const std::vector<Action>& acts)
+{
+    const int ctrl = s.active_player_index;
+    const dmgev::GainChain c0 = dmgev::ReadGainChain(s, ctrl);
+    bool pain_live = c0.nbarb > 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (pain_live) { break; }
+        if (p.controller_index != ctrl || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.tap_self_damage > 0) { pain_live = true; }
+    }
+    if (!pain_live) { return false; }
+    // Strictly better than c0 for some pain size 0..3 of a land tap, and nowhere worse.
+    auto improves = [&](const dmgev::GainChain& c) -> bool
+    {
+        bool strict = false;
+        for (int pain = 0; pain <= 3; ++pain)
+        {
+            const dmgev::ChainV v = dmgev::TapEventsValue(c, pain, /*land=*/true);
+            const dmgev::ChainV b = dmgev::TapEventsValue(c0, pain, /*land=*/true);
+            if (v.opp < b.opp || v.life < b.life) { return false; }
+            if (v.opp > b.opp || v.life > b.life) { strict = true; }
+        }
+        return strict;
+    };
+    int paying = 0;
+    bool any_improves = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { return false; }
+        if (!a.free_cast && a.cost.ManaValue() > 0) { ++paying; }
+        if (d->card.IsInstant() || d->card.IsSorcery()) { continue; }   // does not stay
+        if (d->card.HasSupertype(Supertype::Legendary))
+        {
+            bool dup = false;   // the legend rule keeps one: the chain does not grow
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == ctrl && p.card.m_name == d->card.m_name) { dup = true; } }
+            if (dup) { continue; }
+        }
+        const CardParams& pp = d->params;
+        if (pp.prevent_noncombat_to_self_gain || pp.land_tap_damage_each_player > 0) { return false; }
+        if (!any_improves)
+        {
+            dmgev::GainChain c1 = c0;
+            dmgev::ChainAdd(c1, pp, /*ours=*/true);
+            any_improves = improves(c1);
+        }
+    }
+    return any_improves && paying >= 2;
 }
 }  // namespace
 
@@ -34398,6 +34473,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
+    // PREVENT DAMAGE: paying the whole plan now would deal a later cast's pain before an earlier cast
+    // that grows the gain chain has resolved -- a dominated timing (dmgev::BatchTimingEnabled). The
+    // casts then pay one at a time, each on the board the casts before it left. Armed boards only.
+    if (state.dmg_events_armed && !mint_prefix && dmgev::BatchTimingEnabled()
+        && PdBatchTimingDominated(state, acts))
+    { return Pp(PP_PD_TIMING); }
     // PREVENT DAMAGE PAIN DEFERRAL: every cast of this batch resolves after the batch payment and
     // before the end-of-main sweep, so each is a candidate pending amplifier for the joint payment
     // (dmgev::PendingCasts, read by PainDeferQuery). Armed boards only; a scope, so it covers every
