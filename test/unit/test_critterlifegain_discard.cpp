@@ -296,6 +296,22 @@ TEST_CASE("Critter discard T10: a 4+ drop that is itself creature overflow reser
     CheckPrefixStableCritter(s);
 }
 
+TEST_CASE("Critter discard T11: the 4th land counts the board -- with 4 lands in play a hand land is surplus even beside a 4+ drop")
+{
+    // Review finding (2026-10-09): the 4th-land reservation ignored lands in play, so with 4 Plains
+    // out and an Archangel kept, a 5th land was protected over a creature. "MANA: 3 lands counting
+    // board, 4 while holding a 4+ mana card": the 4 is already met by the board, so the hand Plains
+    // is a surplus land and sheds FIRST (surplus lands shed before creature overflow / spare watchers).
+    const GameState s = MakeCritter(
+        { "Plains", "Archangel of Thune", "Ajani's Pridemate", "Ocelot Pride", "Auriok Champion",
+          "Voice of the Blessed", "Heliod, Sun-Crowned", "Serra Ascendant" },
+        { "Plains", "Plains", "Plains", "Plains", "Soul Warden", "Soul's Attendant" });
+    const std::vector<int> o = Crit(s);
+    REQUIRE(!o.empty());
+    CHECK(o.front() == 0);
+    CheckPermutationCritter(s, o);
+}
+
 TEST_CASE("Critter discard: MTG_CRITTER_BUCKET_DISCARD=0 restores exactly the generic ranking; the default is the policy")
 {
     const GameState s = CritterT1();

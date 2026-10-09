@@ -18408,8 +18408,10 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
     // 4+ drop and the 4th land compete for the last slot, KEEP's "creatures to fill -> 4th land"
     // gives it to the creature.
     auto big = [&](int i) { return CleanupDiscardManaValue(ap.hand[at(i)]) >= 4; };
+    // The 4th land counts the board like every land quota: with 4+ lands already in play (lands_n
+    // holds board + kept) there is no 4th land to reserve, and a further hand land is surplus.
     int fourth = -1;
-    if (const int spare_land = pick_land(); spare_land >= 0)
+    if (const int spare_land = lands_n < 4 ? pick_land() : -1; spare_land >= 0)
     {
         const std::size_t room_r = static_cast<std::size_t>(std::max(0, kHandLimit - core_hand - 1));
         bool kept_big = std::any_of(taken.begin(), taken.end(), big);
