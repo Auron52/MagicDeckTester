@@ -31,24 +31,36 @@ struct Counter
 // Card was already made trivially copyable for exactly this reason (see the InternedName note in
 // Card.h: "vector<Card> copy/erase are memcpy/memmove"); Permanent never got the same treatment.
 //
-// SEQUENCE SEMANTICS ARE PRESERVED EXACTLY -- insertion order is kept and duplicate entries of the
-// same Type are NOT merged. That matters: AddPlusCounters merges deliberately, but seven other
-// sites push a raw second PlusOnePlusOne entry, and .size() is read by BuildSimKey, the dominance
-// signature and several dedup keys. A per-Type slot array would have silently merged those and
-// moved every one of those keys. This is a storage change, not a behaviour change.
+// CANONICAL STORAGE: AT MOST ONE ENTRY PER Counter::Type (2026-10-09). A Counter is only
+// (type, count), so two +1/+1 entries are game-identical to one entry holding their sum -- counters
+// of one kind are interchangeable (CR 122.1); nothing in the rules remembers which effect put which
+// counter. Every put goes through Add(), which merges into that type's existing entry and appends
+// only for a type not yet present. There is deliberately no push_back: an appending put is the
+// defect this replaced.
 //
-// THE CAPACITY IS THE ONE RISK, so it is instrumented rather than assumed: an overflowing push_back
-// folds the new counters into the first entry of the same Type (which preserves the TOTAL, the only
-// thing EffectivePower/EffectiveToughness read) and bumps g_counter_overflows. That counter is
-// asserted zero by the test gate, so a cap that is ever too small shows up as a test failure rather
-// than as a wrong board.
+// WHY: .size() and the ordered (type, count) list are read by BuildSimKey, the dominance signature,
+// the mana-DFS memo key and several dedup keys. AddPlusCounters always merged, but seven other sites
+// appended a raw second +1/+1 entry, so a 5/5 built from three +1 entries keyed differently from the
+// same 5/5 built from one +3 entry -- missed transposition and dedup hits, i.e. wasted search. And
+// a loop that re-fires a raw site (Melira Pod: sac a persist creature to Carrion Feeder, it returns,
+// Celes puts a +1/+1 counter on each creature) appended one entry per iteration until the inline
+// array overflowed, where the old overflow path merged them -- so .size() also MOVED mid-game.
+// One pooled regression-tier batch logged x5,787,486 of those (2026-10-05).
+//
+// THE CAPACITY: with canonical storage a permanent holds at most one entry per Type, so kCap only
+// has to cover the enum (static_assert below). The overflow path is therefore unreachable; it stays
+// instrumented anyway -- it folds into the last entry (never drops a counter on the floor) and bumps
+// g_counter_overflows, which the exit-time reporter prints and test/regression.sh FAILS on.
 inline std::atomic<std::uint64_t> g_counter_overflows{0};
 
 struct CounterList
 {
-    // Counter::Type has five values. Six slots leaves room for the duplicate-PlusOnePlusOne entries
-    // the raw push sites create without paying for a seventh; see g_counter_overflows above.
+    // Counter::Type has five values and storage is canonical, so five entries is the most a
+    // permanent can hold; the sixth slot is spare (and keeps sizeof(Permanent) where it was).
     static constexpr int kCap = 6;
+    // Keep in step with the LAST Counter::Type enumerator.
+    static_assert(static_cast<int>(Counter::Type::Depletion) < kCap,
+                  "CounterList::kCap must cover every Counter::Type (storage is one entry per type)");
 
     using value_type     = Counter;
     using iterator       = Counter*;
@@ -68,14 +80,18 @@ struct CounterList
     Counter&       operator[](std::size_t i)       { return m_e[i]; }
     const Counter& operator[](std::size_t i) const { return m_e[i]; }
 
-    void push_back(const Counter& c)
+    // Put `n` counters of type `t`: MERGE into the type's existing entry, else append one. `n` is
+    // not clamped -- a planeswalker printed with 0 starting loyalty still gets its mirror entry,
+    // exactly as the old append did.
+    void Add(Counter::Type t, int n)
     {
-        if (m_n < kCap) { m_e[m_n++] = c; return; }
-        g_counter_overflows.fetch_add(1, std::memory_order_relaxed);
         for (std::int32_t i = 0; i < m_n; ++i)
-        { if (m_e[i].type == c.type) { m_e[i].count += c.count; return; } }
-        m_e[kCap - 1].count += c.count;   // last resort: never drop a counter on the floor
+        { if (m_e[i].type == t) { m_e[i].count += n; return; } }
+        if (m_n < kCap) { m_e[m_n++] = Counter{t, n}; return; }
+        g_counter_overflows.fetch_add(1, std::memory_order_relaxed);   // unreachable: see kCap
+        m_e[kCap - 1].count += n;   // last resort: never drop a counter on the floor
     }
+    void Add(const Counter& c) { Add(c.type, c.count); }
 
     // The remove_if/erase idiom at the decrement site passes a suffix [first, end()).
     iterator erase(iterator first, iterator last)
@@ -88,10 +104,11 @@ struct CounterList
     iterator erase(iterator pos) { return erase(pos, pos + 1); }
 };
 
-// A too-small kCap must never pass QUIETLY. The merge above keeps the board legal, but it collapses
-// two entries into one and so moves .size() -- which BuildSimKey, the dominance signature and four
-// dedup keys read. One inline variable (C++17: exactly one instance program-wide), so every binary
-// that links core -- mtg, mtg-test, mtg-analyze -- shouts on the way out if it ever happened.
+// An overflow must never pass QUIETLY. With canonical storage it cannot happen unless a Counter::Type
+// is added past kCap (the static_assert above should catch that first), and its fallback folds into
+// an entry of the WRONG type. One inline variable (C++17: exactly one instance program-wide), so
+// every binary that links core -- mtg, mtg-test, mtg-analyze -- shouts on the way out if it ever
+// happened, and test/regression.sh fails the tier on the line.
 namespace counterlist
 {
     struct OverflowReporter
@@ -102,8 +119,8 @@ namespace counterlist
             if (n != 0)
             {
                 std::fprintf(stderr,
-                             "[counterlist] OVERFLOW x%llu -- CounterList::kCap (%d) is too small; "
-                             "entries were merged, so .size() moved. RAISE kCap in Permanent.h.\n",
+                             "[counterlist] OVERFLOW x%llu -- CounterList::kCap (%d) is smaller than "
+                             "the number of Counter::Type values; RAISE kCap in Permanent.h.\n",
                              static_cast<unsigned long long>(n), CounterList::kCap);
             }
         }

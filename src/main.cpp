@@ -7190,7 +7190,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 Counter dep;
                 dep.type  = Counter::Type::Depletion;
                 dep.count = dc;
-                p.counters.push_back(dep);
+                p.counters.Add(dep);
             }
             // "As this enters, choose a color" (Coldsteel Heart). A permanent STAGED directly onto
             // the battlefield never ran the as-enters replacement (FireOwnEtbTriggers fires only on

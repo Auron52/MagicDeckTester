@@ -284,7 +284,7 @@ TEST_CASE("Voice of the Blessed: flying+vigilance from the 4th +1/+1 counter, in
     AddPlusCounters(s.battlefield[v], 6);                    // 10
     CHECK(s.battlefield[v].card.HasKeyword(Keyword::Indestructible));
     // Continuously checked (CR 611.3): seven -1/-1 counters annihilate down to 3 -> all gone.
-    s.battlefield[v].counters.push_back(Counter{Counter::Type::MinusOneMinusOne, 7});
+    s.battlefield[v].counters.Add(Counter{Counter::Type::MinusOneMinusOne, 7});
     AnnihilateCounters(s.battlefield[v]);
     CHECK(PlusCounters(s.battlefield[v]) == 3);
     CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Flying));

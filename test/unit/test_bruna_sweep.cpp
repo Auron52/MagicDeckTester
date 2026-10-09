@@ -373,7 +373,7 @@ TEST_CASE("Bruna sweep C: Wild Growth on a depleted Remote Farm goes to the grav
     const int farm = b.Put("Remote Farm", /*tapped=*/true);
     b.Put("Forest");
     for (Permanent& p : b.s.battlefield)
-    { if (p.card.m_number == farm) { p.counters.push_back(Counter{ Counter::Type::Depletion, 0 }); } }
+    { if (p.card.m_number == farm) { p.counters.Add(Counter{ Counter::Type::Depletion, 0 }); } }
     Permanent wg;
     wg.card = CardBs("Wild Growth", 50); wg.controller_index = 0; wg.owner_index = 0;
     wg.aura_attached_to = farm;

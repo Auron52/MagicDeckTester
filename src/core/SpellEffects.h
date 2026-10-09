@@ -2007,20 +2007,16 @@ inline int DoublerShift(const GameState& state, int controller, bool for_tokens)
 // (Psychotrope Thallid), which resolves above it.
 inline void TrickDraw(GameState& state, int controller, int n);
 
-// Add N +1/+1 counters to a permanent, MERGING into an existing +1/+1 entry rather than pushing a
-// new Counter each time. The sim key folds `counters` as an ORDERED list of (type, count) entries
-// (BuildSimKey), so a 5/5 built from three separate +1 entries would key differently from the
-// game-identical 5/5 built from one +3 entry -- and a lifegain-watcher deck adds dozens of counters
-// per game. Pre-existing push_back sites are untouched (byte-identical); every NEW counter source
-// uses this. Callers that can ever put both counter types on one body follow with
-// AnnihilateCounters (CR 704.5r), exactly as the existing sites do.
+// Add N +1/+1 counters to a permanent and refresh the counter-threshold keywords. The merge into an
+// existing +1/+1 entry is now CounterList::Add's job for EVERY put (canonical storage, see
+// Permanent.h) -- this helper used to be the only site that merged, and the sim key folds `counters`
+// as an ORDERED list of (type, count) entries, so the raw appending sites keyed a 5/5 built from
+// three +1 entries apart from the game-identical 5/5 built from one +3 entry. Callers that can ever
+// put both counter types on one body follow with AnnihilateCounters (CR 704.5r).
 inline void AddPlusCounters(Permanent& p, int n)
 {
     if (n <= 0) { return; }
-    bool merged = false;
-    for (Counter& c : p.counters)
-    { if (c.type == Counter::Type::PlusOnePlusOne) { c.count += n; merged = true; break; } }
-    if (!merged) { p.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, n}); }
+    p.counters.Add(Counter::Type::PlusOnePlusOne, n);
     RefreshCounterThresholdKeywords(p);
 }
 
@@ -2052,17 +2048,17 @@ inline int PlusCountersOn(const Permanent& p)
 //
 // "If an effect would put one or more counters on a permanent you control, it puts twice that many
 // of those counters on that permanent instead." Unlike tokens -- where CreateToken was already the
-// one funnel every site called -- there is NO shared counter helper in this engine: ~12 sites
-// open-code `counters.push_back(...)` and five more counter kinds live as bare scalar ints on
+// one funnel every site called -- there is NO shared DOUBLING counter helper in this engine: ~12
+// sites call `counters.Add(...)` directly and five more counter kinds live as bare scalar ints on
 // Permanent. So the doubling has to be applied by the caller, through these.
 //
 // SCOPE, and why the legacy sites are deliberately NOT converted: doubling is observable only when
 // a doubler is on the battlefield, and Doubling Season is the only one in the card pool. No shipped
 // deck pairs it with any other counter source, so converting the legacy sites would be pure
-// byte-identical churn across every existing counter deck -- and their append-vs-merge distinction
-// is load-bearing for the sim key (see AddPlusCounters above), which makes a blanket refactor a
-// real regression risk for zero present benefit. The three sites that CAN observe doubling today
-// (spore counters, quest counters, devour's enters-with +1/+1) all route through here.
+// byte-identical churn across every existing counter deck. (The append-vs-merge distinction that
+// used to make such a refactor a sim-key risk is gone: CounterList::Add merges for every site.)
+// The three sites that CAN observe doubling today (spore counters, quest counters, devour's
+// enters-with +1/+1) all route through here.
 // A future deck pairing a doubler with another counter source must convert that source's site.
 //
 // A counter placed as a permanent ENTERS is doubled too (CR 121.6 / 614.1c -- the same rule that
@@ -2187,7 +2183,7 @@ inline void PutDepletionCounters(GameState& state, Permanent& p, int n)
     Counter dep;
     dep.type  = Counter::Type::Depletion;
     dep.count = n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
-    p.counters.push_back(dep);
+    p.counters.Add(dep);
 }
 
 // True while candidates are being enumerated FOR THE SEARCH (variant fan); false on the greedy
@@ -5401,7 +5397,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             for (const std::string& st : state.battlefield[entered_index].card.m_subtypes)
             { if (st == usub) { n = wd->params.other_creature_etb_counters_subtype; break; } }
         }
-        state.battlefield[entered_index].counters.push_back(
+        state.battlefield[entered_index].counters.Add(
             Counter{ Counter::Type::PlusOnePlusOne, n });
         if (log)
         {
@@ -6657,7 +6653,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
             for (Permanent& q : state.battlefield)
             {
                 if (q.controller_index != ectrl || !q.card.IsCreature()) { continue; }
-                q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, per});
+                q.counters.Add(Counter{Counter::Type::PlusOnePlusOne, per});
                 // CR 704.5r: the +1/+1 annihilates a -1/-1 already on the body -- for the
                 // ENTERING persist body this IS the Melira-replacement mechanic (the return's
                 // own counter is cancelled by the trigger it fired, so the body loops clean).
@@ -8383,7 +8379,7 @@ inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& 
     perm.entered_this_turn = true;
     if (minus_counters > 0)
     {
-        perm.counters.push_back(Counter{Counter::Type::MinusOneMinusOne, minus_counters});
+        perm.counters.Add(Counter{Counter::Type::MinusOneMinusOne, minus_counters});
     }
     state.battlefield.push_back(perm);
     const int idx = static_cast<int>(state.battlefield.size()) - 1;
@@ -9290,7 +9286,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                          { return x.first > y.first; });
         for (int k = 0; k < ab.amount && k < static_cast<int>(ranked.size()); ++k)
         {
-            state.battlefield[ranked[k].second].counters.push_back(
+            state.battlefield[ranked[k].second].counters.Add(
                 Counter{Counter::Type::PlusOnePlusOne, ranked[k].first});
         }
     }
@@ -9926,8 +9922,8 @@ inline void ApplyGraveyardExileGrow(GameState& state, int controller, int source
         if (!od) { break; }
         if (od->params.gy_exile_grow_counters > 0)
         {
-            q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne,
-                                         od->params.gy_exile_grow_counters});
+            q.counters.Add(Counter{Counter::Type::PlusOnePlusOne,
+                                   od->params.gy_exile_grow_counters});
         }
         GainLife(state, controller, od->params.gy_exile_grow_lifegain);
         if (g_play_event_sink && !g_tap_speculating)
@@ -11505,7 +11501,7 @@ inline void PerformLookTopPutCreature(GameState& state, int controller, const Ca
             // "+1/+1 counters if mana value <= max_mv" -- counters ride the permanent (EffectivePower).
             const int mv = perm.card.m_mana_cost.ManaValue();
             if (pp.look_put_counter_bonus > 0 && mv <= pp.look_put_counter_bonus_max_mv)
-            { perm.counters.push_back(Counter{ Counter::Type::PlusOnePlusOne, pp.look_put_counter_bonus }); }
+            { perm.counters.Add(Counter{ Counter::Type::PlusOnePlusOne, pp.look_put_counter_bonus }); }
             state.battlefield.push_back(perm);
             const int slot = static_cast<int>(state.battlefield.size()) - 1;
             FireEtbWatchers(state, controller, slot);
@@ -12446,7 +12442,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         for (Permanent& q : state.battlefield)
         {
             if (q.controller_index != controller || q.card.m_number != source_id) { continue; }
-            if (self_ctr > 0) { q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, self_ctr}); }
+            if (self_ctr > 0) { q.counters.Add(Counter{Counter::Type::PlusOnePlusOne, self_ctr}); }
             q.temp_power_bonus += self_pp;
             q.temp_tough_bonus += self_pt;
             break;
@@ -16265,7 +16261,7 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     Permanent& tgt = state.battlefield[ti];
 
     if (pp.counters_on_target > 0)
-    { tgt.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, pp.counters_on_target}); }
+    { tgt.counters.Add(Counter{Counter::Type::PlusOnePlusOne, pp.counters_on_target}); }
     if (pp.grants_temp_haste) { tgt.temp_haste = true; }
 
     // P/T pump: flat + graveyard-scaled (Ancestral Anger) + drawn-count (Fists of Flame, AFTER
@@ -28046,7 +28042,7 @@ inline void FireSagaChapter(GameState& state, int controller, const CardDefiniti
                      tgt.EffectivePower(), tgt.EffectiveToughness());
     }
     if (chapter == 2)
-    { tgt.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, pp.saga_ch2_counters_on_target}); }
+    { tgt.counters.Add(Counter{Counter::Type::PlusOnePlusOne, pp.saga_ch2_counters_on_target}); }
     else
     {
         // "Until end of turn, double its power and toughness" == it gets +X/+Y until end of turn,
@@ -28199,7 +28195,7 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
         Counter dep;
         dep.type  = Counter::Type::Depletion;
         dep.count = def.params.enters_tapped_with_depletion;
-        perm.counters.push_back(dep);
+        perm.counters.Add(dep);
     }
     state.battlefield.push_back(perm);
     if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }

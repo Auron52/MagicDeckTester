@@ -284,6 +284,7 @@ unset(CMAKE_POLICY_VERSION_MINIMUM)
 enable_testing()
 add_executable(mtg-test
     test/unit/test_mana_payment.cpp
+    test/unit/test_counter_list.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
     test/unit/test_cost_reducers.cpp

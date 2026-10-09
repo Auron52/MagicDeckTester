@@ -398,7 +398,7 @@ TEST_CASE("depletion tap order: plain land first, then the depletion land with M
     auto with_dep = [](Permanent p, int n)
     {
         Counter c; c.type = Counter::Type::Depletion; c.count = n;
-        p.counters.push_back(c);
+        p.counters.Add(c);
         return p;
     };
 
@@ -564,7 +564,7 @@ TEST_CASE("strict filter feed: a DEPLETION land's burst feeds the filter (gi448 
     auto with_dep = [](Permanent p, int n)
     {
         Counter c; c.type = Counter::Type::Depletion; c.count = n;
-        p.counters.push_back(c);
+        p.counters.Add(c);
         return p;
     };
     // gi448's control T2: Saprazzan Skerry ({T}, remove a counter: add {U}{U}) + Cascade Bluffs
@@ -606,7 +606,7 @@ TEST_CASE("feed-filter-first: the last feeder routes THROUGH the filter so a lat
         s.turn_number         = 3;
         Permanent skerry = MakeLand("Saprazzan Skerry");
         Counter c; c.type = Counter::Type::Depletion; c.count = 1;
-        skerry.counters.push_back(c);
+        skerry.counters.Add(c);
         s.battlefield.push_back(skerry);
         s.battlefield.push_back(MakeLand("Cascade Bluffs"));
         s.battlefield.push_back(MakeLand("Reliquary Tower"));

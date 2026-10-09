@@ -56,7 +56,7 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     if (edef->params.loyalty_start > 0)
     {
         perm.loyalty = edef->params.loyalty_start;
-        perm.counters.push_back(Counter{Counter::Type::Loyalty, edef->params.loyalty_start});
+        perm.counters.Add(Counter{Counter::Type::Loyalty, edef->params.loyalty_start});
     }
     // FADING (CR 702.32, Saproling Burst): an ENTERS-WITH replacement, so it sits in this pre-push
     // window beside loyalty_start, and it goes through PutFadeCounters so Doubling Season doubles
