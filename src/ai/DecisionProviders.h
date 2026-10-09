@@ -700,10 +700,11 @@ class VialProvider : public DeckProvider
 public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
-    // No overrides left: the hand-aware charge policy this class existed for is now the ROOT
-    // default (GenericProvider::WantVialCharge, adopted 2026-08-18) -- an archetype opt-in was the
-    // very thing that let Goblins/Minotaur silently lose their Vial. The class stays so routing and
-    // the batch [play] line still name the archetype.
+    // The hand-aware charge policy this class existed for is now the ROOT default
+    // (GenericProvider::WantVialCharge, adopted 2026-08-18) -- an archetype opt-in was the very thing
+    // that let Goblins/Minotaur silently lose their Vial. The class stays so routing and the batch
+    // [play] line still name the archetype; what it holds now is the Knights cast order below and
+    // slivers_vial's cleanup-discard rule (the only deck that resolves here directly).
     const char* Name() const override { return "Vial"; }
     // MTG_KNIGHTS_ORDER (USER-reviewed Knights cast order, 2026-08-19): the cast-trigger
     // watcher (Worthy Knight) before the tribe, the gated ETB digger (Acclaimed Contender)
@@ -712,6 +713,16 @@ public:
     // stays byte-identical for slivers_vial (verified against cards.json 2026-08-19).
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
+    // The USER-settled slivers_vial cleanup-discard buckets (2026-10-09,
+    // docs/design/slivers-vial-discard-policy-proposal.md): the shared 3-turn CURVE FILL with LORDS
+    // FIRST, an interleaved land / anthem / unique-grant keep ladder, Vial surplus after turn 1.
+    // MTG_SLIVERS_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking). Every deck
+    // that RESOLVES to this class directly is slivers_vial (checked 2026-10-09: Knights, WhiteKnights
+    // and Soldiers derive from it and override this hook; Goblins, Minotaur and Pirates route to their
+    // own providers), and the land targets are DERIVED from the deck's dominant creature mana value
+    // (GameState::vial_target_mv), so no land constant sits on this shared base.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Knights (Aether Vial knight tribal). Rode VialProvider and STILL DOES -- it derives from it, so
