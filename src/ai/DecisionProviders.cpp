@@ -10517,12 +10517,21 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
 //       surplus lands (the proposal's S6: "no opinion is a reason to protect a card, not to pitch it").
 // Classification is by PARAMS on the definition (a hand card is a name-only placeholder). The return
 // routes through CleanupDiscardRankingWithOrder, so staged cards and the remaining required-piece
-// protection stay engine-enforced. Prefix-stable except that a shed Rite of Flame raises a surviving
-// Rite's graveyard credit -- which only moves that Rite LATER, never into the prefix already shed.
+// protection stay engine-enforced.
+// NOT PREFIX-STABLE: a shed Rite of Flame lands in the graveyard and raises every surviving Rite's
+// credit, which RE-ORDERS the rest of a multi-card cleanup (review 2026-10-09: DS + 2 Rite, 2 Pyretic,
+// 2 Desperate, 2 Seething, Irencrag on 4 Mountains, shed 3 -- one consultation reads Rite, Rite,
+// Pyretic; re-ranking after each shed gives Rite, Pyretic, Pyretic). So CleanupDiscardShedStable()
+// is false while the buckets are on and the engine asks again after every shed.
 static bool DragonstormBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_DRAGONSTORM_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::DRAGONSTORM_BUCKET_DISCARD, on);
+}
+
+bool DragonstormProvider::CleanupDiscardShedStable() const
+{
+    return !DragonstormBucketDiscardEnabled();
 }
 
 // Apex of Power (impulse_exile) loses its last-copy protection while a Dragonstorm

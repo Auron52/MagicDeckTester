@@ -116,9 +116,12 @@ backwards -> turn-1 Bloom -> land 1) -> the one protected payoff.
 10. Land order inside the bucket is the proposal's 6.2 (Needle > basic > storage > Territory); the
     Territory-for-off-colour-Dragons promotion is moot (haste Dragons always go first).
 
-Prefix stability: the rule chooses its keeps from the whole hand, except that a shed Rite of Flame
-raises a surviving Rite's graveyard credit -- which can only move that Rite later, never into the prefix
-already shed.
+**Not prefix-stable (review fix, 2026-10-09).** A shed Rite of Flame lands in the graveyard and raises
+every surviving Rite's credit, which re-orders the rest of a multi-card cleanup (DS + 2 Rite, 2 Pyretic,
+2 Desperate, 2 Seething, Irencrag on 4 Mountains, shed 3: one consultation reads Rite, Rite, Pyretic;
+re-ranking after each shed gives Rite, Pyretic, Pyretic). `DragonstormProvider::CleanupDiscardShedStable()`
+is therefore false while the buckets are on (true at `=0`), so the engine re-ranks after every shed.
+The original note here claimed stability; it was wrong.
 
 
 ---

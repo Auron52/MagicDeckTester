@@ -354,6 +354,35 @@ TEST_CASE("Dragonstorm discard D13: a duplicate legend is shed first")
     CHECK(GenDs(s).front() == 7);
 }
 
+// NOT prefix-stable (review 2026-10-09): 4 Mountains, 5 short of Dragonstorm. One consultation keeps
+// Irencrag > Seething x2 > Desperate x2 > Pyretic x2 (gross 3) > Rite x2 (gross 2), so its first three
+// sheds read Rite, Rite, Pyretic. But a shed Rite lands in the graveyard and the survivor's float rises
+// to 3 (net 2, value 2 -> 162, level with Desperate), so re-ranked it outlasts both Pyretics: the
+// cleanup the rule really asks for is Rite, Pyretic, Pyretic. The provider declares itself unstable
+// while the buckets are on, and the engine's cleanup then re-ranks after every shed.
+TEST_CASE("Dragonstorm discard D14: not prefix-stable -- a multi-card cleanup is re-ranked per shed")
+{
+    heurarm::t_arm[heurarm::DRAGONSTORM_BUCKET_DISCARD] = 1;
+    CHECK_FALSE(DsProv().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::DRAGONSTORM_BUCKET_DISCARD] = 0;
+    CHECK(DsProv().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::DRAGONSTORM_BUCKET_DISCARD] = -1;
+
+    const GameState base = MakeDs({ kDS, kRite, kRite, kPyr, kPyr, kDesp, kDesp, kSeeth, kSeeth, kIren },
+                                  { kMtn, kMtn, kMtn, kMtn });
+    const std::vector<int> once = Ds(base);
+    CHECK(once == std::vector<int>{ 2, 1, 4, 3, 6, 5, 8, 7, 9, 0 });   // a batched prefix: Rite, Rite, Pyretic
+
+    GameState s = base;
+    heurarm::t_arm[heurarm::DRAGONSTORM_BUCKET_DISCARD] = 1;
+    const int shed = CleanupDiscardShed(s, &kDsReq, 3, -1, false, true, nullptr);
+    heurarm::t_arm[heurarm::DRAGONSTORM_BUCKET_DISCARD] = -1;
+    CHECK(shed == 3);
+    std::vector<std::string> gy;
+    for (const Card& c : s.players[0].graveyard) { gy.push_back(c.m_name.str()); }
+    CHECK(gy == std::vector<std::string>{ kRite, kPyr, kPyr });
+}
+
 TEST_CASE("Dragonstorm discard: every non-staged hand index is named exactly once on every board")
 {
     const std::vector<std::vector<std::string>> hands = {

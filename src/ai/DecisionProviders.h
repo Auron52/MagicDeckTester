@@ -1151,6 +1151,9 @@ public:
     // hand copy of EACH; the USER wants one OR the other ("We only must keep one or the other,
     // prioritizing dragonstorm"), so Apex's protection is waived while a Dragonstorm is in hand.
     bool CleanupDiscardProtectionWaived(const GameState&, const Card&) const override;
+    // NOT prefix-stable while the buckets are on (a shed Rite of Flame raises the surviving Rite's
+    // graveyard credit), so a multi-card cleanup is re-ranked per shed; true when =0 (generic).
+    bool CleanupDiscardShedStable() const override;
 
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /
