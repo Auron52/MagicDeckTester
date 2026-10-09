@@ -38772,8 +38772,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
             // Green Sun's Zenith: "Shuffle Green Sun's Zenith into its owner's library." LOCKSTEP
             // with EffectHandler::MoveToGraveyard (the shared ShuffleSelfIntoLibrary).
+            // The CAST COPY goes in, not the definition's template: Library::ShuffleByKey ranks every
+            // card by splitmix(seed, m_number), so the template's m_number 0 put the Zenith at a
+            // different depth than the executor's real copy (#24 at the same seed) and shifted every
+            // draw the lookahead predicted past it (claude-play sweep s61005, 2026-10-08: the redrawn
+            // Zenith showed num 0). GszShuffleCopyIdOn (GameLogger.h): MTG_GSZ_SHUFFLE_COPY_ID, default
+            // ON; =0 or --legacy-gsz-shuffle (a reference recorded before) = the template (old).
             else if (def.params.shuffles_self_into_library_on_resolve)
-            { ShuffleSelfIntoLibrary(state, state.active_player_index, def.card); }
+            {
+                Card self = def.card;
+                if (GszShuffleCopyIdOn()) { self.m_number = cast_number; }
+                ShuffleSelfIntoLibrary(state, state.active_player_index, self);
+            }
             else                                       { ap.graveyard.push_back(def.card); }
         }
 

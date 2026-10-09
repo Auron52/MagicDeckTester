@@ -393,12 +393,21 @@ def recording_rule_args(ref):
     Faithmender, Vito, ...) keeps the painful lands for the end-of-main sweep (dmgev::PainDeferEnabled).
     A recording made before carries no key, so its auto-tapped payments are replayed with
     --legacy-pain-pay -- the payment it was actually played with. Inert on every deck without the
-    armed damage-event model."""
+    armed damage-event model.
+
+    `gsz_copy_id` (2026-10-08, claude-play sweep s61005): from then on a resolved Green Sun's Zenith
+    is shuffled into the library as its CAST COPY (its m_number) on the apply path that human play
+    uses, as the executor always did -- Library::ShuffleByKey ranks by m_number, so the old template
+    copy (m_number 0) sat at a different depth and changed every later draw. A recording made before
+    carries no key and replays with --legacy-gsz-shuffle -- the draws it was actually played with.
+    Inert on every deck without Green Sun's Zenith."""
     args = [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
+    if not ref.get("gsz_copy_id"):
+        args.append("--legacy-gsz-shuffle")
     return args
 
 

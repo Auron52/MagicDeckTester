@@ -4149,6 +4149,9 @@ if (!log_dir.empty())
     // A reference WITHOUT the key predates it and is replayed with --legacy-pain-pay. Same contract
     // as the key above; inert on every deck without an armed damage-event model.
     if (dmgev::PainDeferEnabled()) { out << ", \"pain_defer\": 1"; }
+    // Same contract for the Green Sun's Zenith self-shuffle COPY ID (GszShuffleCopyIdOn, GameLogger.h):
+    // a reference without `gsz_copy_id` predates it and replays under --legacy-gsz-shuffle.
+    if (GszShuffleCopyIdOn()) { out << ", \"gsz_copy_id\": 1"; }
     out << ",\n  \"decisions\": [\n";
     for (size_t i = 0; i < trace.size(); ++i)
     {
@@ -8197,6 +8200,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-main-swap")    { g_play_legacy_main_swap = true; continue; }   // replay a reference recorded before the human combat-swap timing rule (value-less)    // #4: value-less, same trap as above
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
+        if (flag == "--legacy-gsz-shuffle")  { g_play_legacy_gsz_shuffle = true; continue; } // replay a reference recorded before the Green Sun's Zenith copy-id shuffle (value-less; see GameLogger.h)
         if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try
         {

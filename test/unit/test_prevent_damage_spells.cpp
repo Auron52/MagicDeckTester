@@ -428,6 +428,71 @@ TEST_CASE("Green Sun's Zenith: the X axis reaches Dina at X = 2 (green), never V
     bool in_lib = false;
     for (const Card& x : after.players[0].library) { if (x.m_name.str() == "Green Sun's Zenith") { in_lib = true; } }
     CHECK(in_lib);
+    // The CAST COPY goes back (MTG_GSZ_SHUFFLE_COPY_ID, default ON): Library::ShuffleByKey ranks by
+    // m_number, so the template's 0 would sit at another depth than the executor's real copy and shift
+    // every later draw (claude-play sweep s61005). Control: lever off -> the template's m_number 0.
+    int gsz_num = -1;
+    for (const Card& x : s.players[0].hand) { if (x.m_name.str() == "Green Sun's Zenith") { gsz_num = x.m_number; } }
+    REQUIRE(gsz_num > 0);
+    auto lib_gsz_number = [](const GameState& g)
+    {
+        for (const Card& x : g.players[0].library) { if (x.m_name.str() == "Green Sun's Zenith") { return x.m_number; } }
+        return -1;
+    };
+    CHECK(lib_gsz_number(after) == gsz_num);
+    heurarm::t_arm[heurarm::GSZ_SHUFFLE_COPY_ID] = 0;
+    GameState legacy = s;
+    TurnSolver::ApplyPlan(legacy, *dina, /*is_pre_combat=*/true);
+    heurarm::t_arm[heurarm::GSZ_SHUFFLE_COPY_ID] = -1;
+    CHECK(lib_gsz_number(legacy) == 0);
+}
+
+TEST_CASE("Green Sun's Zenith: the lookahead's reshuffled library is the executor's, card for card")
+{
+    // The LOCKSTEP pin behind the per-copy-ID check above (s108346 gi345: with the template copy the
+    // search drew a phantom Zenith on T3, committed a T5 line the real game could not follow, and LOST
+    // at every budget above b20). Resolve the same Zenith once through the rollout (TurnSolver::ApplyPlan
+    // -> apply_one) and once through the executor's own zone move (ShuffleSelfIntoLibrary with the
+    // physical copy, which is what EffectHandler::MoveToGraveyard calls), from the same state, and
+    // require the two libraries to agree in ORDER. Control: the lever off must disagree.
+    GameState s = Board2(false);
+    s.game_seed = 108346;
+    for (int k = 0; k < 3; ++k) { Put2(s, "Forest"); }
+    Hand2(s, "Green Sun's Zenith");
+    const Card gsz = s.players[0].hand.back();
+    Lib2(s, "Dina, Soul Steeper");
+    for (int k = 0; k < 25; ++k) { Lib2(s, k % 2 ? "Mountain" : "Plains"); }
+    const TurnSolver::Plan* dina = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].card_name.str() == "Green Sun's Zenith"
+            && p.actions[0].tutor_target.str() == "Dina, Soul Steeper") { dina = &p; }
+    }
+    REQUIRE(dina != nullptr);
+    GameState exec = s;
+    Library& lib = exec.players[0].library;
+    for (auto it = lib.begin(); it != lib.end(); ++it)
+    { if (it->m_name.str() == "Dina, Soul Steeper") { lib.erase(it); break; } }
+    ShuffleAfterSearch(exec, 0);
+    ShuffleSelfIntoLibrary(exec, 0, gsz);
+    auto same_order = [&](const GameState& r)
+    {
+        if (r.search_count != exec.search_count) { return false; }
+        if (r.players[0].library.size() != exec.players[0].library.size()) { return false; }
+        for (std::size_t i = 0; i < exec.players[0].library.size(); ++i)
+        { if (r.players[0].library[i].m_number != exec.players[0].library[i].m_number) { return false; } }
+        return true;
+    };
+    GameState rollout = s;
+    TurnSolver::ApplyPlan(rollout, *dina, /*is_pre_combat=*/true);
+    REQUIRE(OnBf(rollout, "Dina, Soul Steeper"));
+    CHECK(same_order(rollout));
+    heurarm::t_arm[heurarm::GSZ_SHUFFLE_COPY_ID] = 0;
+    GameState legacy = s;
+    TurnSolver::ApplyPlan(legacy, *dina, /*is_pre_combat=*/true);
+    heurarm::t_arm[heurarm::GSZ_SHUFFLE_COPY_ID] = -1;
+    CHECK_FALSE(same_order(legacy));
 }
 
 // ---- Stage 5 verification guards (2026-09-27) ---------------------------------------------------

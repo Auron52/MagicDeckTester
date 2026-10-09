@@ -335,6 +335,8 @@ enum Slot : int
     BOUNCE_FOLD,              // MTG_BOUNCE_FOLD            SOUND identity fold for the searched Karoo bounce (BounceFoldOn, EngineFlags.h): a bounce variant whose index resolves -- on the bounce state its applied sibling already measured -- to a candidate a sibling already applied is declined BEFORE the unit charge and the apply. The variant differs from that sibling only in bounce_choice, so its apply is the sibling's apply. DEFAULT ON; MTG_BOUNCE_FOLD_VERIFY applies it anyway and compares the post-apply key.
     BOUNCE_USER_RULE,         // MTG_BOUNCE_USER_RULE       the USER's Karoo bounce default (2026-10-08): a TAPPED returnable land that RE-ENTERS UNTAPPED and whose every colour another land we keep also makes is returned with NO search (DecisionProvider::BounceUserRulePick). "We don't need to search if there is a tapped land that comes into play untapped" + "I mean that it doesn't generate colours any other land doesn't."
     HINATA_BOUNCE_RULE,       // MTG_HINATA_BOUNCE_RULE     the USER's Hinata Karoo rule (HinataProvider::BounceUserRulePick): among re-enter-untapped returnable lands, fewest colours, then most copies, then the colour the deck needs less (pip counts), then the base order
+    PD_BESEECH_USEFUL,        // MTG_PD_BESEECH_USEFUL      Prevent Damage: the AUTONOMOUS search offers Beseech the Queen only the cards with an engine ROLE (read off params): the gain / drain / amp creatures, the damage sources (Manabarbs, Spellshock, Rolling Earthquake, Pyrohemia), the creature tutors (Living Wish, Green Sun's Zenith), Ancient Tomb-shaped lands, the FUEL land (most self-damage per tap: Tarnished Citadel) and, while colours or next turn's land are short, ONE TEMPO land (most missing colours fixed, then most colours, untapped, least pain). Drops another Beseech and the redundant lands. The Wish doctrine's shape applied to Beseech -- a DRAFT for the USER's review, measurement lever, default OFF; human play keeps every name
+    GSZ_SHUFFLE_COPY_ID,      // MTG_GSZ_SHUFFLE_COPY_ID    Green Sun's Zenith's self-shuffle in the APPLY path (search lookahead / human-play apply) puts the CAST COPY (its m_number) into the library instead of the definition's template (m_number 0): Library::ShuffleByKey ranks cards by m_number, so the template landed at a different depth than the executor's real copy and shifted every predicted draw past it (claude-play sweep s61005, 2026-10-08). A lockstep fix, DEFAULT ON; =0 = the template
     COUNT
 };
 
@@ -631,6 +633,8 @@ inline const char* Name(int slot)
         "MTG_BOUNCE_FOLD",
         "MTG_BOUNCE_USER_RULE",
         "MTG_HINATA_BOUNCE_RULE",
+        "MTG_PD_BESEECH_USEFUL",
+        "MTG_GSZ_SHUFFLE_COPY_ID",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

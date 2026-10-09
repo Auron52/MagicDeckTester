@@ -1328,6 +1328,22 @@ inline bool HumanKarooFloatOn()       // ...and whether it applies HERE (human p
 // the flag above (a replay is one game in one process).
 inline bool g_play_legacy_pain_pay = false;
 
+// GREEN SUN'S ZENITH SELF-SHUFFLE -- the CAST COPY goes into the library on the APPLY path (search
+// lookahead AND human play), not the definition's template (m_number 0). Library::ShuffleByKey ranks
+// cards by m_number, so the template sat at a different depth than the executor's real copy and every
+// later draw differed between the two worlds (claude-play sweep s61005, 2026-10-08). The rule the run
+// plays under -- the recording stamp `gsz_copy_id` reads this. `--legacy-gsz-shuffle` restores the
+// template for REPLAY: a reference recorded before carries no key, and its replayer
+// (test/viewer_protocol_check.py) passes the flag so its draws replay exactly as played.
+// MTG_GSZ_SHUFFLE_COPY_ID (heurarm slot GSZ_SHUFFLE_COPY_ID), DEFAULT ON; inert without a
+// shuffles_self_into_library_on_resolve card (only Green Sun's Zenith).
+inline bool g_play_legacy_gsz_shuffle = false;
+inline bool GszShuffleCopyIdOn()
+{
+    static const bool s_env = EnvOn("MTG_GSZ_SHUFFLE_COPY_ID", true);
+    return heurarm::Flag(heurarm::GSZ_SHUFFLE_COPY_ID, s_env) && !g_play_legacy_gsz_shuffle;
+}
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit
