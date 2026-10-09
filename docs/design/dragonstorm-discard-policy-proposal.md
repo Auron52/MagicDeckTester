@@ -62,6 +62,64 @@ SHED: Karrthus / Kolaghan -> other Dragons beyond the exception (Utvara > Lathli
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `DragonstormProvider::CleanupDiscardCandidates` + `DragonstormProvider::
+CleanupDiscardProtectionWaived` (`src/ai/DecisionProviders.cpp`), behind
+`MTG_DRAGONSTORM_BUCKET_DISCARD` (default ON; heurarm slot `DRAGONSTORM_BUCKET_DISCARD`). `=0`
+restores `GenericProvider::CleanupDiscardCandidates` AND the profile's last-copy-of-EACH protection
+(the waiver is gated on the same flag). Tests: `test/unit/test_dragonstorm_discard.cpp`.
+
+**Protection.** The profile is unchanged (`required_pieces` [Apex of Power, Dragonstorm] also gates the
+mulligan). The waiver drops Apex's discard protection while a Dragonstorm is in hand; it does NOT use
+`InterchangeableRequiredGroup` (the provider has no override): grouping the two would count
+{Dragonstorm, Apex} as two copies of one role and protect NEITHER. Outcomes under `"hand"` scope:
+{DS} -> DS; {DS, Apex} -> DS only; {DS, DS} -> neither by the engine, the order sheds the 2nd early and
+names the kept one last; {Apex} -> Apex; {Apex, Apex} -> neither by the engine, the order keeps both.
+
+**Emitted shed order** (most expendable first): dead legend duplicates -> Karrthus / Kolaghan (haste,
+mana value desc) -> the other Dragons beyond the exception (mana value desc: Utvara > Lathliss >
+Scourge) -> 2nd+ Dragonstorm -> Lotus Bloom not kept -> Apex alongside a Dragonstorm -> 3rd+ Medallion
+-> surplus lands (Territory -> storage -> basic -> Needle) -> unrecognised -> the keep ladder
+backwards (soft 2nd Medallion -> cheap Dragon -> the extra Apexes (no Dragonstorm) -> fast mana
+backwards -> turn-1 Bloom -> land 1) -> the one protected payoff.
+
+**Agent readings (USER may overturn):**
+1. **The KEEP and SHED lines disagree at the tail.** KEEP ends "Apex alongside a Dragonstorm -> soft 2nd
+   Medallion" (Apex kept over the 2nd Medallion); SHED has "Apex alongside a Dragonstorm -> 3rd+
+   Medallion -> surplus lands" (Apex shed before them). For interchangeable Medallion copies both hold
+   only if a 3rd copy is worth more than a 2nd, so the SHED list (and the USER's "fast mana is the
+   priority over Apex") wins: the Apex sheds before the 3rd Medallion, the surplus lands AND the soft
+   2nd Medallion. The opposite reading is a one-line move.
+2. The protected payoff is the LAST card named -- after land 1 and the turn-1 Bloom, which KEEP lists
+   above it -- because SHED ends "-> protected" and the engine sheds a protected sole copy last anyway.
+3. Fast-mana interleave = the proposal's ladder minus the slots the USER moved: ritual, land, ritual,
+   Medallion, ritual, ritual, land, ritual, land, then every other ritual (unlimited quota).
+4. "Cheap Dragon" = a non-haste Dragon of mana value <= 6, cheapest first (Scourge 5 > Lathliss 6);
+   "Linvala" read as Lathliss. Utvara (8) is never kept as the exception.
+5. Net of board: a Bloom on the battlefield or suspended fills the turn-1 Bloom slot; a Medallion on the
+   battlefield fills the Medallion slot (the hand's first is then the soft 2nd) and lowers the land
+   target to 3. "Lands to 4" counts land permanents.
+6. "Very limited mana": each land in play at max(1, its yield) (a Needle 2, a charged battery its
+   counters), the two drops at 1 each whether or not a land is held, every ritual's net
+   (Medallion-adjusted), 3 per Bloom on the battlefield or arriving off suspend within 2 turns; against
+   9 - Medallions in play. "Dragons are useless when Dragonstorm can be cast next turn" falls out: a
+   Dragonstorm held with mana not very limited keeps no Dragon.
+7. Ritual order = the proposal's EV: value = net float (Medallion-adjusted), +1 if spliceable, +1 per
+   copy already in a graveyard (Rite of Flame); Irencrag + its shortfall when >= 3 short of the
+   protected payoff's cost, 0 when not short; times a 1/3-per-mana decay in the distance to castable
+   next turn (board mana + 1 when a land is kept; red pips against red sources, Territory excluded).
+   Ties: larger gross float kept first. Rite of Flame leads at 1 source and sinks at 4+.
+8. A staged (Apex-exiled) card is never named and does not count as a held Dragonstorm (it expires).
+9. A dead legend duplicate is shed first (the brief's generic rule); an unrecognised card sheds after the
+   surplus lands (the proposal's S6).
+10. Land order inside the bucket is the proposal's 6.2 (Needle > basic > storage > Territory); the
+    Territory-for-off-colour-Dragons promotion is moot (haste Dragons always go first).
+
+Prefix stability: the rule chooses its keeps from the whole hand, except that a shed Rite of Flame
+raises a surviving Rite's graveyard credit -- which can only move that Rite later, never into the prefix
+already shed.
+
 
 ---
 
