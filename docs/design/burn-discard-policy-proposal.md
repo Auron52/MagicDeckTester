@@ -59,6 +59,62 @@ true)`; `=0` restores `GenericProvider::CleanupDiscardCandidates` (max-MV). Quot
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `BurnProvider::CleanupDiscardCandidates` (+ `CleanupDiscardProtectionWaived`,
+`CleanupDiscardShedStable`) in `src/ai/DecisionProviders.cpp`, behind `MTG_BURN_BUCKET_DISCARD`
+(heurarm `BURN_BUCKET_DISCARD`, default ON). `=0` is `GenericProvider::CleanupDiscardCandidates` with
+the waiver OFF, i.e. today's ranking byte-for-byte. Tests: `test/unit/test_burn_discard.cpp`.
+
+- **Shed order emitted:** S1 2nd Eidolon (every hand copy while one is on our battlefield, else every
+  hand copy but the first) > S2 dead Blaze, then dead Blood > S3 lands beyond 3 (+1 with a live
+  Blaze), counting the board > S4 a Shard Volley without its own land (the k-th Volley needs k lands
+  among board + kept hand lands) > S5 burn beyond lethal, worst first > S6 the 2nd Light Up the Stage
+  (every copy below 2 lands across board + hand) > S7 spare creatures, a not-needed Eidolon first >
+  S8 unrecognised cards > the keep ladder backwards > the kept creatures.
+- **Burn order:** Bolt > Skullcrack > Blaze (opponent creature + a kept land in hand, 3) > Blood that
+  kills (3) > Shard Volley > Blaze with no land (1) > Blood that cannot kill (0). Creatures: haste,
+  then power, the self-taxing body last = Goblin Guide > Swiftspear > Eidolon, quota 2 counting board.
+- **Eidolon protection (the profile is NOT edited):** `burn.profile.json` is what play loads for
+  `mulligan.required_pieces` (the keep-model sidecar contributes only its `exhaustive_keep` block; it
+  holds the same three names), scope `All`. `CleanupDiscardProtectionWaived` waives Eidolon's discard
+  protection unless the USER's keep condition holds: no Eidolon on our battlefield, it is the only
+  Eidolon in hand, turn <= 3, and board creatures + the hand's Goblin Guides / Swiftspears < 2.
+  Goblin Guide / Swiftspear are never waived. The mulligan's use of `required_pieces` is untouched.
+- **Other forced-discard paths that read the protection, for this deck:** only the cleanup shed
+  (executor `AIEngine::ChooseDiscard` incl. its searched trial set, the rollout `CleanupDiscardShed`,
+  the search's discard node) -- all through this ranking, so the waiver applies there. The
+  `MTG_DISCARD_TRACE` `prot=` field reads it too (diagnostic). `LandsEdgePitchOrder` is Land's Edge
+  only (not in this deck; lands are never required pieces). `ChooseNonCleanupDiscardIndex` passes no
+  required pieces at all and no burn card discards outside cleanup. So the waiver changes the cleanup
+  shed and nothing else.
+
+Agent readings (the USER may overturn any of these):
+1. "Creature quota short" = board creatures + hand Goblin Guides / Swiftspears < 2 (they fill the
+   quota before Eidolon, per the creature order). Staged cards are not counted.
+2. The waiver reads "the only Eidolon in hand" literally: with two copies in hand both are
+   unprotected; the 2nd sheds in S1 and the first, when needed, is placed last -- where the
+   protection puts it once the 2nd is gone, so the order does not move.
+3. "Early" is read on the turn of the cleanup (`turn_number <= 3`).
+4. "Burn beyond lethal" = the opponent's life minus our creatures' next-turn swing (printed power +
+   counters, until-end-of-turn pumps excluded), walking the kept burn best-first (the proposal's
+   REACH quota; not restated in the USER block). Searing Blood with a creature it cannot kill delivers
+   no face damage and ranks below the 1-damage Blaze (the USER order does not place it).
+5. The +1 land for Searing Blaze counts only a LIVE Blaze: a dead one is shed in S2, ahead of the
+   lands, so it is no longer held when S3 is decided. Blaze's "land in hand" and the Volley land count
+   read the KEPT hand lands for the same reason.
+6. The kept cards are interleaved by the proposal's section-5 ladder with its clock slots dropped
+   (every kept creature is protected): land, land, burn, land, Light Up the Stage, burn, burn, land
+   (the Blaze +1), then the remaining burn. Surplus lands shed last-in-hand first (all Mountains).
+7. Unrecognised cards (none on this list) shed after the spare creatures, ahead of the keep tail.
+8. The bucket arm declares `CleanupDiscardShedStable() == false` (a shed can move the Blaze land, the
+   Volley land count or the lethal walk), so a multi-card rollout cleanup is re-ranked per shed --
+   what the executor's per-card cleanup already does. `=0` keeps the default `true`.
+
+Observation, not changed: with 4+ lands already in play the literal quota ("3 counting board, +1 while
+holding Searing Blaze") makes every hand land surplus, so a held Blaze then has no landfall land and
+ranks as the 1-damage Blaze. `PreferHoldLandDrop` banks drops from 3 lands, so this is rare.
+
 
 ---
 

@@ -7627,6 +7627,295 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
     return lands >= kBankThreshold;
 }
 
+// ---- BurnProvider::CleanupDiscardCandidates ---------------------------------
+//
+// THE USER'S BUCKETS (2026-10-09, docs/design/burn-discard-policy-proposal.md, "burn: SETTLED"),
+// MTG_BURN_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking with every
+// required piece protected, i.e. today's rule byte-for-byte -- the waiver below is gated on the
+// same flag).
+//
+// SHED ORDER (index 0 first):
+//   S1 a 2nd Eidolon -- every hand copy while one is on our battlefield, else every hand copy but
+//      the first ("Duplicates should definitely be unprotected", USER);
+//   S2 Searing Blaze / Searing Blood with NO opponent creature on the board now, Blaze first ("no
+//      look-ahead at the spawn schedule", USER);
+//   S3 lands beyond the quota: 3 counting the board, +1 while holding a Searing Blaze;
+//   S4 a Shard Volley with no land of its own: the k-th Volley needs k lands among board + kept hand
+//      lands ("One land per volley is okay", USER -- the per-Volley land quota is DROPPED);
+//   S5 burn beyond lethal, worst first;
+//   S6 a 2nd Light Up the Stage (or every copy below 2 lands across board + hand);
+//   S7 spare creatures past the quota of 2 counting the board, a not-needed Eidolon FIRST;
+//   S8 anything this policy does not recognise (empty on this list; a screening arm's new card);
+//   then the KEEP LADDER read backwards, then the kept creatures. Goblin Guide / Monastery
+//   Swiftspear are required pieces and stay protected, so wherever this order names them the
+//   shared builder moves them to its last-resort tier -- "-> protected" at the end of the USER's
+//   SHED list.
+//
+// BURN ORDER, best kept first: Lightning Bolt > Skullcrack > Searing Blaze (a creature to hit and a
+// land in hand: 3) > Searing Blood that kills > Shard Volley ("below all of the other bolt-like
+// cards, but still solid", USER) > Searing Blaze with no land (1 dmg). CREATURE ORDER: Goblin Guide
+// > Monastery Swiftspear > Eidolon, quota 2 counting the board. LIGHT UP THE STAGE: 1, only with
+// >= 2 lands across board + hand.
+//
+// EIDOLON (USER): "I would keep 1 if we don't have enough creatures and it is relatively early."
+// "Early" = turn 3 or earlier (USER). Eidolon is a mulligan.required_piece in burn.profile.json
+// (scope All = every copy protected), and required_pieces also force-mulligans a hand holding none,
+// so the profile is NOT edited: CleanupDiscardProtectionWaived below waives Eidolon's DISCARD
+// protection unless that keep condition holds. A needed Eidolon therefore stays protected (it sits
+// with Goblin Guide / Swiftspear at the very end), every other Eidolon is ranked by this order.
+//
+// Agent readings (surfaced in the doc's implementation notes):
+//   * "Quota short" = board creatures + the hand's Goblin Guides / Swiftspears (they fill the
+//     quota of 2 before Eidolon, per the creature order) < 2. Staged cards are not counted.
+//   * The waiver reads "the only Eidolon in hand" literally; with two copies in hand both are
+//     unprotected, the 2nd sheds in S1, and the first -- when needed -- is placed last, which is
+//     exactly where the protection puts it once the 2nd is gone.
+//   * Lethal = the opponent's life minus our creatures' next-turn swing (printed power + counters;
+//     until-end-of-turn pumps excluded), walking the kept burn best-first (the proposal's REACH
+//     quota). Searing Blood with a creature it cannot kill delivers no face damage and ranks below
+//     the 1-damage Blaze.
+//   * The +1 land for Blaze counts only a LIVE Blaze (an opponent creature on the board): a dead one
+//     is shed in S2, ahead of the lands, so it is no longer held when S3 is decided. Likewise
+//     "a land in hand" for Blaze's 3 damage and the Volley land count read the KEPT hand lands.
+//   * The keep ladder interleaves the kept cards as the proposal's section 5 did (clock slots
+//     dropped: every kept creature is protected): land, land, burn, land, Light Up the Stage, burn,
+//     burn, land (the Blaze +1), then the remaining burn.
+// Classification is by PARAMS (on_cast_trigger_damage = the self-taxing body, sacrifice_land,
+// landfall_damage, death_trigger_damage, targeting, stages_cards); hand cards resolve through the
+// card definition. Not prefix-stable (shedding a card can move the Blaze land, the Volley land count
+// or the lethal walk), so the bucket arm declares CleanupDiscardShedStable() false and a multi-card
+// cleanup is re-ranked per shed -- exactly what the executor's per-card cleanup does.
+static bool BurnBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_BURN_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::BURN_BUCKET_DISCARD, on);
+}
+
+// Eidolon of the Great Revel, by param: a creature that taxes every cheap spell cast.
+static bool BurnIsSelfTaxingCreature(const CardDefinition* d)
+{ return d != nullptr && d->card.IsCreature() && d->params.on_cast_trigger_damage > 0; }
+
+// The USER's single-Eidolon keep condition: no Eidolon on our battlefield, an Eidolon in hand, it is
+// early (turn 3 or earlier) and the creature quota (2, counting the board, filled Goblin Guide >
+// Swiftspear > Eidolon) is still short. `only_copy` adds "it is the only Eidolon in hand" (the
+// waiver's literal reading); the shed order asks without it, because there the 2nd copy is S1.
+static bool BurnSingleEidolonNeeded(const GameState& s, bool only_copy)
+{
+    constexpr int kCreatureQuota = 2;
+    if (s.turn_number > 3) { return false; }
+    const int me = s.active_player_index;
+    int board_creatures = 0;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me || !perm.card.IsCreature()) { continue; }
+        if (BurnIsSelfTaxingCreature(CardDatabase::Instance().LookupCached(perm.card))) { return false; }
+        ++board_creatures;
+    }
+    int eidolons = 0, others = 0;
+    for (const Card& c : s.players[me].hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        if (BurnIsSelfTaxingCreature(d)) { ++eidolons; } else { ++others; }
+    }
+    if (eidolons == 0 || (only_copy && eidolons > 1)) { return false; }
+    return board_creatures + others < kCreatureQuota;
+}
+
+bool BurnProvider::CleanupDiscardProtectionWaived(const GameState& s, const Card& c) const
+{
+    if (!BurnBucketDiscardEnabled()) { return false; }
+    // Goblin Guide / Monastery Swiftspear stay protected (USER); only the self-taxing body is waived.
+    if (!BurnIsSelfTaxingCreature(CardDatabase::Instance().LookupCached(c))) { return false; }
+    return !BurnSingleEidolonNeeded(s, /*only_copy=*/true);
+}
+
+bool BurnProvider::CleanupDiscardShedStable() const { return !BurnBucketDiscardEnabled(); }
+
+std::vector<int> BurnProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!BurnBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto at = [](std::vector<int>& v, int k) -> int& { return v[static_cast<std::size_t>(k)]; };
+
+    // ---- board census (net of board) --------------------------------------------------------------
+    int board_lands = 0, board_creatures = 0, board_power = 0;
+    bool board_eidolon = false;
+    std::vector<int> opp_creatures;   // battlefield indices
+    for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+    {
+        const Permanent& perm = s.battlefield[static_cast<std::size_t>(bi)];
+        if (perm.controller_index != me)
+        {
+            if (perm.card.IsCreature()) { opp_creatures.push_back(bi); }
+            continue;
+        }
+        if (perm.card.IsLand()) { ++board_lands; }
+        if (perm.card.IsCreature())
+        {
+            ++board_creatures;
+            // Next turn's swing: until-end-of-turn pumps (prowess) are gone by then.
+            board_power += std::max(0, perm.EffectivePower() - perm.temp_power_bonus);
+            if (BurnIsSelfTaxingCreature(def_of(perm.card))) { board_eidolon = true; }
+        }
+    }
+    const bool opp_creature = !opp_creatures.empty();
+
+    // ---- partition the hand (precedence LAND > CREATURE > BURN > DIG > unrecognised) -------------
+    std::vector<int> lands, creatures, live_burn, dead_blaze, dead_other, digs, others;
+    bool live_landfall = false;
+    auto needs_creature = [](const CardParams& p)
+    { return p.targeting == Targeting::Creature || p.targeting == Targeting::Multi; };
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
+        if (d == nullptr) { others.push_back(i); continue; }
+        const CardParams& p = d->params;
+        if (d->card.IsCreature()) { creatures.push_back(i); continue; }
+        if (d->tmpl == CardTemplate::DirectDamage || p.damage > 0 || p.landfall_damage > 0
+            || p.death_trigger_damage > 0)
+        {
+            if (needs_creature(p) && !opp_creature)
+            { (p.landfall_damage > 0 ? dead_blaze : dead_other).push_back(i); continue; }
+            live_burn.push_back(i);
+            if (p.landfall_damage > 0) { live_landfall = true; }
+            continue;
+        }
+        if (p.stages_cards || p.draw > 0) { digs.push_back(i); continue; }
+        others.push_back(i);
+    }
+
+    // ---- MANA: 3 counting the board, +1 while holding a live Searing Blaze --------------------------
+    const int land_quota = 3 + (live_landfall ? 1 : 0);
+    const int land_need  = std::max(0, land_quota - board_lands);
+    const int kept_lands_n = std::min(static_cast<int>(lands.size()), land_need);
+    const int total_lands  = board_lands + kept_lands_n;
+
+    // ---- REACH: the USER's burn order, then Volley lands, then lethal ------------------------------
+    auto blood_kills = [&](const CardParams& p)
+    {
+        for (int bi : opp_creatures)
+        { if (s.battlefield[static_cast<std::size_t>(bi)].EffectiveToughness() <= p.damage) { return true; } }
+        return false;
+    };
+    std::vector<int> b_rank(static_cast<std::size_t>(n), 9), b_face(static_cast<std::size_t>(n), 0);
+    for (int i : live_burn)
+    {
+        const CardParams& p = def_of(ap.hand[static_cast<std::size_t>(i)])->params;
+        int r = 0, f = p.damage;
+        if (p.sacrifice_land)                 { r = 3; }
+        else if (p.landfall_damage > 0)       { if (kept_lands_n > 0) { r = 1; f = p.landfall_damage; } else { r = 4; } }
+        else if (p.death_trigger_damage > 0)  { if (blood_kills(p)) { r = 2; f = p.death_trigger_damage; } else { r = 5; f = 0; } }
+        else if (needs_creature(p))           { r = 2; if (p.targeting != Targeting::Multi) { f = 0; } }
+        at(b_rank, i) = r; at(b_face, i) = f;
+    }
+    std::stable_sort(live_burn.begin(), live_burn.end(), [&](int a, int b)
+    {
+        if (at(b_rank, a) != at(b_rank, b)) { return at(b_rank, a) < at(b_rank, b); }
+        if (at(b_face, a) != at(b_face, b)) { return at(b_face, a) > at(b_face, b); }
+        const int ma = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)]);
+        const int mb = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+        if (ma != mb) { return ma < mb; }
+        return a < b;
+    });
+    std::vector<int> volley_no_land, burn_kept, burn_beyond;
+    {
+        int volleys = 0, acc = 0;
+        const int need = std::max(0, s.Opponent().life - board_power);
+        for (int i : live_burn)
+        {
+            if (def_of(ap.hand[static_cast<std::size_t>(i)])->params.sacrifice_land)
+            {
+                if (volleys + 1 > total_lands) { volley_no_land.push_back(i); continue; }
+                ++volleys;
+            }
+            if (acc >= need) { burn_beyond.push_back(i); continue; }
+            burn_kept.push_back(i);
+            acc += at(b_face, i);
+        }
+    }
+
+    // ---- DIG: one Light Up the Stage, only with >= 2 lands across board + hand --------------------
+    const int dig_keep = (board_lands + static_cast<int>(lands.size()) >= 2) ? 1 : 0;
+
+    // ---- CLOCK: Goblin Guide > Swiftspear > Eidolon, quota 2 counting the board -------------------
+    std::stable_sort(creatures.begin(), creatures.end(), [&](int a, int b)
+    {
+        const CardDefinition* da = def_of(ap.hand[static_cast<std::size_t>(a)]);
+        const CardDefinition* db = def_of(ap.hand[static_cast<std::size_t>(b)]);
+        const bool ta = BurnIsSelfTaxingCreature(da), tb = BurnIsSelfTaxingCreature(db);
+        if (ta != tb) { return !ta; }                                   // the self-taxing body last
+        const bool ha = da->card.HasKeyword(Keyword::Haste), hb = db->card.HasKeyword(Keyword::Haste);
+        if (ha != hb) { return ha; }
+        const int pa = da->card.m_power.value_or(0), pb = db->card.m_power.value_or(0);
+        if (pa != pb) { return pa > pb; }
+        return a < b;
+    });
+    const bool eidolon_needed = BurnSingleEidolonNeeded(s, /*only_copy=*/false);
+    std::vector<int> eidolon_dupes, eidolon_spare, creature_spare, creature_kept;
+    {
+        int slots = std::max(0, 2 - board_creatures);
+        bool first_eidolon = true;
+        for (int i : creatures)
+        {
+            if (BurnIsSelfTaxingCreature(def_of(ap.hand[static_cast<std::size_t>(i)])))
+            {
+                if (board_eidolon || !first_eidolon) { eidolon_dupes.push_back(i); continue; }
+                first_eidolon = false;
+                if (eidolon_needed && slots > 0) { creature_kept.push_back(i); --slots; }
+                else                             { eidolon_spare.push_back(i); }
+                continue;
+            }
+            if (slots > 0) { creature_kept.push_back(i); --slots; }
+            else           { creature_spare.push_back(i); }
+        }
+    }
+
+    // ---- the keep ladder (the kept non-creature cards, best first) --------------------------------
+    std::vector<int> ladder;
+    ladder.reserve(static_cast<std::size_t>(n));
+    {
+        std::size_t li = 0, bi = 0, di = 0;
+        const std::size_t ln = static_cast<std::size_t>(kept_lands_n), dn = std::min<std::size_t>(digs.size(), static_cast<std::size_t>(dig_keep));
+        auto take = [&](char slot)
+        {
+            if (slot == 'L' && li < ln)               { ladder.push_back(lands[li++]); }
+            else if (slot == 'R' && bi < burn_kept.size()) { ladder.push_back(burn_kept[bi++]); }
+            else if (slot == 'D' && di < dn)          { ladder.push_back(digs[di++]); }
+        };
+        for (char slot : { 'L', 'L', 'R', 'L', 'D', 'R', 'R', 'L' }) { take(slot); }
+        while (bi < burn_kept.size()) { take('R'); }
+        while (li < ln)               { take('L'); }
+        while (di < dn)               { take('D'); }
+    }
+
+    // ---- emit the shed order ----------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    for (int i : eidolon_dupes) { shed.push_back(i); }                                       // S1
+    for (int i : dead_blaze)    { shed.push_back(i); }                                       // S2
+    for (int i : dead_other)    { shed.push_back(i); }
+    for (std::size_t k = lands.size(); k-- > static_cast<std::size_t>(kept_lands_n);) { shed.push_back(lands[k]); }  // S3
+    for (int i : volley_no_land) { shed.push_back(i); }                                      // S4
+    for (std::size_t k = burn_beyond.size(); k-- > 0;) { shed.push_back(burn_beyond[k]); }   // S5
+    for (std::size_t k = digs.size(); k-- > static_cast<std::size_t>(dig_keep);) { shed.push_back(digs[k]); }       // S6
+    for (int i : eidolon_spare) { shed.push_back(i); }                                       // S7
+    for (std::size_t k = creature_spare.size(); k-- > 0;) { shed.push_back(creature_spare[k]); }
+    for (int i : others)        { shed.push_back(i); }                                       // S8
+    for (std::size_t k = ladder.size(); k-- > 0;) { shed.push_back(ladder[k]); }             // keep tail
+    for (std::size_t k = creature_kept.size(); k-- > 0;) { shed.push_back(creature_kept[k]); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 std::string GoblinsProvider::ForcedEarlyLandName(const GameState& s, int controller) const
 {
     // How many opening turns to force (MTG_FORCED_EARLY_LAND_TURNS, default 1).
