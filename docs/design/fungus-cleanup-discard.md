@@ -115,3 +115,40 @@ Doubling Season / Beastmaster), then surplus THREATS beyond the core.
 
 Adopt via the heuristic-optimization route (train seeds, then held-out), behind a `heurarm` slot,
 like every other Fungus lever -- though see the frequency in section 4 before spending a sweep on it.
+
+## 6. Settled gaps (2026-10-09)
+
+The section-5 buckets were documented 2026-09-24 but never implemented (no Fungus discard code
+existed; the generic max-MV ranking still ran). On 2026-10-09 the USER filled the remaining gap --
+which bucket gives way when every bucket is within target and the hand is still over seven:
+
+### Fungus: ALREADY USER-RULED 2026-09-24 -- docs/design/fungus-cleanup-discard.md §5 (on main)
+Card data verified (mono-G Thallids / Saprolings; 19 Forest + 3 Simic Growth Chamber; required_pieces
+empty). Real play: 1 cleanup shed in 400 games (it shed Doubling Season). The ruling: MANA to 5 total
+counting the board (<= 3 lands, <= 1 accelerator, the 5 includes the accelerator); ENABLERS Doubling
+Season 1 + Beastmaster Ascension 1 at most; THREATS a mix with a protected core of one Sporecrown, one
+Mycoloth, one Sporesower and one 1-drop (Utopia Mycon preferred); shed surplus mana -> surplus enablers
+-> threats beyond the core. GAPS asked 2026-10-09: the order among protected cards (needed for a total
+order: 3 mana + 2 enablers + 4 core = 9 > 7) and the order of threats beyond the core.
+Agent draft (SUPERSEDED where the SETTLED gaps below differ): KEEP land -> Utopia Mycon (else a 1-drop) -> land -> Sporecrown -> land -> Sporesower ->
+Doubling Season -> Mycoloth -> Beastmaster -> accelerator (within the 5) -> other threats (variety
+first; then 2nd Sporecrown > Tukatongue = Thallid > Psychotrope > Shell-Dweller > Essence Warden --
+Warden is not a Fungus and its lifegain is inert in a goldfish). Dead Simic Growth Chamber (no other
+land to return) shed first (the Karoo rule).
+
+
+### Fungus answer to the USER's "Do we not have a proper bucketing approach going on here?":
+the 09-24 buckets were DOCUMENTED but NEVER IMPLEMENTED (no Fungus discard code; generic max-MV still
+runs). The buckets stand as ruled; the gap is only which bucket gives way when all are within target
+and the hand is still over 7 (re-asked in bucket terms).
+USER 2026-10-09: "I would keep things that combo with doubling season (like Mycoloth, Saproling Burst)
+along with the season itself unless they are uncastable for the foreseeable future."
+#### Fungus gaps: SETTLED (USER, 2026-10-09) -- append as §6 of fungus-cleanup-discard.md
+- DOUBLING SEASON + its combo partners (param-keyed: Mycoloth's devour / per-counter upkeep tokens;
+  Saproling Burst's fade-counter tokens -- Burst is in decks/Fungus/candidate-b-2026-09, not the
+  shipped 60) are kept TOGETHER, above Beastmaster and the rest of the core, unless uncastable for the
+  foreseeable future (agent reading: 5 mana not reachable within 2 turns counting lands in play + kept
+  land drops + the accelerator -- surfaced).
+- Then (agent default, surfaced): Beastmaster gives way first, then the remaining core creatures
+  (Sporesower, Sporecrown, the 1-drop), mana within the 5 kept longest. Creatures beyond the core: one
+  of each name first, Essence Warden last. Dead Simic Growth Chamber shed first.
