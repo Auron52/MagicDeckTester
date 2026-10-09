@@ -419,6 +419,19 @@ public:
     virtual const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const
     { return nullptr; }
 
+    // CleanupDiscardProtectionWaived -- a required piece whose DISCARD protection the provider takes
+    // over: true makes CleanupDiscardProtected treat this hand card as unprotected, so the provider's
+    // own shed order decides when it goes. required_pieces is shared with the MULLIGAN (a hand holding
+    // none of them is force-mulliganed, KeepModel ApplyKeepConstraints), so removing a piece from the
+    // profile to unprotect its discard would also change which hands are kept; this waives the discard
+    // half only. USER 2026-10-09 discard designs (docs/design/<deck>-discard-policy-proposal.md):
+    // burn -- "Duplicates [of Eidolon] should definitely be unprotected. Similarly late game Eidolons
+    // could also be removed."; Fluctuator -- exactly one of {Fluctuator, Enlightened Tutor} protected,
+    // none once a Fluctuator is in play; Dragonstorm -- "We only must keep one or the other,
+    // prioritizing dragonstorm". Consumed by CleanupDiscardProtected, so it covers every forced-discard
+    // caller of the protection, not just cleanup. Default false = byte-identical.
+    virtual bool CleanupDiscardProtectionWaived(const GameState&, const Card&) const { return false; }
+
     // CleanupDiscardCandidates -- cleanup discard (hand over its size limit): WHICH card to shed,
     // as hand indices in PREFERENCE order. This is the whole rule, provider-owned: the engine keeps
     // only the mechanism (move the chosen card to the graveyard).

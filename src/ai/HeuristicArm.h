@@ -347,6 +347,23 @@ enum Slot : int
     RESTRICTED_MANA_RANK,     // MTG_RESTRICTED_MANA_RANK   a colored_creature_only source whose restricted colours this deck's creature spells can use number at most ONE (DeckTraits: GameState::deck_creature_pip_colors) ranks as a {C} source plus one creature-only colour, below the mono tier (ManaSourceRankBase), instead of a rainbow held last of the lands; its rebuy activation's {T} source is held through the plan's casts and its own {2}. Dragons s7007 gi959 (Haven of the Spirit Dragon). DEFAULT ON; =0 restores the historical ladder
     PD_CAST_ORDER,            // MTG_PD_CAST_ORDER          Prevent Damage: the USER's cast order (2026-10-09) -- Tamanoa + Green Sun's Zenith 10, the other creatures 12, Rhox / Bilbo 13, Spellshock 15, other noncreatures 20, Rolling Earthquake 25, Pyrohemia 26. Default ON; =0 -> generic
     PD_DISCARD_USER,          // MTG_PD_DISCARD_USER        Prevent Damage: the USER's discard ladder (2026-10-09) -- lands to 4 (1 Ancient Tomb + 3 coloured, painful first) > 2 GAIN (Tamanoa, Tamanoa, Rhox) > 1 DRAIN > 1 damage spell (Earthquake first) > extra lands > a 2nd drain; tutors back up missing pieces (Zenith GAIN, Wish DRAIN, Beseech anywhere). Default ON; =0 -> the 09-28 ladder
+    ANGELS_BUCKET_DISCARD,    // MTG_ANGELS_BUCKET_DISCARD    Angels: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    AURA_BUCKET_DISCARD,      // MTG_AURA_BUCKET_DISCARD      Auras: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    BREACH_BUCKET_DISCARD,    // MTG_BREACH_BUCKET_DISCARD    BreachingDragonstorm: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    BURN_BUCKET_DISCARD,      // MTG_BURN_BUCKET_DISCARD      burn: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    CG_BUCKET_DISCARD,        // MTG_CG_BUCKET_DISCARD        Creature Giving: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    CRITTER_BUCKET_DISCARD,   // MTG_CRITTER_BUCKET_DISCARD   CritterLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    DRAGONSTORM_BUCKET_DISCARD, // MTG_DRAGONSTORM_BUCKET_DISCARD Dragonstorm: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    EDF_BUCKET_DISCARD,       // MTG_EDF_BUCKET_DISCARD       EldraziDisplacerFlicker: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    FLUCT_BUCKET_DISCARD,     // MTG_FLUCT_BUCKET_DISCARD     Fluctuator: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    GIANTS_BUCKET_DISCARD,    // MTG_GIANTS_BUCKET_DISCARD    Giants: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    GOBLIN_BUCKET_DISCARD,    // MTG_GOBLIN_BUCKET_DISCARD    Goblins: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    KNIGHTS_BUCKET_DISCARD,   // MTG_KNIGHTS_BUCKET_DISCARD   Knights: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    POD_BUCKET_DISCARD,       // MTG_POD_BUCKET_DISCARD       Melira Pod: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    SLIVERS_BUCKET_DISCARD,   // MTG_SLIVERS_BUCKET_DISCARD   slivers_vial (VialProvider): the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    FUNGUS_BUCKET_DISCARD,    // MTG_FUNGUS_BUCKET_DISCARD    Fungus: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    WK_BUCKET_DISCARD,        // MTG_WK_BUCKET_DISCARD        WhiteKnights (its extras over the Knights rule): the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    SELESNYA_BUCKET_DISCARD,  // MTG_SELESNYA_BUCKET_DISCARD  SelesnyaLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     COUNT
 };
 
@@ -655,6 +672,23 @@ inline const char* Name(int slot)
         "MTG_RESTRICTED_MANA_RANK",
         "MTG_PD_CAST_ORDER",
         "MTG_PD_DISCARD_USER",
+        "MTG_ANGELS_BUCKET_DISCARD",
+        "MTG_AURA_BUCKET_DISCARD",
+        "MTG_BREACH_BUCKET_DISCARD",
+        "MTG_BURN_BUCKET_DISCARD",
+        "MTG_CG_BUCKET_DISCARD",
+        "MTG_CRITTER_BUCKET_DISCARD",
+        "MTG_DRAGONSTORM_BUCKET_DISCARD",
+        "MTG_EDF_BUCKET_DISCARD",
+        "MTG_FLUCT_BUCKET_DISCARD",
+        "MTG_GIANTS_BUCKET_DISCARD",
+        "MTG_GOBLIN_BUCKET_DISCARD",
+        "MTG_KNIGHTS_BUCKET_DISCARD",
+        "MTG_POD_BUCKET_DISCARD",
+        "MTG_SLIVERS_BUCKET_DISCARD",
+        "MTG_FUNGUS_BUCKET_DISCARD",
+        "MTG_WK_BUCKET_DISCARD",
+        "MTG_SELESNYA_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
