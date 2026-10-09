@@ -797,9 +797,28 @@ regression_tiers / suite FAIL (expected, not added); card_costs / clause_ledger 
   (`MTG_PD_PAIN_PAY=0` hatch). Next: perf (the 5j gate), §5i discard buckets, suite rows + GT.
 
 ## Claude-play sweep
-- commit: `ef26b03b`
-- seeds: 31001 games: 16
-- flags: 0 unresolved
+- commit: `b5a594e0`
+- seeds: 61001..61016 games: 16
+- flags: 2 unresolved
+
+**Re-sweep on HEAD `b5a594e0` (2026-10-08, 16 Opus players, one SEED each, `--reveal 6`, benchmark =
+the shipped d5/b20).** Results and replay helpers: `logs/pd_opt/sweep/` (gitignored). 11 games tie
+the AI, 2 beat it, 0 lose to it; every player predicted every life total from cards.json and matched
+the engine except where flagged.
+
+| seed | AI | Claude | flags -> resolution |
+|---|---|---|---|
+| 61001 | 5 | 5 | **CONFIRMED** the pain-aware payer's rest-of-line check (`line_ok`) let an any-colour land cover every colour, so an X-spell-first payment stranded Tamanoa -> **fixed** `MTG_PD_LINE_OK_EXACT` (two more defects in the same check: phantom mana from non-mana permanents, and re-demanding already-paid casts) |
+| 61002, 61007, 61011, 61012, 61016 | 5 | 5 | none (61011: a pre-Vito painful payment, see 61013) |
+| 61003 | 6 | **5** | **search could not EXPRESS "cast Pyrohemia, then ping it in the same main"** (no site-9 variant: `CardHasPostEntryActivation` lacked `ping_all_cost`; not recovered at d8 b0) -> **fixed** `MTG_POST_ENTRY_PING_ALL` |
+| 61004, 61009 | 7 | 7 | none |
+| 61005 | 6 | 6 | **CONFIRMED** whole-turn batch prepay pays a multi-cast plan before its first cast resolves -> lost Tamanoa gains / drains (**UNRESOLVED**, fix in progress); **CONFIRMED** the apply path shuffled Green Sun's Zenith back as its template (`m_number 0`) -> the lookahead's library order differed from the game's -> **fixed** `MTG_GSZ_SHUFFLE_COPY_ID` (also the root cause of s108346 gi345, below) |
+| 61006, 61008, 61010, 61015 | 6 | 6 | none (61008: a pre-Vito painful payment, see 61013) |
+| 61013 | 6 | **5** | the batch-prepay defect again (same UNRESOLVED item); UNCERTAIN: `MTG_PD_PAIN_DEFER` did not hold City of Brass for a lone Vito/Dina (**UNRESOLVED**, under investigation with the batch-prepay fix); the T5 line needs Living Wish -> **Brushland**, which `MTG_PD_WISH_TRIM`'s "always Battlefield Forge" rule prunes -> a counterexample to the USER's doctrine (surfaced, not changed) |
+| 61014 | 6 | **5** | none: the search's T1 land choice at b20; it finds T5 at b100 (budget, not inexpressible) |
+
+### First sweep (`ef26b03b`, 2026-09-27)
+- commit: `ef26b03b` · seeds: 31001 games: 16 · flags: 0 unresolved (after the fixes below)
 
 16 Opus players (claude-play, `--reveal 6`), one per game index 0..15 of base seed 31001, run on
 `ef26b03b` (m2 OFF). Results: `logs/prevent_damage/sweep/results.jsonl` (gitignored; gi0 has no result
@@ -1897,3 +1916,66 @@ seeds 930000.., 20 single-threaded processes; 8,243 decisions, 32.6M units):
 **Next (pipeline order):** claude-play re-sweep on HEAD (the recorded one predates every sweep fix and
 §5i) -> value leaf -> keep table. The Beseech axis is the remaining width lever; a doctrine is the
 USER's (see "Search width: the Beseech axis" below once measured).
+
+## Search width: the Beseech axis -- `MTG_PD_BESEECH_USEFUL` DRAFT (2026-10-08), default OFF, USER doctrine
+
+Beseech the Queen reaches every distinct library name with MV <= lands (~19), each a searched variant,
+times the twobrid payment variants, at every ply: ~44% of all scored candidates. The draft applies the
+Wish doctrine's SHAPE to it, by params (`PreventDamageProvider::TutorCandidates`): KEEP the engine
+creatures (gain / drain / amp), the damage sources (Manabarbs, Spellshock, Rolling Earthquake,
+Pyrohemia), the creature tutors (Living Wish, Green Sun's Zenith), the Ancient Tomb-shaped land, the
+FUEL land (most self-damage per tap, untapped: Tarnished Citadel) and -- while a colour or next turn's
+land drop is short -- ONE TEMPO land (most missing colours fixed, then most colours, untapped, least
+pain). DROP another Beseech, a Vito / Dina already held, and the other lands. Human play keeps every
+name. A MEASUREMENT lever until the USER rules on the doctrine.
+
+| round (seeds; play settings + a d3 cell; one pooled batch each, both arms a heurarm slot) | paired games | delta (turns/game) | better / worse | units | CPU |
+|---|---|---|---|---|---|
+| 1, first cut (98001/99001 x300, 2HG 100001 x150, d3 101001 x200) | 950 | -0.0137 +/- 0.0048 | 17 / 4 | 0.79x | 0.74x |
+| 2, first cut (103001/104001 x400, 2HG 105001 x200, d3 106001 x300) | 1,300 | -0.0092 +/- 0.0039 | 19 / 7 | 0.78x | 0.79x |
+| 3, **land roles fixed** (107001/108001/109001 x400, 2HG 110001 x200, d3 111001 x300) | 1,700 | -0.0018 +/- 0.0035 | 11 / 6 | 0.82x | (box overloaded) |
+
+- **Recovery (USER two-stage check) of every slower game.** Round 1: 4/4 (two at stage 1; gi235 at d8 b0;
+  gi198's T5 is reproduced by neither arm at b200 / b1000 / d8 b0). Round 2: 5/7 recover; **two did not
+  -- s104219 gi218 and s104261 gi260 -- and were REAL counterexamples to the first cut's land rule**: the
+  exhaustive base Beseeched Reflecting Pool (the next land drop; the one-fixer slot had fallen to library
+  order) and Tarnished Citadel (as FUEL: 3 self-damage per coloured tap = 3 Vito drain under Tamanoa).
+  Root-caused and the ranking fixed (fuel + tempo roles; USER rule "counterexample -> fix the ranking");
+  both then win T5 at d8 b0. Round 3: 5/6 recover (gi160 / gi350 / gi93 stage 1, gi226 / gi66 stage 2);
+  s108346 gi345 (T5 -> unwon) is NOT the lever: the BASE also never wins at b100 / b1000 / d6 / d8 -- the
+  Zenith lockstep defect below, fixed.
+- OFF path: PD's three smoke rows reproduce the committed GT digests exactly in every round.
+- **USER DECISION (surfaced; default taken = OFF):** adopt the Beseech doctrine (as drafted, or amended)?
+  Recommendation: adopt -- quality-neutral at ~0.8x units, every slower game recovers; the freed budget
+  goes to depth.
+
+## Engine fixes from the 2026-10-08 sweep (integration branch; all default ON, PD-only reach)
+
+| flag | defect | fix | reach |
+|---|---|---|---|
+| `MTG_GSZ_SHUFFLE_COPY_ID` | apply path shuffled Green Sun's Zenith back as the definition's template (`m_number 0`); `Library::ShuffleByKey` ranks by `m_number`, so the lookahead's library differed from the game's after every Zenith. s108346 gi345: the search "drew" a T3 Zenith the game never dealt, committed a phantom T5 line and LOST at every budget above b20 | the cast copy (its `m_number`) goes in; recording stamp `gsz_copy_id`, `--legacy-gsz-shuffle` replays older references | only Green Sun's Zenith carries the param |
+| `MTG_POST_ENTRY_PING_ALL` | site 9's fan-out predicate `CardHasPostEntryActivation` lacked `ping_all_cost`, so "cast Pyrohemia, then ping" was inexpressible at any depth (s61003) | one clause | only Pyrohemia carries the param |
+| `MTG_PD_LINE_OK_EXACT` | the pain-aware payer's rest-of-line check: any-colour land counted toward every colour; untapped non-mana permanents counted as 1 mana; re-demanded already-paid casts (s61001) | colour-exact assignment (`ColorFeasibility::PayablePips`) over the line's true unpaid remainder | armed (damage-event) decks only = PD |
+
+Isolated GSZ A/B (s112001/113001 x500, 2HG 114001 x200, d3 115001 x400): -0.0050 +/- 0.0025, 10 / 3,
+units 1.00x; the 3 slower games recover (two at stage 1; gi4's base T5 is reproduced by neither arm at
+d8 b0).
+
+**Multi-arm A/B of the stack** (one pooled batch, every arm a full heurarm flag set, `base` = the
+committed tree with every new lever OFF; held-out s116001/s117001 x400 d5 b20, 2HG s118001 x200, d3 b10
+s119001 x300 = 1,300 paired games per arm; scratch `logs/pd_opt/multi1/`):
+
+| arm | delta vs base (turns/game) | better / worse | units |
+|---|---|---|---|
+| GSZ copy id | -0.0077 +/- 0.0029 (p 0.012) | 10 / 1 | 1.00x |
+| Pyrohemia ping | -0.0008 +/- 0.0008 | 1 / 0 | 1.00x |
+| line_ok exact | 0.0000 (no game moved) | 0 / 0 | 1.00x |
+| **all three (the new defaults)** | **-0.0085 +/- 0.0030 (p 0.006)** | 11 / 1 | 1.00x |
+| all three + Beseech draft | **-0.0162 +/- 0.0041 (p < 0.001)** | 23 / 3 | **0.80x** |
+
+Every slower game recovers under the USER two-stage check: s118001 gi79 (both arms) and s116001 gi112
+at stage 1, s116001 gi152 at stage 2 (d8 b0 = 5).
+
+Deferred (own doc): `docs/design/committed-line-replay-lockstep.md` -- a committed full-depth line is
+replayed without checking the real hand still matches (the gi345 amplifier), and the same template-copy
+pattern still feeds exile / graveyard on the apply path.
