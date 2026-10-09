@@ -1,0 +1,20 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Prodigious Growth",
+    "Mythic Proportions"
+   ],
+   "why": "USER RULING 2026-10-09: 'I think Prodigious growth and Mythic Proportions could be merged.' Both are the deck's big green trample Auras (Prodigious Growth +7/+7, Mythic Proportions +8/+8); the keep decision treats them as the same card."
+  }
+ ],
+ "keep_apart": [
+  {
+   "cards": [
+    "Birds of Paradise",
+    "Avacyn's Pilgrim"
+   ],
+   "why": "USER RULING 2026-10-09: 'I wouldn't merge birds and avacyn's as much as it is tempting to do so. Missing blue is a real problem for this deck.' Birds makes any colour (blue included); Pilgrim makes only white."
+  }
+ ]
+}
