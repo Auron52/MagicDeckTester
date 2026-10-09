@@ -2050,11 +2050,11 @@ s162001 x300, d3 b10 s163001 x400, d0 s164001 x3000, vs UNPRUNED; `logs/pd_opt/m
 
 | arm | searched turns vs unpruned (1,900) | all 4,900 | units | slower | recovered (st.1 + st.2) | NOT recovered |
 |---|---|---|---|---|---|---|
-| the USER's rule (shipped) | **+46 (+0.024 / game; d5 p 0.003 / 0.019)** | -0.0104 | 0.59x | 89 | 16 + 8 | 64-65 |
-| + FIN_ALWAYS | -3 (-0.002) | -0.0200 | 0.64x | 40 | 19 + 2 | 18-19 |
-| + FIN_ALWAYS + TOMB | -9 (-0.005) | -0.0212 | 0.65x | 33 | 19 + 2 | 11-12 |
+| the USER's rule (shipped) | **+46 (+0.024 / game; d5 p 0.003 / 0.019)** | -0.0104 | 0.59x | 89 | 16 + 8 | 65 |
+| + FIN_ALWAYS | -3 (-0.002) | -0.0200 | 0.64x | 40 | 19 + 2 | 19 |
+| + FIN_ALWAYS + TOMB | -9 (-0.005) | -0.0212 | 0.65x | 33 | 19 + 2 | 12 |
 
-(one T7 game, s160001 gi406, was still searching at d8 b0 for all three arms when this was written.)
+(s160001 gi406, a T7 base win, reaches only T8 at d8 b0 in all three arms -- the same game, digest-identical.)
 FIN_ALWAYS vs the shipped rule: -0.0096 +/- 0.0020 overall, every searched cell better (d3 p 0.008,
 d5 p < 0.001). TOMB on top: -0.0012 +/- 0.0008 (10 / 4) and a third fewer unrecovered games.
 
@@ -2069,7 +2069,7 @@ searched play at ~0.65x units.
    +0.014 t/game slower than unpruned in searched games (pooled, 5,700) and most of its slower games do
    not recover. Recommended amendment: **`MTG_PD_BESEECH_FIN_ALWAYS` + `MTG_PD_BESEECH_TOMB`** --
    "engine creatures, the damage sources and Ancient Tomb; skip duplicates": searched -0.005 vs
-   unpruned at 0.65x units, 11-12 unrecovered of 33 (the shipped rule: 64-65 of 89). FIN_ALWAYS alone:
+   unpruned at 0.65x units, 12 unrecovered of 33 (the shipped rule: 65 of 89). FIN_ALWAYS alone:
    pooled -0.005 vs unpruned at 0.64x. Narrowest: `MTG_PD_BESEECH_FINISHER` (neutral at 0.59x). None of
    them clears the recovery bar outright (the rest are Green Sun's Zenith and land fetches).
    [shipped rule unchanged; amendments OFF]
