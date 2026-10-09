@@ -206,12 +206,14 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 // Colours first. Board Forest, Temple Garden, Stomping Ground, Overgrown Tomb (W1 B1 R1 G4); 5 - 4 =
 // ONE source owed. The hand's spells need U2 (Phantasm); Breeding Pool (tier 3) makes U, the fetch
 // (tier 2: W/B/R/G) does not -> Breeding Pool 1 is kept and the better-tier Heath 0 is the surplus.
-// Ladder L1, Suture 3, Defense 4, Crop Rotation 7, Phantasm 2 (U: 1 source, deficit 1 -> near).
-// Shed Warden 6, Heath 0, War-Riders 5, tail 2 7 4 3 1.
+// The 5 sources are met (4 + Breeding Pool) before the land-tutor slot, so Crop Rotation 7 is
+// SURPLUS MANA (review fix 2026-10-09), shed after the surplus Heath. Ladder L1, Suture 3, Defense 4,
+// Phantasm 2 (U: 1 kept source, deficit 1 -> near). Shed Warden 6, Heath 0, Crop Rotation 7,
+// War-Riders 5, tail 2 4 3 1.
 TEST_CASE("CG discard C6: a land covering a missing colour beats a better-tier land")
 {
     const GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
-    CHECK(Cg(s) == std::vector<int>{ 6, 0, 5, 2, 7, 4, 3, 1 });
+    CHECK(Cg(s) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
     CHECK(Gen(s).front() == 4);       // generic sheds Defense of the Heart (MV 4)
     CHECK(DothLast(s).front() == 2);  // the patch moves it back and sheds Phantasm
 }
@@ -252,6 +254,74 @@ TEST_CASE("CG discard C9: Enlightened Tutor fills the engine slot only while it 
     CHECK(Cg(live) == std::vector<int>{ 5, 1, 6, 4, 7, 0, 2, 3 });
     const GameState dead = MakeCg(hand, { kFor, kTG }, {}, LibWithoutDoth());
     CHECK(Cg(dead) == std::vector<int>{ 5, 1, 0, 6, 4, 7, 2, 3 });
+}
+
+// ---- review fixes (2026-10-09) ------------------------------------------------------------------
+// FIX 1 -- COLOURS FIRST BEATS THE COUNT (integrator reading): a land supplying a colour a KEPT spell
+// needs, that no board / already-kept source supplies, is kept past the 5-source quota; the fuel
+// distance counts only kept sources. FIX 2 -- the land tutor is MANA: surplus once 5 sources are met.
+
+// The reviewer's board. Five lands in play (W1 U0 B1 R1 G5), so no hand land is owed. Old code: the
+// hand's only blue source, Breeding Pool 0, was surplus mana and index 0, while Phantasm 1 held the
+// fuel slot as "near" only because the distance counted that surplus Pool. Now: Suture 3 (white on
+// board), Defense 4; the land tutors are surplus mana (FIX 2: 5 sources met), worst first Scrying 7
+// then Crop Rotation 5; fuel Phantasm needs blue, none kept -> it would keep the Pool -> 1 blue
+// source, deficit 1 -> near, takes the slot and keeps Breeding Pool behind it. Shed 7 5, War-Riders 2,
+// Wurm 6, tail 0 1 4 3.
+TEST_CASE("CG discard R1: the reviewer's board -- the only blue source is kept for the kept Phantasm")
+{
+    const GameState s = MakeCg({ kBP, kHP, kWR, kSP, kDotH, kCrop, kWurm, kScry },
+                               { kFor, kTG, kSG, kOT, kTree });
+    const std::vector<int> o = Cg(s);
+    CHECK(o == std::vector<int>{ 7, 5, 2, 6, 0, 1, 4, 3 });
+    CHECK(o.front() != 0);   // old code: Breeding Pool at index 0
+}
+
+// FIX 1 alone (no land tutor in hand). Same board; hand Breeding Pool 0, Phantasm 1, War-Riders 2,
+// Suture 3, Defense 4, Wurm 5, Wurm 6, Suture 7. Ladder Suture 3, Defense 4, Phantasm 1 + its
+// Breeding Pool 0. Shed surplus fuel War-Riders 2, Wurms 5 6, 2nd Suture 7, tail 0 1 4 3.
+// (Old: Breeding Pool 0 first -- 0 2 5 6 7 1 4 3.)
+TEST_CASE("CG discard R2: a colour land for the kept fuel is kept past the quota")
+{
+    const GameState s = MakeCg({ kBP, kHP, kWR, kSP, kDotH, kWurm, kWurm, kSP },
+                               { kFor, kTG, kSG, kOT, kTree });
+    CHECK(Cg(s) == std::vector<int>{ 2, 5, 6, 7, 0, 1, 4, 3 });
+}
+
+// FIX 1 for a non-fuel spell. Five lands in play with NO white (Forest, Stomping Ground, Overgrown
+// Tomb, Breeding Pool, Tree); hand Temple Garden 0, Suture 1, Defense 2, Wurm 3, Wurm 4, Suture 5,
+// Defense 6, War-Riders 7. The kept Suture Priest needs W and nothing kept makes it -> Temple Garden
+// is kept behind it. Ladder Suture 1, Temple Garden 0, Defense 2, War-Riders 7. Shed Wurms 3 4, 2nd
+// Suture 5, extra Defense 6, tail 7 2 0 1. (Old: Temple Garden 0 first -- 0 3 4 5 6 7 2 1.)
+TEST_CASE("CG discard R3: the only white source is kept for the kept Suture Priest")
+{
+    const GameState s = MakeCg({ kTG, kSP, kDotH, kWurm, kWurm, kSP, kDotH, kWR },
+                               { kFor, kSG, kOT, kBP, kTree });
+    CHECK(Cg(s) == std::vector<int>{ 3, 4, 5, 6, 7, 2, 0, 1 });
+}
+
+// FIX 2, the reviewer's board. Five lands + our Suture Priest in play, three opponent creatures
+// (fuel filled). Hand Crop Rotation 0, Wurm 1, Wurm 2, Defense 3, Defense 4, Defense 5, Suture 6,
+// Suture 7. The 5 sources are met -> Crop Rotation is SURPLUS MANA, shed first, ahead of the Wurms,
+// the 2nd Priests and the extra Defenses. Ladder Defense 3. Shed 0, 1 2, 7 6, 5 4, tail 3.
+// (Old: Wurm 1 first and Crop Rotation kept in the ladder -- 1 2 7 6 5 4 0 3.)
+TEST_CASE("CG discard R4: the land tutor is surplus mana once the 5 sources are met")
+{
+    const GameState s = MakeCg({ kCrop, kWurm, kWurm, kDotH, kDotH, kDotH, kSP, kSP },
+                               { kFor, kTG, kSG, kOT, kTree, kSP }, { kOppBody, kOppBody, kOppBody });
+    CHECK(Cg(s) == std::vector<int>{ 0, 1, 2, 7, 6, 5, 4, 3 });
+}
+
+// FIX 2's reading pinned (not a regression: old and new agree): "met" is read at the tutor's place
+// in the ladder. Board Forest + Temple Garden (2 sources); hand Stomping Ground 0, Overgrown Tomb 1,
+// Breeding Pool 2, Crop Rotation 3, Suture 4, Defense 5, Phantasm 6, Wurm 7. Land order (colour
+// first: B, then U) 1 2 0. L1 Overgrown Tomb, Suture, Defense, L2 Breeding Pool -> 4 sources, the
+// tutor slot is still open -> Crop Rotation kept; L3 Stomping Ground -> 5; Phantasm (1 kept blue,
+// near). Shed Wurm 7, tail 6 0 3 2 5 4 1.
+TEST_CASE("CG discard R5: the land tutor is kept while the sources are short at its slot")
+{
+    const GameState s = MakeCg({ kSG, kOT, kBP, kCrop, kSP, kDotH, kHP, kWurm }, { kFor, kTG });
+    CHECK(Cg(s) == std::vector<int>{ 7, 6, 0, 3, 2, 5, 4, 1 });
 }
 
 TEST_CASE("CG discard: =0 is exactly the shipped DotH-last patch; the three arms differ")
