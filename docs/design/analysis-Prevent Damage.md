@@ -799,7 +799,7 @@ regression_tiers / suite FAIL (expected, not added); card_costs / clause_ledger 
 ## Claude-play sweep
 - commit: `b5a594e0`
 - seeds: 61001..61016 games: 16
-- flags: 2 unresolved
+- flags: 0 unresolved
 
 **Re-sweep on HEAD `b5a594e0` (2026-10-08, 16 Opus players, one SEED each, `--reveal 6`, benchmark =
 the shipped d5/b20).** Results and replay helpers: `logs/pd_opt/sweep/` (gitignored). 11 games tie
@@ -812,9 +812,9 @@ the engine except where flagged.
 | 61002, 61007, 61011, 61012, 61016 | 5 | 5 | none (61011: a pre-Vito painful payment, see 61013) |
 | 61003 | 6 | **5** | **search could not EXPRESS "cast Pyrohemia, then ping it in the same main"** (no site-9 variant: `CardHasPostEntryActivation` lacked `ping_all_cost`; not recovered at d8 b0) -> **fixed** `MTG_POST_ENTRY_PING_ALL` |
 | 61004, 61009 | 7 | 7 | none |
-| 61005 | 6 | 6 | **CONFIRMED** whole-turn batch prepay pays a multi-cast plan before its first cast resolves -> lost Tamanoa gains / drains (**UNRESOLVED**, fix in progress); **CONFIRMED** the apply path shuffled Green Sun's Zenith back as its template (`m_number 0`) -> the lookahead's library order differed from the game's -> **fixed** `MTG_GSZ_SHUFFLE_COPY_ID` (also the root cause of s108346 gi345, below) |
+| 61005 | 6 | 6 | **CONFIRMED** whole-turn batch prepay pays a multi-cast plan before its first cast resolves -> lost Tamanoa gains / drains -> **fixed** `MTG_PD_BATCH_TIMING`; **CONFIRMED** the apply path shuffled Green Sun's Zenith back as its template (`m_number 0`) -> the lookahead's library order differed from the game's -> **fixed** `MTG_GSZ_SHUFFLE_COPY_ID` (also the root cause of s108346 gi345, below) |
 | 61006, 61008, 61010, 61015 | 6 | 6 | none (61008: a pre-Vito painful payment, see 61013) |
-| 61013 | 6 | **5** | the batch-prepay defect again (same UNRESOLVED item); UNCERTAIN: `MTG_PD_PAIN_DEFER` did not hold City of Brass for a lone Vito/Dina (**UNRESOLVED**, under investigation with the batch-prepay fix); the T5 line needs Living Wish -> **Brushland**, which `MTG_PD_WISH_TRIM`'s "always Battlefield Forge" rule prunes -> a counterexample to the USER's doctrine (surfaced, not changed) |
+| 61013 | 6 | **5** | the batch-prepay defect again (fixed, above); the pain deferral did not hold City of Brass for a lone Vito/Dina -- REAL: a {C} capability bit (Reflecting Pool reflects {C}, City cannot) failed the colour-superset test -> **fixed** `MTG_PD_DEFER_C_GENERIC`; the T5 line needs Living Wish -> **Brushland**, which `MTG_PD_WISH_TRIM`'s "always Battlefield Forge" rule prunes -> a counterexample to the USER's doctrine (surfaced, not changed) |
 | 61014 | 6 | **5** | none: the search's T1 land choice at b20; it finds T5 at b100 (budget, not inexpressible) |
 
 ### First sweep (`ef26b03b`, 2026-09-27)
@@ -1956,6 +1956,8 @@ name. A MEASUREMENT lever until the USER rules on the doctrine.
 | `MTG_GSZ_SHUFFLE_COPY_ID` | apply path shuffled Green Sun's Zenith back as the definition's template (`m_number 0`); `Library::ShuffleByKey` ranks by `m_number`, so the lookahead's library differed from the game's after every Zenith. s108346 gi345: the search "drew" a T3 Zenith the game never dealt, committed a phantom T5 line and LOST at every budget above b20 | the cast copy (its `m_number`) goes in; recording stamp `gsz_copy_id`, `--legacy-gsz-shuffle` replays older references | only Green Sun's Zenith carries the param |
 | `MTG_POST_ENTRY_PING_ALL` | site 9's fan-out predicate `CardHasPostEntryActivation` lacked `ping_all_cost`, so "cast Pyrohemia, then ping" was inexpressible at any depth (s61003) | one clause | only Pyrohemia carries the param |
 | `MTG_PD_LINE_OK_EXACT` | the pain-aware payer's rest-of-line check: any-colour land counted toward every colour; untapped non-mana permanents counted as 1 mana; re-demanded already-paid casts (s61001) | colour-exact assignment (`ColorFeasibility::PayablePips`) over the line's true unpaid remainder | armed (damage-event) decks only = PD |
+| `MTG_PD_BATCH_TIMING` | whole-turn batch prepay dealt a later cast's payment pain before an earlier amplifier (Tamanoa / Vito / Dina) resolved (s61005, s61013) | decline the batch for such plans; pay per cast | PD |
+| `MTG_PD_DEFER_C_GENERIC` | the pain deferral's colour-superset test counted {C} as a colour, so City of Brass could never stand in for Reflecting Pool (s61013) | {C} is generic while no {C} pip is live | PD |
 
 Isolated GSZ A/B (s112001/113001 x500, 2HG 114001 x200, d3 115001 x400): -0.0050 +/- 0.0025, 10 / 3,
 units 1.00x; the 3 slower games recover (two at stage 1; gi4's base T5 is reproduced by neither arm at
@@ -1975,6 +1977,24 @@ s119001 x300 = 1,300 paired games per arm; scratch `logs/pd_opt/multi1/`):
 
 Every slower game recovers under the USER two-stage check: s118001 gi79 (both arms) and s116001 gi112
 at stage 1, s116001 gi152 at stage 2 (d8 b0 = 5).
+
+**Batch timing + defer-{C}** (`MTG_PD_BATCH_TIMING`, `MTG_PD_DEFER_C_GENERIC`, both default ON, PD-only:
+`dmg_events_armed`). On an armed board the whole-turn prepay now declines a multi-cast plan whose
+permanent casts can only make pain worth more (at least one improving it, at least two paying mana) --
+the casts pay one at a time through the shared per-cast payer; order-independent, so executor and
+rollout stay in lockstep. The deferral ignores the {C} capability bit while no {C} pip is live this turn.
+A/B on top of the three fixes above (one pooled batch; s120001/s121001 x400 d5, 2HG s122001 x200, d3
+s123001 x300, d0 s124001 x3000 = 4,300 paired; `logs/pd_opt/multi2/`):
+
+| arm (vs the three fixes) | delta (turns/game) | better / worse | units |
+|---|---|---|---|
+| + batch timing | -0.0098 +/- 0.0020 | 39 / 4 | 0.99x |
+| + defer-{C} | -0.0016 +/- 0.0006 | 7 / 0 | 1.00x |
+| **+ both (the shipped defaults)** | **-0.0119 +/- 0.0021** | 47 / 3 | 0.99x |
+| + both + Beseech draft | -0.0135 +/- 0.0025 | 62 / 12 | 0.81x |
+
+The one slower searched game of the shipped stack, s120001 gi192, recovers at d8 b0 (T5 = W; stage 1
+gave T6); the two slower d0 games (gi332, gi1605) are downstream greedy choices (the lighter d0 bar).
 
 Deferred (own doc): `docs/design/committed-line-replay-lockstep.md` -- a committed full-depth line is
 replayed without checking the real hand still matches (the gi345 amplifier), and the same template-copy
