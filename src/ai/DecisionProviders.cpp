@@ -5458,6 +5458,373 @@ std::string AurasProvider::SelectDigSource(const GameState& s, const ManaPool& p
     return ::SelectDigSource(s, pool, out_is_sac);
 }
 
+// ---- AurasProvider::CleanupDiscardCandidates ---------------------------------
+//
+// THE USER'S DESIGN (2026-10-09): docs/design/auras-discard-policy-proposal.md, "#### Auras: SETTLED".
+// The agent proposal below that block is background, superseded wherever the USER section differs.
+//
+//   KEEP (best first): 3 lands, NET OF BOARD, W+G covered -> 1 creature, net of board (Light-Paws >
+//     Kor > Bogle/Scout) -> Light-Paws if none in play -> every USEFUL Aura, best live power per mana
+//     first (Light-Paws in play: keep the pricier of two equal Auras) -> if room: the 4th land, Kor,
+//     a spare plain creature.
+//   SHED (most expendable first): a duplicate Light-Paws -> a BLANK 0-power Aura / a DEAD Ancestral
+//     Mask -> lands beyond the 4th -> spare plain creatures -> a Coronet / Lion Umbra with no creature
+//     in play or hand -> a spare Kor -> the 4th land -> the useful Auras, worst rate first -> the
+//     protected cards (Light-Paws, the creature, the 3 lands).
+//   LANDS shed: tapped Razorverge -> Plains/Forest -> Branchloft -> Brushland -> untapped Razorverge
+//     -> Horizon Canopy last.
+//
+// The USER rulings behind the non-obvious rungs:
+//   * "3 lands total is all that is required. We could keep 4 when there is extra space. Auras we
+//     should keep almost as many as possible at least when they are effective ones." -> 3 lands hard,
+//     the 4th soft BELOW every effective Aura, and NO Aura floor: every effective Aura is kept; only
+//     the ineffective ones (blank, dead Mask, stranded Coronet / Lion Umbra) shed early.
+//   * "Useful auras go before everything except 3 lands and a creature" / "you make sure you have
+//     enough land and at least 1 creature and then fill the rest with auras." -> the engine is NOT
+//     protected above the Auras -- with one USER exception: Light-Paws is PROTECTED while none is in
+//     play, even when another creature already fills the creature slot.
+//   * ONE engine total (Light-Paws OR Kor), and the pick is Light-Paws -> a Kor outside the creature
+//     slot is always the leftovers' spare Kor ("4th land > Kor > spare plain creature").
+//   * "Spare land is discarded before a spare plain creature" (lands beyond the 4th shed first).
+//
+// Agent readings (listed in the doc's implementation notes; the USER may overturn any of them):
+//   (a) "Light-Paws if none in play" = no Light-Paws in play: a Kor in play does NOT unprotect a hand
+//       Light-Paws (the design has no rung for a non-duplicate, unprotected Light-Paws).
+//   (b) BLANK = the SETTLED test (0 power, no scaler in play OR kept in hand) plus the proposal's
+//       band-1 exemptions, which the review did not overturn: nothing is a blank while an ENGINE is
+//       in play (Light-Paws turns each Aura cast into a fetched Aura, Kor into a card), and the SOLE
+//       enabler of a held restricted Aura that has no host yet is kept (the cheapest such 0-power
+//       Aura). DEAD Mask = a scaler whose cast-now power is 0 (no enchantment on the battlefield),
+//       with no other enchantment in hand and no engine in play.
+//   (c) STRANDED is the SETTLED text literally: a restricted Aura with no creature in play or in
+//       hand. A Coronet with a creature but no enabler anywhere stays a useful Aura.
+//   (d) Equal rates: a scaler is kept over a non-scaler (its rate rises with every later cast), then
+//       by mana value -- with Light-Paws in play the pricier is kept (USER: a larger fetch bracket),
+//       otherwise the cheaper (proposal 7.1) -- then hand order.
+//   (e) Colour cover: a Branchloft Pathway in hand covers BOTH colours (either face is a play
+//       choice); a land the cover needs is a hard keep even past the third (proposal 5.1).
+//   (f) Cards the design has no class for (none in the shipping list: a land Aura, a non-Aura spell,
+//       an unknown card) shed right after the blanks, highest mana value first.
+//   (g) Ties inside a shed class go by hand order, earliest first.
+//   (h) Kor Spiritdancer's +2/+2 per Aura on it is not part of an Aura's value: it is the same for
+//       every Aura in the hand (proposal 9). Toughness and lifelink are 0 by the design (section 3).
+//
+// PREFIX-STABLE (CleanupDiscardShedStable's default): no card's class depends on a card that sheds
+// before it -- which is why a stranded Aura counts neither as an enabler nor as the dead Mask's
+// "enchantment around" (it sheds ahead of both). test_auras_discard.cpp walks boards shed by shed.
+// Classification is by PARAMS (aura_cast_tutor_attach, draw_on_aura_cast, is_aura,
+// aura_enchant_requires, aura_scale_*, sacrifice_draw_cost, mdfc_back_name, fastland via
+// LandWouldEnterTapped); the only name test is the legend rule's (CR 704.5j keys on the name). Every
+// non-staged index is named, through CleanupDiscardRankingWithOrder (staged / required-piece
+// protection stays engine-enforced; Auras.profile.json's required_pieces is empty).
+static bool AuraBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_AURA_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::AURA_BUCKET_DISCARD, on);
+}
+
+std::vector<int> AurasProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!AuraBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // A SCALER counts enchantments, so one more Aura on the battlefield raises it by its per-unit power.
+    auto is_scaler = [](const CardDefinition* d)
+    {
+        if (d == nullptr || !d->params.is_aura || d->params.aura_scale_power <= 0) { return false; }
+        const std::string& k = d->params.aura_scale_kind;
+        return k == "enchantments" || k == "other_enchantments" || k == "artifacts_enchantments";
+    };
+    constexpr unsigned kW = 1u, kG = 2u;   // the deck is G/W: the design's "W+G covered"
+    auto colour_bits = [&](const std::vector<Color>& v)
+    {
+        unsigned b = 0;
+        for (Color c : v)
+        {
+            if (c == Color::White) { b |= kW; }
+            if (c == Color::Green) { b |= kG; }
+        }
+        return b;
+    };
+
+    // ---- 1. board census (every quota is net of board) ---------------------------------------------
+    int board_lands = 0, board_creatures = 0, ench_all = 0, ench_own = 0, artench_own = 0;
+    int scale_credit = 0;   // power ONE more enchantment adds through the live scalers on our board
+    unsigned board_bits = 0;
+    bool tutor_in_play = false, drawer_in_play = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        const bool ench = p.card.HasType(CardType::Enchantment);
+        if (ench) { ++ench_all; }
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (ench) { ++ench_own; }
+        if (ench || p.card.HasType(CardType::Artifact)) { ++artench_own; }
+        if (p.card.IsLand())
+        {
+            ++board_lands;
+            if (d != nullptr) { board_bits |= colour_bits(d->params.produces); }   // the played face only
+        }
+        if (p.card.IsCreature())
+        {
+            ++board_creatures;
+            if (d != nullptr && d->params.aura_cast_tutor_attach) { tutor_in_play = true; }
+            if (d != nullptr && d->params.draw_on_aura_cast)      { drawer_in_play = true; }
+        }
+        if (is_scaler(d)) { scale_credit += d->params.aura_scale_power; }
+    }
+    const bool engine_in_play = tutor_in_play || drawer_in_play;
+
+    // ---- 2. per-card class ---------------------------------------------------------------------------
+    enum Cls : char { K_STAGED, K_DUP, K_LAND, K_TUTOR, K_DRAWER, K_PLAIN, K_AURA, K_OTHER };
+    enum Sub : char { A_USEFUL, A_BLANK, A_DEAD, A_STRANDED };
+    enum LandSlot : char { L_HARD, L_SOFT, L_BEYOND };
+    struct Info
+    {
+        const CardDefinition* d = nullptr;
+        int      mv = 0, marg = 0;   // marg: an Aura's live power if cast now (see section 3)
+        char     cls = K_STAGED, sub = A_USEFUL, land_rank = 0, land_slot = L_BEYOND;
+        unsigned bits = 0;           // a hand land's W/G cover
+    };
+    std::vector<Info> info(static_cast<std::size_t>(n));
+    bool creature_in_hand = false, scaler_in_hand = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[i];
+        if (hc.m_is_staged) { continue; }
+        Info& f = info[i];
+        f.d  = def_of(hc);
+        f.mv = CleanupDiscardManaValue(hc);
+        if (CleanupDiscardIsLand(hc)) { f.cls = K_LAND; continue; }
+        if (f.d == nullptr) { f.cls = K_OTHER; continue; }
+        const CardDefinition& d = *f.d;
+        if (d.card.HasSupertype(Supertype::Legendary))
+        {
+            // DEAD (the legend rule): a copy on our battlefield, or an earlier copy in hand.
+            bool dup = false;
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == me && p.card.m_name == hc.m_name) { dup = true; break; } }
+            for (int j = 0; j < i && !dup; ++j)
+            { if (info[j].cls != K_STAGED && ap.hand[j].m_name == hc.m_name) { dup = true; } }
+            if (dup) { f.cls = K_DUP; continue; }
+        }
+        if (d.card.IsCreature())
+        {
+            creature_in_hand = true;
+            f.cls = d.params.aura_cast_tutor_attach ? K_TUTOR : d.params.draw_on_aura_cast ? K_DRAWER : K_PLAIN;
+            continue;
+        }
+        if (d.params.is_aura && !d.params.is_land_aura)
+        {
+            f.cls = K_AURA;
+            if (is_scaler(f.d)) { scaler_in_hand = true; }
+            continue;
+        }
+        f.cls = K_OTHER;
+    }
+
+    // ---- 3. Aura value: LIVE power if cast now (+ the scaler credit), per mana ------------------------
+    // TOUGHNESS AND LIFELINK ARE VALUED 0 (USER design; the proposal's 4.6): aura_tough_bonus is stored
+    // but INERT against the passive goldfish opponent, and lifelink gains life against an opponent that
+    // deals none. So Armadillo Cloak's +2/+2 counts as +2, Spirit Link counts as 0, Daybreak Coronet's
+    // lifelink counts for nothing -- and this comparator INVERTS FOR EXACTLY THOSE CARDS the day the
+    // simulator gets an opponent that deals damage. Kor Spiritdancer's +2/+2 per Aura on it is not
+    // counted either: it is the same for every Aura in the hand (agent reading (h), proposal 9).
+    auto live_power = [&](const CardParams& p)
+    {
+        int units = 0;
+        if (p.aura_scale_kind == "enchantments")                { units = ench_own + 1; }    // counts itself
+        else if (p.aura_scale_kind == "other_enchantments")     { units = ench_all; }        // excludes itself
+        else if (p.aura_scale_kind == "artifacts_enchantments") { units = artench_own + 1; }
+        return p.aura_power_bonus + p.aura_scale_power * units;
+    };
+    for (int i = 0; i < n; ++i)
+    {
+        Info& f = info[i];
+        if (f.cls != K_AURA) { continue; }
+        f.marg = live_power(f.d->params) + scale_credit;
+        // "Coronet/Lion Umbra with no creature in play or hand" -- agent reading (c).
+        if (!f.d->params.aura_enchant_requires.empty() && board_creatures == 0 && !creature_in_hand)
+        { f.sub = A_STRANDED; }
+    }
+
+    // ---- 4. the ineffective Auras: a DEAD scaler, a BLANK 0-power Aura -- agent reading (b) ----------
+    if (!engine_in_play)
+    {
+        // "Ancestral Mask with no enchantment around": realises nothing now (marg 0 <=> no enchantment
+        // on the battlefield) and nothing in hand can raise it. A stranded Aura sheds first, so it is
+        // not "around".
+        for (int i = 0; i < n; ++i)
+        {
+            Info& f = info[i];
+            if (f.cls != K_AURA || f.sub != A_USEFUL || !is_scaler(f.d) || f.marg > 0) { continue; }
+            bool around = false;
+            for (int j = 0; j < n && !around; ++j)
+            { around = j != i && info[j].cls == K_AURA && info[j].sub != A_STRANDED; }
+            if (!around) { f.sub = A_DEAD; }
+        }
+        // "blank 0-power Aura (no scaler in play OR kept in hand)": marg 0 on a non-scaler means no
+        // power of its own and no live scaler; a scaler in hand is never shed ahead of the blank (at an
+        // equal rate the non-scaler goes first).
+        if (!scaler_in_hand)
+        {
+            bool layer_waits = false, real_enabler = false;
+            int  enabler = -1;   // the cheapest 0-power plain Aura: the one a waiting layer keeps
+            for (int i = 0; i < n; ++i)
+            {
+                const Info& f = info[i];
+                if (f.cls != K_AURA || f.sub != A_USEFUL) { continue; }
+                if (!f.d->params.aura_enchant_requires.empty())
+                {
+                    bool host = false;
+                    for (const Permanent& p : s.battlefield)
+                    {
+                        if (p.controller_index == me && AuraCouldEnchant(s, f.d->params, p)) { host = true; break; }
+                    }
+                    if (!host) { layer_waits = true; }
+                    continue;
+                }
+                if (f.marg > 0) { real_enabler = true; continue; }
+                if (enabler < 0 || f.mv < info[enabler].mv) { enabler = i; }
+            }
+            const int keep_enabler = (layer_waits && !real_enabler) ? enabler : -1;
+            for (int i = 0; i < n; ++i)
+            {
+                Info& f = info[i];
+                if (f.cls != K_AURA || f.sub != A_USEFUL || f.marg > 0 || is_scaler(f.d)
+                    || !f.d->params.aura_enchant_requires.empty() || i == keep_enabler) { continue; }
+                f.sub = A_BLANK;
+            }
+        }
+    }
+
+    // ---- 5. lands: the W+G cover first, then the USER's land order ------------------------------------
+    // Keep rank, higher = kept longer: tapped now 0 < one colour 1 < MDFC 2 < pain dual 3 < untapped
+    // dual 4 < the dig land 5 -- "tapped Razorverge -> Plains/Forest -> Branchloft -> Brushland ->
+    // untapped Razorverge -> Horizon Canopy last" (a fastland is "tapped" from our 4th land on).
+    std::vector<int> land_keep;   // the hand's lands, best kept first
+    land_keep.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i)
+    {
+        Info& f = info[i];
+        if (f.cls != K_LAND) { continue; }
+        land_keep.push_back(i);
+        if (f.d == nullptr) { f.land_rank = 1; continue; }
+        const CardParams& p = f.d->params;
+        f.bits = colour_bits(p.produces) | colour_bits(p.mdfc_back_produces);   // agent reading (e)
+        int colours = 0;
+        for (Color c : { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green })
+        { if (std::find(p.produces.begin(), p.produces.end(), c) != p.produces.end()) { ++colours; } }
+        if (LandWouldEnterTapped(s, *f.d))          { f.land_rank = 0; }
+        else if (p.sacrifice_draw_cost.has_value()) { f.land_rank = 5; }
+        else if (!p.mdfc_back_name.empty())         { f.land_rank = 2; }
+        else if (colours <= 1)                      { f.land_rank = 1; }
+        else if (p.tap_self_damage > 0)             { f.land_rank = 3; }
+        else                                        { f.land_rank = 4; }
+    }
+    std::stable_sort(land_keep.begin(), land_keep.end(),
+                     [&](int a, int b) { return info[a].land_rank > info[b].land_rank; });
+    auto popc = [](unsigned v) { int k = 0; while (v) { v &= v - 1; ++k; } return k; };
+    int cov_n = 0;   // the cover is pulled to the front: the best-ranked land covering the most missing
+    for (unsigned missing = (kW | kG) & ~board_bits; missing != 0; )
+    {
+        int best = -1, best_gain = 0;
+        for (int k = cov_n; k < static_cast<int>(land_keep.size()); ++k)
+        {
+            const int g = popc(info[land_keep[k]].bits & missing);
+            if (g > best_gain) { best = k; best_gain = g; }
+        }
+        if (best < 0) { break; }
+        const int pick = land_keep[best];
+        land_keep.erase(land_keep.begin() + best);
+        land_keep.insert(land_keep.begin() + cov_n, pick);
+        ++cov_n;
+        missing &= ~info[pick].bits;
+    }
+    const int hl     = static_cast<int>(land_keep.size());
+    const int hard_n = std::min(hl, std::max(std::max(0, 3 - board_lands), cov_n));
+    const int soft_n = std::min(hl - hard_n, std::max(0, 4 - board_lands - hard_n));
+    for (int k = 0; k < hl; ++k)
+    { info[land_keep[k]].land_slot = k < hard_n ? L_HARD : k < hard_n + soft_n ? L_SOFT : L_BEYOND; }
+
+    // ---- 6. creatures: the creature slot (net of board), Light-Paws, the leftovers --------------------
+    auto power_of = [&](int i) { return info[i].d->card.m_power.value_or(0); };
+    int slot = -1;   // the hand creature filling the creature slot: Light-Paws > Kor > a plain body
+    if (board_creatures == 0)
+    {
+        auto tier = [&](int i) { return info[i].cls == K_TUTOR ? 0 : info[i].cls == K_DRAWER ? 1 : 2; };
+        for (int i = 0; i < n; ++i)
+        {
+            const char c = info[i].cls;
+            if (c != K_TUTOR && c != K_DRAWER && c != K_PLAIN) { continue; }
+            if (slot < 0) { slot = i; continue; }
+            if (tier(i) != tier(slot)) { if (tier(i) < tier(slot)) { slot = i; } continue; }
+            if (power_of(i) != power_of(slot)) { if (power_of(i) > power_of(slot)) { slot = i; } continue; }
+            if (info[i].mv < info[slot].mv) { slot = i; }
+        }
+    }
+    int paws = -1;   // "Light-Paws if none in play" -- agent reading (a)
+    if (!tutor_in_play)
+    {
+        for (int i = 0; i < n; ++i) { if (info[i].cls == K_TUTOR) { paws = i; break; } }
+    }
+    if (paws == slot) { paws = -1; }   // the creature slot already holds it
+
+    // ---- 7. the shed order ---------------------------------------------------------------------------
+    std::vector<int> shed, seg;
+    shed.reserve(static_cast<std::size_t>(n));
+    seg.reserve(static_cast<std::size_t>(n));
+    auto emit = [&](auto in_class, auto sheds_before)
+    {
+        seg.clear();
+        for (int i = 0; i < n; ++i) { if (in_class(i)) { seg.push_back(i); } }
+        std::sort(seg.begin(), seg.end(), sheds_before);
+        shed.insert(shed.end(), seg.begin(), seg.end());
+    };
+    auto by_index = [](int a, int b) { return a < b; };
+    auto mv_desc  = [&](int a, int b) { return info[a].mv != info[b].mv ? info[a].mv > info[b].mv : a < b; };
+    auto aura_sub = [&](int i, char sb) { return info[i].cls == K_AURA && info[i].sub == sb; };
+
+    emit([&](int i) { return info[i].cls == K_DUP; }, by_index);                          // dup Light-Paws
+    emit([&](int i) { return aura_sub(i, A_BLANK); }, mv_desc);                           // blank 0-power
+    emit([&](int i) { return aura_sub(i, A_DEAD); }, by_index);                           // dead Mask
+    emit([&](int i) { return info[i].cls == K_OTHER; }, mv_desc);                         // agent reading (f)
+    emit([&](int i) { return info[i].cls == K_LAND && info[i].land_slot == L_BEYOND; },   // beyond the 4th
+         [&](int a, int b) { return info[a].land_rank != info[b].land_rank
+                                    ? info[a].land_rank < info[b].land_rank : a < b; });
+    emit([&](int i) { return info[i].cls == K_PLAIN && i != slot; },                      // spare plain bodies
+         [&](int a, int b)
+         {
+             if (power_of(a) != power_of(b)) { return power_of(a) < power_of(b); }
+             return info[a].mv != info[b].mv ? info[a].mv > info[b].mv : a < b;
+         });
+    emit([&](int i) { return aura_sub(i, A_STRANDED); }, mv_desc);                        // stranded layer
+    emit([&](int i) { return (info[i].cls == K_DRAWER || info[i].cls == K_TUTOR) && i != slot && i != paws; },
+         by_index);                                                                       // spare Kor
+    emit([&](int i) { return info[i].cls == K_LAND && info[i].land_slot == L_SOFT; }, by_index);   // 4th land
+    emit([&](int i) { return aura_sub(i, A_USEFUL); },                                    // useful, worst first
+         [&](int a, int b)
+         {
+             const long ra = static_cast<long>(info[a].marg) * std::max(1, info[b].mv);
+             const long rb = static_cast<long>(info[b].marg) * std::max(1, info[a].mv);
+             if (ra != rb) { return ra < rb; }
+             const bool sa = is_scaler(info[a].d), sb = is_scaler(info[b].d);
+             if (sa != sb) { return !sa; }                                                // reading (d)
+             if (info[a].mv != info[b].mv)
+             { return tutor_in_play ? info[a].mv < info[b].mv : info[a].mv > info[b].mv; }
+             return a < b;
+         });
+    if (paws >= 0) { shed.push_back(paws); }                                              // protected
+    if (slot >= 0) { shed.push_back(slot); }
+    for (int k = hard_n - 1; k >= 0; --k) { shed.push_back(land_keep[k]); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- TreasureHuntProvider ---------------------------------------------------
 
 bool TreasureHuntProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
@@ -14025,7 +14392,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.copies_solo_targeted_spells) { mirrorwing = true; }
 
         // Bogle Auras: Light-Paws' cast-an-Aura tutor-attach is unique to this deck. The provider
-        // exists for the Horizon Canopy dig hooks (see AurasProvider); everything else is Generic.
+        // holds the Horizon Canopy dig hooks and the cleanup-discard buckets (see AurasProvider);
+        // everything else is Generic.
         if (p.aura_cast_tutor_attach) { aura = true; }
 
         // Dragonstorm (Storm ritual-storm): the tutor-to-battlefield put IS the archetype signature
@@ -14287,7 +14655,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // FiveColour; must WIN OVER anti (its fetchlands set that signature on their own -- see the
     // domain_mana detection above). No other deck has domain_mana, so exclusivity is preserved.
     if (fivec) { return g_fivecolour; }
-    // Bogle Auras: only the dig hooks differ from Generic (Horizon Canopy sac-draw). No other
+    // Bogle Auras: the dig hooks (Horizon Canopy sac-draw) and the USER's cleanup-discard buckets
+    // (2026-10-09) differ from Generic. No other
     // deck carries aura_cast_tutor_attach, so exclusivity is preserved; the deck trips no other
     // signature (verified: it routed to Generic before this provider existed).
     if (aura) { return g_auras; }

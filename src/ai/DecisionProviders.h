@@ -1694,11 +1694,12 @@ public:
 };
 
 // Bogle Auras (hexproof voltron): signature is Light-Paws' aura_cast_tutor_attach (unique to
-// this deck). Exists to give the deck the DIG hooks: it runs 4x Horizon Canopy
+// this deck). Created to give the deck the DIG hooks: it runs 4x Horizon Canopy
 // ("{1}, {T}, Sacrifice: draw a card") and GenericProvider's dig gate is a hard false, so the
 // autonomous search structurally could not consider the sac-draw the deck is built around --
 // found by the reference bench (auras s21/gi20: the human sacs Canopy on T4 AND T5, finds
 // Ethereal Armor + Light-Paws, wins T5; the search sat on both Canopies and won T6).
+// Since 2026-10-09 it also holds the USER's cleanup-discard buckets (CleanupDiscardCandidates).
 class AurasProvider : public DeckProvider
 {
 public:
@@ -1724,6 +1725,13 @@ public:
     // The dig is a SEARCHED decision here (USER 2026-08-28): ShouldConsiderDig is only the
     // default/horizon heuristic; the enumerator fans dig/no-dig variants and the rollout decides.
     bool        DigDecisionSearched() const override { return true; }
+    // Cleanup discard: the USER-settled buckets (2026-10-09,
+    // docs/design/auras-discard-policy-proposal.md "Auras: SETTLED") -- keep 3 lands (net of board,
+    // W+G covered) > 1 creature > Light-Paws while none is in play > every USEFUL Aura (live power
+    // per mana) > the 4th land > Kor > a spare plain creature; dead / blank / stranded cards shed
+    // first. See the definition. MTG_AURA_BUCKET_DISCARD=0 -> the generic max-MV ranking.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Fluctuator cycling combo. This provider exists for a reason none of the others do: it does not
