@@ -58,6 +58,60 @@ Implementation note: EDF is NOT in the regression suite -> needs a direct paired
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `EldraziFlickerProvider::CleanupDiscardCandidates` (src/ai/DecisionProviders.cpp,
+after `TutorCandidates`) behind `MTG_EDF_BUCKET_DISCARD` (heurarm slot `EDF_BUCKET_DISCARD`, default
+ON; `=0` = `GenericProvider::CleanupDiscardCandidates`). Tests: `test/unit/test_eldrazi_flicker_discard.cpp`
+(16 cases, every expected order derived by hand from the SETTLED block). Roles are keyed on params
+through the combo route's own predicates (`comboroute::IsOutlet / IsUntapper / IsDrainer / IsExiler /
+IsWish / IsCall / IsLandAura / IsReducer / IsGorge`, the draw-land tests, `comborules::IsTlessFinisher
+/ HasRedSource / ColorlessSourceCount / HasRepeatableDrawSource`, `FlickerTopLandYields`); no card name
+appears. `required_pieces` is empty for this deck, so no protection waiver is needed.
+
+The shed order emitted: no-role card > duplicate legend > 2nd Training Grounds > hostless Aura /
+self-bouncing karoo > Eladamri's Call filling no slot > lands past the 4th > Auras past the target >
+spare flicker sources / untappers (less suitable first) > spare finishers > Training Grounds below
+its threshold > then the keep ladder backwards (3rd-4th land, extra Living Wish, Training Grounds,
+Auras up to the target, the 2 lands, win con, untapper, flicker).
+
+Agent readings (the USER has not ruled on these; each is also in the code's header comment):
+
+- R1 "2+ colourless sources" = the board's {C} sources plus the {C}-capable hand lands the ladder
+  KEEPS (win-con land, 2 lands, 3rd-4th). A land past the 4th does not swing the outlet choice.
+- R2 Cloud's "can untap 4+ mana" reads today's board (its top-2 land yields, Auras on them included).
+  "Training Grounds is available" = one in play or a live copy in hand; the same availability gives
+  the target its "2 less". Generalised by params: the CHEAPEST untapper whose refund is >= 4 (or any,
+  with Training Grounds) is kept; with none viable, the one with the MOST untaps.
+- R3 The target keeps the USER's per-outlet numbers (outlet cast + one flicker) even when the outlet
+  is already in play; board mana counting toward it is the net-of-board part. It reads the slot's
+  outlet: the board's preferred one, the hand's, or what a slot-filling tutor would fetch; with no
+  outlet anywhere, the preferred one in library / sideboard (fallback 6 / 4).
+- R4 "Mana" for the target and the Training Grounds threshold = board land yields (with their Auras)
+  + the win-con land + the 2 lands + the Auras kept so far. The 3rd-4th lands sit below Training
+  Grounds on the ladder, so they do not count toward its threshold.
+- R5 The SHED list ("Training Grounds below its threshold -> extra Living Wish -> protected") and the
+  KEEP ladder ("extra Living Wish -> 3rd-4th land") are reconciled by shedding the 3rd-4th lands
+  BETWEEN Training-Grounds-below-threshold and the extra Wish.
+- R6 {W}/{U} coverage outranks the 4-land cap: a land supplying a missing {W}/{U} is kept in the
+  2-lands step even as a 5th land. A board Aura making any colour counts as covering a colour.
+- R7 Eladamri's Call fills a missing flicker/untapper slot BEFORE Living Wish (the Wish can also reach
+  the win con, the Call cannot); a tutor fills a slot only when its zone holds that role. A Call
+  filling nothing, and a Living Wish whose sideboard holds no legal target at all, shed in the
+  "Call with both pieces covered" tier.
+- R8 Shivan Gorge's "with red" = red on our board or a red-capable land / any-colour Aura in hand.
+  The win-con slot prefers the nearest to castable, then finisher > Gorge > draw land. A spare draw
+  land or Gorge stays a LAND (it competes for the land slots); "spare win cons" are the finisher
+  creatures (a non-live one first, then farther from castable first).
+- R9 "Less suitable first" spans both roles: every spare for which a strictly better kind is in play
+  or in hand sheds first (outlets before untappers, the proposal's O9 shape), then the rest.
+- R10 Land keep order after colour coverage: {C}-capable, then more of {W,U,B,G}, then untapped, then
+  hand order. Aura keep order: lower mana value, then a non-shroud Aura before a shroud one -- the
+  param rule that evaluates to the USER's Overgrowth > Trace > Fertile > Wild Growth shed order.
+
+Not measured: EDF is not in the regression suite, so the adoption evidence has to be a direct paired
+A/B (`MTG_EDF_BUCKET_DISCARD=1` vs `=0`) on this deck.
+
 
 ---
 
