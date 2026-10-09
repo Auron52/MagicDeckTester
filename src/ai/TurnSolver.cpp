@@ -2670,20 +2670,20 @@ static std::string BoardSignature(const GameState& s)
         std::string e = p.card.m_name;
         e += p.tapped ? "/T" : "/U";
         e += p.entered_this_turn ? "/S" : "/R";     // summoning sickness
-        e += "/c" + std::to_string(p.counters.size());
+        e += "/c" + p.counters.KeyFragment();
         e += "/ch" + std::to_string(p.charge_counters) + "," + std::to_string(p.storage_counters);
         if (p.age_counters > 0) { e += "/g" + std::to_string(p.age_counters); }   // cumulative upkeep
-        // Spore / quest counts. NOTE the `/c` entry above records only counters.SIZE, so a
-        // vector-backed counter would collide here at differing counts -- one of the reasons these
-        // two are dedicated ints. Both are future-determining (spores decide how many Saprolings a
+        // Spore / quest counts. (The `/c` entry above recorded only counters.SIZE until 2026-10-09,
+        // so a vector-backed counter would have collided here at differing counts -- one of the
+        // reasons these two are dedicated ints; it reads CounterList::KeyFragment now.) Both are future-determining (spores decide how many Saprolings a
         // later turn yields; quest counters decide when the anthem switches on), so they must be
         // distinguished. Nonzero-gated, so every other deck keeps the EXACT prior signature.
         if (p.spore_counters > 0) { e += "/sp" + std::to_string(p.spore_counters); }
         if (p.fade_counters > 0)  { e += "/fd" + std::to_string(p.fade_counters); }
         if (p.quest_counters > 0) { e += "/qu" + std::to_string(p.quest_counters); }
-        // Hone counters (Dwalin) MUST be keyed: the attack half flips them MID-TURN, and the
-        // generic `/c` field below records only counters.SIZE. Nonzero-gated, so every deck
-        // that cannot make one keeps its exact prior signature.
+        // Hone counters (Dwalin) MUST be keyed: the attack half flips them MID-TURN, and they are a
+        // bare int, not a CounterList entry, so the generic `/c` field never sees them.
+        // Nonzero-gated, so every deck that cannot make one keeps its exact prior signature.
         if (p.hone_counters > 0) { e += "/hn" + std::to_string(p.hone_counters); }
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
@@ -22063,7 +22063,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                           + std::to_string(p.temp_tough_bonus)
                           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "")
                           + (p.temp_double_strike ? "D" : "")
-                          + "/c" + std::to_string(p.counters.size());
+                          + "/c" + p.counters.KeyFragment();
                 if (!seen_equiv.insert(eq).second) { continue; }
                 // The best dork's plain form is replaced by the cast-time pick (above); its strive
                 // variants (Twinflame) keep the explicit target.
@@ -22319,7 +22319,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // target's m_number (0 = decline), riding the etb_kx channel to FireOwnEtbTriggers (the
         // Terastodon vehicle); a PUT entry resolves via the provider's FlickerTarget instead.
         // Targets fold by an equivalence key (lossless): same name + tapped-state + sick-state +
-        // counter count are interchangeable in every modelled respect.
+        // counters (per-type TOTALS -- KeyFragment, not the entry count: a flicker resets counters,
+        // so a Carrion Feeder with one +1/+1 counter is the better blink than one with five) are
+        // interchangeable in every modelled respect.
         if (def.params.etb_blink_permanent)
         {
             { Action v = a; v.chosen_x = 0; actions.push_back(std::move(v)); }   // decline
@@ -22330,7 +22332,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 std::string key = t.card.m_name.str();
                 key += t.tapped ? "|t" : "|u";
                 key += t.entered_this_turn ? "|s" : "|r";
-                key += "|" + std::to_string(t.counters.size());
+                key += "|" + t.counters.KeyFragment();
                 if (std::find(seen_fk.begin(), seen_fk.end(), key) != seen_fk.end()) { continue; }
                 seen_fk.push_back(std::move(key));
                 Action v   = a;
@@ -24842,7 +24844,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             key += tgt.entered_this_turn ? "|s" : "|r";
                             key += "|" + std::to_string(tgt.EffectivePower())
                                  + "/" + std::to_string(tgt.EffectiveToughness())
-                                 + "|" + std::to_string(tgt.counters.size())
+                                 + "|" + tgt.counters.KeyFragment()
                                  + "|" + std::to_string(tgt.controller_index);
                             if (std::find(seen_targets.begin(), seen_targets.end(), key)
                                 != seen_targets.end()) { continue; }
@@ -26702,7 +26704,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 key += v.entered_this_turn ? "|s" : "|r";
                 key += "|" + std::to_string(v.EffectivePower())
                      + "/" + std::to_string(v.EffectiveToughness());
-                key += "|" + std::to_string(v.counters.size());
+                key += "|" + v.counters.KeyFragment();
                 key += v.is_token ? "|tok" : "|c";
                 if (std::find(seen_victims.begin(), seen_victims.end(), key)
                     != seen_victims.end()) { continue; }

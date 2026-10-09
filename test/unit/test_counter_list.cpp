@@ -138,3 +138,21 @@ TEST_CASE("Carrion Feeder's sacrifice payload puts into the existing +1/+1 entry
     CHECK(f->counters.size() == 1);
     CHECK(CountOf(f->counters, Counter::Type::PlusOnePlusOne) == 10);
 }
+
+TEST_CASE("CounterList::KeyFragment keys per-type TOTALS, independent of put order")
+{
+    CounterList a, b, c, none;
+    a.Add(Counter::Type::Depletion, 2);
+    a.Add(Counter::Type::PlusOnePlusOne, 1);
+    b.Add(Counter::Type::PlusOnePlusOne, 1);
+    b.Add(Counter::Type::Depletion, 2);
+    CHECK(a.KeyFragment() == b.KeyFragment());           // same totals, other first-put order
+    c.Add(Counter::Type::PlusOnePlusOne, 5);
+    c.Add(Counter::Type::Depletion, 2);
+    CHECK(c.size() == a.size());                          // size() cannot tell them apart...
+    CHECK(c.KeyFragment() != a.KeyFragment());            // ...the fragment can
+    CHECK(none.KeyFragment().empty());
+    CounterList depleted;                                 // a spent depletion land keeps its 0 marker
+    depleted.Add(Counter::Type::Depletion, 0);
+    CHECK(depleted.KeyFragment() != none.KeyFragment());
+}

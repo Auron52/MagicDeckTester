@@ -93,6 +93,29 @@ struct CounterList
     }
     void Add(const Counter& c) { Add(c.type, c.count); }
 
+    // The counters as a KEY FRAGMENT: "<type>:<count>," per entry, in Counter::Type order -- exact
+    // and independent of the order the types were first put. Any dedup / equivalence key that must
+    // tell two bodies' counters apart reads THIS, never size(): size() is the number of counter
+    // TYPES present, so it keys a creature with one +1/+1 counter the same as one with five. (While
+    // raw sites appended one +1/+1 entry per put, size() happened to equal the total on most boards,
+    // and four target-fold keys leaned on that; canonical storage would have made them lossy.)
+    std::string KeyFragment() const
+    {
+        std::string k;
+        for (int t = 0; t <= static_cast<int>(Counter::Type::Depletion); ++t)
+        {
+            for (std::int32_t i = 0; i < m_n; ++i)
+            {
+                if (static_cast<int>(m_e[i].type) != t) { continue; }
+                k += std::to_string(t);
+                k += ':';
+                k += std::to_string(m_e[i].count);
+                k += ',';
+            }
+        }
+        return k;
+    }
+
     // The remove_if/erase idiom at the decrement site passes a suffix [first, end()).
     iterator erase(iterator first, iterator last)
     {
