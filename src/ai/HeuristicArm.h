@@ -368,7 +368,7 @@ enum Slot : int
     AURA_BUCKET_DISCARD,      // MTG_AURA_BUCKET_DISCARD      Auras: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     BREACH_BUCKET_DISCARD,    // MTG_BREACH_BUCKET_DISCARD    BreachingDragonstorm: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     BURN_BUCKET_DISCARD,      // MTG_BURN_BUCKET_DISCARD      burn: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
-    CG_BUCKET_DISCARD,        // MTG_CG_BUCKET_DISCARD        Creature Giving: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    CG_BUCKET_DISCARD,        // MTG_CG_BUCKET_DISCARD        Creature Giving: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the 2026-08-06 Defense-of-the-Heart-last patch (MTG_CG_DOTH_LAST below; both =0 -> the generic max-MV ranking)
     CRITTER_BUCKET_DISCARD,   // MTG_CRITTER_BUCKET_DISCARD   CritterLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     DRAGONSTORM_BUCKET_DISCARD, // MTG_DRAGONSTORM_BUCKET_DISCARD Dragonstorm: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     EDF_BUCKET_DISCARD,       // MTG_EDF_BUCKET_DISCARD       EldraziDisplacerFlicker: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
@@ -381,6 +381,7 @@ enum Slot : int
     FUNGUS_BUCKET_DISCARD,    // MTG_FUNGUS_BUCKET_DISCARD    Fungus: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     WK_BUCKET_DISCARD,        // MTG_WK_BUCKET_DISCARD        WhiteKnights (its extras over the Knights rule): the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     SELESNYA_BUCKET_DISCARD,  // MTG_SELESNYA_BUCKET_DISCARD  SelesnyaLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
+    CG_DOTH_LAST,             // MTG_CG_DOTH_LAST             Creature Giving, under MTG_CG_BUCKET_DISCARD=0 only: the 2026-08-06 patch ranking every Defense of the Heart last. Default ON; =0 with the buckets off -> the generic max-MV ranking (the USER's three-arm A/B: generic / patch / buckets)
     COUNT
 };
 
@@ -723,6 +724,7 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_BUCKET_DISCARD",
         "MTG_WK_BUCKET_DISCARD",
         "MTG_SELESNYA_BUCKET_DISCARD",
+        "MTG_CG_DOTH_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
