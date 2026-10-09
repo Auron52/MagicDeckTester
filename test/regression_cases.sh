@@ -60,6 +60,7 @@ declare -A DECK_FILE=(
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
   [soldiers]=decks/Soldiers/soldiers.cod
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
+  [bruna]=decks/Bruna/Bruna.cod
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
@@ -93,6 +94,7 @@ declare -A DECK_PROF=(
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
   [soldiers]=decks/Soldiers/soldiers.profile.json
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
+  [bruna]=decks/Bruna/Bruna.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -432,15 +434,19 @@ SMOKE_CASES=(
   "pd 0 1001 1000 0"
   "pd 3 1001   25 10"
   "pd 5 1001   15 20"
-  # bruna: REMOVED FROM ALL THREE TIERS 2026-10-06 (USER: "Yes, we should take Bruna out.") -- it fails
-  # the 3x suite-cost rule (CLAUDE.md): ~3.9 s/game after the Glittering Wish sideboard widened from 4 to
-  # 11 names, against a 3.10 s budget (3x fivecolour), and it was 35% of the overnight tier's work units.
-  # Getting it under 3x is the FIRST goal (the Wish heuristic is the intended fix); re-measure on a QUIET
-  # box with a pooled batch, then restore the rows below (and the DECK_FILE / DECK_PROF entries
-  # [bruna]=decks/Bruna/Bruna.cod / decks/Bruna/Bruna.profile.json) and accept GT for all three tiers.
-  # smoke: "bruna2hg 3 1001 50 10", "bruna 0 1001 1000 0", "bruna 3 1001 150 10", "bruna 5 1001 75 20"
-  # regression: "bruna 0 2002 1000 0", "bruna 3 {2002,3003} 150 10", "bruna 5 {2002,3003} 75 20"
-  # overnight: "bruna 0 {4004,6006,8008,10010} 2000 0", "bruna 3 {4004..7007} 1000 20", "bruna 5 {4004..7007} 500 40"
+  # bruna: RESTORED TO ALL THREE TIERS 2026-10-09 (USER: "see if Bruna earns a spot back in the suite").
+  # It was removed 2026-10-06 (USER: "Yes, we should take Bruna out.") for failing the 3x suite-cost rule
+  # (~3.9 s/game after the Glittering Wish sideboard widened from 4 to 11 names). The Wish / Open the
+  # Armory candidate rules (0111b1b5) brought it back inside: ONE pooled regression-tier batch on a QUIET
+  # box (load ~0) measured its worst searched case, d5 b20 s3003, at 4,683 ms/game against hinata's
+  # 1,812 (the costliest deck with both artifacts) -> 2.58x, budget 5,437 (suite_gate --measure-all).
+  # No value leaf / keep table yet, so GT WILL move when they land. Cost in the tiers (2026-10-09, Bruna
+  # rows alone): overnight makespan 27m46s on 24 cores with 285 games over 30 s; ~70% of its search is
+  # the clairvoyant mulligan-bottoming playouts the keep table replaces (analysis-Bruna.md, slow games).
+  "bruna2hg 3 1001   50 10"
+  "bruna 0 1001 1000 0"
+  "bruna 3 1001  150 10"
+  "bruna 5 1001   75 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -691,7 +697,12 @@ REGRESSION_CASES=(
   "pd 3 3003   40 10"
   "pd 5 2002   25 20"
   "pd 5 3003   25 20"
-  # bruna: removed 2026-10-06, see the SMOKE block.
+  # bruna: RESTORED 2026-10-09, see the SMOKE block.
+  "bruna 0 2002 1000 0"
+  "bruna 3 2002  150 10"
+  "bruna 3 3003  150 10"
+  "bruna 5 2002   75 20"
+  "bruna 5 3003   75 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -1122,7 +1133,19 @@ OVERNIGHT_CASES=(
   "pd 5 5005   75 40"
   "pd 5 6006   75 40"
   "pd 5 7007   75 40"
-  # bruna: removed 2026-10-06, see the SMOKE block.
+  # bruna: RESTORED 2026-10-09, see the SMOKE block.
+  "bruna 0 4004 2000 0"
+  "bruna 0 6006 2000 0"
+  "bruna 0 8008 2000 0"
+  "bruna 0 10010 2000 0"
+  "bruna 3 4004 1000 20"
+  "bruna 3 5005 1000 20"
+  "bruna 3 6006 1000 20"
+  "bruna 3 7007 1000 20"
+  "bruna 5 4004  500 40"
+  "bruna 5 5005  500 40"
+  "bruna 5 6006  500 40"
+  "bruna 5 7007  500 40"
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.
