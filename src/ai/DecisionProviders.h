@@ -293,9 +293,13 @@ public:
 // the deck ACTUALLY ROUTES TO TODAY; change that only with a measurement.
 
 // Giants (mono-red Giant tribal: Inferno Titan / Sunrise Sovereign / Hamletback Goliath).
-// EMPTY derivation -- play-neutral by construction, inheriting every judgement hook from
-// GenericProvider, which is what this deck WOULD have ridden had its signature not collided with
-// somebody else's.
+// Derives from DeckProvider (== Generic behaviour) -- GenericProvider is what this deck WOULD have
+// ridden had its signature not collided with somebody else's -- and holds ONE judgement hook:
+//   * CleanupDiscardCandidates -- the USER-settled cleanup-discard buckets (2026-10-09,
+//     docs/design/giants-discard-policy-proposal.md; MTG_GIANTS_BUCKET_DISCARD, default ON, =0
+//     restores the generic max-MV ranking). See the .cpp block.
+// Every other hook inherits GenericProvider byte-for-byte. (Until 2026-10-09 this was an EMPTY
+// derivation, play-neutral by construction.)
 //
 // It exists because Giants is the SEVENTH deck to hit the archetype-neutral misroute class
 // documented in DetectDecisionProvider (after Mirrorwing, StompySurprise, Minotaur, Dragons,
@@ -318,6 +322,12 @@ public:
                "Greaves grants haste, so a winless-this-turn proof must model all four. See "
                "SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Giants"; }
+    // The USER-settled cleanup-discard buckets (2026-10-09): mana 6 (4 with a Daredevil in play) + a
+    // soft 7th, Daredevil 2/1/0, Giants 2 + a soft 3rd in the USER's order discounted by distance to
+    // castable, Greaves 1, Bolt 1 + a soft 2nd, Pyroclasm a blank. MTG_GIANTS_BUCKET_DISCARD=0
+    // restores the generic max-MV ranking (A/B hatch).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Prevent Damage (Manabarbs / painlands / Tamanoa / Rhox Faithmender / Vito / Dina). Onboarded

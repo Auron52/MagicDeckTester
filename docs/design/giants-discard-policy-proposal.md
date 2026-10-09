@@ -74,6 +74,54 @@ USER answers 2026-10-09:
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `GiantsProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`), behind
+`MTG_GIANTS_BUCKET_DISCARD` (heurarm slot `GIANTS_BUCKET_DISCARD`, default ON; `=0` returns
+`GenericProvider::CleanupDiscardCandidates`, the max-MV ranking). Tests:
+`test/unit/test_giants_discard.cpp` (17 cases; each expected order derived by hand from the SETTLED
+block, each with the generic control).
+
+As built:
+- KEEP LADDER (one card per slot): MANA, GIANT, DAREDEVIL, MANA, GIANT, MANA, GREAVES, DAREDEVIL2,
+  GIANT3, MANA, BOLT, MANA, MANA, MANA7, BOLT2. A MANA slot fills only while `6 - board sources`
+  (`4 -` with a Daredevil in play) is unmet; MANA7 takes one source past it. Daredevil slots fill to
+  `2 - Daredevils in play`; Greaves to `1`, `0` with one in play.
+- MANA PICK LIST: a land first while no land is in play, then Sol Ring (`produces_amount >= 2`), the
+  other lands, a plain rock, Fire Diamond (`enters_tapped`) last. A rock with no land on the battlefield
+  or in hand is a blank.
+- GIANTS by EV = P(play) x 7 x 0.85^position, position from the USER's order (Titan 0, Flinger 1,
+  Behemoth 2, Tectonic 3, Sovereign 4, Goliath 5, Harbinger 6); P = {1, .70, .35, .10, .03, .02} by mana
+  short of reach; cost = MV minus the SUM of the in-play Daredevils' discount, floored at the coloured
+  pips, times (1 + copies already ahead in hand or in play).
+- SHED: Pyroclasm > dead rock (Fire Diamond first) > dead legend copy > mana past the 7th (Fire
+  Diamond, Mountains, Sol Ring) > spare Greaves > 3rd/4th Bolt > spare Daredevils > spare Giants (lowest
+  EV first) > unrecognised > the ladder backwards. Every non-staged card named once.
+
+Agent readings (surfaced; the USER may overturn any):
+- Sovereign's "promote at 2+ Giants in play" is dropped (the design's own agent default).
+- Behemoth "top" = above Inferno Titan (position -1), "last" = below Giant Harbinger (position 7); the
+  other Giants keep fixed positions, so Behemoth's move does not re-weight them. Positions are the
+  deck-level place in the USER's order, not a rank within the hand.
+- `reach` (the distance term) counts MANA, so Sol Ring is 2; the quota counts SOURCES (Sol Ring is 1),
+  per "6 sources".
+- Only a Daredevil IN PLAY discounts (a held one does not; proposal D5). The mana target's credit is one
+  copy's worth: 4 with one or two Daredevils in play.
+- "No land anywhere" = none on our battlefield and none in hand (literal).
+- The Giant quota (2 + soft 3rd) is NOT netted against Giants in play: the SETTLED block nets mana,
+  Daredevils and Greaves only, and the Dragons / Minotaur threat floors it descends from are hand
+  floors.
+- S0's inner order (Pyroclasm before a dead rock), the duplicate-legend rule (inert: no legend in the
+  list) and an S6 slot for an unrecognised card (inert) are agent placements.
+- Not implemented, being absent from the SETTLED block: the proposal's two-red-source colour tie-break
+  (inert -- every land is a Mountain) and its six exploratory levers (`MTG_GIANTS_DISCARD_MANA5`, `_DIAMOND_EARLY`,
+  `_HARBINGER_HIGH`, `_HAND_REDUCER`, `_THREAT3`, `_BINARY`).
+
+Ages the committed keep table (`Giants.keepmodel.exhaustive.profile.json.gz`) and value leaf
+(`Giants.value.json`): both were fitted under the max-MV ranking. Not measured here (no game runs in
+this step); per the design, measure non-inferiority with the sidecar in place.
+
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)

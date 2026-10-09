@@ -13927,9 +13927,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Harbinger to fetch, so a Goblin-tuned ranking would silently decide which Giant is
         // unreachable -- a narrowing never measured for this deck.
         //
-        // Routes to GiantsProvider, an EMPTY DeckProvider derivation: per the always-own-a-
-        // provider rule the deck gets a name and a certificate answer, and per the "no unmeasured
-        // narrowing" rule it gets no heuristics at all until one is proposed and measured.
+        // Routes to GiantsProvider, a DeckProvider derivation: per the always-own-a-provider rule
+        // the deck gets a name and a certificate answer, and it holds exactly ONE judgement hook --
+        // the USER-settled cleanup-discard buckets (2026-10-09, GiantsProvider::
+        // CleanupDiscardCandidates, MTG_GIANTS_BUCKET_DISCARD=0 restores Generic). Every other hook
+        // inherits GenericProvider byte-for-byte.
         //
         // Signature = Giants-only gated params OR'd across FIVE different cards (Inferno Titan,
         // Borderland Behemoth, Hamletback Goliath, Surtland Flinger, Tectonic Giant) so a
@@ -18578,6 +18580,355 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
     // is the exact ranking this provider exists to overturn, and on a hand where every card is
     // quota-covered (common on a deck whose curve tops at eight) that fallback decided everything.
     for (auto it = taken_order.rbegin(); it != taken_order.rend(); ++it) { put(*it); }
+
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// ---- GiantsProvider::CleanupDiscardCandidates -------------------------------
+//
+// THE USER'S SETTLED DESIGN (2026-10-09): docs/design/giants-discard-policy-proposal.md, block
+// "Giants: SETTLED" (the original 2026-09-23 proposal below it is background and is superseded
+// wherever it differs). MTG_GIANTS_BUCKET_DISCARD, default ON; =0 restores the generic max-MV ranking.
+//
+// WHY THIS DECK NEEDS ONE. The generic tier B is descending mana value, which on this list sheds all
+// twenty Giants and the four Daredevils before it will shed one Pyroclasm, one surplus Mountain or a
+// fourth Bolt -- the cards the deck exists to cast go first, and lands go last. Real play sheds almost
+// never (0 in 200 games at d5), but the SEARCH sheds 81,594 times in those 200 games, ~95% of them
+// with fewer than four lands, and index 0 of this ranking decides every one with no search above it.
+//
+// THE BUCKETS:
+//   MANA     6 sources COUNTING THE BOARD, 4 with a Daredevil in play -- USER: "6 and 4 with a
+//            daredevil is correct if we need the space. If we have lands on board we might be able
+//            to aim for 7." -- so a SOFT 7th (5 with a Daredevil) "when there is room", which the
+//            USER placed "just before the 2nd Bolt" in the ladder. Pick order: a land FIRST while
+//            none is in play, then Sol Ring > lands > Fire Diamond. A rock with no land anywhere is
+//            a BLANK (nothing can pay for it) and never fills a mana slot.
+//   REDUCER  Stinkdrinker Daredevil: 2 while none is in play, 1 with one, 0 at two. A spare copy is
+//            NOT a threat -- it is a Goblin Rogue, so nothing in the deck counts, pumps or fetches it.
+//   GIANTS   2 + a soft 3rd. The USER's order, best first: Inferno Titan > Surtland Flinger >
+//            Borderland Behemoth > Tectonic Giant > Sunrise Sovereign > Hamletback Goliath > Giant
+//            Harbinger. USER: "would put Flinger higher than you might expect. It is very good for
+//            throwing something like a behemoth. Sovereign is probably overrated in your list.
+//            Trample is a big part of its draw and that doesn't do anything in goldfishing." --
+//            then "Flinger 2nd right after Titan; Sovereign below Tectonic", and "Inferno Titan is
+//            highly regarded as well. It does 12 damage + firebreathing by the turn it attacks."
+//            Borderland Behemoth is BOARD-CONDITIONAL (4/4 + 4/4 per other Giant): TOP of the order
+//            with 2+ Giants in play, LAST with none, its listed place with exactly one.
+//   HASTE    Lightning Greaves 1, 0 with one in play (Equip {0} re-points it every turn).
+//   REACH    Lightning Bolt 1 + a soft 2nd.
+//   BLANK    Pyroclasm. The goldfish opponent never blocks and no card here watches a creature die,
+//            so it can only hurt us (two in one turn kill our own 1/3 Daredevil). First shed. This
+//            verdict rests on the OPPONENT MODEL, not the card: a blocking opponent must revisit it.
+//
+// DISTANCE TO CASTABLE orders the Giants -- EV = P(play) x value, the shape MinotaurProvider adopted
+// and the design names. value = 7 x 0.85^(position in the USER's order); P comes from how much mana
+// the card is still short of `reach` (board mana + hand lands + live hand rocks), with Minotaur's HARD
+// decay {1, .70, .35, .10, .03} and .02 beyond. A Daredevil IN PLAY takes {2} off every Giant, and the
+// discount STACKS per Daredevil (SUM, exactly as ManaPayment applies it) and is FLOORED at the coloured
+// pips (it reduces generic only, CR 601.2f): two Daredevils price Tectonic Giant at {R}{R} = 2, never 0.
+// A second copy must be paid for on top of the first (cumulative mana, counting copies in play), so a
+// spare Titan sinks on its own without a spare-copy rule.
+//
+// THE KEEP LADDER (interleaved, one card per slot; read BACKWARDS it is the tail of the shed order):
+//    1 MANA  2 GIANT  3 DAREDEVIL  4 MANA  5 GIANT  6 MANA  7 GREAVES  8 DAREDEVIL2  9 GIANT3 (soft)
+//   10 MANA 11 BOLT  12 MANA  13 MANA  14 MANA7 (the soft 7th source)  15 BOLT2 (soft)
+// A MANA slot fills only while the hard target (net of board) is unmet; MANA7 fills one source past it.
+// SHED ORDER: S0 Pyroclasm, then a dead rock, then a dead legend copy > S1 mana past the 7th (Fire
+// Diamond, then Mountains, then Sol Ring: the pick list reversed) > S2 spare Greaves > S3 the 3rd/4th
+// Bolt > S4 spare Daredevils > S5 spare Giants, lowest discounted value first > S6 anything this policy
+// does not recognise > the ladder read backwards. Every non-staged hand card is named exactly once, so
+// nothing falls through to max-MV; the return routes through CleanupDiscardRankingWithOrder, so the
+// staged-card and required-piece protections stay engine-enforced (required_pieces is empty here).
+//
+// AGENT READINGS (listed in the design doc's implementation notes for the USER to overturn):
+//   * Sovereign's "promote at 2+ Giants in play" clause from the proposal is DROPPED with its demotion
+//     (the design's own agent default).
+//   * Behemoth "top" = above Inferno Titan (position -1), "last" = below Giant Harbinger (position 7);
+//     every other Giant keeps its fixed position, so moving Behemoth never re-weights the rest.
+//     Positions are the DECK-level place in the USER's order, not a hand-relative rank (Minotaur needed
+//     hand-relative ranks because its buckets tie; this order has none).
+//   * `reach` counts MANA (Sol Ring = 2); the quota counts SOURCES (the USER's "6 sources").
+//   * Only a Daredevil IN PLAY discounts ("per Daredevil in play"); a held one does not (proposal D5).
+//     The mana target's credit is one copy's worth: 4 with one or two Daredevils in play.
+//   * "No land anywhere" = no land on our battlefield and none in hand (literal). A rock in play with
+//     no land is unreachable against the goldfish.
+//   * The Giant quota is NOT netted against Giants in play: the design nets mana, Daredevil and
+//     Greaves only, and the Dragons / Minotaur threat floors it inherits are hand floors too.
+//   * S0's inner order (Pyroclasm before a dead rock: a dead rock goes live the moment a land is
+//     drawn), the duplicate-legend rule (implementation contract; inert, the list has no legend) and
+//     the S6 slot for an unrecognised card (inert on this list) are agent placements.
+//   * The proposal's two-red-source colour tie-break is not in the SETTLED block and is not
+//     implemented (inert: every land here is a Mountain, and Sol Ring's place is fixed by rule).
+//
+// Classification is by PARAMS (mana_rock / produces_amount / enters_tapped, IsSubtypeCostReducer,
+// damage_all_creatures, equip_grants_haste, damage + targeting, the Giants' own gated params), never by
+// card name, so a screening arm that swaps a card keeps the right bucket.
+static bool GiantsBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_GIANTS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::GIANTS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> GiantsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!GiantsBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const std::size_t un = static_cast<std::size_t>(n);
+
+    // Every hand read goes through the DEFINITION: a hand card is a name-only placeholder
+    // (DeckLoader::MakePlaceholder), so its own type / cost / subtype fields are empty.
+    auto def_of  = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto mana_of = [](const CardDefinition* d)
+    { return d == nullptr ? 1 : std::max(1, d->params.produces_amount); };
+
+    // ---- 1. board census (our permanents) --------------------------------------------------------
+    int board_lands = 0, board_sources = 0, board_mana = 0, board_reducers = 0, board_haste = 0;
+    std::vector<const CardDefinition*> board_red;   // literal-subtype reducers: the discount sources
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand())                          { ++board_lands; ++board_sources; board_mana += mana_of(d); }
+        else if (d != nullptr && d->params.mana_rock) { ++board_sources; board_mana += mana_of(d); }
+        if (d == nullptr) { continue; }
+        if (IsSubtypeCostReducer(*d))
+        {
+            ++board_reducers;
+            // A reducer that picks its type on resolution (chooses_creature_type) names no subtype
+            // here, so it prices no discount (MinotaurProvider's rule); inert on this list.
+            if (!d->params.reduces_spell_subtype.empty()) { board_red.push_back(d); }
+        }
+        if (d->params.equip_grants_haste) { ++board_haste; }
+    }
+
+    // ---- 2. partition the hand --------------------------------------------------------------------
+    enum Cls : signed char { C_SKIP, C_DEAD, C_LAND, C_BLANK, C_RED, C_ROCK, C_HASTE, C_BOLT, C_GIANT, C_REST };
+    std::vector<signed char> cls(un, C_SKIP);
+    auto legend_dead = [&](int i)   // a copy on our battlefield, or an earlier copy in hand
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.m_name == hc.m_name) { return true; } }
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& o = ap.hand[static_cast<std::size_t>(j)];
+            if (!o.m_is_staged && o.m_name == hc.m_name) { return true; }
+        }
+        return false;
+    };
+    bool hand_land = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        signed char& c = cls[static_cast<std::size_t>(i)];
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary) && legend_dead(i)) { c = C_DEAD; continue; }
+        if (CleanupDiscardIsLand(hc)) { c = C_LAND; hand_land = true; continue; }
+        if (d == nullptr) { c = C_REST; continue; }
+        const CardParams& p = d->params;
+        // Order matters: the reducer test precedes the creature test (a Daredevil is a creature).
+        if (p.damage_all_creatures > 0)        { c = C_BLANK; }
+        else if (IsSubtypeCostReducer(*d))     { c = C_RED; }
+        else if (p.mana_rock)                  { c = C_ROCK; }
+        else if (p.equip_grants_haste)         { c = C_HASTE; }
+        else if (p.damage > 0 && !d->card.IsCreature()
+                 && (p.targeting == Targeting::Any || p.targeting == Targeting::Player)) { c = C_BOLT; }
+        else if (d->card.IsCreature())         { c = C_GIANT; }
+        else                                   { c = C_REST; }
+    }
+    auto is_cls = [&](int i, Cls k) { return cls[static_cast<std::size_t>(i)] == k; };
+
+    // ---- 3. mana: the pick list, and the dead rocks -----------------------------------------------
+    const bool rocks_live = board_lands > 0 || hand_land;
+    auto rock_tier = [&](int i)   // 0 = burst (Sol Ring), 1 = plain, 2 = enters tapped (Fire Diamond)
+    {
+        const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
+        if (d->params.produces_amount >= 2) { return 0; }
+        return d->params.enters_tapped ? 2 : 1;
+    };
+    std::vector<int> mana_pick;   // keep order: a land first while none is in play, Sol Ring > lands > Fire Diamond
+    std::vector<int> dead_rocks;  // shed order (the pick order reversed)
+    mana_pick.reserve(un);
+    int first_land = -1;
+    if (board_lands == 0)
+    {
+        for (int i = 0; i < n; ++i) { if (is_cls(i, C_LAND)) { first_land = i; mana_pick.push_back(i); break; } }
+    }
+    if (rocks_live) { for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == 0) { mana_pick.push_back(i); } } }
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_LAND) && i != first_land) { mana_pick.push_back(i); } }
+    for (int t = 1; t <= 2; ++t)
+    {
+        if (!rocks_live) { break; }
+        for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == t) { mana_pick.push_back(i); } }
+    }
+    if (!rocks_live)
+    {
+        for (int t = 2; t >= 0; --t)
+        { for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == t) { dead_rocks.push_back(i); } } }
+    }
+    // Reach for the distance term: every mana source on the board, plus every land and live rock held.
+    int reach = board_mana;
+    for (int i : mana_pick) { reach += mana_of(def_of(ap.hand[static_cast<std::size_t>(i)])); }
+
+    // ---- 4. the Giants, by discounted value -------------------------------------------------------
+    // Behemoth's own param names the subtype it counts; nothing here hardcodes "Giant".
+    std::string_view pump_tribe;
+    for (int i = 0; i < n && pump_tribe.empty(); ++i)
+    {
+        if (!is_cls(i, C_GIANT)) { continue; }
+        const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
+        if (!d->params.static_self_pump_per_other_subtype.empty())
+        { pump_tribe = d->params.static_self_pump_per_other_subtype; }
+    }
+    int board_tribe = 0;
+    if (!pump_tribe.empty())
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && CardHasSubtype(p.card, pump_tribe)) { ++board_tribe; } }
+    }
+    // Position in the USER's order (agent reading: Behemoth moves to -1 / 7, the rest stay fixed).
+    auto value_pos = [&](const CardParams& p)
+    {
+        if (p.attack_trigger_damage_any > 0)                   { return 0; }   // Inferno Titan
+        if (p.attack_sac_fling)                                { return 1; }   // Surtland Flinger
+        if (!p.static_self_pump_per_other_subtype.empty())                     // Borderland Behemoth
+        { return board_tribe >= 2 ? -1 : (board_tribe == 0 ? 7 : 2); }
+        if (p.attack_trigger_modal)                            { return 3; }   // Tectonic Giant
+        if (p.power_bonus > 0 && !p.subtypes_affected.empty()) { return 4; }   // Sunrise Sovereign
+        if (p.any_creature_enters_self_counters_power)         { return 5; }   // Hamletback Goliath
+        if (p.tutor_to_top)                                    { return 6; }   // Giant Harbinger
+        return 8;                                                              // unrecognised creature
+    };
+    // kVal[pos + 1] = 7 x 0.85^pos for pos -1..8, by repeated IEEE multiplication -- exact and the same
+    // on every platform (std::pow is not guaranteed bit-identical across libms; Windows parity).
+    static const std::array<double, 10> kVal = []
+    {
+        std::array<double, 10> v{};
+        v[1] = 7.0;
+        v[0] = 7.0 / 0.85;
+        for (std::size_t k = 2; k < v.size(); ++k) { v[k] = v[k - 1] * 0.85; }
+        return v;
+    }();
+    auto p_play = [](int deficit)
+    {
+        static const double kHard[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };
+        return deficit <= 0 ? 1.0 : (deficit < 5 ? kHard[deficit] : 0.02);
+    };
+    std::vector<int>    giants;
+    std::vector<double> ev(un, 0.0);
+    std::vector<int>    vpos(un, 0);
+    giants.reserve(un);
+    for (int i = 0; i < n; ++i)
+    {
+        if (!is_cls(i, C_GIANT)) { continue; }
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        const CardDefinition* d = def_of(hc);
+        int red = 0;
+        for (const CardDefinition* rd : board_red)
+        {
+            if (rd->params.reduces_spell_subtype_creature_only && !d->card.IsCreature()) { continue; }
+            if (CardHasSubtype(d->card, rd->params.reduces_spell_subtype))
+            { red += std::max(1, rd->params.reduces_spell_subtype_amount); }
+        }
+        const ManaCost& mc = d->card.m_mana_cost;
+        const int eff = mc.ManaValue() - std::min(red, mc.generic);   // SUM, floored at the pips
+        int copies = 0;
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& o = ap.hand[static_cast<std::size_t>(j)];
+            if (!o.m_is_staged && o.m_name == hc.m_name) { ++copies; }
+        }
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.m_name == hc.m_name) { ++copies; } }
+        const int pos = value_pos(d->params);
+        vpos[static_cast<std::size_t>(i)] = pos;
+        ev[static_cast<std::size_t>(i)]   = p_play(eff * (1 + copies) - reach)
+                                            * kVal[static_cast<std::size_t>(pos + 1)];
+        giants.push_back(i);
+    }
+    std::stable_sort(giants.begin(), giants.end(), [&](int a, int b)
+    {
+        const double ea = ev[static_cast<std::size_t>(a)], eb = ev[static_cast<std::size_t>(b)];
+        if (ea != eb) { return ea > eb; }
+        return vpos[static_cast<std::size_t>(a)] < vpos[static_cast<std::size_t>(b)];
+    });
+
+    // ---- 5. the keep ladder -----------------------------------------------------------------------
+    enum Slot : char { L_MANA, L_GIANT, L_RED, L_HASTE, L_BOLT, L_MANA7 };
+    static const Slot kLadder[] = {
+        L_MANA, L_GIANT, L_RED, L_MANA, L_GIANT, L_MANA, L_HASTE, L_RED, L_GIANT, L_MANA, L_BOLT,
+        L_MANA, L_MANA, L_MANA7, L_BOLT
+    };
+    const int mana_target = board_reducers > 0 ? 4 : 6;
+    const int mana_need   = std::max(0, mana_target - board_sources);       // hard, net of board
+    const int mana_soft   = std::max(0, mana_target + 1 - board_sources);   // + the soft 7th
+    int red_need   = std::max(0, 2 - board_reducers);
+    int haste_need = board_haste > 0 ? 0 : 1;
+    std::vector<char> keep(un, 0);
+    std::vector<int>  taken;                 // acquisition order; reversed, it is the keep tail
+    taken.reserve(un);
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
+    auto next_of = [&](int& cur, Cls k)      // the next unkept card of class k in hand order, or -1
+    {
+        while (cur < n && !is_cls(cur, k)) { ++cur; }
+        return cur < n ? cur++ : -1;
+    };
+    std::size_t nm = 0, ng = 0;
+    int cur_red = 0, cur_haste = 0, cur_bolt = 0, mana_taken = 0;
+    for (const Slot slot : kLadder)
+    {
+        switch (slot)
+        {
+            case L_MANA:
+            case L_MANA7:
+                if (mana_taken < (slot == L_MANA ? mana_need : mana_soft) && nm < mana_pick.size())
+                { take(mana_pick[nm++]); ++mana_taken; }
+                break;
+            case L_GIANT:
+                if (ng < giants.size()) { take(giants[ng++]); }
+                break;
+            case L_RED:
+                if (red_need > 0) { const int i = next_of(cur_red, C_RED); if (i >= 0) { take(i); --red_need; } }
+                break;
+            case L_HASTE:
+                if (haste_need > 0) { const int i = next_of(cur_haste, C_HASTE); if (i >= 0) { take(i); --haste_need; } }
+                break;
+            case L_BOLT:
+                { const int i = next_of(cur_bolt, C_BOLT); if (i >= 0) { take(i); } }
+                break;
+        }
+    }
+
+    // ---- 6. the shed order ------------------------------------------------------------------------
+    std::vector<int>  shed;
+    std::vector<char> listed(un, 0);
+    shed.reserve(un);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[static_cast<std::size_t>(i)].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_unkept_cls = [&](Cls k)          // a bucket's overflow, the later copy first
+    { for (int i = n - 1; i >= 0; --i) { if (is_cls(i, k) && !keep[static_cast<std::size_t>(i)]) { put(i); } } };
+
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_BLANK)) { put(i); } }                     // S0 Pyroclasm
+    for (int i : dead_rocks) { put(i); }                                                    //    dead rock
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_DEAD)) { put(i); } }                      //    dead legend
+    for (auto it = mana_pick.rbegin(); it != mana_pick.rend(); ++it)                        // S1 mana past 7th
+    { if (!keep[static_cast<std::size_t>(*it)]) { put(*it); } }
+    put_unkept_cls(C_HASTE);                                                                // S2 spare Greaves
+    put_unkept_cls(C_BOLT);                                                                 // S3 3rd/4th Bolt
+    put_unkept_cls(C_RED);                                                                  // S4 spare Daredevil
+    for (auto it = giants.rbegin(); it != giants.rend(); ++it)                              // S5 spare Giants
+    { if (!keep[static_cast<std::size_t>(*it)]) { put(*it); } }
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_REST)) { put(i); } }                      // S6 unrecognised
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }                  // the ladder, backwards
 
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
