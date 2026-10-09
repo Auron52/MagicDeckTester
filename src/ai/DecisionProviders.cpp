@@ -10841,6 +10841,17 @@ std::vector<int> DragonstormProvider::CleanupDiscardCandidates(
 //       castable, and counting it would let one shed strand the payoff it was counted for.
 //   (e) A legend duplicate is dead whatever the legend (only Wanderer is one here); an unrecognised card
 //       sheds after the spare enablers, last of the overflow.
+//   (f) AGENT CORRECTION (review 2026-10-09; the USER may overturn): INSIDE a land rank the land kept
+//       first is the one paying coloured pips that the board plus the lands already kept do not cover,
+//       for the FIRST payoff in the USER's order that still has such a pip (more such pips first); then
+//       by card name. The fill stops at 5 mana and (d) counts only kept lands, so a hand-order tie-break
+//       let hand order decide payability: board 3 Mountains, hand [Peat Bog, Skerry, Protege, CT, BD,
+//       Boarding Party, CT, BD] kept the Bog and shed a stranded Protege, the same hand with the two
+//       lands swapped kept the Skerry and shed the Bog. Now both keep the Skerry. The surplus lands shed
+//       in the same order reversed.
+// NOT PREFIX-STABLE: the (f) tie-break reads the HELD payoffs (shedding one can flip which of two tied
+// surplus lands goes next), and a filter loses its feeder when the last other land is shed. So
+// CleanupDiscardShedStable() is false while the buckets are on and the engine re-ranks per shed.
 // Classification is by PARAMS on the definition (a hand card is a name-only placeholder): enabler =
 // etb_exile_until_nonland || shuffle_reveal_freecast, payoff = cascade_max_mv > 0. The return routes
 // through CleanupDiscardRankingWithOrder (required_pieces is empty for this deck).
@@ -10848,6 +10859,11 @@ static bool BreachBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_BREACH_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::BREACH_BUCKET_DISCARD, on);
+}
+
+bool BreachingDragonstormProvider::CleanupDiscardShedStable() const
+{
+    return !BreachBucketDiscardEnabled();
 }
 
 std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
@@ -10936,7 +10952,6 @@ std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
         if (d->params.ramp_filter)              { return 3; }
         return 2;
     };
-    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b) { return land_rank(a) < land_rank(b); });
     // Creative Technique (two free casts with demonstrate, uncapped) > Breaching Dragonstorm.
     std::stable_sort(enablers.begin(), enablers.end(), [&](int a, int b)
     {
@@ -10956,17 +10971,82 @@ std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
     {
         const int ra = payoff_rank(a), rb = payoff_rank(b);
         if (ra != rb) { return ra < rb; }
-        return CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)])
-             < CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+        const int ma = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)]);
+        const int mb = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+        if (ma != mb) { return ma < mb; }
+        return ap.hand[static_cast<std::size_t>(a)].m_name.str() < ap.hand[static_cast<std::size_t>(b)].m_name.str();
     });
+
+    // Land choice, readings (b) + (f): the best rank first; inside a rank the land paying uncovered pips
+    // of the first payoff (USER order) that has any, more of them first; then by name. `av` is the
+    // coverage so far (board + lands already chosen). Lands are scanned in hand order and only a
+    // STRICTLY better land replaces the pick, so a remaining tie is between same-name (identical) cards.
+    auto pip_of = [&](int i, int c) -> int
+    {
+        const ManaCost& mc = def_at(i)->card.m_mana_cost;
+        switch (c)
+        {
+            case 0:  return mc.white;
+            case 1:  return mc.blue;
+            case 2:  return mc.black;
+            case 3:  return mc.red;
+            default: return mc.green;
+        }
+    };
+    auto help_key = [&](int land, const int* av, int& amount) -> int
+    {
+        const CardDefinition* d = def_at(land);
+        for (std::size_t k = 0; k < payoffs.size(); ++k)
+        {
+            int a = 0;
+            for (int c = 0; c < 5; ++c)
+            {
+                const int unc = pip_of(payoffs[k], c) - av[c];
+                if (unc > 0) { a += std::min(colour_amount(d, c), unc); }
+            }
+            if (a > 0) { amount = a; return static_cast<int>(k); }
+        }
+        amount = 0;
+        return static_cast<int>(payoffs.size());
+    };
+    enum PickMode { PICK_RED, PICK_MANA, PICK_ANY };
+    auto pick_land = [&](const std::vector<char>& used, const int* av, PickMode mode) -> int
+    {
+        int best = -1, b_rank = 0, b_key = 0, b_amt = 0;
+        for (int i : lands)
+        {
+            if (used[static_cast<std::size_t>(i)]) { continue; }
+            const CardDefinition* d = def_at(i);
+            if (mode == PICK_RED && colour_amount(d, kRed) <= 0) { continue; }
+            if (mode == PICK_MANA && yield(d) <= 0) { continue; }
+            int amt = 0;
+            const int r = land_rank(i), k = help_key(i, av, amt);
+            bool better = best < 0;
+            if (!better)
+            {
+                if (r != b_rank)      { better = r < b_rank; }
+                else if (k != b_key)  { better = k < b_key; }
+                else if (amt != b_amt) { better = amt > b_amt; }
+                else
+                {
+                    better = ap.hand[static_cast<std::size_t>(i)].m_name.str()
+                           < ap.hand[static_cast<std::size_t>(best)].m_name.str();
+                }
+            }
+            if (better) { best = i; b_rank = r; b_key = k; b_amt = amt; }
+        }
+        return best;
+    };
 
     // ---- 3. the keep ladder ----------------------------------------------------------------------
     std::vector<char> keep(static_cast<std::size_t>(n), 0);
     std::vector<int>  taken;
+    std::vector<int>  land_seq;   // every hand land in keep order: the ladder's picks, then the surplus
     auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
     auto take_land = [&](int i)
     {
         take(i);
+        land_seq.push_back(i);
         const CardDefinition* d = def_at(i);
         mana += yield(d);
         for (int c = 0; c < 5; ++c) { avail[c] += colour_amount(d, c); }
@@ -10975,16 +11055,16 @@ std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
     { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
 
     // R1 the only red source (reading (c)).
-    if (!board_red)
-    { for (int i : lands) { if (colour_amount(def_at(i), kRed) > 0) { take_land(i); break; } } }
+    if (!board_red) { const int i = pick_land(keep, avail, PICK_RED); if (i >= 0) { take_land(i); } }
     // E1 the best enabler.
     const int e1 = first_free(enablers);
     if (e1 >= 0) { take(e1); }
     // M mana to 5, flat, counting the board.
-    for (int i : lands)
+    while (mana < 5)
     {
-        if (mana >= 5) { break; }
-        if (!keep[static_cast<std::size_t>(i)] && yield(def_at(i)) > 0) { take_land(i); }
+        const int i = pick_land(keep, avail, PICK_MANA);
+        if (i < 0) { break; }
+        take_land(i);
     }
     // E2 a second enabler, preferring the other name.
     {
@@ -11015,6 +11095,20 @@ std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
             if (payable[static_cast<std::size_t>(i)]) { take(i); ++kept_payoffs; }
         }
     }
+    // The surplus lands continue the same keep order past the target (scratch coverage, so a second
+    // Skerry gets no credit for pips the first already pays); they shed in it reversed.
+    {
+        std::vector<char> used = keep;
+        int av2[5] = { avail[0], avail[1], avail[2], avail[3], avail[4] };
+        for (;;)
+        {
+            const int i = pick_land(used, av2, PICK_ANY);
+            if (i < 0) { break; }
+            used[static_cast<std::size_t>(i)] = 1;
+            land_seq.push_back(i);
+            for (int c = 0; c < 5; ++c) { av2[c] += colour_amount(def_at(i), c); }
+        }
+    }
 
     // ---- 4. the shed order -----------------------------------------------------------------------
     std::vector<int> shed;
@@ -11030,7 +11124,7 @@ std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
     for (int i = 0; i < n; ++i) { if (dead[static_cast<std::size_t>(i)]) { put(i); } }   // Wanderer dupes
     for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it)                         // stranded payoffs
     { if (unkept(*it) && !payable[static_cast<std::size_t>(*it)]) { put(*it); } }
-    for (auto it = lands.rbegin(); it != lands.rend(); ++it) { if (unkept(*it)) { put(*it); } }   // surplus lands
+    for (auto it = land_seq.rbegin(); it != land_seq.rend(); ++it) { if (unkept(*it)) { put(*it); } } // surplus lands
     for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it) { if (unkept(*it)) { put(*it); } } // extra castable
     for (auto it = enablers.rbegin(); it != enablers.rend(); ++it) { if (unkept(*it)) { put(*it); } } // spare enabler
     for (int i = 0; i < n; ++i) { if (other[static_cast<std::size_t>(i)]) { put(i); } }
