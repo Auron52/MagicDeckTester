@@ -741,11 +741,12 @@ public:
 };
 
 // WhiteKnights (2026-09-25) -- mono-white Knight tribal on Aether Vial, a DIFFERENT shipping list
-// from Knights above. An EMPTY derivation of KnightsProvider: it inherits every judgement hook
+// from Knights above. A derivation of KnightsProvider: it inherits every judgement hook
 // byte-for-byte (the Vial charge policy from VialProvider, the USER-reviewed MTG_KNIGHTS_ORDER cast
-// order, and the root defaults for everything else), so it exists for the reasons the
-// every-deck-owns-a-provider rule gives -- a name in scripts/provider_audit.py and a place to hold a
-// certificate -- and NOT to narrow anything.
+// order, and the root defaults for everything else) EXCEPT the cleanup discard, which since
+// 2026-10-09 is its own USER-settled rule (the Knights rule plus extras; see below). It exists for
+// the reasons the every-deck-owns-a-provider rule gives -- a name in scripts/provider_audit.py and a
+// place to hold a certificate -- and NOT to narrow anything.
 //
 // WHY IT IS NEEDED AT ALL: both lists trip the `knights` signature (both mainboards run Knight
 // Exemplar, Worthy Knight and Acclaimed Contender), so without this they would SHARE a provider and
@@ -764,6 +765,9 @@ public:
 // behaves identically, since there is no hook here to lose. The cost of getting it wrong is the
 // audit name and the certificate, not the deck's play. If either list ever earns a measured hook,
 // that stops being true and the signature needs a sturdier discriminator.
+// (2026-10-09: it HAS stopped being true for the cleanup discard -- the USER-settled WhiteKnights
+// rule below is the Knights rule PLUS extras keyed on params Knights' mainboard does not carry
+// (removal, a mana rock), so a misroute would now cost WhiteKnights those extras.)
 class WhiteKnightsProvider : public KnightsProvider
 {
 public:
@@ -777,6 +781,16 @@ public:
                "creature's damage is not deferred to the next turn. Any 'provably winless this turn' "
                "bound that ignores the double-strike activation is simply wrong." }; }
     const char* Name() const override { return "WhiteKnights"; }
+    // The USER-settled WhiteKnights cleanup-discard rule (2026-10-09,
+    // docs/design/whiteknights-discard-policy.md): the Knights curve rule plus the extras -- Swords /
+    // Unexpectedly Absent shed first, Sol Ring and Remote Farm count as (2) mana, duplicate legends
+    // shed early. MTG_WK_BUCKET_DISCARD (default ON; =0 -> GenericProvider's max-MV ranking,
+    // independent of MTG_KNIGHTS_BUCKET_DISCARD). This is the first judgement hook this class holds,
+    // so the "misroute between the two Knight providers is play-neutral" note above no longer holds
+    // for the cleanup discard: the two rules differ by the extras.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;   // false while the rule is on (see Knights)
 };
 
 
