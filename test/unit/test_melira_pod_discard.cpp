@@ -202,7 +202,7 @@ TEST_CASE("Pod discard P5: a 2nd Melira -- one in play, or an earlier copy in ha
     CheckPod(in_hand, { 2, 6, 7, 4, 3, 5, 1, 0 }, 4);
 }
 
-TEST_CASE("Pod discard P6: Chord fills the MISSING enabler's slot and raises mana to 5; an extra Chord does not")
+TEST_CASE("Pod discard P6: Chord fills the MISSING enabler's slot; ANY Chord in hand raises mana to 5")
 {
     // 4 lands in play. No enabler anywhere -> Chord 0 takes the enabler slot; mana5 = Branchloft 4
     // (the fastland Blooming Marsh 3 enters tapped at 4 lands -> the surplus land).
@@ -211,13 +211,27 @@ TEST_CASE("Pod discard P6: Chord fills the MISSING enabler's slot and raises man
           "Voice of Resurgence" },
         { "Forest", "Razorverge Thicket", "Llanowar Wastes", "Caves of Koilos" });
     CheckPod(missing, { 3, 5, 6, 7, 4, 1, 2, 0 }, 5);
-    // A real Melira 6: the Chord is EXTRA (kept above the toolbox), mana stays at 4 -> both hand lands
-    // are surplus, the tapped fastland first.
+    // A real Melira 6: the Chord is EXTRA (kept above the toolbox) and STILL raises the quota to 5
+    // (SETTLED "5 while a Chord is kept", design-literal -- review FIX 3; the first cut shed the
+    // Branchloft here too): Branchloft 4 is mana5, only the tapped fastland 3 is surplus.
     const GameState extra = MakePod(
         { kChord, kFinks, kFeeder, "Blooming Marsh", "Branchloft Pathway", "Reveillark", kMelira,
           "Voice of Resurgence" },
         { "Forest", "Razorverge Thicket", "Llanowar Wastes", "Caves of Koilos" });
-    CheckPod(extra, { 3, 4, 5, 7, 0, 1, 2, 6 }, 5);
+    CheckPod(extra, { 3, 5, 7, 0, 4, 1, 2, 6 }, 5);
+}
+
+TEST_CASE("Pod discard FIX3: the reviewer's board -- an extra Chord keeps the 5th land (Reveillark sheds, not Branchloft)")
+{
+    // All pieces present; 4 lands in play; quota 5 with the Chord -> Branchloft 3 is mana5.
+    // toolbox Reveillark 4 > Ooze 7 > Voice 6; extra Chord 0; ladder [Melira 5, Feeder 2, Finks 1, Branchloft 3].
+    const GameState s = MakePod(
+        { kChord, kFinks, kFeeder, "Branchloft Pathway", "Reveillark", kMelira, "Voice of Resurgence",
+          "Scavenging Ooze" },
+        { "Forest", "Razorverge Thicket", "Llanowar Wastes", "Caves of Koilos" });
+    const std::vector<int> got = Pod(s);
+    CHECK(got == std::vector<int>{ 4, 7, 6, 0, 3, 1, 2, 5 });   // the first cut: index 0 = Branchloft 3
+    CheckPermutationPod(s, got);
 }
 
 TEST_CASE("Pod discard P7: Chord fills the missing 1st persist; a 2nd Chord is extra; no fetchable persist -> no fill")
@@ -228,10 +242,10 @@ TEST_CASE("Pod discard P7: Chord fills the missing 1st persist; a 2nd Chord is e
     // ladder: [Melira 0, Feeder 1, Chord 2 (persist1), Razorverge 4 (mana5)]; Chord 3 extra.
     CheckPod(MakePod(hand, board), { 6, 7, 5, 3, 4, 2, 1, 0 }, 7);
     // Agent reading: a Chord with no persist creature left in the LIBRARY fills nothing -> both Chords
-    // are extra, mana stays at 4 and the Razorverge is surplus.
+    // are extra. They still raise the quota to 5 (FIX 3), so the Razorverge stays as mana5.
     const std::vector<std::string> lib_no_persist = { kMelira, "Vizier of Remedies", kFeeder,
                                                       "Blooming Marsh", "Llanowar Wastes", "Forest" };
-    CheckPod(MakePod(hand, board, lib_no_persist), { 4, 6, 7, 5, 2, 3, 1, 0 }, 7);
+    CheckPod(MakePod(hand, board, lib_no_persist), { 6, 7, 5, 2, 3, 4, 1, 0 }, 7);
 }
 
 TEST_CASE("Pod discard P8: Pod is kept while the combo is not easily castable; extra Pods and a Pod with one in play are surplus")
@@ -245,14 +259,16 @@ TEST_CASE("Pod discard P8: Pod is kept while the combo is not easily castable; e
     CheckPod(MakePod(hand, { "Forest", kPod }), { 7, 5, 0, 1, 4, 3, 6, 2 }, 0);
 }
 
-TEST_CASE("Pod discard P9: Recruiter / Ranger are protected while a role is missing, plain toolbox otherwise")
+TEST_CASE("Pod discard P9: Recruiter / Ranger are protected while a role THEY can fetch is missing, plain toolbox otherwise")
 {
     const std::vector<std::string> hand = { "Recruiter of the Guard", "Ranger of Eos", kFinks, kFeeder, kBlood,
                                             "Felidar Guardian", kFinks, kFinks };
-    // No enabler anywhere -> a role is missing: Ranger 1 then Recruiter 0 shed only after the surplus
-    // copies (Finks 7, then Bloodthrone 4). ladder: [Feeder 3, Finks 2, Finks 6 (persist2, fungible)].
+    // No enabler anywhere -> the ENABLER role is missing. Recruiter (toughness <= 2) reaches Melira /
+    // Vizier in the library -> protected, shed only after the surplus copies (Finks 7, Bloodthrone 4).
+    // Ranger (MV <= 1) cannot fetch an enabler -> plain toolbox, after Felidar (FIX 2; the first cut
+    // protected it too). ladder: [Feeder 3, Finks 2, Finks 6 (persist2, fungible)].
     CheckPod(MakePod(hand, { "Forest", "Llanowar Wastes", "Caves of Koilos" }),
-             { 5, 7, 4, 1, 0, 6, 2, 3 }, 1);   // generic pitches Ranger (MV 4)
+             { 5, 1, 7, 4, 0, 6, 2, 3 }, 1);   // generic pitches Ranger (MV 4)
     // Melira + Redcap in play: nothing missing -> they rejoin the toolbox after Felidar (Ranger first).
     // Board persist 1 fills persist1; the hand Finks 2 is persist2 (the missing lifegain sub-role).
     CheckPod(MakePod(hand, { "Forest", "Llanowar Wastes", "Caves of Koilos", kMelira, kRedcap }),
@@ -291,4 +307,104 @@ TEST_CASE("Pod discard P12: a staged card is never in the policy's order (it lan
     const std::vector<int> got = Pod(s);
     CHECK(got == std::vector<int>{ 6, 7, 2, 0, 1, 5, 4, 3 });
     CheckPermutationPod(s, got);
+}
+
+// ---- 2026-10-09 review fixes ------------------------------------------------------------------------
+
+TEST_CASE("Pod discard FIX1a: the reviewer's board -- the lone {W} land is not shed while the Pod is ruled surplus off it")
+{
+    // Board Forest / Wastes / Marsh / Hierarch: no {W}. The kept Vizier {1}{W} needs Caves 0. With the
+    // Chord the quota is 5, so Caves is mana5; Vizier is castable off it, the combo is assembled, Pod 4
+    // is surplus. toolbox Ooze 7 > Voice 6; extra Chord 5; ladder [Vizier 1, Feeder 2, Finks 3, Caves 0].
+    const GameState s = MakePod(
+        { "Caves of Koilos", "Vizier of Remedies", kFeeder, kFinks, kPod, kChord, "Voice of Resurgence",
+          "Scavenging Ooze" },
+        { "Forest", "Llanowar Wastes", "Blooming Marsh", "Ignoble Hierarch" });
+    const std::vector<int> got = Pod(s);
+    CHECK(got == std::vector<int>{ 7, 6, 4, 5, 0, 3, 2, 1 });   // the first cut: index 0 = Caves 0
+    CheckPermutationPod(s, got);
+}
+
+TEST_CASE("Pod discard FIX1b: COLOURS FIRST BEATS THE COUNT -- a land supplying a kept piece's missing colour is kept past the quota")
+{
+    // Same board, no Chord: quota 4 is filled by the board, yet Caves 0 is the only {W} for the kept
+    // Vizier 1 -> kept just above it (integrator reading). Vizier castable off the KEPT Caves -> combo
+    // assembled -> Pod 4 surplus. toolbox Felidar 5 > Ooze 7 > Voice 6; ladder [Caves 0, Vizier 1,
+    // Feeder 2, Finks 3].
+    const GameState s = MakePod(
+        { "Caves of Koilos", "Vizier of Remedies", kFeeder, kFinks, kPod, "Felidar Guardian",
+          "Voice of Resurgence", "Scavenging Ooze" },
+        { "Forest", "Llanowar Wastes", "Blooming Marsh", "Ignoble Hierarch" });
+    CheckPod(s, { 5, 7, 6, 4, 3, 2, 1, 0 }, 4);   // the first cut: [0, 5, 7, 6, 4, 3, 2, 1]
+}
+
+TEST_CASE("Pod discard FIX1c: 'easily castable' counts only KEPT lands -- a surplus land does not make the combo castable")
+{
+    // Forest / Wastes / Caves in play (3 units). The quota's 4th source is the Birds 0 (dorks outrank
+    // surplus lands), so Branchloft 1 is surplus. Redcap 4 (MV 4) is castable only off that surplus land
+    // -> NOT easily castable -> the Pod 5 is kept after persist1.
+    // ladder [Melira 2, Feeder 3, Redcap 4, Pod 5, Birds 0 (mana4)]; toolbox Felidar 6 > Voice 7.
+    const GameState s = MakePod(
+        { "Birds of Paradise", "Branchloft Pathway", kMelira, kFeeder, kRedcap, kPod, "Felidar Guardian",
+          "Voice of Resurgence" },
+        { "Forest", "Llanowar Wastes", "Caves of Koilos" });
+    CheckPod(s, { 1, 6, 7, 0, 5, 4, 3, 2 }, 4);   // the first cut shed the Pod 5 ahead of the ladder
+}
+
+TEST_CASE("Pod discard FIX2a: the reviewer's board -- nothing Ranger can fetch is missing, so Ranger is toolbox")
+{
+    // Board Melira + Forest / Wastes / Caves; two Finks = persist 2 of 2 (fungible: a missing Redcap is
+    // not a missing role). Feeder kept, Finks castable -> combo assembled -> both Pods surplus.
+    // (Hand reordered from the reviewer's so the generic control differs: a Pod first.)
+    // toolbox Ranger 4; Pods 0, 5; spare Bloodthrone 7; extra Chord 6; ladder [Feeder 1, Finks 2, Finks 3].
+    const GameState s = MakePod(
+        { kPod, kFeeder, kFinks, kFinks, "Ranger of Eos", kPod, kChord, kBlood },
+        { kMelira, "Forest", "Llanowar Wastes", "Caves of Koilos" });
+    CheckPod(s, { 4, 0, 5, 7, 6, 3, 2, 1 }, 0);   // the first cut: index 0 = Birthing Pod 0
+}
+
+TEST_CASE("Pod discard FIX2b: persist is ONE fungible role of 2 -- one copy short protects Recruiter, never Ranger")
+{
+    // Board Melira + Feeder + 3 lands; one Finks in hand -> persist 1 of 2 is missing. Recruiter 1
+    // reaches Finks / Redcap -> protected (after the spare Bloodthrone 7). Ranger 0 (MV <= 1) cannot ->
+    // toolbox, after Voice. toolbox Chupacabra 6 > Felidar 3 > Ooze 5 > Voice 4 > Ranger 0.
+    const GameState s = MakePod(
+        { "Ranger of Eos", "Recruiter of the Guard", kFinks, "Felidar Guardian", "Voice of Resurgence",
+          "Scavenging Ooze", "Ravenous Chupacabra", kBlood },
+        { "Forest", "Llanowar Wastes", "Caves of Koilos", kMelira, kFeeder });
+    CheckPod(s, { 6, 3, 5, 4, 0, 7, 1, 2 }, 0);   // the first cut: Ranger after Bloodthrone, protected
+}
+
+TEST_CASE("Pod discard FIX2c: a missing OUTLET protects both tutors (each can fetch Carrion Feeder)")
+{
+    // Board Melira + 3 lands; no outlet anywhere. Ranger 0 (Feeder is MV 1) and Recruiter 1 (Feeder is
+    // 1/1) are both protected, Ranger first. Finks 2 castable -> persist1; Redcap 3 persist2.
+    const GameState s = MakePod(
+        { "Ranger of Eos", "Recruiter of the Guard", kFinks, kRedcap, "Felidar Guardian", "Voice of Resurgence",
+          "Scavenging Ooze", "Ravenous Chupacabra" },
+        { "Forest", "Llanowar Wastes", "Caves of Koilos", kMelira });
+    CheckPod(s, { 7, 4, 6, 5, 0, 1, 3, 2 }, 0);
+}
+
+TEST_CASE("Pod discard FIX4: the order is NOT prefix-stable while the policy is on -- re-rank per shed")
+{
+    // The hook: false with the policy on, true with the =0 hatch (the generic ranking is stable).
+    heurarm::t_arm[heurarm::POD_BUCKET_DISCARD] = 1;
+    CHECK_FALSE(MeliraPodProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::POD_BUCKET_DISCARD] = 0;
+    CHECK(MeliraPodProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::POD_BUCKET_DISCARD] = -1;
+
+    // Why: the combo is on the board (one persist), the hand is an extra Chord 0, a Branchloft 1 and a
+    // Recruiter 2 (persist 1 of 2 missing -> protected). The Chord keeps the quota at 5, so the
+    // Branchloft is mana5 and sheds last: [Chord, Recruiter, Branchloft]. Once the Chord is gone the
+    // quota is 4 and the Branchloft is SURPLUS -- it now sheds before the Recruiter, which a prefix of
+    // the first answer would have got backwards.
+    const std::vector<std::string> board = { "Forest", "Razorverge Thicket", "Llanowar Wastes",
+                                             "Caves of Koilos", kMelira, kFeeder, kFinks };
+    GameState s = MakePod({ kChord, "Branchloft Pathway", "Recruiter of the Guard" }, board);
+    CHECK(Pod(s) == std::vector<int>{ 0, 2, 1 });
+    s.players[0].hand.erase(s.players[0].hand.begin());   // shed the Chord
+    const std::vector<int> again = Pod(s);                 // hand: Branchloft 0, Recruiter 1
+    CHECK(again == std::vector<int>{ 0, 1 });              // a prefix would say Recruiter, then Branchloft
 }

@@ -37029,11 +37029,13 @@ std::vector<std::string> MeliraPodProvider::ReviveCandidates(
 // keeping a combo piece in hand.
 //
 // QUOTAS, NET OF BOARD (a board permanent fills its slot first):
-//   MANA     4 sources (lands + dorks), 5 while a Chord is kept for a missing piece. G/W/B coverage
+//   MANA     4 sources (lands + dorks), 5 while ANY Chord is in hand (SETTLED, literal). G/W/B coverage
 //            first (R excluded: only Celes needs it and only a dork makes it); then dorks ("never
 //            surplus mana"); then lands, a FASTLAND that would enter tapped (3+ lands in play) last.
 //            Painlands are NOT demoted (goldfish: the life is nearly free). A Karoo with no other land
-//            to bounce is dead -- index 0.
+//            to bounce is dead -- index 0. COLOURS FIRST BEATS THE COUNT (integrator reading,
+//            2026-10-09): a land supplying a colour a KEPT piece needs, which nothing in play or kept
+//            supplies, is kept past the quota, just above that piece.
 //   ENABLER  1 (Melira / Vizier; Celes counts ON THE BATTLEFIELD ONLY, as NotePodRoles does).
 //   OUTLET   1 (Carrion Feeder > Bloodthrone Vampire: the permanent-counter outlet first).
 //   PERSIST  2 (Redcap 1 + Finks 1, fungible).
@@ -37044,35 +37046,37 @@ std::vector<std::string> MeliraPodProvider::ReviveCandidates(
 // THE POD RULE (USER): "Pod is probably a 1-of keep on every hand except for one where you have
 //   assembled the full combo with easily castable creatures" -- kept right after the 1st persist;
 //   surplus when enabler + outlet + persist are all present (hand + board) and each role not on the
-//   battlefield has a hand piece castable with the mana in play + one land drop. Extra Pods are surplus.
+//   battlefield is held by a KEPT hand piece castable with the mana in play + one KEPT land drop.
+//   Extra Pods are surplus.
 //
 // KEEP LADDER (best kept first; read backwards it is the tail of the shed order):
 //   mana1 > enabler (or Chord) > mana2 > outlet (or Chord) > mana3 > persist1 (or Chord) > Pod > mana4
-//   > persist2 > mana5 (only with a Chord kept above it)
+//   > persist2 > mana5 (with a Chord in hand); a piece's colour land sits just above it.
 // SHED ORDER (index 0 first; every non-staged hand card named exactly once):
 //   S1 dead Karoo > S2 Celes with no source of a colour she needs ({R}: no land here makes it) >
 //   S3 duplicate legend (a 2nd Melira, or one already in play) > S4 surplus LANDS (keep order
 //   reversed) > S5 TOOLBOX: Chupacabra > Severance Priest > Reclamation Sage > Celes (with {R}) >
 //   surplus dorks > Felidar > Reveillark > Ooze > Voice > Ranger > Recruiter > S6 extra Pods / the Pod
 //   with the combo assembled > S7 surplus combo copies (spare enablers > spare persist > Bloodthrone >
-//   spare Feeders) > S8 extra Chords > S9 Ranger / Recruiter while a role is missing > S10 the ladder
-//   reversed.
+//   spare Feeders) > S8 extra Chords > S9 Ranger / Recruiter while a role THEY can fetch is missing >
+//   S10 the ladder reversed. Not prefix-stable: CleanupDiscardShedStable() is false while this is on.
 //
 // AGENT READINGS (listed in the design doc's implementation notes; the USER may overturn any):
 //   * An extra Chord sits just above the toolbox -- after the surplus combo copies (S8), as the SETTLED
-//     shed line orders it -- and does NOT raise the mana quota: mana5 sits ABOVE the extra-Chord slot,
-//     so only a Chord kept for a missing piece activates it (else the extra Chord would shed before the
-//     5th land it justified).
+//     shed line orders it -- and, per the SETTLED mana line, still raises the quota to 5.
 //   * A Chord fills a missing slot only while the LIBRARY still holds a creature of that role (a Chord
 //     that cannot fetch the piece fills nothing -- the PD "tutor with no legal target" class).
-//   * "Easily castable" = each role not on the battlefield has a hand piece castable ON ITS OWN from the
-//     mana in play plus one UNTAPPED land drop, colour-exact (each pip takes a distinct source).
+//   * "Easily castable" = each role not on the battlefield is held by a kept hand piece castable ON ITS
+//     OWN from the mana in play plus one UNTAPPED KEPT land drop, colour-exact (each pip takes a
+//     distinct source). A surplus land is not counted (integrator reading, 2026-10-09).
 //   * persist1 / persist2 prefer the persist sub-role not yet held (board or kept), then the copy
 //     castable next turn (the all-decks "distance to castable" rule), then the Redcap payload, then
 //     hand order. The enabler slot takes the castable-next-turn copy first, then hand order.
 //   * "Recruiter / Ranger protected while a role is missing" = they leave the toolbox and shed only
-//     after every explicit shed class (S9); "missing" is PutTargetPolicy's any_missing (enabler /
-//     outlet / lifegain persist / damage persist absent from battlefield + hand).
+//     after every explicit shed class (S9), and only while a role is missing that THAT tutor can fetch
+//     from the library by its own tutor params; persist is one fungible role of 2 (corrected in the
+//     2026-10-09 review: the first cut used PutTargetPolicy's four roles and protected Ranger of Eos
+//     when only a Redcap was missing, which it cannot fetch).
 //   * Surplus dorks and a castable Celes sit just above the inert bodies (the proposal's B1 / P3).
 //   * Unclassified non-land cards (none on this decklist) open the toolbox block.
 // NOT IMPLEMENTED, per the SETTLED design: the Reveillark recovery term (OFF), any toolbox distance term
@@ -37087,6 +37091,12 @@ static bool PodBucketDiscardEnabled()
     static const bool on = EnvOn("MTG_POD_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::POD_BUCKET_DISCARD, on);
 }
+
+// NOT PREFIX-STABLE while the policy is on, so a multi-card cleanup is re-ranked per shed: a card's
+// class can hang on a card that sheds ahead of it. Shedding an extra Chord drops the mana quota from 5
+// to 4 and turns the 5th land surplus; shedding the piece a colour land serves releases the land; and
+// the Pod / tutor tests read the hand's pieces. (The generic ranking it falls back to is stable.)
+bool MeliraPodProvider::CleanupDiscardShedStable() const { return !PodBucketDiscardEnabled(); }
 
 // Can each coloured pip take a DISTINCT mana unit whose colour mask covers it? A tiny exhaustive
 // backtrack: the pieces it is asked about carry at most two coloured pips, over <= 16 units.
@@ -37259,26 +37269,13 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
     }
     auto is_dead = [&](int i) { return dead_karoo[at(i)] || dup_legend[at(i)] || celes_dead[at(i)]; };
 
-    // ---- 3. castable next turn: the mana in play + one UNTAPPED land drop, colour-exact ---------
-    unsigned drop_masks[8];
-    int ndrop = 0;
-    for (int i = 0; i < n && ndrop < 8; ++i)
+    // ---- 3. castable next turn: the mana in play + one UNTAPPED land drop from the KEPT lands ---
+    // The coloured pips of a cost as colour masks (a hybrid pip accepts either colour; a phyrexian pip
+    // is payable with 2 life and demands nothing).
+    auto pip_masks = [](const CardDefinition* d, unsigned* pips) -> int
     {
-        if (cls[at(i)] != C_LAND || dead_karoo[at(i)]) { continue; }
-        const CardDefinition* d = defs[at(i)];
-        if (d == nullptr || d->params.enters_tapped) { continue; }
-        if (d->params.fastland_max_other_lands >= 0 && board_lands > d->params.fastland_max_other_lands) { continue; }
-        const unsigned m = land_bits(i);
-        bool seen = false;
-        for (int k = 0; k < ndrop; ++k) { if (drop_masks[k] == m) { seen = true; break; } }
-        if (!seen) { drop_masks[ndrop++] = m; }
-    }
-    auto castable_next = [&](const CardDefinition* d) -> bool
-    {
-        if (d == nullptr) { return true; }
         const ManaCost& mc = d->card.m_mana_cost;
         int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
-        unsigned pips[8];
         int np = 0;
         for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
         {
@@ -37289,27 +37286,39 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
             if (b >= 0 && b < 5) { m |= 1u << b; }
             if (m != 0u && np < 8) { pips[np++] = m; }
         }
-        for (int k = 0; k < mc.phyrexian_count && k < 2; ++k)   // payable with 2 life
+        for (int k = 0; k < mc.phyrexian_count && k < 2; ++k)
         { const int c = mc.phyrexian_color[k]; if (c >= 0 && c < 5 && flat[c] > 0) { --flat[c]; } }
         for (int c = 0; c < 5; ++c) { for (int k = 0; k < flat[c] && np < 8; ++k) { pips[np++] = 1u << c; } }
-        const int need = mc.ManaValue() - mc.phyrexian_count;
+        return np;
+    };
+    auto drop_ok = [&](int i)   // a hand land that would enter UNTAPPED next turn
+    {
+        const CardDefinition* d = defs[at(i)];
+        if (cls[at(i)] != C_LAND || dead_karoo[at(i)] || d == nullptr || d->params.enters_tapped) { return false; }
+        return !(d->params.fastland_max_other_lands >= 0 && board_lands > d->params.fastland_max_other_lands);
+    };
+    // INTEGRATOR READING (2026-10-09): castability counts only the lands actually KEPT -- the mana
+    // quota's (section 4) and the colour lands kept past it (section 6) -- plus `extra`, the colour
+    // lands the piece being weighed would itself keep. A surplus land is about to be shed, so a piece
+    // castable only through it is not castable (the reviewer's board: the lone {W} land shed first while
+    // the Pod was ruled surplus because Vizier could be cast off that very land).
+    std::vector<char> kept_land(un, 0);
+    auto castable_with = [&](const CardDefinition* d, const int* extra, int nextra) -> bool
+    {
+        if (d == nullptr) { return true; }
+        unsigned pips[8];
+        const int np = pip_masks(d, pips);
+        const int need = d->card.m_mana_cost.ManaValue() - d->card.m_mana_cost.phyrexian_count;
         if (need <= nbu && PodPipsAssignable(pips, np, board_units, nbu, 0u)) { return true; }
         if (need > nbu + 1) { return false; }
         unsigned units[kMaxBoardUnits + 1];
         for (int k = 0; k < nbu; ++k) { units[k] = board_units[k]; }
-        for (int k = 0; k < ndrop; ++k)
-        {
-            units[nbu] = drop_masks[k];
-            if (PodPipsAssignable(pips, np, units, nbu + 1, 0u)) { return true; }
-        }
+        auto try_drop = [&](int j)
+        { units[nbu] = land_bits(j); return drop_ok(j) && PodPipsAssignable(pips, np, units, nbu + 1, 0u); };
+        for (int j = 0; j < n; ++j) { if (kept_land[at(j)] && try_drop(j)) { return true; } }
+        for (int k = 0; k < nextra; ++k) { if (try_drop(extra[k])) { return true; } }
         return false;
     };
-    std::vector<char> cast(un, 0);
-    for (int i = 0; i < n; ++i)
-    {
-        const char c = cls[at(i)];
-        if (c == C_ENABLER || c == C_OUTLET || c == C_PERSIST) { cast[at(i)] = castable_next(defs[at(i)]) ? 1 : 0; }
-    }
 
     // ---- 4. the mana keep order: G/W/B coverage, then dorks, then lands (the worst last) --------
     std::vector<int> mana_order;
@@ -37376,25 +37385,24 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
         mana_order.insert(mana_order.end(), rest.begin(), rest.end());
     }
 
-    // ---- 5. Pod surplus: the full combo assembled (hand + board) with easily castable pieces ----
-    bool cast_enabler = false, cast_outlet = false, cast_persist = false;
-    for (int i = 0; i < n; ++i)
-    {
-        if (is_dead(i) || !cast[at(i)]) { continue; }
-        switch (cls[at(i)])
-        {
-            case C_ENABLER: cast_enabler = true; break;
-            case C_OUTLET:  cast_outlet  = true; break;
-            case C_PERSIST: cast_persist = true; break;
-            default: break;
-        }
-    }
-    const bool combo_assembled = (board_enabler || cast_enabler) && (board_outlet || cast_outlet)
-                              && (board_persist > 0 || cast_persist);
-
-    // Chord's reach: does the LIBRARY still hold a creature of each role? (Scanned only with a Chord.)
+    // ---- 5. the mana quota and the lands it keeps -----------------------------------------------
+    // SETTLED: "MANA 4 counting board (5 while a Chord is kept)" -- ANY Chord in hand raises it, the
+    // extra Chord included (design-literal, 2026-10-09 review; the 10-09 first cut bumped it only for a
+    // Chord kept for a missing piece). The hand fills the slots the board leaves, in mana_order.
     bool any_chord = false;
     for (int i = 0; i < n; ++i) { if (cls[at(i)] == C_CHORD) { any_chord = true; break; } }
+    const int quota = 4 + (any_chord ? 1 : 0);
+    unsigned kept_bits = board_bits;   // colours of every source in play or kept
+    std::vector<char> in_quota(un, 0);
+    for (int k = 0; k < quota - board_sources && k < static_cast<int>(mana_order.size()); ++k)
+    {
+        const int i = mana_order[static_cast<std::size_t>(k)];
+        in_quota[at(i)] = 1;
+        if (cls[at(i)] == C_LAND) { kept_land[at(i)] = 1; kept_bits |= land_bits(i); }
+        else                      { kept_bits |= bits_of(defs[at(i)]->params.produces); }
+    }
+
+    // Chord's reach: does the LIBRARY still hold a creature of each role? (Scanned only with a Chord.)
     bool lib_enabler = false, lib_outlet = false, lib_persist = false;
     if (any_chord)
     {
@@ -37421,12 +37429,56 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
         while (mi < mana_order.size())
         { const int i = mana_order[mi++]; if (!keep[at(i)]) { take(i); return; } }
     };
-    bool chord_kept = false;
+    // COLOURS FIRST BEATS THE COUNT -- INTEGRATOR READING (2026-10-09), surfaced to the USER;
+    // consistent with EldraziFlicker's R6 and the USER's Prevent Damage ladder: a land that supplies a
+    // colour a KEPT piece needs, which no source in play or kept supplies, is kept even past the mana
+    // quota. It enters the ladder just ABOVE the piece it serves (so the piece sheds first, and a per-
+    // shed re-rank then releases the land). The candidate is the first such land in mana_order.
+    auto colour_lands_for = [&](int piece, int* out) -> int
+    {
+        unsigned pips[8];
+        const int np = pip_masks(defs[at(piece)], pips);
+        unsigned have = kept_bits;
+        int k = 0;
+        for (int p = 0; p < np && k < 3; ++p)
+        {
+            if ((pips[p] & have) != 0u) { continue; }
+            for (int i : mana_order)
+            {
+                if (cls[at(i)] != C_LAND || keep[at(i)] || in_quota[at(i)]) { continue; }
+                if ((land_bits(i) & pips[p]) == 0u) { continue; }
+                out[k++] = i;
+                have |= land_bits(i);
+                break;
+            }
+        }
+        return k;
+    };
+    auto castable_piece = [&](int i)   // as if kept: counting the colour lands it would keep
+    {
+        int cl[3];
+        const int k = colour_lands_for(i, cl);
+        return castable_with(defs[at(i)], cl, k);
+    };
+    // Take a piece, its colour lands first; returns whether it is castable from the kept lands.
+    auto take_piece = [&](int i) -> bool
+    {
+        int cl[3];
+        const int k = colour_lands_for(i, cl);
+        for (int q = 0; q < k; ++q)
+        {
+            take(cl[q]);
+            kept_land[at(cl[q])] = 1;
+            kept_bits |= land_bits(cl[q]);
+        }
+        take(i);
+        return castable_with(defs[at(i)], nullptr, 0);
+    };
     auto chord_for = [&](bool lib_has)
     {
         if (!lib_has) { return; }
         for (int i = 0; i < n; ++i)
-        { if (cls[at(i)] == C_CHORD && !keep[at(i)]) { take(i); chord_kept = true; return; } }
+        { if (cls[at(i)] == C_CHORD && !keep[at(i)]) { take_piece(i); return; } }
     };
     auto pick_best = [&](char want, auto key) -> int   // the lowest key, then hand order
     {
@@ -37440,38 +37492,45 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
         return best;
     };
     bool have_pay = board_payload, have_life = board_lifebody;
+    // Returns 1 = took a castable copy, 0 = took an uncastable one, -1 = none to take.
     auto fill_persist = [&]() -> int
     {
         const int i = pick_best(C_PERSIST, [&](int j)
         {
             const CardDefinition* d = defs[at(j)];
             const bool fills = (is_payload(d) && !have_pay) || (is_lifebody(d) && !have_life);
-            return (fills ? 0 : 4) + (cast[at(j)] ? 0 : 2) + (is_payload(d) ? 0 : 1);
+            return (fills ? 0 : 4) + (castable_piece(j) ? 0 : 2) + (is_payload(d) ? 0 : 1);
         });
-        if (i >= 0)
-        {
-            take(i);
-            if (is_payload(defs[at(i)]))  { have_pay  = true; }
-            if (is_lifebody(defs[at(i)])) { have_life = true; }
-        }
-        return i;
+        if (i < 0) { return -1; }
+        const bool ok = take_piece(i);
+        if (is_payload(defs[at(i)]))  { have_pay  = true; }
+        if (is_lifebody(defs[at(i)])) { have_life = true; }
+        return ok ? 1 : 0;
     };
 
+    // The Pod test reads the pieces the ladder KEEPS for each role (castable from the kept lands).
+    bool enabler_ok = board_enabler, outlet_ok = board_outlet, persist_ok = board_persist > 0;
     mana_slot(1);
     if (!board_enabler)
     {
-        const int i = pick_best(C_ENABLER, [&](int j) { return cast[at(j)] ? 0 : 1; });
-        if (i >= 0) { take(i); } else { chord_for(lib_enabler); }
+        const int i = pick_best(C_ENABLER, [&](int j) { return castable_piece(j) ? 0 : 1; });
+        if (i >= 0) { enabler_ok = take_piece(i); } else { chord_for(lib_enabler); }
     }
     mana_slot(2);
     if (!board_outlet)
     {
         const int i = pick_best(C_OUTLET, [&](int j)   // Carrion Feeder > Bloodthrone Vampire
         { return defs[at(j)]->params.sac_outlet_add_counter_to_self > 0 ? 0 : 1; });
-        if (i >= 0) { take(i); } else { chord_for(lib_outlet); }
+        if (i >= 0) { outlet_ok = take_piece(i); } else { chord_for(lib_outlet); }
     }
     mana_slot(3);
-    if (board_persist < 1 && fill_persist() < 0) { chord_for(lib_persist); }
+    if (board_persist < 1)
+    {
+        const int r = fill_persist();
+        if (r < 0) { chord_for(lib_persist); } else { persist_ok = (r == 1); }
+    }
+    // Pod: surplus when the full combo is assembled (hand + board) with easily castable pieces.
+    const bool combo_assembled = enabler_ok && outlet_ok && persist_ok;
     if (!board_pod && !combo_assembled)
     {
         const int i = pick_best(C_POD, [](int) { return 0; });
@@ -37479,7 +37538,7 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
     }
     mana_slot(4);
     if (board_persist < 2) { fill_persist(); }
-    if (chord_kept) { mana_slot(5); }
+    if (any_chord) { mana_slot(5); }
 
     // ---- 7. emit the shed order -----------------------------------------------------------------
     std::vector<int> shed;
@@ -37500,9 +37559,45 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
     { if (cls[at(*it)] == C_LAND && !keep[at(*it)]) { put(*it); } }
     // S5 the TOOLBOX, most expendable first (USER: "Celes (no R source) -> Chupacabra -> Severance
     // Priest -> Reclamation Sage -> Felidar -> Reveillark -> Ooze -> Voice"; Recruiter / Ranger after
-    // Voice, and out of the block entirely while a role is missing).
-    const PodRoles roles = NotePodRoles(s, me);
-    const bool any_missing = !roles.have_prev || !roles.have_outlet || !roles.have_lifegain || !roles.have_damage;
+    // Voice, and out of the block entirely while a role is missing THAT tutor can fetch).
+    //
+    // "Recruiter / Ranger protected while a role is missing" (corrected 2026-10-09 review): the roles
+    // are the combo's three, with PERSIST one fungible role of 2 (USER: "Redcap 1 + Finks 1,
+    // fungible") -- not PutTargetPolicy's four, which split Redcap from Finks -- each counted over
+    // battlefield + hand (Celes on the battlefield only). A tutor is protected only while a missing role
+    // has a creature IT can fetch from the library under its own tutor params: Ranger of Eos
+    // (tutor_max_mv 1) reaches the outlet, never a persist body or an enabler.
+    bool miss_enabler = !board_enabler, miss_outlet = !board_outlet;
+    int persist_total = board_persist;
+    for (int i = 0; i < n; ++i)
+    {
+        if (is_dead(i)) { continue; }
+        if (cls[at(i)] == C_ENABLER) { miss_enabler = false; }
+        if (cls[at(i)] == C_OUTLET)  { miss_outlet  = false; }
+        if (cls[at(i)] == C_PERSIST) { ++persist_total; }
+    }
+    const bool miss_persist = persist_total < 2;
+    std::vector<char> tutor_prot(un, 0);
+    if (miss_enabler || miss_outlet || miss_persist)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (cls[at(i)] != C_TUTOR) { continue; }
+            const CardParams& pp = defs[at(i)]->params;
+            for (const Card& lc : ap.library)
+            {
+                const CardDefinition* ld = def_of(lc);
+                if (ld == nullptr) { continue; }
+                const bool role = (miss_enabler && is_enabler(ld)) || (miss_outlet && is_outlet(ld))
+                               || (miss_persist && is_persist(ld));
+                if (!role) { continue; }
+                bool type_ok = pp.tutor_types.empty();
+                for (const std::string& t : pp.tutor_types)
+                { if (CardMatchesTypeName(ld->card, t)) { type_ok = true; break; } }
+                if (type_ok && TutorNumericFilterOk(ld->card, pp)) { tutor_prot[at(i)] = 1; break; }
+            }
+        }
+    }
     auto tool_rank = [&](int i) -> int
     {
         const CardDefinition* d = defs[at(i)];
@@ -37534,7 +37629,7 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
         {
             if (keep[at(i)] || is_dead(i)) { continue; }
             const char c = cls[at(i)];
-            if (c == C_TOOL || c == C_CELES || c == C_DORK || (c == C_TUTOR && !any_missing)) { tool.push_back(i); }
+            if (c == C_TOOL || c == C_CELES || c == C_DORK || (c == C_TUTOR && !tutor_prot[at(i)])) { tool.push_back(i); }
         }
         std::stable_sort(tool.begin(), tool.end(), [&](int a, int b)
         {
@@ -37575,16 +37670,14 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
     }
     // S8 extra Chords.
     for (int i = 0; i < n; ++i) { if (cls[at(i)] == C_CHORD && !keep[at(i)]) { put(i); } }
-    // S9 Recruiter / Ranger while a role is missing (Ranger first: it reaches only the outlet).
-    if (any_missing)
+    // S9 Recruiter / Ranger while a role THEY can fetch is missing (Ranger first: it reaches only the
+    // outlet).
+    for (int pass = 0; pass < 2; ++pass)
     {
-        for (int pass = 0; pass < 2; ++pass)
+        for (int i = 0; i < n; ++i)
         {
-            for (int i = 0; i < n; ++i)
-            {
-                if (cls[at(i)] != C_TUTOR || keep[at(i)]) { continue; }
-                if ((tool_rank(i) == 100) == (pass == 1)) { put(i); }
-            }
+            if (cls[at(i)] != C_TUTOR || !tutor_prot[at(i)]) { continue; }
+            if ((tool_rank(i) == 100) == (pass == 1)) { put(i); }
         }
     }
     // S10 the ladder, last-kept first.

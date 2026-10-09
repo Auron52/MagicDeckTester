@@ -2627,6 +2627,9 @@ public:
     // pitched the engine or a combo piece in 63% of real sheds. MTG_POD_BUCKET_DISCARD=0 -> generic.
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // false while the bucket rule is on (re-rank per shed): an extra Chord, a colour land's piece and
+    // the Pod / tutor tests make a card's class depend on cards that shed ahead of it.
+    bool CleanupDiscardShedStable() const override;
 };
 
 class MinotaurProvider : public DeckProvider
