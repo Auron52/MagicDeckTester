@@ -334,6 +334,8 @@ enum Slot : int
     BOUNCE_SEARCH,            // MTG_BOUNCE_SEARCH          the Karoo bounce is a SEARCHED plan dimension (Plan::bounce_choice; KarooBounceSearchOn, EngineFlags.h): the provider narrows the returnable lands (DecisionProvider::BounceSearchCandidates -- one candidate in the easy cases, the 2-3 real options in a contested one) and the enumeration fans the contested ones, instead of BounceKarooLand taking the provider's front() inside the search window (a no-greedy-rule violation). USER 2026-10-08: "The Karoo decision should also be searched with heuristics. However, we may want to heuristic it more often than not, since the decision is usually an easy one."
     BOUNCE_FOLD,              // MTG_BOUNCE_FOLD            SOUND identity fold for the searched Karoo bounce (BounceFoldOn, EngineFlags.h): a bounce variant whose index resolves -- on the bounce state its applied sibling already measured -- to a candidate a sibling already applied is declined BEFORE the unit charge and the apply. The variant differs from that sibling only in bounce_choice, so its apply is the sibling's apply. DEFAULT ON; MTG_BOUNCE_FOLD_VERIFY applies it anyway and compares the post-apply key.
     PD_LINE_OK_EXACT,         // MTG_PD_LINE_OK_EXACT       Prevent Damage: the pain-aware payer's REST-OF-LINE check (dmgev::PainAwarePay, harmful mode) is EXACT -- supply: the remaining mana sources must be ASSIGNABLE to the line's coloured pips and cover its mana value (ColorFeasibility::PayablePips), not merely present (one any-colour land covered every colour; a creature counted as a mana); demand: what is owed is the line's live unpaid hold, not the plan total that re-counted casts already paid. Claude-play sweep s61001 T5 (2026-10-08): Tamanoa dropped behind a Rolling Earthquake X=2. Default ON; =0 = the legacy estimate + presence test
+    PD_BATCH_TIMING,          // MTG_PD_BATCH_TIMING        Prevent Damage: the whole-turn batch prepay DECLINES (PP_PD_TIMING) a multi-cast plan that casts something growing the value of every pain / Manabarbs event (Tamanoa; Vito / Dina / Faithmender / Bilbo with a gain engine out), when every chain-relevant cast is monotone (no Purity, no Manabarbs) and two casts pay mana -- paying the whole plan up front deals the later casts' pain before that amplifier resolves, a dominated timing; the casts then pay one at a time. Order-independent (PdBatchTimingDominated). Claude-play sweep s61005 T5 / s61013 T4 (2026-10-08). Default ON; =0 = the batch on every multi-cast plan
+    PD_DEFER_C_GENERIC,       // MTG_PD_DEFER_C_GENERIC     Prevent Damage: the pain deferral's payability test (CapabilityCovers) treats {C} as generic while no {C} pip is live this turn, so a held City of Brass may stand in for a Reflecting Pool that could also reflect {C} (s61013 T4: Vito paid pain-first before it could drain). Default ON; =0 = the WUBRG + C superset test
     COUNT
 };
 
@@ -629,6 +631,8 @@ inline const char* Name(int slot)
         "MTG_BOUNCE_SEARCH",
         "MTG_BOUNCE_FOLD",
         "MTG_PD_LINE_OK_EXACT",
+        "MTG_PD_BATCH_TIMING",
+        "MTG_PD_DEFER_C_GENERIC",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
