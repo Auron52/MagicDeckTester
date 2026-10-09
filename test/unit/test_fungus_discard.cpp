@@ -127,9 +127,10 @@ TEST_CASE("Fungus discard F1: a dead Simic Growth Chamber is shed first (the Kar
     CheckPermutation(s, o);
 }
 
-// Board 2 Forests -> need 3: keep 3 of the 4 hand Forests; need - lands = 0, so Wild Growth is
-// SURPLUS ("the max 5 includes the accelerator mana"). reach2 = 2 + 1 + 1 = 4 < 5 -> the tier is
-// not castable within 2 turns and gives way BEFORE Sporecrown.
+// Board 2 Forests -> need 3: keep 3 of the 4 hand Forests (1 + 1 + 1 covers it); the need is met, so
+// Wild Growth is SURPLUS ("the max 5 includes the accelerator mana"). Board 2 + kept 3 = 5 -> the tier
+// IS castable (integrator reading 2026-10-09) and is kept above Sporecrown: read backwards, Sporecrown,
+// Mycoloth, the Season, the Forests. (The old 2-turn reading shed Mycoloth before Sporecrown here.)
 TEST_CASE("Fungus discard F2: mana to 5 counting the board -- the 4th land and the accelerator are surplus")
 {
     const GameState s = MakeFungus(
@@ -137,8 +138,42 @@ TEST_CASE("Fungus discard F2: mana to 5 counting the board -- the 4th land and t
           "Sporecrown Thallid" },
         { "Forest", "Forest" });
     const std::vector<int> o = Fu(s);
-    CHECK(o == std::vector<int>{ 3, 4, 6, 5, 7, 2, 1, 0 });
+    CHECK(o == std::vector<int>{ 3, 4, 7, 6, 5, 2, 1, 0 });
     CHECK(Gen(s).front() == 5);   // generic sheds Doubling Season
+    CheckPrefixStable(s);
+}
+
+// THE REVIEWER'S BOARD for the integrator reading (2026-10-09): Forest x2 in play, Forest x3 kept make
+// exactly the 5 the USER sized the bucket to, so the Season tier is castable and kept TOGETHER above
+// Beastmaster and the core. Ladder: Forests, Season, Mycoloth, Mycon, Sporecrown, Sporesower,
+// Beastmaster -> backwards Beastmaster gives way first. (The 2-turn reading shed Mycoloth, then the
+// Season -- exactly what the generic rule does.)
+TEST_CASE("Fungus discard F2b: 2 Forests in play + 3 kept = 5 -> the Season tier is castable")
+{
+    const GameState s = MakeFungus(
+        { "Forest", "Forest", "Forest", "Doubling Season", "Mycoloth", "Beastmaster Ascension",
+          "Sporecrown Thallid", "Sporesower Thallid", "Utopia Mycon" },
+        { "Forest", "Forest" });
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 5, 7, 6, 8, 4, 3, 2, 1, 0 });
+    CHECK(Gen(s).front() == 3);   // generic sheds the Season
+    CheckPrefixStable(s);
+}
+
+// LAND MANA BY WHAT IT MAKES (review fix 2026-10-09): board 2 -> need 3. The candidate-B depletion lands
+// make 2 each, so the first Woodlot (2) and the second (4) cover it -- the Peat Bog is surplus, and with
+// the need met the Sol Ring is surplus too. Board 2 + kept 4 = 6 -> the tier is castable.
+// Shed: Peat Bog, Sol Ring, then the ladder (Woodlot, Woodlot, Season, Mycoloth, Mycon, Sporecrown)
+// backwards. (Counting each land as 1 kept all three lands and shed the Sol Ring first.)
+TEST_CASE("Fungus discard F2c: a 2-mana land fills two of the five")
+{
+    const GameState s = MakeFungus(
+        { "Hickory Woodlot", "Hickory Woodlot", "Peat Bog", "Sol Ring", "Doubling Season", "Mycoloth",
+          "Sporecrown Thallid", "Utopia Mycon" },
+        { "Forest", "Forest" });
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 2, 3, 6, 7, 5, 4, 1, 0 });
+    CHECK(Gen(s).front() == 4);   // generic sheds the Season
     CheckPrefixStable(s);
 }
 
@@ -220,23 +255,40 @@ TEST_CASE("Fungus discard F6: core slots filled from the board; the hand lord le
 
 // The candidate-B list (param-keyed, never a name): Saproling Burst's fade-counter tokens make it a
 // Season partner; Sol Ring is the accelerator (rock); a 2nd Slimefoot in hand is a dead legend.
-// Board 2 -> need 3: Forest + Hickory Woodlot (untapped first), need - 2 = 1 -> Sol Ring kept;
-// reach2 = 2 + 1 + 2 + 2 = 7 -> castable. Ladder: Forest, Woodlot, Sol Ring, [Season, Mycoloth,
-// Burst], Sporecrown, Slimefoot.
-TEST_CASE("Fungus discard F7: Saproling Burst joins the Season tier; Sol Ring accelerates; dead 2nd legend")
+// Board 2 -> need 3: Forest (1, untapped first) + Hickory Woodlot (2) cover it, so the Sol Ring is
+// SURPLUS mana (it sheds right after the dead legend); 2 + 3 = 5 -> castable. Ladder: Forest, Woodlot,
+// [Season, Mycoloth, Burst], Sporecrown, Slimefoot.
+TEST_CASE("Fungus discard F7: Saproling Burst joins the Season tier; dead 2nd legend; Sol Ring surplus")
 {
     const GameState s = MakeFungus(
         { "Saproling Burst", "Doubling Season", "Mycoloth", "Sol Ring", "Forest", kSlimefoot, kSlimefoot,
           "Sporecrown Thallid", "Hickory Woodlot" },
         { "Forest", "Forest" });
     const std::vector<int> o = Fu(s);
-    CHECK(o == std::vector<int>{ 6, 5, 7, 0, 2, 1, 3, 8, 4 });
+    CHECK(o == std::vector<int>{ 6, 3, 5, 7, 0, 2, 1, 8, 4 });
     CHECK(Gen(s).front() == 0);   // generic sheds Saproling Burst (MV 5, first)
     CheckPrefixStable(s);
 }
 
-// Board 1 Forest -> need 4: one hand Forest; reach2 = 1 + 1 = 2 < 5 -> NOT castable, so the tier gives
-// way right after the beyond-core cards and BEFORE Beastmaster (then Sporecrown, the 1-drop, the land).
+// Sol Ring IS the accelerator when the lands fall short: board 2, one Forest kept -> 1 of need 3, so the
+// rock is kept (+2 -> 3, met); 2 + 3 = 5 -> castable.
+TEST_CASE("Fungus discard F7b: Sol Ring kept as the one accelerator when the lands fall short")
+{
+    const GameState s = MakeFungus(
+        { "Saproling Burst", "Doubling Season", "Mycoloth", "Sol Ring", "Forest", "Sporecrown Thallid",
+          "Utopia Mycon", "Thallid" },
+        { "Forest", "Forest" });
+    const std::vector<int> o = Fu(s);
+    // Ladder: Forest(4), Sol Ring(3), [Season(1), Mycoloth(2), Burst(0)], Mycon(6), Sporecrown(5),
+    // Thallid(7) beyond the core.
+    CHECK(o == std::vector<int>{ 7, 5, 6, 0, 2, 1, 3, 4 });
+    CHECK(Gen(s).front() == 0);
+    CheckPrefixStable(s);
+}
+
+// Board 1 Forest -> need 4: one hand Forest; board + kept = 1 + 1 = 2 < 5 -> NOT castable (the bucket
+// cannot be filled), so the tier gives way right after the beyond-core cards and BEFORE Beastmaster
+// (then Sporecrown, the 1-drop, the land).
 TEST_CASE("Fungus discard F8: an uncastable Season tier gives way before Beastmaster")
 {
     const GameState s = MakeFungus(
@@ -250,7 +302,7 @@ TEST_CASE("Fungus discard F8: an uncastable Season tier gives way before Beastma
 }
 
 // Board 2 -> need 3, one hand Forest -> need - 1 = 2 >= 1 -> ONE Wild Growth is kept (the second is
-// surplus mana); reach2 = 2 + 1 + 1 = 4 -> not castable.
+// surplus mana); board + kept = 2 + 1 + 1 = 4 < 5 -> not castable.
 TEST_CASE("Fungus discard F9: one accelerator within the 5, the second is surplus")
 {
     const GameState s = MakeFungus(
