@@ -172,19 +172,27 @@ Agent readings (not USER-ruled; each is a one-line change if overturned):
    Sol Ring). A land Aura with no host (no land in play, none kept) is surplus.
 2. `board_mana` = lands by `produces_amount` + land-Aura extras + rocks + creature mana dorks. NOT
    counted: Utopia Mycon's sac-for-mana and a Brightcap Badger grant (both spend the swarm).
-3. A hand land fills one unit of `need` whatever it taps for (the formula counts lands). Land keep
-   order: non-Karoo > Karoo, untapped > enters-tapped, more mana, hand order.
+3. ~~A hand land fills one unit of `need` whatever it taps for.~~ REVIEW FIX (2026-10-09): a hand
+   land fills `need` by the MANA it makes, exactly as `board_mana` counts the board (USER: "MANA to 5
+   total counting the board") -- candidate B's 2-mana depletion lands are two of the five; a Karoo
+   counts +1 (its drop returns a land). Lands are kept best-first, at most 3, until their mana covers
+   `need`; one accelerator only while `need` is still unmet. Land keep order: non-Karoo > Karoo,
+   untapped > enters-tapped, more mana, hand order.
 4. Core 1-drop = a FUNGUS creature of MV 1 (Essence Warden never fills it). The slot is filled from the
    board by a Mycon-type in play, or by any Fungus 1-drop in play while no Mycon is in hand.
 5. The Season tier keeps ONE Season (net of board) and ONE copy of each partner kind -- devour /
    per-counter upkeep tokens (Mycoloth), fade-counter tokens (Saproling Burst) -- net of board (the
    09-24 "one Mycoloth"). Extra copies are beyond-core threats. The tier holds its position even with
    no Season anywhere (Mycoloth alone). Inner keep order Season > devour partner > fade partner.
-6. "Uncastable for the foreseeable future" = 5 mana NOT reachable within 2 turns, counting
-   `board_mana` + the first two kept land drops (a Karoo +1, it returns a land; other lands their
-   `produces_amount`) + the kept accelerator's mana. The literal 5 is the bar for the whole tier, so it
-   moves as one unit. NOTE what this does to a common hand: board 2 Forests + 3 Forests kept reaches
-   only 4 in 2 turns (5 on the 3rd), so the Season and Mycoloth give way before Sporecrown there.
+6. "Uncastable for the foreseeable future" -- **INTEGRATOR READING (2026-10-09), surfaced; it replaces
+   the agent reading below**: the Season tier is castable when `board_mana` + ALL the kept mana (every
+   kept land and the kept accelerator, by the mana they make) reaches 5. The USER sized the MANA bucket
+   to exactly 5, so a hand that fills it can cast the Season. The literal 5 is the bar for the whole
+   tier, so it moves as one unit.
+   ~~5 mana within 2 turns, counting the first two kept land drops~~ (the agent's first reading): on
+   an ordinary board -- 2 Forests in play, 3 Forests kept, 5 lands with no draw -- it marked the Season
+   "uncastable" and shed Mycoloth and the Season exactly as the generic rule does, inverting the
+   USER's ruling.
 7. An uncastable tier gives way right after the beyond-core cards and BEFORE Beastmaster.
 8. Surplus enablers: the 2nd+ Beastmaster before the 2nd+ Season (one in play makes every hand copy
    surplus).

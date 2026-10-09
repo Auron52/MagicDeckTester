@@ -33452,11 +33452,12 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 //
 // BUCKETS, every one keyed on PARAMS (a hand card is a name-only placeholder -- every read goes through
 // the definition), each quota NET OF BOARD:
-//   MANA      lands + ONE accelerator. need = max(0, 5 - board_mana); keep_lands = min(3, live lands,
-//             need); keep_accel = min(1, accelerators, need - keep_lands) -- the 5 includes the
-//             accelerator, so a kept Wild Growth is one of the five, not a bonus on top. board_mana is
-//             what our board makes in a turn: lands by produces_amount (a Chamber counts 2), each land
-//             Aura's extra (Wild Growth +1), rocks, creature mana dorks.
+//   MANA      lands + ONE accelerator. need = max(0, 5 - board_mana); lands are kept (best first, at
+//             most 3) until the mana THEY make covers need, then one accelerator while need is still
+//             unmet -- the 5 includes the accelerator, so a kept Wild Growth is one of the five, not a
+//             bonus on top. board_mana is what our board makes in a turn: lands by produces_amount (a
+//             Chamber counts 2), each land Aura's extra (Wild Growth +1), rocks, creature mana dorks;
+//             a hand land counts the same way (a Karoo +1: its drop returns a land).
 //   ENABLERS  Doubling Season (doubles_tokens / doubles_counters) 1, Beastmaster Ascension
 //             (quest_counter_per_attacker) 1.
 //   THREATS   the core -- one Sporecrown (the Fungus/Saproling lord), one Sporesower
@@ -33466,9 +33467,10 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 // upkeep tokens (Mycoloth), fade-counter tokens (Saproling Burst; candidate-B list only, so it is keyed
 // on fading_counters + fade_creates_tokens, never a name) -- kept TOGETHER above Beastmaster and the
 // rest of the core, with only the mana within the 5 kept longer. Unless uncastable for the foreseeable
-// future: the doc's surfaced agent reading, 5 mana not reachable within 2 turns counting board_mana +
-// the first two kept land drops + the kept accelerator -- then the tier gives way FIRST among the
-// within-target cards.
+// future -- INTEGRATOR READING (2026-10-09), surfaced: board_mana + all the kept mana falls short of 5
+// (the bucket the USER sized to exactly 5 cannot be filled) -- then the tier gives way FIRST among the
+// within-target cards. (It replaces the agent reading "5 within 2 turns", which inverted the ruling
+// on ordinary boards.)
 //
 // KEEP LADDER (most kept first; read backwards it is the tail of the shed order):
 //   kept lands > kept accelerator > [Season tier, if castable] > core 1-drop > Sporecrown > Sporesower
@@ -33484,16 +33486,16 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 //     play or a kept land) or it is surplus.
 //   * board_mana does NOT count Utopia Mycon's sac-for-mana or a Brightcap Badger grant: both spend the
 //     swarm, and under-counting only raises the land target.
-//   * a hand land fills one unit of `need` whatever it taps for (the formula counts lands, not mana);
-//     land keep order: non-Karoo > Karoo, untapped > enters-tapped, more mana, hand order.
+//   * land keep order: non-Karoo > Karoo, untapped > enters-tapped, more mana, hand order. (A hand
+//     land fills `need` by the mana it makes -- review fix 2026-10-09, no longer one unit per land.)
 //   * the core 1-drop slot is filled from the board only by a Mycon-type, or by any Fungus 1-drop
 //     while no Mycon is in hand ("preferably Utopia Mycon"). Essence Warden is not a Fungus, so it
 //     never fills the 1-drop slot.
 //   * the tier keeps ONE copy of each partner kind (the 09-24 "one Mycoloth"), net of board, and holds
 //     its position even with no Season anywhere (Mycoloth is the card the deck exists to cast). Inner
 //     keep order: Season > devour partner > fade partner.
-//   * castability: a land drop adds its produces_amount, a Karoo +1 (it returns a land); the bar is the
-//     literal 5 for the whole tier, so it moves as one unit.
+//   * castability (the integrator reading above): the bar is the literal 5 for the whole tier, so it
+//     moves as one unit.
 //   * surplus enablers: Beastmaster before Season ("Beastmaster gives way first", carried over).
 //   * beyond the core, keep order lord > Sporesower / partner copies > other bodies > the sac-draw
 //     outlet (Psychotrope) > defender (Shell-Dweller); "Essence Warden last" = a non-Fungus,
@@ -33640,29 +33642,38 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
     });
     constexpr int kManaTarget = 5;   // the deck's top of curve: Mycoloth {3}{G}{G}, Doubling Season {4}{G}
     const int need = std::max(0, kManaTarget - board_mana);
-    const int keep_lands = std::min({ 3, static_cast<int>(lands.size()), need });
+    // A hand land fills `need` by the MANA it makes, exactly as board_mana counts the board (review fix
+    // 2026-10-09; USER: "5 total mana (counting the board)"): a 2-mana depletion land (candidate B's
+    // Hickory Woodlot / Peat Bog) is two of the five. A Karoo adds +1 -- its land drop returns a land.
+    auto land_mana = [&](const CardDefinition* d)
+    { return is_karoo(d) ? 1 : (d != nullptr ? ManaProducedPerTap(*d) : 1); };
+    int keep_lands = 0, kept_mana = 0;
+    for (int i : lands)
+    {
+        if (keep_lands >= 3 || kept_mana >= need) { break; }   // hard cap 3, and the 5 is reached
+        ++keep_lands;
+        kept_mana += land_mana(defs[at(i)]);
+    }
     std::stable_sort(accels.begin(), accels.end(), [&](int a, int b)
     { return accel_mana(*defs[at(a)]) > accel_mana(*defs[at(b)]); });
     int kept_accel = -1;
-    if (need - keep_lands >= 1)
+    if (need - kept_mana >= 1)
     {
         for (int i : accels)
         {
             const CardDefinition& d = *defs[at(i)];
             if (d.params.is_land_aura && board_lands == 0 && keep_lands == 0) { continue; }   // no host
             kept_accel = i;
+            kept_mana += accel_mana(d);
             break;
         }
     }
-    // Castability of the Season tier: 5 mana within 2 turns (agent reading, surfaced in the doc).
-    int reach2 = board_mana;
-    for (int k = 0; k < std::min(2, keep_lands); ++k)
-    {
-        const CardDefinition* d = defs[at(lands[at(k)])];
-        reach2 += is_karoo(d) ? 1 : (d != nullptr ? ManaProducedPerTap(*d) : 1);
-    }
-    if (kept_accel >= 0) { reach2 += accel_mana(*defs[at(kept_accel)]); }
-    const bool tier_castable = reach2 >= kManaTarget;
+    // Castability of the Season tier -- INTEGRATOR READING (2026-10-09), surfaced: the tier is castable
+    // when board_mana + ALL the kept mana (every kept land and the kept accelerator, by the mana they
+    // make) reaches 5. The USER sized the MANA bucket to exactly 5, so a hand that fills it can cast the
+    // Season; the earlier agent reading (5 within 2 turns) marked ordinary boards -- 2 Forests in play,
+    // 3 kept -- "uncastable" and shed Mycoloth and the Season exactly as the generic rule does.
+    const bool tier_castable = board_mana + kept_mana >= kManaTarget;
 
     // ---- 4. ENABLERS and the Season tier (one copy each, net of board) ----------------------------
     const int kept_season = (!b_season && !seasons.empty()) ? seasons.front() : -1;

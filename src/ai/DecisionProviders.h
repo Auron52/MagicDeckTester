@@ -2430,7 +2430,8 @@ public:
     // (<= 3 lands, <= 1 accelerator, the 5 includes it), ENABLERS 1 Doubling Season + 1 Beastmaster,
     // THREATS a mix around a core of one Sporecrown / Sporesower / Fungus 1-drop (Mycon preferred) /
     // Mycoloth. The Season and its param-keyed combo partners (devour, fade-counter tokens) are kept
-    // TOGETHER above Beastmaster and the rest of the core unless 5 mana is out of reach for 2 turns.
+    // TOGETHER above Beastmaster and the rest of the core unless the board + every kept mana card
+    // cannot make 5 (integrator reading, 2026-10-09).
     // Behind MTG_FUNGUS_BUCKET_DISCARD (heurarm FUNGUS_BUCKET_DISCARD), default ON; =0 -> generic.
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
