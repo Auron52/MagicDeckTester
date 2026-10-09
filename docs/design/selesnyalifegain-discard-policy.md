@@ -56,13 +56,18 @@ default ON (`=0` restores the generic max-MV ranking exactly). Tests:
 `test/unit/test_selesnyalifegain_discard.cpp`. Every role is keyed on card PARAMS.
 
 * CASTABILITY = a two-turn projection. M1 = board lands (produces_amount) + board mana dorks + the
-  first kept land drop; M2 = board lands + two kept land drops + board dorks + the castable hand Elves
-  deployed next turn within M1 (USER order), Priest / Archdruid re-counted over the new Elves. A
-  payoff is distance 1 off M1, 2 off M2 (Paragon also needs 2 W sources by then), else unreachable.
+  first kept land drop; M2 = board lands + two kept land drops + board dorks + the BEST next-turn
+  deployment of the castable hand Elves within M1 (bounded exhaustive over the first 8 offered; REVIEW
+  FIX S-3 2026-10-09 -- it was greedy in keep order, so an Archdruid ate M1 = 3 for M2 = 4 where
+  Llanowar + Mystic make 5), Priest / Archdruid re-counted over the new Elves. A payoff is distance 1
+  off M1, 2 off M2 (Paragon also needs 2 W sources by then), else unreachable, and then its GAP -- the
+  mana plus W sources it is still short at M2 -- is its distance to castable.
   Ranking = (reachable and enabled) first, nearer first, then the USER's ties.
 * KEEP LADDER (agent default, the Giants ramp shape; most kept first): land > Elf > payoff > land >
   Elf > payoff > land (> W lands kept past 3 for a Paragon) > lifegain > the other kept Elves > the
-  soft 3rd payoff.
+  soft 3rd payoff. The land slots hold the first min(kept, LANDS-3 need) lands; a W land kept only for
+  the Paragon is one of the "past 3" extras (REVIEW FIX S-4: the code used to put it in the top land
+  slots, against this ladder).
 * SHED: dead Sanctuary (then a dead legend) > unclassified > surplus lands > lifegain with no payoff
   (and surplus lifegain) > payoffs not reachable / not enabled (Waves first) > surplus castable
   payoffs past 2 + soft 3rd > surplus Elves (those not castable next turn first) > the ladder
@@ -85,12 +90,18 @@ Agent readings (not USER-ruled; each is a one-line change if overturned):
    5 (the cheapest payoffs) when none is kept. Castable Elves (castable next turn) are kept in the USER's
    order until M2 reaches it; the rest are surplus.
 5. A Blossoming Sands is a lifegain source in hand only (its gain is the ETB); a Blighted Steppe counts
-   in hand or play. "Lifegain payoff" for the LIFEGAIN rule = Paragon / Ageless.
+   in hand or play. "Lifegain payoff" for the LIFEGAIN rule = Paragon / Ageless, and (REVIEW FIX S-5,
+  verified in cards.json: Blossoming Bogbeast's `attack_team_pump_per_life_gained` -- "+X/+X where X is
+  the amount of life you gained this turn") Bogbeast, so a Feed the Clan beside a held / in-play
+  Bogbeast has a payoff. Bogbeast is still NOT gated for enablement (its own attack gains 2 first).
+  Not extended to Accomplished Alchemist (its mana also scales with life gained this turn) -- open.
 6. Quotas net of board: payoffs in play count against 2 + soft 3rd; a Wellwisher in play fills
    LIFEGAIN 1.
 7. A reachable Genesis Wave ranks right after Craterhoof among equals (the USER's tie list does not
    name it). The kept Paragon takes the 2nd HARD slot when castability alone would leave it soft or out.
-8. Within "payoffs not reachable / not enabled": Waves first, then unreachable before not-enabled, then
-   the USER's order reversed (Avatar first, Bogbeast last).
+8. Within "payoffs not reachable / not enabled": Waves first (USER), then the largest GAP first (REVIEW
+   FIX S-1 2026-10-09, USER "based on how castable" -- the tie order alone shed a 1-short Ageless
+   before an 8-drop Craterhoof); a reachable-but-unenabled payoff has gap 0 and goes last; the USER's
+   order reversed (Avatar first, Bogbeast last) only on an equal gap.
 9. A lifegain card that is the ONLY lifegain source enabling a kept Paragon / Ageless is laddered right
    after that payoff, so the pair gives way together.
