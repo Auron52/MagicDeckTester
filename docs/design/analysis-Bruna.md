@@ -1609,3 +1609,38 @@ pre-fix binary (`56ea019a`) vs the fix, same manifest, `logs/cr508_bruna_ab/`. L
   power-gain rule that was first proposed for this (branch `cr508-hold-gain`, kept as a local record).
 * 9 faster games: 5 were old T5 wins through an illegal payment that now win T4 legally (the hold keeps
   the {U} source home); the other 4 are search churn.
+
+## Suite re-admission + value-leaf feasibility (2026-10-09)
+
+**Re-admitted to all three tiers** (`f1e675d9`, USER: *"see if Bruna earns a spot back in the suite"*).
+One pooled regression-tier batch of every suite deck plus Bruna on a quiet box
+(`suite_gate.py --measure-all`, Release): Bruna's worst searched case (d5 b20 s3003) 4,450 ms/game
+against hinata's 1,712 (the costliest deck with both artifacts) = **2.60x**, inside 3x. Overnight Bruna
+rows alone: 27m46s makespan on 24 cores, 285 games over 30 s.
+
+**Value-leaf cost probe** (`scripts/wk_valueleaf_cost_probe.py --deck decks/Bruna/Bruna.cod
+--alt-profile <bottom_eval_depth 0, topk 0>`, one pooled batch, 17.5 min wall; box load ~20-26 with our
+24 workers, so close to uncontended). The phase-C H cells exactly as the matrix runs them (unbounded,
+value off, lazy leaf, 40M-unit per-game cap), projected to 400 games x 4 seeds:
+
+| cell | games | units/game | core-s/game | phase C core-h | cheap-bottom arm core-s/game | core-h |
+|---|---|---|---|---|---|---|
+| H1 | 40 | 35k | 1.1 | 0.5 | 0.5 | 0.2 |
+| H2 | 40 | 296k | 11.2 | 5.0 | 6.1 | 2.7 |
+| H3 | 40 | 1.24M | 62.5 | 27.8 | 32.9 | 14.6 |
+| H4 | 24 | 4.12M | 135.2 | 60.1 | 64.5 | 28.7 |
+| H5 | 12 (1 hit the 40M cap) | 3.13M | 205.4 | 91.3 | 158.3 | 70.3 |
+| **H total** | | | | **184.6** | | **116.5** |
+
+Phase A (2,500 rows x K=3 at play settings, 3.59 s/game) ~7.5 core-h; phase E (1,000 x 8 seeds x 2 arms)
+~16 core-h. **Floor: ~208 core-h = ~8.7 h wall on 24 cores**, before the V cells (priced ~200x
+cheaper than H at depth 5), fitting, the trust/play A/Bs and the load-imbalance tail -- so expect
+roughly 10-15 h. The H5 sample is 12 games, one of them a capped monster (seed 8014 gi 6), so the H5
+line is the noisiest.
+
+**What a keep table first would buy the generation:** the cheap-bottom arm removes ~37% of the H cells
+(184.6 -> 116.5 core-h, ~3 h wall), far less than the ~70% bottoming share at play settings: at
+unbounded depth the real game dominates. Not enough to justify inverting the pipeline order (the keep
+table would then be fitted to pre-leaf play and need regenerating). The mulligan stage's settings
+(`mull_gen_depth` / `mull_gen_budget_ms`) come from the value leaf's `value_play`, so its cost is
+measured after the leaf exists.
