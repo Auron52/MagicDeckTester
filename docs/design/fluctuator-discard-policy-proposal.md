@@ -86,6 +86,57 @@ Housekeeping: Capital City note says "38 of 42 lands enter tapped" -- it is 34.
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `FluctuatorProvider::CleanupDiscardCandidates` + `CleanupDiscardProtectionWaived` +
+`CleanupDiscardShedStable` (src/ai/DecisionProviders.cpp), all behind `MTG_FLUCT_BUCKET_DISCARD`
+(heurarm `FLUCT_BUCKET_DISCARD`, default ON; `=0` = the generic max-MV ranking with the profile's
+scope-All protection, byte-identical to before). Tests: `test/unit/test_fluctuator_discard.cpp`.
+
+- **Protection (USER: one of {Fluctuator, Tutor}, Fluctuator first, none with a Fluctuator in play).**
+  The engine loads `decks/Fluctuator/Fluctuator.profile.json` (`required_pieces` [Fluctuator,
+  Enlightened Tutor], no `discard_protect` -> scope All); the keep-model sidecar contributes only the
+  keep table. The profile is untouched (required_pieces also gates the mulligan). The waiver: a hand
+  Fluctuator or Tutor while a Fluctuator is on our battlefield; a Tutor while a Fluctuator is in hand;
+  a copy while another copy of the same name is in hand. Outcome: {F} F protected; {F,T} F protected,
+  T shed first; {F,F} / {T,T} neither protected, the order keeps exactly one; {T} protected;
+  F in play + {F} or {T}: not protected, shed first. `InterchangeableRequiredGroup` stays (inert
+  under scope All).
+- **KEEP ladder:** enabler (Fluctuator > Tutor; none with one in play) > Stinger (board fills it) >
+  Unearth (1 always) > R + B source > Hollow One (1) > lands to 3 counting board (4 with no enabler
+  anywhere; skipped while `HoldFuelWhileComboing`) > 2nd Stinger, 2nd Unearth (close-out failure =
+  `FluctuatorWantsSecondThreat`; the Unearth also needs a Stinger in the yard or hand) > W source while
+  the Tutor is kept. **SHED:** spare Fluctuators > spare Tutor > Forsake > Stinger-for-Unearth (one
+  copy) > Hollow One (no reachable enabler, reach < 5) > lands past the count (no-colour tapped >
+  covered tapped > untapped > missing colour > Capital City) > spare Hollow One > spare Unearth >
+  spare Stinger > the ladder backwards. Ties: lowest `m_number` sheds first.
+- **Stinger-for-Unearth** next-turn test: every land we control plus at most ONE hand land without
+  `enters_tapped` (Capital City / Blasted Landscape), through the provider's conversion-aware route
+  arithmetic (`FluctuatorRouteReachableWith`, the generalised `FluctuatorCastRouteReachable`), so
+  "Capital City needs a feed" and "Blasted Landscape is colourless" both fall out of the arithmetic.
+- **Shed-order stability:** declared NOT prefix-stable while the buckets are on (`reach` counts hand
+  lands, so shedding a surplus land can flip the Hollow One clause); the rollout therefore re-ranks
+  after each shed, exactly as the executor's per-card cleanup loop already does.
+
+Agent readings (the USER may overturn any of them):
+1. Colour COVERAGE is by a PLAIN (non-conversion) source on our battlefield or already kept. Capital
+   City covers a colour only when no plain source of it is in hand (it is then the R/B fallback); it
+   still ranks first among the count lands.
+2. `reach` = lands on our battlefield + lands in hand. "Castable" enabler (S2b): a Fluctuator at
+   reach >= 2; an Enlightened Tutor at reach >= 2 with a W source (or Capital City) among those lands
+   (the SHED list says "no reachable enabler", which includes the Tutor).
+3. W is relevant only while the Tutor is the KEPT enabler (a spare Tutor sheds first anyway).
+4. Among single-colour R/B sources in the colour rung, one that also gives a missing W (Tutor kept)
+   is preferred (e.g. Glittering Massif over Smoldering Crater).
+5. Hollow One's quota is net of board (a Hollow One in play fills it), per the proposal's B4.
+6. Stinger-for-Unearth has no board condition (the SETTLED text names none); the 2nd-Unearth target is
+   "a Stinger in the yard or in hand", without the cycling side's route condition.
+7. Enlightened Tutor counts as an enabler whatever the library holds (the proposal's "a tutor that
+   cannot find the enabler is fodder" refinement is not in the SETTLED block and was not built).
+8. Housekeeping NOT done here (out of this change's scope): the "38 of this deck's 42 lands enter
+   TAPPED" note (it is 34) is in Capital City's cards.json oracle_text bracket and in a comment in
+   src/ai/LandPlay.cpp (`WHY IT MATTERS HERE`); DecisionProviders.cpp carries no such comment.
+
 
 ---
 
