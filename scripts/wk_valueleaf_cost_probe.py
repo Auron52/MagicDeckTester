@@ -50,8 +50,22 @@ def main():
     ap.add_argument("--games", default="40,40,40,24,12",
                     help="games per H depth 1..5 (comma-separated)")
     ap.add_argument("--rows-games", type=int, default=60, help="games for the phase-A rate sample")
-    ap.add_argument("--out", default=os.path.join(ROOT, "logs/wk_vlcost"))
+    ap.add_argument("--out", default=None, help="default logs/vlcost_<deck stem>")
+    # Any deck, not just WhiteKnights (Bruna 2026-10-09). Defaults keep the original WK probe.
+    ap.add_argument("--deck", default=DECK)
+    ap.add_argument("--profile", default=PROF)
+    # The real phase C passes valueleaf.sh's ABANDON_FLOOR_UNITS as each H cell's absolute per-game
+    # cap; without it one unbounded monster game decides the probe's wall (and its s/game). 0 = off.
+    ap.add_argument("--abandon-units", type=int, default=40000000)
+    # A second H arm on an alternative profile, pooled in the SAME batch (e.g. one whose mulligan
+    # bottoming is nearly free, to price what a keep table would save the matrix). Reported as its
+    # own table; the TOTAL stays the shipped profile's.
+    ap.add_argument("--alt-profile", default=None)
     args = ap.parse_args()
+    deck, prof = os.path.abspath(args.deck), os.path.abspath(args.profile)
+    if args.out is None:
+        stem = os.path.splitext(os.path.basename(deck))[0].replace(" ", "_")
+        args.out = os.path.join(ROOT, f"logs/vlcost_{stem}")
 
     per = [int(x) for x in args.games.split(",")]
     if len(per) != len(HDEPTHS):
@@ -64,17 +78,24 @@ def main():
     jobs = []
     # --- the H cells, exactly as the matrix runs them: unbounded, value OFF -------------------
     for d, g in zip(HDEPTHS, per):
-        jobs.append({"name": f"H{d}", "deck": DECK, "profile": PROF,
+        jobs.append({"name": f"H{d}", "deck": deck, "profile": prof,
                      "games": g, "seed": 8008, "depth": d,
                      "budget_ms": 0,              # 0 = unbounded; the H arm's whole point
                      "value_model": False,        # value OFF -- the heuristic arm
-                     "ignore_play_profile": True})
+                     "ignore_play_profile": True,
+                     "abandon_units": args.abandon_units})
+    if args.alt_profile:
+        for d, g in zip(HDEPTHS, per):
+            jobs.append({"name": f"H{d}_alt", "deck": deck, "profile": os.path.abspath(args.alt_profile),
+                         "games": g, "seed": 8008, "depth": d, "budget_ms": 0,
+                         "value_model": False, "ignore_play_profile": True,
+                         "abandon_units": args.abandon_units})
     # --- a phase-A-shaped cell: play settings, K searched labels per decision ------------------
     # ROW_K is the number of SEARCHED labels per decision, which is what makes a row dump cost
     # multiples of a plain game. There is no manifest key for it, so this cell measures the plain
     # play-settings game rate and the projection multiplies by ROW_K -- stated as an approximation
     # rather than dressed up as a measurement.
-    jobs.append({"name": "A_playrate", "deck": DECK, "profile": PROF,
+    jobs.append({"name": "A_playrate", "deck": deck, "profile": prof,
                  "games": args.rows_games, "seed": 610000, "depth": 5, "budget_ms": 20})
 
     mf = os.path.join(args.out, "manifest.json")
@@ -148,6 +169,18 @@ def main():
         print(f"   {f'H{d}':<9} {g:>5}  {('%.0f' % upg) if upg else 'n/a':>12}  "
               f"{('%.3f' % spg) if spg else 'n/a':>18}  "
               f"{('%.1f core-h' % proj) if proj else 'n/a':>18}")
+
+    if args.alt_profile:
+        alt_h = 0.0
+        print(f"\n   ALT profile {os.path.basename(args.alt_profile)}:")
+        for d, g in zip(HDEPTHS, per):
+            ms = cell_ms(f"H{d}_alt")
+            spg = (ms / 1000.0 / g) if (ms and g) else None
+            proj = (spg * MATRIX_TARGET * MATRIX_SEEDS / 3600.0) if spg else None
+            alt_h += proj or 0.0
+            print(f"   {f'H{d}_alt':<9} {g:>5}  {'':>12}  {('%.3f' % spg) if spg else 'n/a':>18}  "
+                  f"{('%.1f core-h' % proj) if proj else 'n/a':>18}")
+        print(f"   ALT H cells ~{alt_h:.1f} core-h (vs ~{matrix_core_h:.1f} on the shipped profile)")
 
     ums = cell_ms("A_playrate")
     aspg = (ums / 1000.0 / args.rows_games) if ums else None
