@@ -80,6 +80,25 @@ source).
 6. The payoff order is a NAME table (no param expresses "easiest to cast"); an unnamed payoff ranks after
    the five, cheapest first. A legend duplicate is dead for any legend (only Wanderer is one here); an
    unrecognised card sheds after the spare enablers.
+7. **AGENT CORRECTION (review fix, 2026-10-09) -- the tie-break INSIDE a land rank.** The first version
+   kept tied lands in HAND ORDER. Because the fill stops at 5 mana and reading 4 counts only kept lands,
+   that let hand order decide which payoffs were payable: board 3 Mountains, hand [Peat Bog, Skerry,
+   Protege, CT, BD, Boarding Party, CT, BD] kept the Bog and shed a stranded Protege at index 0; the
+   same hand with the two lands swapped kept the Skerry and shed the Bog. Now, inside a rank, the land
+   kept first is the one paying coloured pips that the board plus the lands already kept do not cover,
+   for the FIRST payoff in the USER's order that still has such a pip (more such pips first), then by
+   card name. Both orders of that hand keep the Skerry and shed the Bog. A Svyelunite Temple (pays
+   Protege's UU) is kept over a Dwarven Ruins (pays Call Forth's 3rd R) because Protege ranks higher.
+   The surplus lands shed in the same order reversed. Reading 4 itself is unchanged. The rank order
+   (reading 2) still comes first, so this never moves a land across ranks.
+
+**Not prefix-stable.** The tie-break reads the HELD payoffs. Test B5/B11 (board Peat Bog + Remote Farm;
+hand Mountain, Peat Bog, CT, BD, Boarding Party, Altisaur, Protege, Skerry): one consultation sheds
+Altisaur, Protege, Peat Bog, but once Protege is gone the Skerry pays nothing and the tied surplus lands
+fall to name order, so re-ranked per shed the third card is the Skerry. A filter also loses its feeder
+when the last other land goes.
+`BreachingDragonstormProvider::CleanupDiscardShedStable()` is false while the buckets are on (true at
+`=0`), so the engine re-ranks after every shed.
 
 
 ---
