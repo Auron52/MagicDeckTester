@@ -8136,15 +8136,22 @@ bool WhiteKnightsProvider::CleanupDiscardShedStable() const { return !WkBucketDi
 //   SHED   dominated Ziggurat / uncastable Vial -> Vial after T1 -> lands past the 4th (duals, then
 //          Mutavault last) -> creatures outside the fill (1-power first) -> soft 4th land -> the fill
 //          reversed (rest of the fill latest-scheduled first, 3rd land, fill lords, first grant,
-//          coloured land, [turn-1 Vial], anthem, coloured land).
+//          coloured land, [turn-1 Vial], anthem, coloured land). The soft 4th's place is OPTIMISED, not
+//          fixed (review fix 2026-10-09): the fill counts its mana, so it is held over each card of the
+//          rest of the fill whose loss costs the fill less than losing the land -- never above the 3rd
+//          land. See "THE SOFT 4TH IS PART OF THE OPTIMISATION" below.
 // Every non-staged hand index is named exactly once, routed through CleanupDiscardRankingWithOrder.
-// The batched multi-shed path is kept (the class default): slivers_vial measured 1.00 sheds per
-// cleanup, and declaring this base unstable would also re-route SoldiersProvider's cleanup.
+// NOT PREFIX-STABLE (review fix, 2026-10-09): shedding the soft 4th re-shapes the fill, and shedding
+// the first Cloudshredder / Hatchery makes the 2nd copy live, so CleanupDiscardShedStable() is false
+// while the rule is on and a multi-card cleanup re-asks after every shed. SoldiersProvider pins its
+// own stability to true, so Soldiers' batched cleanup is untouched.
 static bool SliversBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_SLIVERS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::SLIVERS_BUCKET_DISCARD, on);
 }
+
+bool VialProvider::CleanupDiscardShedStable() const { return !SliversBucketDiscardEnabled(); }
 
 std::vector<int> VialProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
@@ -8290,12 +8297,18 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
     }
 
     // ---- 6. the curve fill ----------------------------------------------------------------------
+    // Two mana models: WITH the soft 4th (every picked land) and WITHOUT it (the 3 the hard target
+    // keeps). The soft 4th is picked last, so dropping it never shifts another land's turn.
+    Mana mana3 = mana;   // board only so far
+    bool has_soft = false;
     for (int t = 0, drop = 0; t < npick; ++t, ++drop)
     {
         const int i = pick_order[t];
         if (drop >= kTurns) { break; }
         const bool tapped = defs[i] != nullptr && defs[i]->params.enters_tapped;
         AddFrom(mana, lsrc[i], lsrc[i].units, drop + (tapped ? 1 : 0));
+        if (slot[i] == 'D') { has_soft = true; }
+        else                { AddFrom(mana3, lsrc[i], lsrc[i].units, drop + (tapped ? 1 : 0)); }
     }
     auto is_anthem = [&](const CardDefinition* d)
     {
@@ -8334,6 +8347,13 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
     Spell spells[kMaxPool];
     for (int t = 0; t < dp.n; ++t) { spells[t] = MakeSpell(s, defs[pool_hand[dp.pool_of[t]]]); }
     Fill& F = t_fill;
+    // Feasibility WITHOUT the soft 4th first (kept as a bitmap -- the scratch is then rebuilt with it).
+    std::uint8_t feas3[kMasks];
+    if (has_soft)
+    {
+        F.Build(spells, dp.n, mana3, vial_charge);
+        for (unsigned M = 0; M < F.Full(); ++M) { feas3[M] = F.Feasible(M) ? 1 : 0; }
+    }
     F.Build(spells, dp.n, mana, vial_charge);
 
     // The slotted first anthem and first unique grant: castable-in-the-window first, then (grant)
@@ -8392,24 +8412,42 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
     }
     const unsigned a_bit = anthem1 >= 0 && slot_of[anthem1] >= 0 ? 1u << slot_of[anthem1] : 0u;
     const unsigned g_bit = grant1 >= 0 && slot_of[grant1] >= 0 ? 1u << slot_of[grant1] : 0u;
-    unsigned must = 0;
-    if ((a_bit | g_bit) != 0 && F.Feasible(a_bit | g_bit)) { must = a_bit | g_bit; }
-    else if (a_bit != 0 && F.Feasible(a_bit))              { must = a_bit; }
-    else if (g_bit != 0 && F.Feasible(g_bit))              { must = g_bit; }
-    unsigned best = must;
-    std::uint64_t best_score = 0;
-    bool any = false;
-    for (unsigned M = 0; M < F.Full(); ++M)
+    // The fill's objective, and its best kept set under a feasibility table, never containing a card
+    // of `excl` (the cards already shed). The slotted anthem / grant are forced in whenever they fit.
+    auto score_of = [&](unsigned M)
     {
-        if ((M & must) != must || !F.Feasible(M)) { continue; }
         const int lords   = std::popcount(M & anthem_bits) + ((M & hatch_bits) != 0 ? 1 : 0);
         const int anthems = std::popcount(M & anthem_bits);
-        const std::uint64_t sc = (static_cast<std::uint64_t>(F.Cost(M)) << 40)
-                               | (static_cast<std::uint64_t>(lords) << 34)
-                               | (static_cast<std::uint64_t>(anthems) << 28)
-                               | ValueKey(M, dp);
-        if (!any || sc > best_score) { best = M; best_score = sc; any = true; }
-    }
+        return (static_cast<std::uint64_t>(F.Cost(M)) << 40)
+             | (static_cast<std::uint64_t>(lords) << 34)
+             | (static_cast<std::uint64_t>(anthems) << 28)
+             | ValueKey(M, dp);
+    };
+    auto must_of = [&](auto feasible)
+    {
+        if ((a_bit | g_bit) != 0 && feasible(a_bit | g_bit)) { return a_bit | g_bit; }
+        if (a_bit != 0 && feasible(a_bit))                   { return a_bit; }
+        if (g_bit != 0 && feasible(g_bit))                   { return g_bit; }
+        return 0u;
+    };
+    auto best_of = [&](auto feasible, unsigned must_set, unsigned excl, std::uint64_t* score_out)
+    {
+        unsigned best_m = must_set & ~excl;
+        std::uint64_t best_sc = 0;
+        bool found = false;
+        for (unsigned M = 0; M < F.Full(); ++M)
+        {
+            if ((M & excl) != 0 || (M & must_set) != (must_set & ~excl) || !feasible(M)) { continue; }
+            const std::uint64_t sc = score_of(M);
+            if (!found || sc > best_sc) { best_m = M; best_sc = sc; found = true; }
+        }
+        if (score_out != nullptr) { *score_out = best_sc; }
+        return best_m;
+    };
+    auto feas4 = [&](unsigned M) { return F.Feasible(M); };
+    auto feas3f = [&](unsigned M) { return feas3[M] != 0; };
+    const unsigned must = must_of(feas4);
+    const unsigned best = best_of(feas4, must, 0u, nullptr);
     int turn_of[kMaxPool];
     F.Schedule(best, dp.rank_bit, turn_of);
 
@@ -8445,8 +8483,11 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
     }
     auto push_slot = [&](char which)
     { for (int t = npick - 1; t >= 0; --t) { if (slot[pick_order[t]] == which) { shed.push_back(pick_order[t]); } } };
-    auto push_fill = [&](bool lords)   // latest-scheduled first, then lowest value
+    // The fill's members of one group (lords or the rest), as DP slots in shed order: latest-scheduled
+    // first, then lowest value.
+    auto fill_order = [&](bool lords, int* out_slots) -> int
     {
+        int no_all = 0;
         for (int k = kTurns - 1; k >= -1; --k)
         {
             int order[kMaxPool], no = 0;
@@ -8458,11 +8499,44 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
                 if (lord == lords) { order[no++] = t; }
             }
             std::sort(order, order + no, [&](int a, int b) { return dp.rank_bit[a] < dp.rank_bit[b]; });
-            for (int q = 0; q < no; ++q) { shed.push_back(pool_hand[dp.pool_of[order[q]]]); }
+            for (int q = 0; q < no; ++q) { out_slots[no_all++] = order[q]; }
         }
+        return no_all;
     };
+    auto push_fill = [&](bool lords)
+    {
+        int order[kMaxPool];
+        const int no = fill_order(lords, order);
+        for (int q = 0; q < no; ++q) { shed.push_back(pool_hand[dp.pool_of[order[q]]]); }
+    };
+    // THE SOFT 4TH IS PART OF THE OPTIMISATION (review fix, 2026-10-09). The fill above was computed
+    // WITH the soft 4th's mana, so shedding that land ahead of the fill would strand exactly the
+    // creatures it was keeping -- USER: "4 if we have space, since casting 2 lords on 4 ... is an easy
+    // way to end the game". So the land goes only where shedding it is at least as good, by the fill's
+    // own objective, as shedding the next card of the rest of the fill: at each step compare the best
+    // kept set WITHOUT the 4th (nothing else shed) against the best kept set WITH it once that card is
+    // gone; ties shed the land (the USER's ladder default -- "soft"). It never rises above the 3rd land
+    // (the ladder keeps the 3rd land below the fill lords, and the 4th below the 3rd).
+    int rest_slots[kMaxPool];
+    const int n_rest = fill_order(false, rest_slots);
+    int soft_at = 0;   // the soft 4th sheds before rest_slots[soft_at]
+    if (has_soft)
+    {
+        const unsigned must3 = must_of(feas3f);
+        unsigned gone = 0;
+        soft_at = n_rest;
+        for (int q = 0; q < n_rest; ++q)
+        {
+            std::uint64_t without_land = 0, without_card = 0;
+            best_of(feas3f, must3, gone, &without_land);
+            best_of(feas4, must, gone | (1u << rest_slots[q]), &without_card);
+            if (without_land >= without_card) { soft_at = q; break; }
+            gone |= 1u << rest_slots[q];
+        }
+    }
+    for (int q = 0; q < soft_at; ++q) { shed.push_back(pool_hand[dp.pool_of[rest_slots[q]]]); }
     push_slot('D');                                                             // soft 4th land
-    push_fill(false);                                                           // rest of the fill
+    for (int q = soft_at; q < n_rest; ++q) { shed.push_back(pool_hand[dp.pool_of[rest_slots[q]]]); }
     push_slot('C');                                                             // 3rd land
     push_fill(true);                                                            // fill lords
     if (grant1 >= 0 && grant1 != anthem1) { shed.push_back(pool_hand[grant1]); }
