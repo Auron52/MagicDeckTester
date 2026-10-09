@@ -541,6 +541,8 @@ The rule decided 1,083 real and 4.19M searched bounces, 2.75M of them with more 
 fastland past its count, a checkland without its type, a shock without the life re-enter TAPPED) --
 instead of the card's `enters_tapped` param alone, which ranks every conditional land as a basic.
 About ten lines in `DecisionProviders.cpp` behind a heurarm lever; ADOPTED default ON with the amended rule (2026-10-09).
+**USER-approved 2026-10-09** on its own (it had shipped bundled with the amended rule): *"Okay, sounds
+good. We should include such a fix."*
 
 **Measurement.** One pooled batch on the same rows and seeds (423 jobs, 295,810 games), paired with the
 first batch's tip / rule / Hinata-A arms (the tip arm is byte-identical to GT, so the pairing is exact):
