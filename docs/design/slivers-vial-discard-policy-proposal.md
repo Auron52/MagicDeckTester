@@ -72,6 +72,63 @@ both 1-drops (3 on turn 3) or lords (2 on turn 4)".
 - Fungus: "foreseeable future" = 5 mana within 2 turns; Beastmaster gives way before the core.
 - Selesnya: shed order between lifegain-without-payoff and unreachable payoffs (agent ordering).
 
+#### Implementation notes (2026-10-09)
+
+Implemented as `VialProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`, on the
+shared `vialcurve` curve fill), behind `MTG_SLIVERS_BUCKET_DISCARD` (default ON; `=0` ->
+`GenericProvider`'s max-MV ranking). Tests: `test/unit/test_slivers_vial_discard.cpp`.
+
+SCOPE, checked first: of the seven shipping lists holding Aether Vial (the only `upkeep_adds_charge`
+card), Knights / WhiteKnights / Soldiers route to VialProvider SUBCLASSES that override this hook
+(Soldiers' own rule is untouched and does not read this flag), and Goblins / Minotaur / Pirates route
+to their own providers -- so slivers_vial is the only deck that resolves to VialProvider directly.
+No land constant sits on the shared base: hard target = dominant creature MV + 1, soft target = 2 x
+dominant MV, coloured sub-quota = dominant MV, from `GameState::vial_target_mv` (stamped from the
+decklist; derived from hand + board when unstamped) -- 3 / 4 / 2 on this deck, the USER's numbers.
+
+What runs, compactly:
+- KEEP ladder: coloured land #1 -> first anthem -> [turn-1 Vial] -> coloured land #2 -> first unique
+  grant -> fill lords -> 3rd land -> rest of the fill -> soft 4th land.
+- SHED: a Ziggurat past the 4th, then an uncastable Vial (nothing but Ziggurats to pay it) -> every
+  other Vial except a turn-1 first copy -> lands past the 4th (duals, then Mutavault last) ->
+  creatures outside the fill (value ascending: 1-power < 2-power < Leeching < live Hatchery < grant
+  < anthem; equal values keep the earlier hand card) -> soft 4th -> rest of the fill (latest-scheduled
+  first) -> 3rd land -> fill lords -> first grant -> coloured land #2 -> [turn-1 Vial] -> first anthem
+  -> coloured land #1.
+- Land slot picks: a coloured slot takes an unrestricted coloured land, then a Ziggurat (never a
+  colourless one while a coloured one is left); once the colours are met a slot prefers Mutavault,
+  then a dual, then a plain colourless land, then a Ziggurat.
+- FILL: the shared model (colour-exact per-turn mana from lands in play + one kept land per turn,
+  Ziggurat creature-only, one Vial put per turn at MV == charge), objective = (mana value deployed,
+  lords = anthems + a live Hatchery, real anthems, value-lex), computed around the slotted first
+  anthem and first grant whenever they fit. Hivepool costs 6 - Slivers in play.
+- The batched multi-shed path is kept (`CleanupDiscardShedStable()` default): the rule is not strictly
+  prefix-stable past the soft 4th, but this deck measured 1.00 sheds per cleanup, and declaring the
+  shared base unstable would also re-route SoldiersProvider's cleanup.
+
+Agent readings (surfaced for the USER):
+1. The land targets' DERIVATION (dominant MV + 1 / 2 x dominant MV / dominant MV); the numbers on
+   this deck are the USER's.
+2. "Dominated" Ziggurat = the proposal's worked example: a Ziggurat no land slot needs (it is the last
+   pick for every slot), i.e. one left past the 4th -> first shed. A Ziggurat that fills a slot because
+   nothing else can is kept in that slot.
+3. Mutavault is the preferred 3rd / 4th land once the colours are met (read off "Mutavault last
+   surplus land shed" and the proposal's section 6), and never fills a coloured slot.
+4. "Keeps the curve full" = the most mana value deployed in the window (cast or Vial-put).
+5. "First unique grant" = the live grant card that fits the window alone, double strike first, then
+   haste; it stays slotted even when it cannot be cast in the window (e.g. a Hivepool with no Sliver
+   in play). "Hivepool covers both": a card whose live grants the first grant already covers (a
+   Cloudshredder behind a held Hivepool) is a plain creature.
+6. The first anthem slot takes the anthem that fits the window alone, then hand order; it is kept
+   even when it does not fit.
+7. The turn-1 Vial sits right behind the first anthem (the proposal's "land1 > body1 > VIAL > land2").
+8. Hivepool's cost counts the Slivers in play NOW, not the ones the fill casts earlier in the window.
+9. The Vial-charge model is the shared one: the charge rises by at most one per upkeep.
+
+Not run here (the brief forbids game runs on this box): the regression suite incl. `slivers2hg`,
+`MTG_DISCARD_SHED_VERIFY=1`, and the d0 byte-identity check of section 9 (d0 has zero cleanups, so a
+d0 movement would be a bug).
+
 
 ---
 

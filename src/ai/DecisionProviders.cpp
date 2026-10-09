@@ -8071,6 +8071,390 @@ std::vector<int> WhiteKnightsProvider::CleanupDiscardCandidates(
 
 bool WhiteKnightsProvider::CleanupDiscardShedStable() const { return !WkBucketDiscardEnabled(); }
 
+// ---- VialProvider::CleanupDiscardCandidates (slivers_vial) --------------------------------------
+//
+// THE USER-SETTLED slivers_vial RULE (2026-10-09; docs/design/slivers-vial-discard-policy-proposal.md,
+// block "slivers_vial: SETTLED"). USER: "Surplus after turn 1 because Slivers almost always wins T4.";
+// "3 lands if things are tight and 4 if we have space, since casting 2 lords on 4 (potentially
+// replicate from hatchery) is an easy way to end the game."; "You typically want to keep as many lords
+// as you can while still maintaining the curve. Hatchery can also fill in the space if we don't have
+// enough lords due to replicate for both 1-drops (3 on turn 3) or lords (2 on turn 4)".
+//
+// SCOPE. VialProvider is a SHARED base (Knights, WhiteKnights and Soldiers derive from it), so: every
+// deck that resolves HERE directly was checked to be slivers_vial alone (2026-10-09: of the seven
+// shipping lists that hold Aether Vial, Knights / WhiteKnights / Soldiers route to subclasses that
+// override this hook, and Goblins / Minotaur / Pirates to their own providers); every role is keyed
+// on a PARAM (creature_mana_only, can_animate, grants_*, power_bonus, attack_trigger_life_loss,
+// affinity_for_subtype, upkeep_adds_charge); and the land targets are DERIVED from the deck's dominant
+// creature mana value (GameState::vial_target_mv, stamped from the decklist) rather than written as
+// constants on the shared base:  hard target = dominant MV + 1, soft target = 2 x dominant MV ("2
+// lords a turn"), coloured sub-quota = dominant MV -- 3 / 4 / 2 on slivers_vial (dominant MV 2), the
+// USER's numbers. AGENT READING (the derivation is the agent's; the numbers are the USER's).
+//
+//   LANDS  3 counting the board, 2 of them coloured; a soft 4th. Ancient Ziggurat (creature-spell-only
+//          mana: it cannot pay a Vial or the Hivepool) is DOMINATED -- AGENT READING, the proposal's
+//          own worked example: "dominated" = a land slot another land can fill, so a Ziggurat is the
+//          last pick for every slot and a Ziggurat left past the 4th is the FIRST card shed. Mutavault
+//          (colourless, also a 2/2 Sliver every anthem pumps) cannot fill a coloured slot, is the
+//          preferred 3rd / 4th land once the colours are met (agent reading of "Mutavault last surplus
+//          land shed", after the proposal's section 6), and is the last surplus land shed.
+//   VIAL   surplus after turn 1 (kept as an engine only at the end of turn 1); a 2nd always shed; a
+//          Vial nothing in board + hand can pay for (only Ziggurats) is dead (first shed).
+//          AGENT READING: the turn-1 Vial sits right behind the first anthem in the keep ladder (the
+//          proposal's "land1 > body1 > VIAL > land2" shape).
+//   UNIQUE GRANTS  double strike > haste (Hivepool covers both); a grant already in play or a 2nd copy
+//          = plain creature (USER). The first unique grant is the best live grant card that fits the
+//          window, double strike first. AGENT READING of "Hivepool covers both": once a grant card is
+//          the first unique grant, a card whose live grants it already covers (a Cloudshredder behind
+//          a held Hivepool) is a plain creature too.
+//   CREATURES  the shared 3-turn curve fill, LORDS FIRST: the set that keeps the curve full (AGENT
+//          READING: the most mana value deployed in the window, cast or Vial-put) with the MOST LORDS
+//          (Muscle / Predatory / Sinew; the first live Hatchery Sliver counts as one), real anthems
+//          preferred on ties, then Leeching > 2-power > 1-power. Hivepool costs 6 - Slivers in play;
+//          the two-pip gold Slivers need two coloured sources (the fill's colour model). The fill is
+//          computed around the slotted first anthem and first grant (kept whenever they fit).
+//   KEEP   coloured land -> anthem -> coloured land -> first unique grant -> curve fill (lords first)
+//          -> 3rd land -> rest of the fill -> soft 4th land.
+//   SHED   dominated Ziggurat / uncastable Vial -> Vial after T1 -> lands past the 4th (duals, then
+//          Mutavault last) -> creatures outside the fill (1-power first) -> soft 4th land -> the fill
+//          reversed (rest of the fill latest-scheduled first, 3rd land, fill lords, first grant,
+//          coloured land, [turn-1 Vial], anthem, coloured land).
+// Every non-staged hand index is named exactly once, routed through CleanupDiscardRankingWithOrder.
+// The batched multi-shed path is kept (the class default): slivers_vial measured 1.00 sheds per
+// cleanup, and declaring this base unstable would also re-route SoldiersProvider's cleanup.
+static bool SliversBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_SLIVERS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    return heurarm::Flag(heurarm::SLIVERS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> VialProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    using namespace vialcurve;
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (!SliversBucketDiscardEnabled() || n <= 0 || n > kHandMax)
+    { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- 1. the land targets, derived from the deck's dominant creature MV ---------------------
+    int dom = s.vial_target_mv;
+    if (dom <= 0)
+    {
+        // Not stamped (a state built outside GoldFishRunner): the most common creature MV over hand +
+        // board, ties toward the higher value -- DeckVialTargetMv's rule on what is visible.
+        int count[16] = {};
+        auto tally = [&](const CardDefinition* d)
+        {
+            if (d == nullptr || !d->card.IsCreature()) { return; }
+            const int mv = d->card.m_mana_cost.ManaValue();
+            if (mv > 0 && mv < 16) { ++count[mv]; }
+        };
+        for (const Card& c : ap.hand) { tally(def_of(c)); }
+        for (const Permanent& perm : s.battlefield) { if (perm.controller_index == me) { tally(def_of(perm.card)); } }
+        int best_cnt = 0;
+        for (int mv = 1; mv < 16; ++mv) { if (count[mv] >= best_cnt && count[mv] > 0) { best_cnt = count[mv]; dom = mv; } }
+        dom = std::max(1, dom);
+    }
+    const int hard_target = dom + 1;                         // 3 on slivers_vial
+    const int soft_target = std::max(hard_target, 2 * dom); // 4
+    const int col_target  = std::min(dom, hard_target);     // 2
+
+    // ---- 2. board census (net of board) -------------------------------------------------------
+    Mana mana{};
+    int board_lands = 0, board_coloured = 0, vial_charge = -1;
+    bool board_ds = false, board_haste = false, board_replicate = false, generic_src = false;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        if (perm.card.IsLand() || (d != nullptr && d->params.mana_rock))
+        {
+            const Source src = ClassifySource(d);
+            AddFrom(mana, src, src.units, 0);
+            if (!src.restricted) { generic_src = true; }
+            if (perm.card.IsLand())
+            {
+                ++board_lands;
+                if (src.kind != Kind::Colourless) { ++board_coloured; }
+            }
+        }
+        if (d == nullptr) { continue; }
+        if (d->params.upkeep_adds_charge)           { vial_charge = std::max(vial_charge, perm.charge_counters); }
+        if (d->params.grants_double_strike)         { board_ds = true; }
+        if (d->params.grants_haste)                 { board_haste = true; }
+        if (d->params.grants_replicate_to_subtypes) { board_replicate = true; }
+    }
+
+    // ---- 3. partition the hand ------------------------------------------------------------------
+    enum : char { C_SKIP, C_LAND, C_VIAL, C_SPELL };
+    char cls[kHandMax];
+    const CardDefinition* defs[kHandMax];
+    Source lsrc[kHandMax];
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        cls[i] = C_SKIP;
+        defs[i] = nullptr;
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        defs[i] = d;
+        if (CleanupDiscardIsLand(c))
+        {
+            cls[i] = C_LAND;
+            lsrc[i] = ClassifySource(d);
+            if (!lsrc[i].restricted) { generic_src = true; }
+            continue;
+        }
+        cls[i] = (d != nullptr && d->params.upkeep_adds_charge) ? C_VIAL : C_SPELL;
+    }
+    auto first_copy = [&](int i)   // no earlier non-staged hand card of the same name
+    {
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& o = ap.hand[static_cast<std::size_t>(j)];
+            if (!o.m_is_staged && o.m_name == ap.hand[static_cast<std::size_t>(i)].m_name) { return false; }
+        }
+        return true;
+    };
+
+    // ---- 4. the Vial ------------------------------------------------------------------------------
+    int kept_vial = -1;
+    if (generic_src && s.turn_number <= 1 && vial_charge < 0)
+    { for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL) { kept_vial = i; break; } } }
+
+    // ---- 5. the land ladder: coloured slots, the hard target, the soft 4th ----------------------
+    // slot: 'A' coloured land #1, 'B' further coloured lands, 'C' the 3rd land, 'D' the soft 4th;
+    // 0 = past the 4th (surplus).
+    char slot[kHandMax] = {};
+    int pick_order[kHandMax], npick = 0;
+    {
+        int lands_have = board_lands, col_have = board_coloured;
+        auto is_col = [&](int i) { return lsrc[i].kind != Kind::Colourless; };
+        auto pick = [&](bool want_colour) -> int
+        {
+            // Coloured slot: unrestricted coloured > Ziggurat; never a colourless land unless nothing
+            // coloured is left. Other slot: Mutavault > unrestricted coloured > other colourless >
+            // Ziggurat. Hand order breaks ties.
+            int best = -1, best_key = -1;
+            for (int i = 0; i < n; ++i)
+            {
+                if (cls[i] != C_LAND || slot[i] != 0) { continue; }
+                const bool col = is_col(i), zig = lsrc[i].restricted;
+                const bool animate = defs[i] != nullptr && defs[i]->params.can_animate;
+                int key;
+                if (want_colour) { key = (col && !zig) ? 3 : (col ? 2 : (animate ? 1 : 0)); }
+                else             { key = animate ? 3 : ((col && !zig) ? 2 : (col ? 0 : 1)); }
+                if (key > best_key) { best = i; best_key = key; }
+            }
+            return best;
+        };
+        auto assign = [&](int target, bool soft)
+        {
+            while (lands_have < target)
+            {
+                const bool want_colour = col_have < col_target;
+                const int i = pick(want_colour);
+                if (i < 0) { return; }
+                const bool col = is_col(i);
+                if (soft)                          { slot[i] = 'D'; }
+                else if (want_colour && col)       { slot[i] = col_have == 0 ? 'A' : 'B'; }
+                else                               { slot[i] = 'C'; }
+                if (col) { ++col_have; }
+                ++lands_have;
+                pick_order[npick++] = i;
+            }
+        };
+        assign(hard_target, false);
+        assign(soft_target, true);
+    }
+
+    // ---- 6. the curve fill ----------------------------------------------------------------------
+    for (int t = 0, drop = 0; t < npick; ++t, ++drop)
+    {
+        const int i = pick_order[t];
+        if (drop >= kTurns) { break; }
+        const bool tapped = defs[i] != nullptr && defs[i]->params.enters_tapped;
+        AddFrom(mana, lsrc[i], lsrc[i].units, drop + (tapped ? 1 : 0));
+    }
+    auto is_anthem = [&](const CardDefinition* d)
+    {
+        return d != nullptr && d->card.IsCreature() && d->params.power_bonus > 0
+            && (!d->params.subtypes_affected.empty() || d->params.affects_all_creatures);
+    };
+    int pool_hand[kHandMax], np = 0;
+    for (int i = 0; i < n; ++i) { if (cls[i] == C_SPELL) { pool_hand[np++] = i; } }
+    // Live binary grants: not already on the battlefield, and not a 2nd copy (USER).
+    bool live_ds[kHandMax], live_haste[kHandMax], live_hatch[kHandMax];
+    for (int j = 0; j < np; ++j)
+    {
+        const int i = pool_hand[j];
+        const CardDefinition* d = defs[i];
+        const bool first = first_copy(i);
+        live_ds[j]    = d != nullptr && first && d->params.grants_double_strike && !board_ds;
+        live_haste[j] = d != nullptr && first && d->params.grants_haste && !board_haste;
+        live_hatch[j] = d != nullptr && first && d->params.grants_replicate_to_subtypes && !board_replicate;
+    }
+    // Preliminary value (bounds the DP pool only on a hand above kMaxPool spells -- never in play).
+    auto base_value = [&](int j)
+    {
+        const CardDefinition* d = defs[pool_hand[j]];
+        if (d == nullptr)     { return 0; }
+        if (is_anthem(d))     { return 600; }
+        if (live_ds[j] || live_haste[j]) { return 550; }
+        if (live_hatch[j])    { return 500; }
+        if (d->params.attack_trigger_life_loss > 0) { return 400; }
+        return 100 * std::clamp(d->card.m_power.value_or(0), 0, 3);   // 2-power 200, 1-power 100
+    };
+    int value[kHandMax], rank[kHandMax], slot_of[kHandMax];
+    for (int j = 0; j < np; ++j) { value[j] = base_value(j); }
+    RankByValue(value, pool_hand, np, rank);
+    DpPool dp;
+    PickDpPool(rank, np, dp, slot_of);
+    Spell spells[kMaxPool];
+    for (int t = 0; t < dp.n; ++t) { spells[t] = MakeSpell(s, defs[pool_hand[dp.pool_of[t]]]); }
+    Fill& F = t_fill;
+    F.Build(spells, dp.n, mana, vial_charge);
+
+    // The slotted first anthem and first unique grant: castable-in-the-window first, then (grant)
+    // double strike > haste, then hand order.
+    int anthem1 = -1, grant1 = -1;   // pool indices
+    {
+        int best_key = -1;
+        for (int t = 0; t < dp.n; ++t)
+        {
+            const int j = dp.pool_of[t];
+            if (!is_anthem(defs[pool_hand[j]])) { continue; }
+            const int key = (F.Feasible(1u << t) ? 1 : 0) * 1000 - pool_hand[j];
+            if (anthem1 < 0 || key > best_key) { anthem1 = j; best_key = key; }
+        }
+        best_key = -1;
+        for (int t = 0; t < dp.n; ++t)
+        {
+            const int j = dp.pool_of[t];
+            if (!live_ds[j] && !live_haste[j]) { continue; }
+            const int key = (F.Feasible(1u << t) ? 4000 : 0) + (live_ds[j] ? 2000 : 0)
+                          + (live_haste[j] ? 1000 : 0) - pool_hand[j];
+            if (grant1 < 0 || key > best_key) { grant1 = j; best_key = key; }
+        }
+    }
+    const bool cover_ds    = grant1 >= 0 && live_ds[grant1];
+    const bool cover_haste = grant1 >= 0 && live_haste[grant1];
+    // Final values: a grant card whose live grants the first grant already covers is a plain body.
+    for (int j = 0; j < np; ++j)
+    {
+        if (j == grant1 || (!live_ds[j] && !live_haste[j])) { continue; }
+        const bool still = (live_ds[j] && !cover_ds) || (live_haste[j] && !cover_haste);
+        if (!still)
+        {
+            const CardDefinition* d = defs[pool_hand[j]];
+            value[j] = d == nullptr ? 0 : 100 * std::clamp(d->card.m_power.value_or(0), 0, 3);
+            if (d != nullptr && is_anthem(d)) { value[j] = 600; }
+            else if (live_hatch[j])           { value[j] = 500; }
+            else if (d != nullptr && d->params.attack_trigger_life_loss > 0) { value[j] = 400; }
+        }
+    }
+    RankByValue(value, pool_hand, np, rank);
+    // Re-derive the DP slots' rank bits from the final ranks (the slot membership is unchanged: it
+    // differs from the preliminary pick only on a hand above kMaxPool spells).
+    {
+        int order[kMaxPool];
+        for (int t = 0; t < dp.n; ++t) { order[t] = t; }
+        std::sort(order, order + dp.n, [&](int a, int b) { return rank[dp.pool_of[a]] < rank[dp.pool_of[b]]; });
+        for (int r = 0; r < dp.n; ++r) { dp.rank_bit[order[r]] = 1u << r; }
+    }
+    unsigned anthem_bits = 0, hatch_bits = 0;
+    for (int t = 0; t < dp.n; ++t)
+    {
+        const int j = dp.pool_of[t];
+        if (is_anthem(defs[pool_hand[j]])) { anthem_bits |= 1u << t; }
+        if (live_hatch[j])                 { hatch_bits |= 1u << t; }
+    }
+    const unsigned a_bit = anthem1 >= 0 && slot_of[anthem1] >= 0 ? 1u << slot_of[anthem1] : 0u;
+    const unsigned g_bit = grant1 >= 0 && slot_of[grant1] >= 0 ? 1u << slot_of[grant1] : 0u;
+    unsigned must = 0;
+    if ((a_bit | g_bit) != 0 && F.Feasible(a_bit | g_bit)) { must = a_bit | g_bit; }
+    else if (a_bit != 0 && F.Feasible(a_bit))              { must = a_bit; }
+    else if (g_bit != 0 && F.Feasible(g_bit))              { must = g_bit; }
+    unsigned best = must;
+    std::uint64_t best_score = 0;
+    bool any = false;
+    for (unsigned M = 0; M < F.Full(); ++M)
+    {
+        if ((M & must) != must || !F.Feasible(M)) { continue; }
+        const int lords   = std::popcount(M & anthem_bits) + ((M & hatch_bits) != 0 ? 1 : 0);
+        const int anthems = std::popcount(M & anthem_bits);
+        const std::uint64_t sc = (static_cast<std::uint64_t>(F.Cost(M)) << 40)
+                               | (static_cast<std::uint64_t>(lords) << 34)
+                               | (static_cast<std::uint64_t>(anthems) << 28)
+                               | ValueKey(M, dp);
+        if (!any || sc > best_score) { best = M; best_score = sc; any = true; }
+    }
+    int turn_of[kMaxPool];
+    F.Schedule(best, dp.rank_bit, turn_of);
+
+    // ---- 7. the shed order ----------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    auto land_shed_rank = [&](int i)   // surplus lands, most expendable first
+    {
+        const bool animate = defs[i] != nullptr && defs[i]->params.can_animate;
+        if (lsrc[i].restricted)                 { return 0; }   // Ziggurat (S0)
+        if (lsrc[i].kind != Kind::Colourless)   { return 1; }   // duals
+        return animate ? 3 : 2;                                 // Mutavault last
+    };
+    auto push_surplus_lands = [&](bool ziggurat)
+    {
+        for (int r = ziggurat ? 0 : 1; r <= (ziggurat ? 0 : 3); ++r)
+            for (int i = n - 1; i >= 0; --i)
+                if (cls[i] == C_LAND && slot[i] == 0 && land_shed_rank(i) == r) { shed.push_back(i); }
+    };
+    push_surplus_lands(true);                                                   // dominated Ziggurat
+    if (!generic_src) { for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL) { shed.push_back(i); } } }
+    else { for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL && i != kept_vial) { shed.push_back(i); } } }
+    push_surplus_lands(false);                                                  // past the 4th
+    auto in_fill = [&](int j) { return slot_of[j] >= 0 && ((best >> slot_of[j]) & 1u) != 0; };
+    {
+        int by_rank[kHandMax];
+        for (int j = 0; j < np; ++j) { by_rank[rank[j]] = j; }
+        for (int r = 0; r < np; ++r)                                            // outside the fill
+        {
+            const int j = by_rank[r];
+            if (j != anthem1 && j != grant1 && !in_fill(j)) { shed.push_back(pool_hand[j]); }
+        }
+    }
+    auto push_slot = [&](char which)
+    { for (int t = npick - 1; t >= 0; --t) { if (slot[pick_order[t]] == which) { shed.push_back(pick_order[t]); } } };
+    auto push_fill = [&](bool lords)   // latest-scheduled first, then lowest value
+    {
+        for (int k = kTurns - 1; k >= -1; --k)
+        {
+            int order[kMaxPool], no = 0;
+            for (int t = 0; t < dp.n; ++t)
+            {
+                const int j = dp.pool_of[t];
+                if (!((best >> t) & 1u) || j == anthem1 || j == grant1 || turn_of[t] != k) { continue; }
+                const bool lord = ((anthem_bits | hatch_bits) >> t) & 1u;
+                if (lord == lords) { order[no++] = t; }
+            }
+            std::sort(order, order + no, [&](int a, int b) { return dp.rank_bit[a] < dp.rank_bit[b]; });
+            for (int q = 0; q < no; ++q) { shed.push_back(pool_hand[dp.pool_of[order[q]]]); }
+        }
+    };
+    push_slot('D');                                                             // soft 4th land
+    push_fill(false);                                                           // rest of the fill
+    push_slot('C');                                                             // 3rd land
+    push_fill(true);                                                            // fill lords
+    if (grant1 >= 0 && grant1 != anthem1) { shed.push_back(pool_hand[grant1]); }
+    push_slot('B');                                                             // coloured land #2
+    if (kept_vial >= 0) { shed.push_back(kept_vial); }
+    if (anthem1 >= 0) { shed.push_back(pool_hand[anthem1]); }
+    push_slot('A');                                                             // coloured land #1
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- SoldiersProvider --------------------------------------------------------
 
 // MTG_SOLDIERS_ORDER -- PROPOSED total cast order for Soldiers (analyze-deck, 2026-10-04). A USER
@@ -17021,6 +17405,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (snow) { return g_snow; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
+    // VialProvider holds slivers_vial's USER-settled cleanup-discard rule (2026-10-09). slivers_vial
+    // is the only shipping list that resolves here; a NEW Vial deck that lands on this branch would
+    // inherit that rule -- param-keyed and with derived land targets, but authored for Slivers -- so
+    // give such a deck its own provider (the always-own-a-provider rule) rather than riding this one.
     if (vial) { return g_vial; }
     if (burn) { return g_burn; }
     return g_generic;
