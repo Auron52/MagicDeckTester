@@ -2461,16 +2461,17 @@ public:
 // the term that mis-captured this deck into Stompy), and etb_team_pump_per_creature (Craterhoof is
 // a green finisher any list may add -- the Lightning Greaves exclusion).
 //
-// Holds NO judgement hook: an EMPTY DeckProvider derivation, so every heuristic is byte-for-byte
-// the Generic one and this is play-neutral by construction (verified by smoke play-changed=0).
-// What it adds is a place for a proof and a name in the audit. Deriving from CritterLifegainProvider
-// or StompyProvider was considered and REJECTED -- the skill forbids deriving from a thematically
-// related deck's provider, because that imports unmeasured narrowing, which is the very thing this
-// class exists to undo. Candidates for its first real hooks, all deliberately left UNMEASURED for
-// now and disclosed in Stage 6a: Accomplished Alchemist's ManaSourceRank (tap the life-scaled dork
-// LAST, since its yield can only grow within the turn), a CastOrderRank putting the lifegain
-// ENGINE (Verdant Sun's Avatar) before the PAYOFFS (Ageless Entity / Nykthos Paragon) the way
-// CritterLifegainProvider's measured order does, LifegainCountersSpendCount (the Paragon's
+// Held NO judgement hook until 2026-10-09: an EMPTY DeckProvider derivation, so every heuristic was
+// byte-for-byte the Generic one and play-neutral by construction (verified by smoke play-changed=0).
+// Its FIRST judgement hook is the USER-settled cleanup-discard buckets declared below
+// (MTG_SELESNYA_BUCKET_DISCARD, default ON; =0 restores the Generic ranking exactly). Deriving from
+// CritterLifegainProvider or StompyProvider was considered and REJECTED -- the skill forbids deriving
+// from a thematically related deck's provider, because that imports unmeasured narrowing, which is
+// the very thing this class exists to undo. Candidates for its next hooks, all deliberately left
+// UNMEASURED for now and disclosed in Stage 6a: Accomplished Alchemist's ManaSourceRank (tap the
+// life-scaled dork LAST, since its yield can only grow within the turn), a CastOrderRank putting
+// the lifegain ENGINE (Verdant Sun's Avatar) before the PAYOFFS (Ageless Entity / Nykthos Paragon)
+// the way CritterLifegainProvider's measured order does, LifegainCountersSpendCount (the Paragon's
 // once-each-turn "you may" -- the greedy default's one systematic loss is a 1-life gain-land
 // eating all four uses on a big-gain turn), and Genesis Wave's pass-2 trigger ORDER.
 class SelesnyaLifegainProvider : public DeckProvider
@@ -2479,6 +2480,20 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? Note this deck answers NO to the second half -- Craterhoof Behemoth grants itself haste and Wirewood Lodge untaps an Elf -- so a winless-this-turn bound must price a same-turn Craterhoof (team +X/+X where X is the creature count) and the Lodge's extra activation. See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "SelesnyaLifegain"; }
+
+    // Cleanup discard: THE USER-SETTLED buckets (2026-10-09, docs/design/
+    // selesnyalifegain-discard-policy.md) -- LANDS 3 counting the board (two W sources while holding
+    // a Paragon; a dead Sanctuary first), ELVES as the primary mana toward the mana target (Priest >
+    // Archdruid > Llanowar = Mystic > Alchemist), LIFEGAIN 1 while a lifegain payoff is held or in
+    // play, PAYOFFS 2 + a soft 3rd ranked by castability x enablement (ties Bogbeast > Paragon >
+    // Craterhoof > Ageless > Avatar; Genesis Wave only with 8+ mana within 2 turns). Behind
+    // MTG_SELESNYA_BUCKET_DISCARD (heurarm SELESNYA_BUCKET_DISCARD), default ON; =0 -> generic.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // FALSE while that policy is on: "held" is read literally (an unreachable Paragon in hand still
+    // keeps its Feed the Clan), so shedding one card can change the answer for another -- the engine
+    // re-asks after every shed. TRUE under the =0 hatch (the Generic ranking is prefix-stable).
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval
