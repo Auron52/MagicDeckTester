@@ -138,7 +138,8 @@ Cross-deck (verbatim):
   * (g) The value the factor multiplies is 0.85^position -- payoff slots: Serra at 30+ 1, Pridemate /
     Voice 0.85, Archangel 0.72, Heliod 0.61, Serra 0.52; fill: Serra at 30+ 1, Pridemate / Voice 0.85,
     Ocelot 0.72, Archangel 0.61, Heliod 0.52, Serra 0.44, Ajani 0.38, Ranger-Captain 0.32
-    (MinotaurProvider's adopted EV2 spread).
+    (MinotaurProvider's adopted EV2 spread). KEPT, USER-accepted 2026-10-10 on the agent's
+    recommendation (the same scale as Angels; see angels-discard-policy-proposal.md (h)). USER 2026-10-10 on the 0.85 scale: *"That is an empirical value. I don't know the answer myself so it is a bit difficult to know. Unfortunately, testing it also won't give us an easy value because discards are so rare. I guess we can stick with it if you think the number seems reasonable."*
   * (h) The conditional 4th land is NOT a LandDrop: whether it is kept depends on which creatures the
     fill keeps, which is what the factor ranks. A kept Archangel / Ajani is therefore priced as if the
     4th land were not there (the conservative side).

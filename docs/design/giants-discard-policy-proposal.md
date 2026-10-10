@@ -168,6 +168,28 @@ Cross-deck (verbatim):
   T2 (the decklist's seven Giant names are exactly Harbinger's candidates, all inside 7, one outside 6).
   Changes play (the tutor axis searches one more target); not measured in this step.
 
+#### USER ruling (2026-10-10): a rock we cannot cast is NOT dead -- it ranks after the lands
+
+The first build's "a mana rock with no land anywhere is a blank" (no land on the battlefield or in hand,
+read literally) shed Sol Ring from landless hands one draw before a Mountain arrived: giants regression
+d3 gi 130 (seed 3133) kept a hand with no land, discarded Sol Ring at the turn-2 cleanup, drew a Mountain
+on turn 4 and never won, where the generic ranking kept Sol Ring, cast it with that Mountain and won on
+turn 8. A proposed amendment (count the library's lands too, `MTG_GIANTS_ROCK_LIBRARY_LAND`) measured 3
+faster / 0 slower over 6,600 paired games (ab2). The USER's ruling replaces both:
+
+> *"It makes no sense to treat it as dead because they are better than no mana source, but it does make
+> sense to prioritize lands over rocks when we cannot cast the rocks."*
+
+Built as `MTG_GIANTS_ROCK_AFTER_LANDS` (heurarm `GIANTS_ROCK_AFTER_LANDS`, the renamed
+`GIANTS_ROCK_LIBRARY_LAND` slot, default ON; `=0` restores the dead-rock rule exactly). A rock is always
+a mana source; one we cannot cast next turn ranks after every land in the pick list, so it fills a MANA
+slot after them and is given up before them. Agent reading of "cannot cast": the board's mana plus the
+best untapped land drop in hand is below the rock's mana value (one land drop a turn; a tapped land adds
+nothing the turn it lands). On the shipped list this moves only the landless hand: no Mountain enters
+tapped, and Fire Diamond already ranks below the lands. Tests: G11 (both arms on the gi-130 shape; a
+library land changes neither) and G11b (two tapped lands: Sol Ring drops behind the second land; with an
+untapped land drop the rock keeps its place). The amendment lever is gone.
+
 
 ---
 
