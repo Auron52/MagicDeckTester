@@ -1533,6 +1533,12 @@ void FireAttackGatherAuras(GameState& state, int controller, const std::vector<i
             EmitPlayEvent(state.turn_number, "trigger", t);
         }
     }
+    // The pin is THIS combat's: consumed whether or not a gather fired (no Bruna attacked, nothing to
+    // gather), the ApplyCombatAuraSwap convention. Nothing reads it again before the next turn start
+    // clears it anyway; consuming it here makes "a pinned variant whose gather never fired leaves
+    // combat in its base plan's state" true by construction, which is what MTG_COMBAT_PIN_FOLD
+    // compares (TurnSolver.cpp, CombatPinFoldOn).
+    state.scripted_bruna_gather = -1;
 }
 
 // ---- Arcanum Wings: "Aura swap {2}{U} ({2}{U}: Exchange this Aura with an Aura card in your hand.)"

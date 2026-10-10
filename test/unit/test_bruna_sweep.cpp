@@ -1350,3 +1350,147 @@ TEST_CASE("Human swap timing: the plan's own land drop pays the combat swap (see
     TurnSolver::DeferAuraSwapToCombat(b.s, /*is_pre_combat=*/true, auton);
     CHECK(auton.actions.empty());
 }
+
+// ---- WIDTH (2026-10-10): dominated Greaves moves, combat-pin variants -------------------------
+namespace
+{
+// Per-job lever override for one case (the heurarm slot the batch runner would set), restored on exit.
+struct ArmOverride
+{
+    heurarm::Slot slot;
+    ArmOverride(heurarm::Slot s, bool on) : slot(s) { heurarm::t_arm[s] = on ? 1 : 0; }
+    ~ArmOverride() { heurarm::t_arm[slot] = -1; }
+};
+
+bool PlanEquipsOnto(const TurnSolver::Plan& p, int host)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::Equip && a.sac_victim_id == host) { return true; } }
+    return false;
+}
+
+bool PlanTargets(const TurnSolver::Plan& p, int num)
+{
+    for (const Action& a : p.actions)
+    {
+        if (a.enchant_target == num) { return true; }
+        if (a.kind == Action::Kind::Equip && a.sac_victim_id == num) { return true; }
+    }
+    return false;
+}
+}   // namespace
+
+// Moving Greaves from Mother onto an Avacyn's Pilgrim that has been on the battlefield since the turn
+// began grants nothing (CR 302.6: haste is moot), shrouds the Pilgrim and unshrouds Mother -- and with
+// nothing in the plan targeting Mother, the no-move sibling dominates it. Not offered; the control arm
+// (MTG_EQUIP_INERT_FOLD=0) offers it, so the case fails without the fold.
+TEST_CASE("Width: an idle Greaves move onto a creature that is not summoning-sick is not offered")
+{
+    GreavesOnMother g;
+    const int pilgrim = g.b.Put("Avacyn's Pilgrim");
+    g.b.Put("Forest");
+    g.b.Put("Razorverge Thicket");
+    g.b.Hand("Glittering Wish");   // something to cast; no creature in hand (it would be the move's best host)
+    g.b.s.players[0].lands_played_this_turn = 1;
+    bool moved = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true))
+    { if (PlanEquipsOnto(p, pilgrim)) { moved = true; } }
+    CHECK_MESSAGE(!moved, "an idle Greaves -> Pilgrim move was enumerated");
+
+    ArmOverride off(heurarm::EQUIP_INERT_FOLD, false);
+    bool moved_ctrl = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true))
+    { if (PlanEquipsOnto(p, pilgrim)) { moved_ctrl = true; } }
+    CHECK_MESSAGE(moved_ctrl, "control arm: the move should be offered with the fold off");
+}
+
+// The same move is a RELEASE when the plan casts an Aura onto the creature it leaves (Arcanum Wings ->
+// Mother needs Mother unshrouded). It must survive there -- and only there.
+TEST_CASE("Width: a Greaves release move survives exactly beside the Aura it releases")
+{
+    GreavesOnMother g;
+    const int pilgrim = g.b.Put("Avacyn's Pilgrim");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Razorverge Thicket");
+    g.b.Put("Island");
+    g.b.Hand("Arcanum Wings");
+    g.b.s.players[0].lands_played_this_turn = 1;
+    bool release = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true))
+    {
+        if (!PlanEquipsOnto(p, pilgrim)) { continue; }
+        CHECK_MESSAGE(PlanTargets(p, g.mother), "a Greaves -> Pilgrim move with nothing targeting Mother");
+        release = true;
+    }
+    CHECK_MESSAGE(release, "the release move (Greaves -> Pilgrim, Wings -> Mother) was not enumerated");
+}
+
+// A summoning-sick creature still gets the Greaves: haste is the whole point there.
+TEST_CASE("Width: Greaves onto a summoning-sick creature is still offered")
+{
+    GreavesOnMother g;
+    const int pilgrim = g.b.Put("Avacyn's Pilgrim", /*tapped=*/false, /*sick=*/true);
+    g.b.Put("Forest");
+    g.b.Put("Razorverge Thicket");
+    g.b.s.players[0].lands_played_this_turn = 1;
+    bool moved = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g.b.s, /*is_pre_combat=*/true))
+    { if (PlanEquipsOnto(p, pilgrim)) { moved = true; } }
+    CHECK(moved);
+}
+
+// The Arcanum Wings combat-swap pin is read only in THIS turn's combat, so a post-combat plan list
+// carries no swap variant (MTG_COMBAT_PIN_PRECOMBAT; the control arm restores the old emission). The
+// pre-combat list keeps it.
+TEST_CASE("Width: combat-swap pin variants only on a pre-combat plan list")
+{
+    BoardBs b;
+    const int mother = b.Put("Mother of Runes");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = mother;
+    b.s.battlefield.push_back(w);
+    b.Put("Island");
+    b.Put("Razorverge Thicket");
+    b.Put("Forest");
+    b.Hand("Colossification");
+    b.s.players[0].lands_played_this_turn = 1;
+    auto pinned = [&](bool pre) {
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(b.s, pre))
+        { if (p.combat_aura_swap_choice >= 0 || p.bruna_gather_choice >= 0) { ++n; } }
+        return n;
+    };
+    CHECK(pinned(true) > 0);
+    CHECK(pinned(false) == 0);
+    ArmOverride off(heurarm::COMBAT_PIN_PRECOMBAT, false);
+    CHECK(pinned(false) > 0);
+}
+
+// The post-apply dedup key must see a pending combat pin, exactly as it sees the other scripted_*
+// pins: two states that differ only in it have different combats. MTG_DEDUP_KEY_COMBAT_PINS=0 is the
+// old key-hole (the control).
+TEST_CASE("Width: the dedup key folds the pending combat pins")
+{
+    BoardBs b;
+    b.Put("Mother of Runes");
+    GameState swap = b.s;   swap.scripted_combat_aura_swap = 70;
+    GameState gath = b.s;   gath.scripted_bruna_gather = 1;
+    CHECK(TurnSolver::DedupKeyOf(swap) != TurnSolver::DedupKeyOf(b.s));
+    CHECK(TurnSolver::DedupKeyOf(gath) != TurnSolver::DedupKeyOf(b.s));
+    ArmOverride off(heurarm::DEDUP_KEY_COMBAT_PINS, false);
+    CHECK(TurnSolver::DedupKeyOf(swap) == TurnSolver::DedupKeyOf(b.s));
+    CHECK(TurnSolver::DedupKeyOf(gath) == TurnSolver::DedupKeyOf(b.s));
+}
+
+// Bruna's gather pin is THIS combat's: consumed whether or not a gather fires (no Bruna attacked), so
+// a pinned variant whose gather never happened leaves combat in its base plan's state.
+TEST_CASE("Width: the Bruna gather pin is consumed by combat even when no gather fires")
+{
+    BoardBs b;
+    b.Put("Mother of Runes");
+    b.s.scripted_bruna_gather = 1;
+    RolloutSimulateCombat(b.s);
+    CHECK(b.s.scripted_bruna_gather == -1);
+    CHECK(b.s.scripted_combat_aura_swap == -1);
+}

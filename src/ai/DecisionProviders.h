@@ -510,6 +510,12 @@ public:
     // MTG_BRUNA_BUCKET_DISCARD=0 restores GenericProvider's max-MV fallback (the A/B hatch).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // Lightning Greaves is this deck's only Equipment, and no card in the main deck or the 11-card
+    // sideboard reads an Equipment's attachment except through haste and shroud (checked against
+    // cards.json 2026-10-10: no upkeep_tokens_per_equipment, double_strike_*_equipped/_equipment,
+    // equip_scale_*, hone_counters_on_enter_or_attack, or aura_enchant_requires "modified" in the
+    // list). Re-check if the list gains an Equipment-matters card.
+    bool FoldsInertHasteShroudEquips() const override { return true; }
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other

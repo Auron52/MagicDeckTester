@@ -755,6 +755,53 @@ static bool CandDedupOn()
 // IF YOU RE-RAISE THIS, aim at the enumerator, not here -- and measure units on the LABEL path
 // first, because that is the arm that decides it.
 static bool CandDedupActive() { return CandDedupOn() || CostReframeEnabled(); }
+
+// ---- COMBAT-PIN WIDTH (Bruna gather / Arcanum Wings combat swap), 2026-10-10 -----------------------
+// AppendSubdecisionAxes clones EVERY base plan once per Arcanum Wings (attached, or in hand) with
+// Plan::combat_aura_swap_choice set, and once per extra Bruna gather subset with bruna_gather_choice
+// set. Both pins ride the STATE (scripted_combat_aura_swap / scripted_bruna_gather) and are read in
+// exactly one place each, the declare-attackers step of THIS turn's combat (ApplyCombatAuraSwap /
+// FireAttackGatherAuras); the turn start clears both. MTG_DUP_DIFF on the 384-rollout mulligan census
+// (d1 b3) found the axis was most of Bruna's duplicate work: of 745k post-apply duplicates, 385k
+// differed from their first reacher ONLY in the swap pin and 150k only in the gather pin, and of the
+// 216k pinned main-1 candidates that reached combat, 211k (97.5%) left it in a state an earlier
+// sibling had already reached. Three levers, each its own claim:
+//
+//   MTG_COMBAT_PIN_PRECOMBAT -- a POST-combat plan's pin can never be read (its combat is over), so
+//     its variant is the base plan applied twice. Do not emit it. IDENTITY, default ON.
+//   MTG_DEDUP_KEY_COMBAT_PINS -- BuildDedupKey folded every other pending scripted_* pin but not
+//     these, so an AXIS variant (a tutor pick, say) that also carried a swap pin was skipped as a
+//     duplicate of the same tutor pick WITHOUT the pin: "Wish -> Almost Perfect, then swap in
+//     combat" could only be scored when the wish's default pick was the one the swap wanted. A key
+//     hole, i.e. a correctness fix; default ON.
+//   MTG_COMBAT_PIN_FOLD -- what the hole was standing in for, done soundly: compare a pinned variant
+//     AFTER combat, where the pin has been consumed. A post-combat state an earlier sibling already
+//     reached has that sibling's future (the second main, the end of turn and the rollout read only
+//     the state), so its scoring is pure recomputation. IDENTITY, default ON.
+static bool CombatPinPrecombatOn()
+{
+    static const bool env = EnvOn("MTG_COMBAT_PIN_PRECOMBAT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::COMBAT_PIN_PRECOMBAT, env);
+}
+static bool DedupKeyCombatPinsOn()
+{
+    static const bool env = EnvOn("MTG_DEDUP_KEY_COMBAT_PINS", true);  // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::DEDUP_KEY_COMBAT_PINS, env);
+}
+static bool CombatPinFoldOn()
+{
+    static const bool env = EnvOn("MTG_COMBAT_PIN_FOLD", true);        // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::COMBAT_PIN_FOLD, env);
+}
+static bool PlanHasCombatPin(const TurnSolver::Plan& p)
+{ return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0; }
+// Firing counters (printed with the rollout stats): pin variants NOT emitted for a post-combat list,
+// and pinned candidates folded after combat (la_cand loop / FSLineWin).
+static std::atomic<long long> g_combat_pin_m2_skipped{0};
+static std::atomic<long long> g_combat_pin_folded[2]{{0}, {0}};
+// MTG_EQUIP_INERT_FOLD's firing counter (see DropInertHasteShroudEquips): equip actions dropped.
+static std::atomic<long long> g_equip_inert_dropped{0};
+static std::atomic<long long> g_equip_idle_release_rejects{0};   // ...and subsets its subset half refused
 static std::atomic<long long> g_condemn_drops_total{0};
 // ...and SPLIT by which action collector was running. SolveUncached is the GREEDY path ("d0
 // decision + every rollout leaf"); EnumeratePlans is the SEARCHED path. A drop in the searched
@@ -1262,6 +1309,171 @@ struct DedupFirstSeen
     std::uint64_t fam;
     int           bp;
 };
+// --- DUPLICATE-PAIR DIFF (MTG_DUP_DIFF, diagnostic only, default OFF) ----------------------------
+// dedup_census says HOW MANY scored candidates land on a post-apply state a sibling already reached;
+// copy_perm cannot say which axis made them (its signature omits enchant/land/plan-level fields, so
+// it is blind both ways -- see copy_FALSE). This names the difference between each duplicate and
+// the FIRST candidate that reached its state, as an aggregate-able category ("COPY[Glittering Wish]",
+// "A+{Lightning Greaves|k13>Troyan} B+{}", "PL[land]"), so the identity that would fold it can be
+// read off a run instead of guessed. Counters only; never consulted by any live path.
+namespace dupdiff
+{
+inline bool On() { static const bool on = EnvOn("MTG_DUP_DIFF"); return on; }
+inline std::mutex g_mu;
+inline std::map<std::string, long long> g_cls;
+inline std::atomic<long long> g_n{0};
+// [pinned][dup]: post-COMBAT state duplicates in the la_cand loop (see the recording site).
+inline std::atomic<long long> g_pc[2][2];
+inline std::string NameOf(const GameState& s, int id)
+{
+    if (id == 0) { return "-"; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number != id) { continue; }
+        std::string n = p.card.m_name.str();
+        if (p.card.IsCreature())
+        {
+            n += p.entered_this_turn ? "(sick)" : "(bf)";
+        }
+        return n;
+    }
+    for (const Player& pl : s.players)
+    { for (const Card& c : pl.hand) { if (c.m_number == id) { return c.m_name.str() + "(hand)"; } } }
+    return "?";
+}
+inline std::string Desc(const GameState& s, const Action& a)
+{
+    std::string d = a.card_name.str() + "|k" + std::to_string(static_cast<int>(a.kind));
+    if (a.chosen_x > 0)        { d += "|x" + std::to_string(a.chosen_x); }
+    if (a.enchant_target != 0) { d += ">" + NameOf(s, a.enchant_target); }
+    if (a.sac_victim_id != 0)  { d += ">>" + NameOf(s, a.sac_victim_id); }
+    if (a.kind != Action::Kind::CastFromHand && a.sac_source_id != 0)
+    { d += "@" + NameOf(s, a.sac_source_id); }
+    if (!a.tutor_target.str().empty()) { d += "|tt" + a.tutor_target.str(); }
+    if (a.alt_cost)  { d += "|alt"; }
+    if (a.free_cast) { d += "|free"; }
+    return d;
+}
+inline void Record(const GameState& s, const TurnSolver::Plan& first, const TurnSolver::Plan& dup)
+{
+    std::string cls;
+    // Plan-level fields that differ, by NAME (values would not aggregate).
+    auto pl = [&](const char* n, bool diff) { if (diff) { cls += cls.empty() ? "PL[" : ","; cls += n; } };
+    pl("land", first.land_to_play != dup.land_to_play);
+    pl("tutor", first.tutor_choice != dup.tutor_choice);
+    pl("tap", first.tapmode_choice != dup.tapmode_choice);
+    pl("fresh", first.freshmode_choice != dup.freshmode_choice);
+    pl("gather", first.bruna_gather_choice != dup.bruna_gather_choice);
+    pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
+    pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
+    pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
+    if (!cls.empty()) { cls += "] "; }
+    std::vector<std::string> a, b;
+    for (const Action& x : first.actions) { a.push_back(Desc(s, x)); }
+    for (const Action& x : dup.actions)   { b.push_back(Desc(s, x)); }
+    if (a == b)
+    {
+        std::string names;
+        for (std::size_t i = 0; i < first.actions.size(); ++i)
+        {
+            if (first.actions[i].hand_index != dup.actions[i].hand_index
+                || first.actions[i].sac_source_id != dup.actions[i].sac_source_id)
+            { names += (names.empty() ? "" : ",") + first.actions[i].card_name.str(); }
+        }
+        cls += names.empty() ? "SAMEACTS" : "COPY[" + names + "]";
+    }
+    else
+    {
+        std::vector<std::string> sa = a, sb = b;
+        std::sort(sa.begin(), sa.end());
+        std::sort(sb.begin(), sb.end());
+        if (sa == sb) { cls += "ORDER"; }
+        else
+        {
+            std::vector<std::string> oa, ob;
+            std::set_difference(sa.begin(), sa.end(), sb.begin(), sb.end(), std::back_inserter(oa));
+            std::set_difference(sb.begin(), sb.end(), sa.begin(), sa.end(), std::back_inserter(ob));
+            cls += "A+{";
+            for (std::size_t i = 0; i < oa.size(); ++i) { cls += (i ? "," : "") + oa[i]; }
+            cls += "} B+{";
+            for (std::size_t i = 0; i < ob.size(); ++i) { cls += (i ? "," : "") + ob[i]; }
+            cls += "}";
+        }
+    }
+    g_n.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lk(g_mu);
+    ++g_cls[cls];
+}
+// Pre-apply shape of a combat-pinned variant, split by whether its post-combat state was a duplicate.
+inline std::map<std::string, std::array<long long, 2>> g_pin_cls;
+inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
+{
+    const int me = s.active_player_index;
+    std::string k;
+    if (plan.combat_aura_swap_choice >= 0)
+    {
+        const int w = plan.combat_aura_swap_choice % kAuraSwapRankStride;
+        bool on_bf = false, cast = false;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_number == w) { on_bf = true; } }
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.hand_index >= 0
+                && a.hand_index < static_cast<int>(s.players[me].hand.size())
+                && s.players[me].hand[static_cast<std::size_t>(a.hand_index)].m_number == w) { cast = true; }
+        }
+        int other_auras = 0;
+        for (const Card& c : s.players[me].hand)
+        {
+            if (c.m_number == w) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.is_aura && !d->params.is_land_aura) { ++other_auras; }
+        }
+        bool adds = false;
+        for (const Action& a : plan.actions)
+        {
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d && (d->params.wish_from_sideboard || d->params.tutor_to_hand || a.kind == Action::Kind::ActivatePermAbility))
+            { adds = true; }
+        }
+        k = std::string("SWAP w=") + (on_bf ? "bf" : (cast ? "cast" : "hand-uncast"))
+          + " otherAurasInHand=" + (other_auras > 0 ? "y" : "n") + " planAdds=" + (adds ? "y" : "n");
+    }
+    else
+    {
+        bool bruna_bf_unsick = false, bruna_any = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.attack_gather_auras) { bruna_any = true; if (!p.entered_this_turn) { bruna_bf_unsick = true; } }
+        }
+        k = std::string("GATHER k=") + std::to_string(plan.bruna_gather_choice)
+          + " bruna=" + (bruna_bf_unsick ? "bf-unsick" : (bruna_any ? "bf-sick" : "none-on-bf"));
+    }
+    std::lock_guard<std::mutex> lk(g_mu);
+    ++g_pin_cls[k][dup ? 1 : 0];
+}
+struct Printer
+{
+    ~Printer()
+    {
+        for (const auto& kv : g_pin_cls)
+        { std::fprintf(stderr, "[pin-class] %-70s unique=%lld dup=%lld\n", kv.first.c_str(), kv.second[0], kv.second[1]); }
+        if (g_n.load() == 0) { return; }
+        std::vector<std::pair<long long, std::string>> v;
+        for (const auto& kv : g_cls) { v.push_back({ kv.second, kv.first }); }
+        std::sort(v.begin(), v.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+        std::fprintf(stderr, "[dup-diff] duplicates=%lld classes=%zu\n", g_n.load(), v.size());
+        std::fprintf(stderr, "[dup-diff] POST-COMBAT unpinned: n=%lld dup=%lld | pinned: n=%lld dup=%lld\n",
+                     g_pc[0][0].load() + g_pc[0][1].load(), g_pc[0][1].load(),
+                     g_pc[1][0].load() + g_pc[1][1].load(), g_pc[1][1].load());
+        for (std::size_t i = 0; i < v.size() && i < 60; ++i)
+        { std::fprintf(stderr, "[dup-diff] %8lld  %s\n", v[i].first, v[i].second.c_str()); }
+    }
+};
+inline Printer g_printer;
+}   // namespace dupdiff
+
 // Which emission arm produced this candidate. Declared here, defined with the sentinels far below.
 static BpArm DedupArmOf(const TurnSolver::Plan& plan);
 // Called once per scored candidate, only under MTG_DEDUP_CENSUS. `first` is meaningful only when
@@ -1478,8 +1690,18 @@ namespace
                     std::vector<std::pair<long long,std::string>> w;
                     for (auto& kv : bfcensus::g_by_kind) { w.push_back({kv.second, kv.first}); }
                     std::sort(w.rbegin(), w.rend());
-                    for (size_t i = 0; i < w.size() && i < 12; ++i)
-                    { std::cerr << "[rollout-stats]   bf_action " << w[i].second << "=" << w[i].first << "\n"; }
+                    for (size_t i = 0, shown = 0; i < w.size() && shown < 12; ++i)
+                    {
+                        if (w[i].second.rfind("EQ ", 0) == 0) { continue; }
+                        ++shown;
+                        std::cerr << "[rollout-stats]   bf_action " << w[i].second << "=" << w[i].first << "\n";
+                    }
+                    // The EQUIP SHAPE rows (see the recording site), every one.
+                    for (size_t i = 0; i < w.size(); ++i)
+                    {
+                        if (w[i].second.rfind("EQ ", 0) != 0) { continue; }
+                        std::cerr << "[rollout-stats]   bf_equip " << w[i].second << "=" << w[i].first << "\n";
+                    }
                     for (auto& kv : bfcensus::g_src_emits)
                     {
                         std::cerr << "[rollout-stats]   bf_src " << kv.first
@@ -1535,6 +1757,11 @@ namespace
                     }
                 }
             }
+            std::cerr << "[rollout-stats] equip_inert_fold dropped=" << g_equip_inert_dropped.load()
+                      << " idle_release_rejects=" << g_equip_idle_release_rejects.load() << "\n";
+            std::cerr << "[rollout-stats] combat_pins m2_variants_not_emitted<=" << g_combat_pin_m2_skipped.load()
+                      << " folded_postcombat la_cand=" << g_combat_pin_folded[0].load()
+                      << " fslinewin=" << g_combat_pin_folded[1].load() << "\n";
             std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
@@ -12599,6 +12826,11 @@ struct SubsetFilterPre
     // (0 = none). Empty = no controlled shroud-granting Equipment is attached to anything, which
     // proves SubsetHasShroudBlockedAura can find nothing (every deck without Lightning Greaves).
     std::vector<int>  aura_shroud_src;
+    // MTG_EQUIP_INERT_FOLD's subset half (see DropInertHasteShroudEquips): per candidate (Equip only),
+    // the creature an inert haste/shroud move would RELEASE when the move is admissible only beside
+    // an action that targets that creature; 0 = unrestricted. EMPTY = not built (greedy scope, or no
+    // provider opt-in) -> the rule never fires.
+    std::vector<int>  equip_release_only;
 
     std::vector<const CardDefinition*> sac_src_def;   // per candidate; nullptr = none/not a sac action
     bool board_persist     = false;                   // meaningful only when sac_src_def is non-empty
@@ -12655,11 +12887,18 @@ static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>
     }
 }
 
+static void BuildEquipReleaseOnly(const GameState& state, const std::vector<Action>& cands,
+                                  std::vector<int>& out);   // defined with DropInertHasteShroudEquips
 static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
 {
     SubsetFilterPre p;
     // See "INSTRUMENTS DISARM IT" above: all-true is the unoptimised chain, unchanged.
-    if (GateProbeArmed() || strandedstats::Enabled() || BfCensusOn() || FoldVerifyOn()) { BuildAuraShroudSrc(state, cands, p.aura_shroud_src); return p; }
+    if (GateProbeArmed() || strandedstats::Enabled() || BfCensusOn() || FoldVerifyOn())
+    {
+        BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
+        BuildEquipReleaseOnly(state, cands, p.equip_release_only);
+        return p;
+    }
 
     // Start from "no filter can fire" and raise a bit per candidate. A field added to the struct
     // without a matching `false` here keeps its member initialiser -- i.e. stays TRUE, the
@@ -12836,6 +13075,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     }
 
     BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
+    if (p.equip) { BuildEquipReleaseOnly(state, cands, p.equip_release_only); }
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -19923,6 +20163,155 @@ static std::vector<int> PickLandAuraHosts(const GameState& state, const std::vec
     if (!cls[2].empty()) { return { cls[2].front() }; }
     if (!cls[3].empty()) { return { cls[3].front() }; }                 // Hickory: only if forced
     return hosts;
+}
+
+// ---- DOMINATED HASTE/SHROUD EQUIP MOVES (MTG_EQUIP_INERT_FOLD, default ON; 2026-10-10) ------------
+// Lightning Greaves' equip {0} makes every (Greaves, creature) pair an action, and the census put it in
+// 35% of Bruna's scored candidates (MTG_BF_CENSUS bf_equip: 334k of them an equip onto a creature that
+// was NOT summoning-sick). Attaching an Equipment whose only effects are haste and shroud does exactly
+// three things: the new host gains haste, it gains shroud, and the old host (if any) loses both.
+//   * HASTE on a creature that has been under our control since the turn began does nothing (CR 302.6
+//     restricts only a creature that has NOT been continuously controlled since the most recent turn
+//     began; it never becomes summoning-sick again while it stays on the battlefield).
+//   * SHROUD on our own creature only ever forbids OUR targeting (CR 702.18a; the goldfish opponent
+//     targets nothing).
+//   * The old host LOSING haste can only hurt; LOSING shroud helps only a later spell or ability that
+//     targets it. The search already releases a Greaves IN THE SAME PLAN as the Aura / equip that needs
+//     the release (SubsetHasShroudBlockedAura / SubsetHasShroudBlockedEquip; the release is hoisted
+//     ahead of the casts), so a release only ever has to ride the plan that targets the old host.
+// So with no action in the list targeting the old host, the move leaves a state the NO-MOVE sibling
+// (always enumerated: an Equip is an optional odometer digit) weakly dominates: from the sibling the
+// same move is still available, at the same {0}, at any later sorcery-speed point, and nothing reads the
+// attachment before one arrives. Two further conditions keep "nothing reads it" true:
+//   * per ACTION: the Equipment is pure haste/shroud (no P/T, lifelink, vigilance, min-power, re-host
+//     sacrifice, scaling or charge rider), its equip costs nothing now, and it carries no hone/charge
+//     counters; the new host is not one whose own text counts its Equipment (Kemba's upkeep Cats are
+//     read at UPKEEP, before any sorcery-speed chance to move back; Kor Duelist / Balan double strike);
+//   * per DECK: the provider vouches that nothing the deck can hold reads attachment otherwise
+//     (DecisionProvider::FoldsInertHasteShroudEquips -- Gauntlets, Dwalin, "modified" Auras).
+// Both scopes, each with its own lever: the SEARCH's candidates (MTG_EQUIP_INERT_FOLD, below) and the
+// greedy policy's (MTG_EQUIP_INERT_FOLD_GREEDY -- see EquipInertFoldGreedyOn). Human play and
+// MTG_UNPRUNED keep every pair.
+static bool EquipInertFoldOn()
+{
+    static const bool env = EnvOn("MTG_EQUIP_INERT_FOLD", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EQUIP_INERT_FOLD, env);
+}
+static bool PureHasteShroudEquipment(const CardParams& pp)
+{
+    return pp.is_equipment && (pp.equip_grants_haste || pp.equip_grants_shroud)
+        && pp.equip_power_bonus == 0 && pp.equip_tough_bonus == 0 && !pp.equip_grants_lifelink
+        && !pp.equip_grants_vigilance && pp.equip_min_power == 0 && !pp.equip_sacrifices_prior_host
+        && pp.equip_scale_power_per_equipment == 0 && pp.equip_scale_tough_per_equipment == 0
+        && pp.equip_combat_damage_charges == 0;
+}
+// The per-ACTION half of the proof above. -1 = not an inert move; otherwise the creature the move
+// would take the Equipment OFF (0 = the Equipment is unattached or cast this plan from hand).
+static int InertHasteShroudMoveOldHost(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::Equip || a.cost.ManaValue() != 0 || a.cost.generic != 0) { return -1; }
+    const int me = state.active_player_index;
+    const Permanent* host = nullptr;
+    const Permanent* eq   = nullptr;    // nullptr = cast this plan from hand
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.m_number == a.sac_victim_id) { host = &p; }
+        if (p.card.m_number == a.sac_source_id) { eq = &p; }
+    }
+    if (host == nullptr || host->entered_this_turn) { return -1; }   // a HAND host is cast this plan
+    const CardDefinition* ed = CardDatabase::Instance().Lookup(a.card_name);
+    if (ed == nullptr || !PureHasteShroudEquipment(ed->params)) { return -1; }
+    if (eq != nullptr && (eq->hone_counters != 0 || eq->charge_counters != 0)) { return -1; }
+    const CardDefinition* hd = CardDatabase::Instance().LookupCached(host->card);
+    if (hd != nullptr && (hd->params.upkeep_tokens_per_equipment
+                          || hd->params.double_strike_while_equipped
+                          || hd->params.double_strike_min_equipment > 0)) { return -1; }
+    return eq != nullptr ? eq->equipped_to : 0;
+}
+// Does any action OTHER than equipment `src`'s own equips target creature `num`? Such an action is
+// what makes a move off `num` a RELEASE rather than an idle reposition.
+static bool ActionTargetsCreature(const Action& b, int num, int src)
+{
+    if (b.enchant_target == num) { return true; }
+    return b.kind == Action::Kind::Equip && b.sac_victim_id == num && b.sac_source_id != src;
+}
+// The GREEDY twin (MTG_EQUIP_INERT_FOLD_GREEDY, default ON): the same drop inside Solve (d0 runner +
+// every rollout leaf). The move's eval of 1 makes the greedy TAKE an idle Greaves move: a one-off probe
+// on the d1 b3 census (2026-10-10) counted 863,517 of 2,523,725 greedy plans (34%) carrying an inert
+// move, 793,958 of them releasing nothing. A playout-POLICY change, so it was measured on its own, on the
+// held-out overnight seeds (analysis-Bruna.md, 2026-10-10): d0 8,000 games 267 faster / 22 slower, net
+// -247 turns; d3 4,000 + d5 2,000 games 0 / 0 (8 play-changed). =0 restores the old greedy.
+static bool EquipInertFoldGreedyOn()
+{
+    static const bool env = EnvOn("MTG_EQUIP_INERT_FOLD_GREEDY", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EQUIP_INERT_FOLD_GREEDY, env);
+}
+// `greedy` = the caller is Solve's own action collection (g_search_candidate_enum is false there).
+static bool EquipInertFoldScope(const GameState& state, bool greedy)
+{
+    return !HumanPlayActive() && (greedy ? EquipInertFoldGreedyOn() : EquipInertFoldOn())
+        && !DecisionUnpruned(UnprunedGate::EquipHost)
+        && ResolveProvider(state).FoldsInertHasteShroudEquips();
+}
+// LIST half: drop every inert move that releases nothing any action in the list could need.
+static void DropInertHasteShroudEquips(const GameState& state, std::vector<Action>& actions)
+{
+    std::size_t w = 0;
+    for (std::size_t i = 0; i < actions.size(); ++i)
+    {
+        const Action& a = actions[i];
+        const int old_host = InertHasteShroudMoveOldHost(state, a);
+        bool drop = old_host == 0;
+        if (old_host > 0)
+        {
+            drop = true;
+            for (const Action& b : actions)
+            { if (ActionTargetsCreature(b, old_host, a.sac_source_id)) { drop = false; break; } }
+        }
+        if (drop) { g_equip_inert_dropped.fetch_add(1, std::memory_order_relaxed); continue; }
+        if (w != i) { actions[w] = std::move(actions[i]); }
+        ++w;
+    }
+    actions.resize(w);
+}
+// SUBSET half: a surviving inert move is admissible only in a subset that also selects an action
+// targeting the creature it releases (otherwise the subset without the move dominates it, and that
+// subset is enumerated: an Equip is an optional digit). Marks are built by BuildSubsetFilterPre.
+static void BuildEquipReleaseOnly(const GameState& state, const std::vector<Action>& cands,
+                                  std::vector<int>& out)
+{
+    out.clear();
+    if (!EquipInertFoldScope(state, /*greedy=*/false) && !EquipInertFoldScope(state, /*greedy=*/true)) { return; }
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const int old_host = InertHasteShroudMoveOldHost(state, cands[j]);
+        if (old_host <= 0) { continue; }
+        if (out.empty()) { out.assign(cands.size(), 0); }
+        out[j] = old_host;
+    }
+}
+static bool SubsetHasIdleReleaseMove(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                     const std::vector<int>& release_only)
+{
+    if (release_only.size() != cands.size()) { return false; }
+    for (int idx : sel)
+    {
+        const int a_host = release_only[static_cast<std::size_t>(idx)];
+        if (a_host <= 0) { continue; }
+        bool needed = false;
+        for (int jdx : sel)
+        {
+            if (jdx == idx) { continue; }
+            if (ActionTargetsCreature(cands[jdx], a_host, cands[idx].sac_source_id)) { needed = true; break; }
+        }
+        if (!needed)
+        {
+            g_equip_idle_release_rejects.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+    }
+    return false;
 }
 
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
@@ -27438,6 +27827,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     }
 
     // Identical creature-Aura HOSTS -> the first k of each class (MTG_AURA_HOST_FOLD; see the function).
+    // Dominated haste/shroud equip moves (see DropInertHasteShroudEquips): the search's lever or the
+    // greedy's by scope, never in human play or an unpruned (viewer / claude-play) enumeration, and only
+    // for a provider that vouches for the deck-level half of the proof.
+    if (EquipInertFoldScope(state, /*greedy=*/!g_search_candidate_enum)) { DropInertHasteShroudEquips(state, actions); }
     FoldInterchangeableCreatureAuraHosts(state, actions);
     // LAST, after every post-pass that can append a variant (the phyrexian twins above are exactly
     // such a case: a second tagged action for one hand slot, which must un-fold that slot's class).
@@ -31848,6 +32241,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         { return; }
         // ...and an Aura SPELL onto a Greaves-shrouded creature without that move (CR 303.4a).
         if (!pre.aura_shroud_src.empty() && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src))
+        { return; }
+        // ...and an idle haste/shroud move (MTG_EQUIP_INERT_FOLD_GREEDY; eval_and_push's twin).
+        if (!pre.equip_release_only.empty() && EquipInertFoldGreedyOn()
+            && SubsetHasIdleReleaseMove(cands, sel, pre.equip_release_only))
         { return; }
         // Reject a creature sac-for-mana whose float nothing spends (see the helper). Solve's
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
@@ -43316,6 +43713,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!pre.aura_shroud_src.empty()
             && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src, /*dest_aura_ordered=*/true))
         { return; }
+        // ...and an INERT haste/shroud move that releases nothing this subset targets (dominated by
+        // the same subset without it; MTG_EQUIP_INERT_FOLD, see DropInertHasteShroudEquips).
+        if (!pre.equip_release_only.empty() && EquipInertFoldOn()
+            && SubsetHasIdleReleaseMove(cands, sel, pre.equip_release_only))
+        { return; }
         // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
@@ -48722,6 +49124,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // against MTG_AURA_SWAP_BRANCH, which instead emits one variant per ranked hand Aura). A
     // variant whose swap cannot happen (no mana left, no legal Aura, Wings never cast) scores
     // exactly like its base plan.
+    //
+    // PRE-COMBAT LISTS ONLY (MTG_COMBAT_PIN_PRECOMBAT, see CombatPinPrecombatOn): both pins are read
+    // only in this turn's combat, so on a post-combat list (the m2 decision, the interior second main)
+    // every variant was its base plan scored a second time.
+    const bool pin_list_dead = !is_pre_combat && CombatPinPrecombatOn();
     if (!cont_axes_only && !HumanPlayActive())
     {
         const int me = state.active_player_index;
@@ -48794,7 +49201,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             swap_ranks = std::max(1, std::min(n, 8));
         }
-        if (gather_width > 1 || !wings.empty())
+        if (pin_list_dead && (gather_width > 1 || !wings.empty()))
+        {
+            // Firing counter: the variants this list would have carried.
+            if (s_rollout_stats)
+            {
+                g_combat_pin_m2_skipped.fetch_add(
+                    static_cast<long long>(all.size())
+                        * static_cast<long long>((gather_width - 1)
+                                                 + static_cast<int>(wings.size()) * swap_ranks),
+                    std::memory_order_relaxed);
+            }
+        }
+        else if (gather_width > 1 || !wings.empty())
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
@@ -52784,7 +53203,28 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
         { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 1) << 40)
                      ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(pins[i]))); }
     }
+    // ...and the two COMBAT pins (Bruna gather subset, Arcanum Wings combat swap + its fixed Aura),
+    // which the list above missed: a tutor variant carrying a swap pin collided with the same tutor
+    // pick without one and was skipped (MTG_DEDUP_KEY_COMBAT_PINS; see CombatPinPrecombatOn). Same
+    // value gate, distinct slots, so a deck that never sets them keeps its exact key.
+    if (DedupKeyCombatPinsOn())
+    {
+        const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
+                              state.scripted_combat_aura_swap_in };
+        for (int i = 0; i < 3; ++i)
+        {
+            if (cpins[i] != -1)
+            { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
+                         ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
+        }
+    }
     return k;
+}
+
+std::uint64_t TurnSolver::DedupKeyOf(const GameState& state)
+{
+    const TranspositionTable::Key k = BuildDedupKey(state);
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
 }
 
 // The census's `skey` column: the engine's OWN full-state identity, folded to 64 bits. Deliberately
@@ -56462,6 +56902,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool bp_variants_here = false;
     for (const TurnSolver::Plan& p : pre) { if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+    // MTG_COMBAT_PIN_FOLD (see CombatPinFoldOn): this frontier's post-combat states, armed only when
+    // it carries a combat-pinned variant. The la_cand loop's twin.
+    bool pin_fold_here = false;
+    if (CombatPinFoldOn())
+    { for (const TurnSolver::Plan& p : pre) { if (PlanHasCombatPin(p)) { pin_fold_here = true; break; } } }
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pin_fold_seen;
     // The bounce fold (see BounceFoldMemo). Only where the post-apply dedup it replaces runs.
     BounceFoldMemo bounce_fold;
     bounce_fold.on     = bp_variants_here && BounceFoldOn();
@@ -57153,6 +57599,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // optimal line for this node -- cache it (cutoff-independent).
             FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
             return win;
+        }
+        // COMBAT-PIN FOLD (MTG_COMBAT_PIN_FOLD): the la_cand loop's rule on this frontier. A
+        // contested dork attack evaluates a second combat from the pre-combat snapshot, so such a
+        // plan neither records nor folds.
+        if (pin_fold_here && !dork_contested)
+        {
+            const bool fresh = pin_fold_seen.insert(BuildDedupKey(s)).second;
+            if (!fresh && PlanHasCombatPin(p))
+            {
+                g_combat_pin_folded[1].fetch_add(1, std::memory_order_relaxed);
+                if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                continue;
+            }
         }
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
         TurnSolver::SearchLine tail{ max_turns + 1, {} };
@@ -61555,6 +62015,32 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             ++bfcensus::g_src_emits[nm];
                         }
                         ++bfcensus::g_by_kind[nm + "|" + std::to_string(static_cast<int>(a.kind))];
+                        // EQUIP SHAPE: where the equipment and the host stand at the decision.
+                        if (a.kind == Action::Kind::Equip)
+                        {
+                            std::string src = "hand", host = "hand";
+                            for (const Permanent& bp : state.battlefield)
+                            {
+                                if (bp.card.m_number == a.sac_source_id)
+                                { src = bp.equipped_to != 0 ? "att" : "free"; }
+                                if (bp.card.m_number == a.sac_victim_id)
+                                {
+                                    const bool hst = CanTapNow(bp, state.battlefield);
+                                    host = !bp.entered_this_turn ? "bf" : (hst ? "haste" : "sick");
+                                }
+                            }
+                            std::string hname;
+                            if (!is_pre_combat && host != "bf")
+                            {
+                                for (const Permanent& bp : state.battlefield)
+                                { if (bp.card.m_number == a.sac_victim_id) { hname = bp.card.m_name.str(); } }
+                                for (const Card& hc : state.ActivePlayer().hand)
+                                { if (hc.m_number == a.sac_victim_id) { hname = hc.m_name.str(); } }
+                                hname = " [" + hname + "]";
+                            }
+                            ++bfcensus::g_by_kind["EQ " + nm + " src=" + src + " host=" + host
+                                                  + (is_pre_combat ? " m1" : " m2") + hname];
+                        }
                     }
                 }
                 if (alt)  { bfcensus::g_sh_alt.fetch_add(1, std::memory_order_relaxed); }
@@ -61792,6 +62278,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             census_seen;
         // Copy-permutation census: the same plan with hand_index (and only hand_index) erased.
         std::unordered_set<std::string> census_names;
+        // MTG_DUP_DIFF: the FIRST candidate to reach each state, so a duplicate can be diffed.
+        std::unordered_map<TranspositionTable::Key, Plan, TranspositionTable::KeyHash> dupdiff_first;
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> dupdiff_postcombat;
+        // MTG_COMBAT_PIN_FOLD: post-combat states of this pass, armed only on a pre-combat list that
+        // carries a combat-pinned variant (Bruna only), so every other deck never builds a key here.
+        bool pin_fold_here = false;
+        if (is_pre_combat && CombatPinFoldOn())
+        { for (const Plan& p : candidates) { if (PlanHasCombatPin(p)) { pin_fold_here = true; break; } } }
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pin_fold_seen;
         // EXACT-REPEAT census: the same plan, nothing erased -- full BpCandFingerprint plus the two
         // fields it does not fold (hand_index, bp_choice). `census_names` answers "would a
         // COPY-BLIND skip be sound" and the answer is measured no (copy_FALSE). This answers the
@@ -62114,6 +62609,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     auto dd_ins = census_seen.emplace(BuildDedupKey(copy),
                                                       DedupFirstSeen{dd_fam, plan.bp_choice});
                     const bool state_dup = !dd_ins.second;
+                    if (dupdiff::On())
+                    {
+                        if (state_dup)
+                        {
+                            auto fit = dupdiff_first.find(dd_ins.first->first);
+                            if (fit != dupdiff_first.end()) { dupdiff::Record(state, fit->second, plan); }
+                        }
+                        else { dupdiff_first.emplace(dd_ins.first->first, plan); }
+                    }
                     DedupFamRecord(state_dup, dd_ins.first->second, dd_fam, plan, g_rollout_nest == 0,
                                    g_bp_chain_ci_last, BpSearchWidth());
                     DedupWhyRecord(state_dup, g_dropped_cast_count - dd_drops_before,
@@ -62220,6 +62724,31 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Combat this turn
                 SimulateCombat(copy);
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
+                // DIAGNOSTIC (MTG_DUP_DIFF): post-COMBAT duplicate rate, split by whether the
+                // candidate carries a combat pin (Bruna gather / Wings combat swap).
+                if (dupdiff::On())
+                {
+                    const bool pinned = PlanHasCombatPin(plan);
+                    const bool dup = !dupdiff_postcombat.insert(BuildDedupKey(copy)).second;
+                    dupdiff::g_pc[pinned ? 1 : 0][dup ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+                }
+                // COMBAT-PIN FOLD (MTG_COMBAT_PIN_FOLD, see CombatPinFoldOn): every candidate of a
+                // list that carries combat-pinned variants RECORDS its post-combat state; a pinned
+                // one whose state is already recorded is that sibling's future and is not scored.
+                // Base plans precede their variants in the list and only a pinned candidate ever
+                // skips; the sibling it folds onto has its future exactly, so the most the fold can
+                // change is WHICH of two lines with one post-combat state takes a tie-break.
+                if (pin_fold_here)
+                {
+                    const bool fresh = pin_fold_seen.insert(BuildDedupKey(copy)).second;
+                    if (dupdiff::On() && PlanHasCombatPin(plan)) { dupdiff::PinClass(state, plan, !fresh); }
+                    if (!fresh && PlanHasCombatPin(plan))
+                    {
+                        g_combat_pin_folded[0].fetch_add(1, std::memory_order_relaxed);
+                        ++candidates_done;
+                        continue;
+                    }
+                }
 
                 // Post-combat (second) main if this deck wants one. SEARCHED, not greedy: this is
                 // the decisive site for "cast now vs hold for after combat" -- the candidate being
@@ -62296,6 +62825,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     auto dd_ins = census_seen.emplace(BuildDedupKey(copy),
                                                       DedupFirstSeen{dd_fam, plan.bp_choice});
                     const bool state_dup = !dd_ins.second;
+                    if (dupdiff::On())
+                    {
+                        if (state_dup)
+                        {
+                            auto fit = dupdiff_first.find(dd_ins.first->first);
+                            if (fit != dupdiff_first.end()) { dupdiff::Record(state, fit->second, plan); }
+                        }
+                        else { dupdiff_first.emplace(dd_ins.first->first, plan); }
+                    }
                     DedupFamRecord(state_dup, dd_ins.first->second, dd_fam, plan, g_rollout_nest == 0,
                                    g_bp_chain_ci_last, BpSearchWidth());
                     DedupWhyRecord(state_dup, g_dropped_cast_count - dd_drops_before,

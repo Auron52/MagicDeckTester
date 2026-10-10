@@ -347,6 +347,11 @@ enum Slot : int
     RESTRICTED_MANA_RANK,     // MTG_RESTRICTED_MANA_RANK   a colored_creature_only source whose restricted colours this deck's creature spells can use number at most ONE (DeckTraits: GameState::deck_creature_pip_colors) ranks as a {C} source plus one creature-only colour, below the mono tier (ManaSourceRankBase), instead of a rainbow held last of the lands; its rebuy activation's {T} source is held through the plan's casts and its own {2}. Dragons s7007 gi959 (Haven of the Spirit Dragon). DEFAULT ON; =0 restores the historical ladder
     PD_CAST_ORDER,            // MTG_PD_CAST_ORDER          Prevent Damage: the USER's cast order (2026-10-09) -- Tamanoa + Green Sun's Zenith 10, the other creatures 12, Rhox / Bilbo 13, Spellshock 15, other noncreatures 20, Rolling Earthquake 25, Pyrohemia 26. Default ON; =0 -> generic
     PD_DISCARD_USER,          // MTG_PD_DISCARD_USER        Prevent Damage: the USER's discard ladder (2026-10-09) -- lands to 4 (1 Ancient Tomb + 3 coloured, painful first) > 2 GAIN (Tamanoa, Tamanoa, Rhox) > 1 DRAIN > 1 damage spell (Earthquake first) > extra lands > a 2nd drain; tutors back up missing pieces (Zenith GAIN, Wish DRAIN, Beseech anywhere). Default ON; =0 -> the 09-28 ladder
+    COMBAT_PIN_PRECOMBAT,     // MTG_COMBAT_PIN_PRECOMBAT   Bruna gather / Arcanum Wings combat-swap pin variants are emitted only for a PRE-combat plan list (a post-combat plan's pin is never read: combat is over and the next turn start clears it). IDENTITY collapse, default ON; =0 restores the main-2 emission
+    DEDUP_KEY_COMBAT_PINS,    // MTG_DEDUP_KEY_COMBAT_PINS  BuildDedupKey folds the pending COMBAT pins (scripted_bruna_gather / scripted_combat_aura_swap / _in) like the other scripted_* pins -- a KEY-HOLE fix: an axis variant carrying a combat pin was skipped as a duplicate of its pin-free twin. Default ON; =0 restores the hole
+    COMBAT_PIN_FOLD,          // MTG_COMBAT_PIN_FOLD        a candidate carrying a combat pin whose POST-COMBAT state an earlier sibling already reached is folded (its future is that sibling's: the pin is consumed by combat). IDENTITY fold, default ON; =0 scores every pinned variant
+    EQUIP_INERT_FOLD,         // MTG_EQUIP_INERT_FOLD       the SEARCH drops an Equip of a pure haste/shroud {0} Equipment (Lightning Greaves) onto a creature that is not summoning-sick, unless it releases a creature this plan targets (TurnSolver.cpp DropInertHasteShroudEquips; provider opt-in FoldsInertHasteShroudEquips). Sound dominance, default ON; =0 offers every pair
+    EQUIP_INERT_FOLD_GREEDY,  // MTG_EQUIP_INERT_FOLD_GREEDY  ...and the same drop in the GREEDY policy (Solve: d0 runner + rollout leaves), where the move's eval of 1 made the greedy take an idle Greaves move in a third of its plans. A playout-policy change, measured on held-out seeds (d0 -0.031 turn/game, searched neutral); default ON, =0 restores the old greedy
     COUNT
 };
 
@@ -655,6 +660,11 @@ inline const char* Name(int slot)
         "MTG_RESTRICTED_MANA_RANK",
         "MTG_PD_CAST_ORDER",
         "MTG_PD_DISCARD_USER",
+        "MTG_COMBAT_PIN_PRECOMBAT",
+        "MTG_DEDUP_KEY_COMBAT_PINS",
+        "MTG_COMBAT_PIN_FOLD",
+        "MTG_EQUIP_INERT_FOLD",
+        "MTG_EQUIP_INERT_FOLD_GREEDY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

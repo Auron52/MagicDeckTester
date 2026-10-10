@@ -1777,6 +1777,20 @@ public:
     // human play like every other equip-width policy.
     virtual bool ConsolidatesEquips() const { return false; }
 
+    // FoldsInertHasteShroudEquips -- the search (and the greedy policy) may drop an Equip of a PURE haste/shroud Equipment
+    // with equip {0} (Lightning Greaves) onto a creature that is NOT summoning-sick, when nothing in
+    // the action list targets the creature it leaves (TurnSolver.cpp, DropInertHasteShroudEquips:
+    // the proof and the local conditions). The deck-level half of that proof is this method's
+    // contract: NOTHING THIS DECK CAN EVER HOLD reads which creature an Equipment is attached to
+    // except through haste and shroud -- no Kemba (upkeep_tokens_per_equipment: read at UPKEEP,
+    // before any sorcery-speed chance to move the Equipment back), no Kor Duelist / Balan
+    // (double_strike_while_equipped / _min_equipment), no Golem-Skin Gauntlets
+    // (equip_scale_*_per_equipment), no Dwalin (hone counters), no "modified" Aura (Lion Umbra).
+    // A deck-composition claim, so it is opted into per provider after reading the list; default
+    // false = byte-identical. MTG_EQUIP_INERT_FOLD=0 / MTG_EQUIP_INERT_FOLD_GREEDY=0 turn the search /
+    // greedy halves off for every provider.
+    virtual bool FoldsInertHasteShroudEquips() const { return false; }
+
     // --- Main-phase classification (USER design 2026-08-14, docs/design/main-phase-classification.md) ---
     // Classify a hand cast by ONE question: does it help (or potentially help) this turn's ATTACK?
     //   Main1 -- yes: lords, haste creatures/granters, pumps incl. equipment. Kept pre-combat.
