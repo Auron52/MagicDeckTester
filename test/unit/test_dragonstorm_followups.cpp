@@ -205,6 +205,25 @@ TEST_CASE("Breakpoint leftovers: the interrupted list's casts join the continuat
     CHECK_FALSE(DsProvFu().MergesBreakpointLeftovers(DefFu("Apex of Power")));
 }
 
+TEST_CASE("Exact walk: a creature-only source's mana is {C} for a noncreature cast (MTG_EXACT_WALK_CCO)")
+{
+    // Unclaimed Territory makes coloured mana for creature spells only -- {C} otherwise. Rite of Flame's
+    // {R} off a lone Territory is not payable; Scourge of Valkas's {R}{R}{R} off five Territories is.
+    const GameState s1 = BoardFu({ "Unclaimed Territory" }, { "Rite of Flame" });
+    const std::vector<Action> rite = { CastFu(s1, "Rite of Flame") };
+    const GameState s5 = BoardFu(std::vector<std::string>(5, "Unclaimed Territory"), { "Scourge of Valkas" });
+    const std::vector<Action> scourge = { CastFu(s5, "Scourge of Valkas") };
+    {
+        ArmFu arm(heurarm::EXACT_WALK_CCO, true);
+        CHECK(ExactOrderFirstUnpayable(s1, rite, { 0 }) == 0);
+        CHECK(ExactOrderFirstUnpayable(s5, scourge, { 0 }) == -1);
+    }
+    {
+        ArmFu arm(heurarm::EXACT_WALK_CCO, false);
+        CHECK(ExactOrderFirstUnpayable(s1, rite, { 0 }) == -1);   // the historical wild booking
+    }
+}
+
 TEST_CASE("Rituals-for-payoff guard: an Apex line keeps its rituals, a restrictor still has to earn its place (MTG_RITUAL_GUARD_APEX)")
 {
     // Eight Mountains, hand Rite of Flame, Seething Song, Apex of Power (+ Irencrag Feat): Rite + Seething +
