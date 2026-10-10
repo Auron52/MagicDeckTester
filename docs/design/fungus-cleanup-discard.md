@@ -178,12 +178,14 @@ Agent readings (not USER-ruled; each is a one-line change if overturned):
    counts +1 (its drop returns a land). Lands are kept best-first, at most 3, until their mana covers
    `need`; one accelerator only while `need` is still unmet. Land keep order: non-Karoo > Karoo,
    untapped > enters-tapped, more mana, hand order.
-4. Core 1-drop = a FUNGUS creature of MV 1 (Essence Warden never fills it). The slot is filled from the
-   board by a Mycon-type in play, or by any Fungus 1-drop in play while no Mycon is in hand.
-5. The Season tier keeps ONE Season (net of board) and ONE copy of each partner kind -- devour /
-   per-counter upkeep tokens (Mycoloth), fade-counter tokens (Saproling Burst) -- net of board (the
-   09-24 "one Mycoloth"). Extra copies are beyond-core threats. The tier holds its position even with
-   no Season anywhere (Mycoloth alone). Inner keep order Season > devour partner > fade partner.
+4. Core 1-drop = a FUNGUS creature of MV 1 (Essence Warden never fills it): a hand Mycon-type first,
+   else another hand Fungus 1-drop. ~~Filled from the board by a Mycon in play~~ -- superseded by the
+   USER's 2026-10-10 creature-quota ruling (see "Implementation notes -- USER rulings 2026-10-10").
+5. The Season tier keeps ONE Season (net of board: "at most 1") and ONE copy of each partner kind --
+   devour / per-counter upkeep tokens (Mycoloth), fade-counter tokens (Saproling Burst) -- from the HAND
+   (the 09-24 "one Mycoloth"; a partner is a threat, so since 2026-10-10 a copy in play does not fill
+   it). Extra copies are beyond-core threats. The tier holds its position even with no Season anywhere
+   (Mycoloth alone). Inner keep order Season > devour partner > fade partner.
 6. "Uncastable for the foreseeable future" -- **INTEGRATOR READING (2026-10-09), surfaced; it replaces
    the agent reading below**: the Season tier is castable when `board_mana` + ALL the kept mana (every
    kept land and the kept accelerator, by the mana they make) reaches 5. The USER sized the MANA bucket
@@ -215,3 +217,24 @@ Cross-deck (verbatim):
 - *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
   model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
 
+#### Implementation notes -- USER rulings 2026-10-10
+The creature-quota ruling (*"Creature quotas are less worried about the board than land quotas ..."*) is
+implemented; exactly what changed in `FungusProvider::CleanupDiscardCandidates`:
+* **Sporecrown** core slot: filled from the hand even with a Sporecrown in play (was: a lord in play
+  filled it and the hand copy fell beyond the core).
+* **Sporesower** core slot: the same.
+* **The 1-drop** core slot: a hand Mycon-type, else another hand Fungus 1-drop -- a Mycon (or any
+  Fungus 1-drop) in play no longer fills it.
+* **Mycoloth / Saproling Burst** (the Season tier's partners, threats): one hand copy of each is kept
+  in the tier even with a copy in play.
+* **Unchanged** (the design's own board rules): Doubling Season and Beastmaster stay "at most 1"
+  counting the board (a copy in play makes every hand copy surplus); the MANA bucket still counts the
+  board (need = 5 - board_mana); a legend already in play still makes the hand copy dead.
+* Not implemented here: the "colour beats the land count" cross-deck ruling -- the coordinator's
+  2026-10-10 brief for this deck did not list it; it is inert on the shipped 60 (mono-green; the
+  Chamber's U pays nothing) and would matter only on candidate B (black for Slimefoot / Deathspore).
+* The shared distance model is not used: the deck's only distance notion is the Season tier's exact
+  5-mana threshold over the kept hand (listed as unchanged in docs/design/discard-distance-model.md).
+* Tests: `test/unit/test_fungus_discard.cpp` 17 cases -- F6 re-derived, F12 (Sporesower + Mycoloth in
+  play), F13 (Beastmaster in play still makes the hand copy surplus); F6 and F12 fail on the
+  pre-ruling code.

@@ -33859,7 +33859,9 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 // are uncastable for the foreseeable future."*
 //
 // BUCKETS, every one keyed on PARAMS (a hand card is a name-only placeholder -- every read goes through
-// the definition), each quota NET OF BOARD:
+// the definition). MANA and ENABLER quotas count the board; THREAT quotas do NOT (USER 2026-10-10:
+// "Creature quotas are less worried about the board than land quotas. This is because you can always add
+// more creatures and sometimes this speeds up the clock."):
 //   MANA      lands + ONE accelerator. need = max(0, 5 - board_mana); lands are kept (best first, at
 //             most 3) until the mana THEY make covers need, then one accelerator while need is still
 //             unmet -- the 5 includes the accelerator, so a kept Wild Growth is one of the five, not a
@@ -33867,10 +33869,11 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 //             Chamber counts 2), each land Aura's extra (Wild Growth +1), rocks, creature mana dorks;
 //             a hand land counts the same way (a Karoo +1: its drop returns a land).
 //   ENABLERS  Doubling Season (doubles_tokens / doubles_counters) 1, Beastmaster Ascension
-//             (quest_counter_per_attacker) 1.
+//             (quest_counter_per_attacker) 1 -- "at most", so a copy in play fills the slot.
 //   THREATS   the core -- one Sporecrown (the Fungus/Saproling lord), one Sporesower
 //             (spore_upkeep_each_fungus), one Fungus 1-drop (Utopia Mycon -- the any-colour Saproling
-//             sac outlet -- preferred), one Mycoloth -- and the rest beyond the core.
+//             sac outlet -- preferred), one Mycoloth -- and the rest beyond the core. Each core slot is
+//             filled from the HAND even with a copy already in play (USER 2026-10-10).
 // THE SEASON TIER (USER 10-09): the kept Season + its combo partners -- devour / per-+1/+1-counter
 // upkeep tokens (Mycoloth), fade-counter tokens (Saproling Burst; candidate-B list only, so it is keyed
 // on fading_counters + fade_creates_tokens, never a name) -- kept TOGETHER above Beastmaster and the
@@ -33896,12 +33899,12 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 //     swarm, and under-counting only raises the land target.
 //   * land keep order: non-Karoo > Karoo, untapped > enters-tapped, more mana, hand order. (A hand
 //     land fills `need` by the mana it makes -- review fix 2026-10-09, no longer one unit per land.)
-//   * the core 1-drop slot is filled from the board only by a Mycon-type, or by any Fungus 1-drop
-//     while no Mycon is in hand ("preferably Utopia Mycon"). Essence Warden is not a Fungus, so it
-//     never fills the 1-drop slot.
-//   * the tier keeps ONE copy of each partner kind (the 09-24 "one Mycoloth"), net of board, and holds
-//     its position even with no Season anywhere (Mycoloth is the card the deck exists to cast). Inner
-//     keep order: Season > devour partner > fade partner.
+//   * the core 1-drop slot takes a hand Mycon-type first, else another hand Fungus 1-drop ("preferably
+//     Utopia Mycon"). Essence Warden is not a Fungus, so it never fills the 1-drop slot.
+//   * the tier keeps ONE copy of each partner kind (the 09-24 "one Mycoloth") from the hand -- a partner
+//     is a threat, so a copy in play does not fill it (USER 2026-10-10) -- and holds its position even
+//     with no Season anywhere (Mycoloth is the card the deck exists to cast). Inner keep order: Season >
+//     devour partner > fade partner. The Season itself stays "at most 1" counting the board.
 //   * castability (the integrator reading above): the bar is the literal 5 for the whole tier, so it
 //     moves as one unit.
 //   * surplus enablers: Beastmaster before Season ("Beastmaster gives way first", carried over).
@@ -33955,9 +33958,10 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
     auto is_karoo    = [](const CardDefinition* d) { return d != nullptr && d->params.etb_bounce_land; };
 
     // ---- 1. board census (own permanents) --------------------------------------------------------
+    // Only MANA and the "at most 1" ENABLERS read the board: a creature / threat already in play fills
+    // no core slot (USER 2026-10-10 -- "you can always add more creatures").
     int board_mana = 0, board_lands = 0;
-    bool b_season = false, b_beast = false, b_devour = false, b_fade = false;
-    bool b_lord = false, b_sower = false, b_mycon = false, b_one_drop = false;
+    bool b_season = false, b_beast = false;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -33975,12 +33979,6 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
         else if (p.card.IsCreature() && !q.produces.empty()) { board_mana += ManaProducedPerTap(*d); }
         if (is_season(q)) { b_season = true; }
         if (is_beast(q))  { b_beast  = true; }
-        if (is_devour(q)) { b_devour = true; }
-        if (is_fade(q))   { b_fade   = true; }
-        if (is_lord(*d))  { b_lord   = true; }
-        if (is_sower(*d)) { b_sower  = true; }
-        if (is_mycon(*d)) { b_mycon  = true; }
-        if (is_one_drop(*d)) { b_one_drop = true; }
     }
 
     // ---- 2. partition the hand (each non-staged card into exactly one list) ------------------------
@@ -34083,26 +34081,22 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
     // 3 kept -- "uncastable" and shed Mycoloth and the Season exactly as the generic rule does.
     const bool tier_castable = board_mana + kept_mana >= kManaTarget;
 
-    // ---- 4. ENABLERS and the Season tier (one copy each, net of board) ----------------------------
+    // ---- 4. ENABLERS (at most one each, net of board) and the tier's partners (from the hand) --------
     const int kept_season = (!b_season && !seasons.empty()) ? seasons.front() : -1;
     const int kept_beast  = (!b_beast  && !beasts.empty())  ? beasts.front()  : -1;
-    const int kept_devour = (!b_devour && !devours.empty()) ? devours.front() : -1;
-    const int kept_fade   = (!b_fade   && !fades.empty())   ? fades.front()   : -1;
+    const int kept_devour = !devours.empty() ? devours.front() : -1;
+    const int kept_fade   = !fades.empty()   ? fades.front()   : -1;
 
-    // ---- 5. THREATS: the core, net of board -------------------------------------------------------
+    // ---- 5. THREATS: the core, from the hand (a copy in play fills nothing) -------------------------
     auto first_threat = [&](auto pred) -> int
     {
         for (int i : threats) { if (defs[at(i)] != nullptr && pred(*defs[at(i)])) { return i; } }
         return -1;
     };
-    const int core_lord  = b_lord  ? -1 : first_threat(is_lord);
-    const int core_sower = b_sower ? -1 : first_threat(is_sower);
-    int core_one = -1;
-    if (!b_mycon)
-    {
-        core_one = first_threat(is_mycon);
-        if (core_one < 0 && !b_one_drop) { core_one = first_threat(is_one_drop); }
-    }
+    const int core_lord  = first_threat(is_lord);
+    const int core_sower = first_threat(is_sower);
+    int core_one = first_threat(is_mycon);
+    if (core_one < 0) { core_one = first_threat(is_one_drop); }
 
     // ---- 6. the keep ladder ------------------------------------------------------------------------
     std::vector<char> kept(at(n), 0);
