@@ -448,3 +448,135 @@ TEST_CASE("EDF discard E16: a staged card is never named by the policy; every in
     CHECK(o == std::vector<int>{ 6, 2, 4, 5, 7, 1, 0, 3 });
     CheckPermutation(s, o);
 }
+
+// ---- USER ruling 2026-10-10 on reading R8: "For EDF that is fine as long as we keep our only
+// win-con/draw source even if it is a land." A SPARE draw land sheds as a land; the ONLY win con /
+// draw source (hand + board) holds the size-1 WIN CON slot even when it is a land -- it is never in
+// the land pool, so the land count, the {W}/{U} cover and a Living Wish cannot push it out. It sheds
+// only at the win-con rung of the backwards ladder (just before the untapper and the flicker source).
+
+namespace
+{
+// Position of hand index `i` in a shed order.
+int PosOf(const std::vector<int>& order, int i)
+{ return static_cast<int>(std::find(order.begin(), order.end(), i) - order.begin()); }
+}   // namespace
+
+TEST_CASE("EDF discard W1: the only draw source is kept past the 4th land even though it is the WORST land by the keep key")
+{
+    // Board: 4 lands (Brushland x2, Adarkar, Yavimaya), no draw source, no finisher. Kitchen is the
+    // only win con -- and by the land keep key it is the worst land in hand (no {C}, enters tapped).
+    // It holds the WIN CON slot, so it is not in the land pool: the three better hand lands are the
+    // ones past the 4th. Displacer (4 {C}) / Drake (top-5 = 4) fill the pieces; the Wish is extra.
+    // Target 6; mana 4 + Kitchen 1 = 5 -> Wild Growth kept.
+    // SHED: Yavimaya, Adarkar, Brushland (past the 4th, worst first) | Wish | WG | Kitchen | Drake |
+    // Displacer.
+    const GameState s = MakeEdf(
+        { "Kitchen", "Brushland", "Adarkar Wastes", "Yavimaya Coast", "Eldrazi Displacer", "Peregrine Drake",
+          "Living Wish", "Wild Growth" },
+        { {"Brushland"}, {"Adarkar Wastes"}, {"Yavimaya Coast"}, {"Brushland"} });
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 3, 2, 1, 6, 7, 0, 5, 4 });
+    for (int land : { 1, 2, 3 }) { CHECK(PosOf(o, land) < PosOf(o, 0)); }
+    CHECK(Gen(s).front() == 5);   // generic: Drake
+}
+
+TEST_CASE("EDF discard W2: the only draw source is kept when ANOTHER land supplies the missing {U}")
+{
+    // Board: Brushland only (G W C). Mariposa ({C} only, covers no colour) is the only draw source ->
+    // WIN CON slot, and it counts as the 2nd land. {U} is still missing, so the cover takes Yavimaya
+    // (ties Adarkar on every key, earlier in hand); Adarkar is the 4th land; Brushland is past it.
+    // Emiel is the only outlet, Cloud the only untapper; Wish extra. Target = Emiel 7; mana 1 +
+    // Mariposa 1 + Yavimaya 1 = 3 -> Overgrowth kept.
+    // SHED: Brushland | Adarkar | Wish | Overgrowth | Yavimaya | Mariposa | Cloud | Emiel.
+    const GameState s = MakeEdf(
+        { "Yavimaya Coast", "Mariposa Military Base", "Adarkar Wastes", "Brushland", "Emiel the Blessed",
+          "Cloud of Faeries", "Living Wish", "Overgrowth" },
+        { {"Brushland"} });
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 3, 2, 6, 7, 0, 1, 5, 4 });
+    CHECK(Gen(s).front() == 4);   // generic: Emiel (MV 4)
+}
+
+TEST_CASE("EDF discard W3: the only draw source is kept over two Living Wishes that could fetch a finisher")
+{
+    // Board: 4 lands, no win con. Conservatory is the only draw source -> WIN CON slot (a real card
+    // fills the slot before any tutor is asked). Both Wishes could fetch Essence Depleter / Dimensional
+    // Infiltrator, but no slot is missing, so both are EXTRA -- and they shed before the Conservatory.
+    // Yavimaya is past the 4th. Target 6; mana 4 + Conservatory 1 = 5 -> Fertile kept.
+    // SHED: Shusher | Yavimaya | Wish, Wish | Fertile | Conservatory | Drake | Displacer.
+    const GameState s = MakeEdf(
+        { "Living Wish", "Conservatory", "Living Wish", "Eldrazi Displacer", "Peregrine Drake",
+          "Yavimaya Coast", "Fertile Ground", "Vexing Shusher" },
+        { {"Brushland"}, {"Adarkar Wastes"}, {"Yavimaya Coast"}, {"Brushland"} });
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 7, 5, 2, 0, 6, 1, 4, 3 });
+    CHECK(PosOf(o, 0) < PosOf(o, 1));
+    CHECK(PosOf(o, 2) < PosOf(o, 1));
+    CHECK(Gen(s).front() == 4);   // generic: Drake
+}
+
+TEST_CASE("EDF discard W4: a finisher that is not live does not make the draw land a spare")
+{
+    // No opponent library dealt -> Dimensional Infiltrator is not a finisher (IsTlessFinisher), so
+    // Mariposa is the only win con / draw source: WIN CON slot, and the Infiltrator is a (non-live)
+    // spare win con. Board 4 lands -> Adarkar and Yavimaya are past the 4th (Yavimaya, later in hand,
+    // first). Cloud (98) is the only untapper. Target 6; mana 4 + 1 = 5 -> Wild Growth kept.
+    // SHED: Yavimaya, Adarkar | Infiltrator | Wish | WG | Mariposa | Cloud | Displacer.
+    GameState s = MakeEdf(
+        { "Dimensional Infiltrator", "Mariposa Military Base", "Adarkar Wastes", "Eldrazi Displacer",
+          "Cloud of Faeries", "Living Wish", "Wild Growth", "Yavimaya Coast" },
+        { {"Brushland"}, {"Adarkar Wastes"}, {"Yavimaya Coast"}, {"Brushland"} });
+    s.opponent_library_dealt = false;
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 7, 2, 0, 5, 6, 1, 4, 3 });
+    CHECK(Gen(s).front() == 3);   // generic: Displacer (MV 3)
+}
+
+TEST_CASE("EDF discard W5: Shivan Gorge with red is the only win con -- kept past the 4th land")
+{
+    // A Fertile Ground on the board makes red: the Gorge is a win con, the only one, so it holds the
+    // slot; the two other hand lands are past the 4th. Board mana 5 + Gorge 1 = 6 meets the target ->
+    // Overgrowth is past it. SHED: Shusher | Adarkar, Brushland | Overgrowth | Wish | Gorge | Drake |
+    // Displacer.
+    const GameState s = MakeEdf(
+        { "Shivan Gorge", "Brushland", "Adarkar Wastes", "Eldrazi Displacer", "Peregrine Drake",
+          "Living Wish", "Overgrowth", "Vexing Shusher" },
+        { {"Brushland"}, {"Adarkar Wastes"}, {"Yavimaya Coast"}, {"Brushland"}, {"Fertile Ground", 0} });
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 7, 2, 1, 6, 5, 0, 4, 3 });
+    CHECK(Gen(s).front() == 4);   // generic: Drake
+}
+
+TEST_CASE("EDF discard W6: with a draw source already in PLAY, the hand's draw land is a spare and sheds as a land (R8)")
+{
+    // Mariposa in play fills the WIN CON slot net of board, so the Conservatory in hand is the 5th land
+    // and sheds first. Drake (top-5 = 4) over Cloud (98, less suitable). Target 6; mana 4 -> WG 5,
+    // Fertile 6; Trace past it. SHED: Conservatory | Trace | Cloud | Wish | Fertile, WG | Drake |
+    // Displacer.
+    const GameState s = MakeEdf(
+        { "Conservatory", "Eldrazi Displacer", "Peregrine Drake", "Living Wish", "Wild Growth",
+          "Fertile Ground", "Cloud of Faeries", "Trace of Abundance" },
+        { {"Mariposa Military Base"}, {"Brushland"}, {"Adarkar Wastes"}, {"Yavimaya Coast"} });
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 0, 7, 6, 3, 5, 4, 2, 1 });
+    CHECK(Gen(s).front() == 2);   // generic: Drake
+}
+
+TEST_CASE("EDF discard W7: a castable finisher in hand holds the slot -- the draw land is then a spare land (agent reading)")
+{
+    // Agent reading of "our ONLY win-con/draw source": the size-1 WIN CON bucket, which a finisher
+    // and a draw land fill alike ("win con (this includes any draw source)"). With a castable
+    // Dimensional Infiltrator AND a Mariposa in hand, the Infiltrator holds the slot (distance 0,
+    // finisher first on the tie) and the Mariposa is a spare: a land, past the 4th here. If the USER
+    // means "the only DRAW source" instead, this board is the one that flips (Mariposa kept).
+    // SHED: Mariposa, Brushland (past the 4th, worst first) | Wish | Fertile, WG | Infiltrator | Drake |
+    // Displacer.
+    const GameState s = MakeEdf(
+        { "Mariposa Military Base", "Dimensional Infiltrator", "Eldrazi Displacer", "Peregrine Drake",
+          "Wild Growth", "Living Wish", "Brushland", "Fertile Ground" },
+        { {"Brushland"}, {"Adarkar Wastes"}, {"Yavimaya Coast"}, {"Brushland"} });
+    const std::vector<int> o = Edf(s);
+    CHECK(o == std::vector<int>{ 0, 6, 5, 7, 4, 1, 3, 2 });
+    CHECK(Gen(s).front() == 3);   // generic: Drake
+}
