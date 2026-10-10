@@ -112,6 +112,21 @@ Agent readings (the USER has not ruled on these; each is also in the code's head
 Not measured: EDF is not in the regression suite, so the adoption evidence has to be a direct paired
 A/B (`MTG_EDF_BUCKET_DISCARD=1` vs `=0`) on this deck.
 
+Follow-up (2026-10-10), after the USER's rulings below (R3 accepted; R8 accepted on the condition
+that the only win con / draw source is kept even when it is a land): VERIFIED, NO CODE CHANGE NEEDED.
+The WIN CON slot is chosen from the real hand cards before the land steps run and is never in the
+land pool, so the lone win-con land sheds only at its own ladder rung (after everything but the
+untapper and the flicker source). Pinned by seven new boards in the test file (23 cases now):
+- W1: board at 4 lands, the only draw source is Kitchen -- the WORST land by the keep key -- and the
+  three better hand lands are the ones past the 4th;
+- W2: another hand land supplies the missing {U}; the {C}-only Mariposa still holds the slot;
+- W3: two Living Wishes that could fetch a finisher are EXTRA and shed before the Conservatory;
+- W4: an Infiltrator with no opponent library is not live, so the Mariposa stays the only win con;
+- W5: Shivan Gorge with red (a Fertile Ground in play) as the only win con, past the 4th land;
+- W6: a draw source already IN PLAY fills the slot, so the hand's draw land is a spare land (R8);
+- W7 (agent reading of "only"): a castable finisher in hand holds the size-1 slot and a draw land
+  beside it is a spare land. If the USER meant "the only DRAW source", this is the board that flips.
+
 
 #### USER rulings (2026-10-10) on the implementation readings
 
