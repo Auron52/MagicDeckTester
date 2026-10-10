@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 6a8fd686  date 2026-10-10
+# Regression ground truth -- commit fbd63d2f  date 2026-10-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -29,6 +29,7 @@
 # accepted-with-regressions (smoke, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
 # accepted-with-regressions (regression, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
 # accepted-with-regressions (overnight, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
+# accepted-with-regressions (overnight, 2026-10-10): bruna (width collapses fbd63d2f, every row better: d3 net -35, d5 -14, d0 -247): 6 slower d3 games -- s4004 gi208, s6006 gi452/gi631 recover at d<old> b100; s4004 gi585 + s7007 gi755 do not recover at d8 b0 but neither does the old binary (old faster win was budget luck); s5005 gi759 T6->T7 is a pre-existing executor/search payment gap the inert-equip fold exposed (docs/design/bruna-wings-recast-payment-divergence.md)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -654,18 +655,18 @@ pd_overnight_d5_s4004=5.5867/f9eb209a13f48291
 pd_overnight_d5_s5005=5.6133/ec9f924710091d48
 pd_overnight_d5_s6006=5.6133/3f00841d9ba39231
 pd_overnight_d5_s7007=5.6000/770073bd141e31dc
-bruna_overnight_d0_s4004=6.2610/4baa93b99eed5adb
-bruna_overnight_d0_s6006=6.2645/90a7d13e36c63db2
-bruna_overnight_d0_s8008=6.2840/115bef2a21c82c2d
-bruna_overnight_d0_s10010=6.2545/93f133c5e3111e8b
-bruna_overnight_d3_s4004=5.0280/bb3229357ca25240
-bruna_overnight_d3_s5005=5.0160/92e71bbf6604e30f
-bruna_overnight_d3_s6006=5.0410/cc9517fb5d70ef78
-bruna_overnight_d3_s7007=5.0880/9e4e50c5c2b8d345
-bruna_overnight_d5_s4004=4.9680/20c52f9086cfbcb0
-bruna_overnight_d5_s5005=5.0380/ca8c2da72635239f
-bruna_overnight_d5_s6006=4.9460/af9165b9517cf208
-bruna_overnight_d5_s7007=5.1340/cdc4e26cef493f6a
+bruna_overnight_d0_s4004=6.2315/2d58d0222b044f42
+bruna_overnight_d0_s6006=6.2315/61d5e18a4618baf9
+bruna_overnight_d0_s8008=6.2515/8957dcc7746c07d2
+bruna_overnight_d0_s10010=6.2260/36a80c8b71e1a414
+bruna_overnight_d3_s4004=5.0260/058b886a879aaf65
+bruna_overnight_d3_s5005=5.0020/5ba2659cf5740180
+bruna_overnight_d3_s6006=5.0300/d5364410353619ac
+bruna_overnight_d3_s7007=5.0800/5885a312c841bfb5
+bruna_overnight_d5_s4004=4.9640/8f99a25913f190d9
+bruna_overnight_d5_s5005=5.0300/652d79df13ea11fb
+bruna_overnight_d5_s6006=4.9400/8409a27bf741c553
+bruna_overnight_d5_s7007=5.1240/fc811bf96350ab82
 giants_overnight_d0_s4004=6.0765/2ef74be2b70bf355
 giants_overnight_d0_s6006=6.0790/cf2bf7092289312e
 giants_overnight_d0_s8008=6.0740/48f6ab21086490b3

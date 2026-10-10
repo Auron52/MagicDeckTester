@@ -1644,3 +1644,141 @@ unbounded depth the real game dominates. Not enough to justify inverting the pip
 table would then be fitted to pre-leaf play and need regenerating). The mulligan stage's settings
 (`mull_gen_depth` / `mull_gen_budget_ms`) come from the value leaf's `value_play`, so its cost is
 measured after the leaf exists.
+
+## Search width -- combat-pin variants and idle Greaves moves (2026-10-10)
+
+USER (2026-10-10): *"let's spend some time optimizing"* -- cut Bruna's search cost by removing WASTED width,
+for the keep-table generation (~2.3M hand cells at `mull_gen` d1 b3, ~0.30-0.41 core-s per rollout) and for
+Bruna's suite cost (2.60x hinata). Branch `bruna-width`. `value_play` (mull_gen d1 b3, 21 buckets) untouched.
+
+### Where the width was (census: 48 openers x R=4 = 384 hand rollouts, d1 b3, seed 424242)
+
+`MTG_TURN_CENSUS=1 MTG_BF_CENSUS=1 MTG_DEDUP_CENSUS=1 MTG_SCORE_COMPS=1 MTG_SCORE_HANDS=48 MTG_SCORE_R=4
+MTG_EQUIV_DEPTH=1 MTG_SCORE_BUDGET_MS=3 MTG_SCORE_HAND_SEED=424242 build/Release/mtg-analyze decks/Bruna/Bruna.cod`.
+Baseline: 5.99M units (la_cand 34.5%, rollout_step 30.3%, greedy_fallback 29.4%), 2.80M candidates, mean width
+8.2, Lightning Greaves Equip actions in 980k candidates (35%), post-apply duplicate rate 36.1%.
+
+A new diagnostic, `MTG_DUP_DIFF=1`, names how every post-apply duplicate differs from the FIRST candidate that
+reached its state (the copy-permutation signature cannot -- it omits plan-level fields, see copy_FALSE). It
+found the 36% was not copy permutations at all:
+
+| duplicate differs from its first reacher only in... | count | share |
+|---|---|---|
+| the Arcanum Wings combat-swap pin (`combat_aura_swap_choice`) | 384,837 | 52% |
+| the Bruna gather pin (`bruna_gather_choice`) | 149,809 | 20% |
+| a breakpoint variant index / a tutor pick (already skipped after the apply) | 132k | 18% |
+| everything else (subset optimism, equip moves, ...) | ~80k | 10% |
+
+The pin variants are clones of EVERY base plan, one per Wings (attached or in hand) and per extra gather subset
+(`AppendSubdecisionAxes`). Two defects made them expensive: they were emitted on POST-combat lists too (main 2,
+the interior second main), where the pin can never be read; and `BuildDedupKey` folded every pending
+`scripted_*` pin EXCEPT the two combat pins. Of the 216k pinned main-1 candidates that reached combat, 97.5%
+left it in a state an earlier sibling had already reached. The census's new `bf_equip` rows split the Greaves
+actions by shape: 334k candidates carried an Equip onto a creature that was NOT summoning-sick.
+
+### What was collapsed, and why each is sound (TurnSolver.cpp, each its own heurarm lever)
+
+* **`MTG_COMBAT_PIN_PRECOMBAT` (identity, default ON).** Both pins are read in exactly one place each, the
+  declare-attackers step of THIS turn's combat (`FireAttackGatherAuras` / `ApplyCombatAuraSwap`), and the turn
+  start clears them. A post-combat list's variant is its base plan applied twice: not emitted.
+* **`MTG_DEDUP_KEY_COMBAT_PINS` (correctness, default ON).** The key hole let an axis variant carrying a pin
+  (e.g. a Glittering Wish pick + a gather subset) be skipped as a duplicate of the same pick WITHOUT the pin --
+  those lines were never scored. Measured: 2HG smoke gi18 T6 -> T5 (Wish -> Almost Perfect + the gather subset
+  that was being skipped: 14 combat damage instead of 9).
+* **`MTG_COMBAT_PIN_FOLD` (identity, default ON).** What the hole stood in for, done soundly: a pinned candidate
+  is compared AFTER combat, where its pin has been consumed; a post-combat state an earlier sibling already
+  reached has that sibling's future (second main, end of turn, rollout read only the state), so it is not
+  scored. Both hosts (the la_cand loop, FSLineWin). `FireAttackGatherAuras` now consumes its pin whether or
+  not a gather fired (the `ApplyCombatAuraSwap` convention), which makes "a gather that never happened leaves
+  combat in the base plan's state" true by construction; with every lever off the Bruna rows are
+  byte-identical to the committed GT (all 9 digests), so the consumption is inert.
+* **`MTG_EQUIP_INERT_FOLD` (sound dominance, default ON; provider opt-in).** An Equipment whose ONLY effects
+  are haste and shroud, with equip {0}, attached to a creature under our control since the turn began
+  (haste moot, CR 302.6) does three things: shroud on the new host (forbids only OUR targeting, CR 702.18a),
+  the old host loses haste (can only hurt) and loses shroud (helps only a spell or ability that TARGETS it).
+  The search releases a Greaves in the same plan as the Aura/equip that needs it
+  (`SubsetHasShroudBlockedAura/Equip`), so a release only ever has to ride that plan. Hence: dropped from the
+  action list when nothing in the list targets the old host; otherwise admitted only in a subset that selects
+  such an action (`SubsetHasIdleReleaseMove`). The no-move sibling (an Equip is an optional digit) weakly
+  dominates: from it the same move is available at the same {0} at any later sorcery-speed point, and nothing
+  reads the attachment before then. Per-action guards: pure haste/shroud equipment (no P/T, lifelink,
+  vigilance, min-power, re-host sacrifice, scaling, charges), no hone/charge counters, host not a Kemba /
+  Kor Duelist / Balan. The DECK half -- nothing the list can hold reads attachment otherwise (Gauntlets,
+  Dwalin, a "modified" Aura) -- is `DecisionProvider::FoldsInertHasteShroudEquips`, true for `BrunaProvider`
+  only (checked against cards.json, main + sideboard). Every other deck is byte-identical by construction.
+* **`MTG_EQUIP_INERT_FOLD_GREEDY` (the same drop in the greedy policy, default ON).** The move's eval of 1 made
+  the greedy (d0 runner + every rollout leaf) TAKE an idle Greaves move in 34% of its plans (863,517 of
+  2,523,725; 793,958 releasing nothing). Measured separately as a policy change (below).
+
+Unit cases (`test_bruna_sweep.cpp`, "Width: ..."): the idle move is not offered (the =0 control offers it),
+the release survives exactly beside the Aura it releases, a sick host still gets Greaves, post-combat lists
+carry no pin variant (=0 restores them), the key folds both pins (=0 is the hole), the gather pin is consumed
+by a combat with no gather.
+
+### Work removed
+
+| measure | before | after | change |
+|---|---|---|---|
+| census units (384 rollouts, d1 b3) | 5,987,693 | 4,567,308 | -23.7% |
+| census scored candidates (la_cand) | 2,064,630 | 1,447,954 | -29.9% |
+| census candidates / mean width | 2.80M / 8.18 | 2.08M / 7.16 | -25.8% |
+| census post-apply duplicate rate | 36.1% | 11.7% | (the rest: bp/tutor variants, skipped after the apply) |
+| Greaves Equip-bearing candidates | 980,042 | 525,218 | -46% |
+| Bruna smoke+regression searched rows (725 games), units | 84.97M | 66.50M | -21.7% |
+| ...turns (loss-penalized sum) | 3663 | 3657 | 6 faster, 0 slower |
+| CPU, 384-rollout census (2 interleaved reps, user s) | 161.8-163.7 | 136.9-137.3 | -16% |
+| CPU, two play rows (reg d5 s2002 + d3 s3003, 2 interleaved reps) | 524-529 s | 496-506 s | -5% |
+| **core-s per hand rollout, d1 b3, 48 openers x R=24 (2,304 rollouts, 2 interleaved reps)** | **0.433-0.440** (16,601 units) | **0.355-0.356** (12,066 units) | **-18.6% CPU, -27.3% units** |
+
+Keep-table projection: the generation's cost is linear in the per-rollout cost on the same openers, so a
+projection made at the old ~0.43 core-s/rollout scales by 0.81 (the USER's ~3.4 days on 24 cores -> ~2.8).
+
+Units fall ~4x faster than CPU at play settings: what was removed were the CHEAP candidates (pinned variants
+fold right after combat; main-2 lists), and the profile that remains is flat (no symbol above 5% self time;
+`SolveSecondMainInSearch` ~2/3 of the attributed candidate cost) -- per-node cost, not branching (the doctrine's
+terminal diagnosis).
+
+Lever decomposition (one pooled batch, per-job heurarm flags, the 7 searched rows, units / loss-penalized turns):
+A0 all off 84.97M / 3663; +PRECOMBAT 77.45M / 3662; +KEY 79.60M / 3660 (the fix restores lines, so it ADDS work);
++FOLD 71.08M / 3658; +EQUIP 66.49M / 3657. EQUIP alone: 79.47M / 3661.
+
+### Play changes and gates
+
+* Smoke + regression, full tiers: every non-Bruna case byte-identical (118 + 166 PASS). Bruna: searched
+  0 slower / 6 faster / 131 play-changed at the same score; d0 (the greedy lever) smoke 2 slower / 32 faster,
+  regression 2 / 32 (light touch: e.g. smoke d0 gi247 T8 -> unwon -- with no idle Greaves move the greedy's
+  Colossification has only the attacker as a legal host and its ETB tap costs the swing).
+* Attribution of the 137 searched play-changed games across the lever arms: 111 first change at EQUIP (the
+  committed line simply no longer contains an idle Greaves move, e.g. smoke d3 gi2 T3 m2 "equip -> Avacyn's
+  Pilgrim" gone, same win turn), 12 at PRECOMBAT, 9 at KEY, 5 at FOLD (budget reallocation; e.g. reg d5 s3003
+  gi1 T8 -> T7 wished for Bruna instead of Vexing Shusher).
+* **Held-out (overnight seeds, every Bruna overnight row, 14,000 games), vs committed GT:** d3 4,000 games
+  6 slower / 37 faster (net -35 turns), d5 2,000 games 0 / 13 (net -14), d0 8,000 games 22 / 267 (net -247; the
+  greedy lever alone -- the main set leaves d0 byte-identical). The greedy lever on the searched rows: 0 / 0
+  (8 play-changed).
+* The 6 slower searched games: s4004 gi208, s6006 gi452, gi631 recover at stage 1 (`--depth <old turn>
+  --budget-ms 100`). s4004 gi585 (T4 -> T5) and s7007 gi755 (T5 -> T6) do not recover at `--depth 8
+  --budget-ms 0` -- and neither does the BASE binary there (T5 / T6): the old faster win was budget luck.
+  **s5005 gi759 (T6 -> T7) is not luck:** base T6 at d8 b0, new T7, and the EQUIP lever alone flips it. Root
+  cause: a pre-existing executor/rollout payment gap -- the search's simulation of "swap in Eldrazi
+  Conscription + recast the Wings" leaves the 10-power Birds attacking, the executor pays the recast's {1}{U}
+  with that Birds (`[fd-diverge]` predicted T6, realized T7). The fold only changed the board the gap showed
+  on (the old line's idle Greaves move had made the search's simulation of that plan come out with no attack).
+  Recorded as deferred work: `docs/design/bruna-wings-recast-payment-divergence.md`. `[fd-diverge]` count on
+  the 725 searched suite games: 1 before, 1 after (the same land-light seed 3018 game).
+* `mtg-test` 561/561, scenarios 158/158, viewer protocol `--strict` 556 refs: 0 play-drift / 0 board-diverged /
+  0 enum-gap.
+
+### What is left (not done here; numbers for the next pass)
+
+* The pinned variants that survive to combat (~15% of scored candidates in the census) still pay a copy +
+  apply + combat before the fold sees them. Skipping them BEFORE the apply needs a proof that the pin did not
+  change the apply (it can: a breakpoint continuation's lethal projection reads the pin via
+  `CountAttackGatherPump`), so it would need a verify arm. Estimated ~2-4% CPU.
+* Greaves onto a summoning-sick creature in MAIN 2 when the creature has no {T} ability (Bruna, Linvala,
+  Vexing Shusher; Mother of Runes' {T} is a deferred card): haste is moot after combat. ~30k census
+  candidates (~1.4%). Needs a sound "no {T} reader" test for the host.
+* Tutor-axis index clamps (`PL[tutor] SAMEACTS`, 41k, 2.8%): sized on the turn-start candidate list, clamped at
+  resolution; skipped after the apply today.
+* Other Greaves decks (FiveColour, Kitty, Goblins, Dragons, Angels, Giants, Mirrorwing) can opt into
+  `FoldsInertHasteShroudEquips` after the same deck-level review (Kitty cannot: Kemba / Kor Duelist / Balan).
