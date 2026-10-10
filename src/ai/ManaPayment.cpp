@@ -2822,9 +2822,14 @@ static void PayFromPoolLineAware(ManaPool& pool, const ManaCost& cost_in, const 
 
 // See ManaPayment.h. The extra terms are all card-parameter tests, so the walk carries no deck
 // knowledge; it is exact only in the same aggregate-pool sense as FirstUnpayablePos.
-int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& acts,
-                             const std::vector<int>& order)
+// `paid` == nullptr: stop at the first cast that cannot be made and return its position. Otherwise the
+// walk SKIPS it the way the executor does (it stays in hand: no cost, no output, no cast counted),
+// records every position's verdict in (*paid) and still returns the first failure.
+static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>& acts,
+                              const std::vector<int>& order, std::vector<char>* paid)
 {
+    if (paid != nullptr) { paid->assign(order.size(), 0); }
+    int first_fail = -1;
     ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
     int casts_left = state.casts_remaining_this_turn;   // -1 = unrestricted
     int red = 0, white = 0, blue = 0, black = 0, green = 0;   // same-turn colour reducers cast so far
@@ -2840,11 +2845,12 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
         const Action& a = acts[order[pos]];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (!a.alt_cost) { SubManaCost(future, a.cost); future.generic = 0; }
-        if (casts_left == 0) { return pos; }
+        if (casts_left == 0) { if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue; }
         // An impulse-exile cast under a live cast cap (Irencrag Feat -> Apex of Power) is the TRAP the
         // USER ruled out ("never before Apex"): Apex is the one permitted cast, so its ten mana and its
         // seven exiled cards are unusable. Not a payment failure, but not a realisable line either.
-        if (casts_left > 0 && d != nullptr && d->params.impulse_exile > 0) { return pos; }
+        if (casts_left > 0 && d != nullptr && d->params.impulse_exile > 0)
+        { if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue; }
         // SPLICE: the k copies a spliced cast reveals must still be IN HAND (a revealed copy stays
         // there; one already cast has left). Copies counted as SubsetHasIllegalSplice counts them.
         if (a.splice_count > 0 && d != nullptr && d->params.splice_onto_arcane)
@@ -2852,7 +2858,8 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
             int copies = 0;
             for (const Card& c : hand) { if (c.m_name == a.card_name) { ++copies; } }
             const int prior = static_cast<int>(std::count(cast_names.begin(), cast_names.end(), a.card_name));
-            if (copies - 1 - prior < a.splice_count) { return pos; }
+            if (copies - 1 - prior < a.splice_count)
+            { if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue; }
         }
         if (!a.alt_cost)
         {
@@ -2865,7 +2872,8 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
                                + (mc.green > 0 ? green : 0);
                 cost.generic = std::max(0, cost.generic - disc);
             }
-            if (!pool.CanPay(cost)) { return pos; }
+            if (!pool.CanPay(cost))
+            { if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue; }
             PayFromPoolLineAware(pool, cost, future);
         }
         CreditCastOutput(state, acts, a, pool);
@@ -2896,8 +2904,87 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
         cast_names.push_back(a.card_name);
         if (casts_left > 0) { --casts_left; }
         if (d != nullptr && d->params.max_casts_after >= 0) { casts_left = d->params.max_casts_after; }
+        if (paid != nullptr) { (*paid)[static_cast<std::size_t>(pos)] = 1; }
     }
-    return -1;
+    return first_fail;
+}
+
+int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& acts,
+                             const std::vector<int>& order)
+{
+    return ExactOrderWalkImpl(state, acts, order, nullptr);
+}
+
+int ExactOrderPaidMask(const GameState& state, const std::vector<Action>& acts,
+                       const std::vector<int>& order, std::vector<char>& paid)
+{
+    return ExactOrderWalkImpl(state, acts, order, &paid);
+}
+
+bool MergeBreakpointLeftovers(const GameState& state, std::vector<Action>& cont, bool& cont_searched,
+                              const std::vector<Action>& leftovers)
+{
+    if (leftovers.empty()) { return false; }
+    std::vector<int> cslots;
+    for (int i = 0; i < static_cast<int>(cont.size()); ++i)
+    { if (cont[i].kind == Action::Kind::CastFromHand && !cont[i].sacrifice_land) { cslots.push_back(i); } }
+    // A leftover the continuation already casts (the re-solve saw it in hand) is not added twice.
+    std::vector<InternedName> cnames;
+    for (int i : cslots) { cnames.push_back(cont[i].card_name); }
+    std::vector<Action> lo;
+    for (const Action& l : leftovers)
+    {
+        auto it = std::find(cnames.begin(), cnames.end(), l.card_name);
+        if (it != cnames.end()) { cnames.erase(it); continue; }
+        lo.push_back(l);
+    }
+    if (lo.empty()) { return true; }
+    // The continuation's own realised order -- exactly what the apply would do with it alone.
+    std::vector<int> alone = cslots;
+    if (!cont_searched)
+    {
+        std::stable_sort(alone.begin(), alone.end(), [&](int x, int y)
+        { return CastOrderLess(state, cont[x], cont[y]); });
+        ApplyDeckCastArrangement(state, cont, alone);
+        ApplyPayableCastOrder(state, cont, alone);
+    }
+    std::vector<char> paid_alone;
+    ExactOrderPaidMask(state, cont, alone, paid_alone);
+    // The union, ordered by the deck's order.
+    std::vector<Action> u = cont;
+    std::vector<int> uord = cslots;
+    for (const Action& l : lo) { uord.push_back(static_cast<int>(u.size())); u.push_back(l); }
+    std::stable_sort(uord.begin(), uord.end(), [&](int x, int y) { return CastOrderLess(state, u[x], u[y]); });
+    ApplyDeckCastArrangement(state, u, uord);
+    ApplyPayableCastOrder(state, u, uord);
+    std::vector<char> paid_u;
+    ExactOrderPaidMask(state, u, uord, paid_u);
+    std::vector<char> paid_by_idx(u.size(), 0);
+    for (std::size_t k = 0; k < uord.size(); ++k) { paid_by_idx[static_cast<std::size_t>(uord[k])] = paid_u[k]; }
+    bool costs_a_cast = false;
+    for (std::size_t k = 0; k < alone.size(); ++k)
+    {
+        if (paid_alone[k] && !paid_by_idx[static_cast<std::size_t>(alone[k])]) { costs_a_cast = true; break; }
+    }
+    if (costs_a_cast)
+    {
+        // CARRY: the continuation's own order first, the leftovers after it -- where a LATER breakpoint in
+        // this continuation (a second Apex) takes them as ITS leftovers and orders them again with the mana
+        // its exile brings (s7000158 T8: Scourge cannot precede Dragonstorm on the first exile's mana, but
+        // can on the second's). With no later breakpoint they are cast after, exactly as before -- the
+        // nearest order that pays (MTG_PAYABLE_ORDER's rule).
+        uord = alone;
+        for (int j = static_cast<int>(cont.size()); j < static_cast<int>(u.size()); ++j) { uord.push_back(j); }
+    }
+    // The casts, in that order, into the cast slots (the continuation's slots, then the appended ones --
+    // ascending), non-cast actions where they were.
+    std::vector<int> slots = cslots;
+    for (int j = static_cast<int>(cont.size()); j < static_cast<int>(u.size()); ++j) { slots.push_back(j); }
+    std::vector<Action> out = u;
+    for (std::size_t k = 0; k < uord.size(); ++k) { out[static_cast<std::size_t>(slots[k])] = u[static_cast<std::size_t>(uord[k])]; }
+    cont = std::move(out);
+    cont_searched = true;
+    return true;
 }
 
 bool UserOrderTraceOn()

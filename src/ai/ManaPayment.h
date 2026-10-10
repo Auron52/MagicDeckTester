@@ -278,6 +278,25 @@ void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& 
 // aggregate-pool colour semantics as FirstUnpayablePos (AvailableManaPool, which holds the float).
 int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& actions,
                              const std::vector<int>& order);
+// The same walk run the way the executor runs a list: a cast that cannot be made is SKIPPED (it stays
+// in hand) and the walk goes on. `paid[k]` = 1 when order position k is made. Returns the first failure.
+int ExactOrderPaidMask(const GameState& state, const std::vector<Action>& actions,
+                       const std::vector<int>& order, std::vector<char>& paid);
+
+// BREAKPOINT LEFTOVERS (DecisionProvider::MergesBreakpointLeftovers; docs/design/dragonstorm-user-cast-
+// order.md). When a breakpoint fires in the middle of a cast list, the list's remaining casts (the
+// `leftovers`) used to be cast AFTER the continuation the breakpoint re-solved -- after its Dragonstorm.
+// This orders them TOGETHER with the continuation's casts by the deck's order (comparator, set
+// arrangement, payable fallback) and, when that union costs no continuation cast its payment (judged
+// with ExactOrderPaidMask against the continuation alone), rewrites `cont` to the union in that order.
+// Otherwise the leftovers are CARRIED: appended after the continuation's own casts, so a later breakpoint
+// inside the continuation (a second Apex) takes them as its own leftovers and orders them again with the
+// mana its exile brings -- and with none they are cast after, as before. Either way cont_searched = true
+// (both apply worlds replay the vector verbatim). A leftover the continuation already casts is matched
+// by name and not added twice. Returns true when the caller must stop its own list (leftovers
+// non-empty: they now live in the continuation); false when there were none.
+bool MergeBreakpointLeftovers(const GameState& state, std::vector<Action>& cont, bool& cont_searched,
+                              const std::vector<Action>& leftovers);
 
 // MTG_USER_ORDER_TRACE (DIAGNOSTIC ONLY, default OFF, a cached static -> zero cost off): the audit
 // instrument for the USER's Dragonstorm cast order. Prints one [uo-order] line per executor cast-order

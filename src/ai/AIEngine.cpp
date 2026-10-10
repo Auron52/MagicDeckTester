@@ -4689,6 +4689,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Site 8 on a COMMITTED line: the found card, or empty when this call is not site 8 / the plan is
     // not committed. See the COMMITTED SITE-8 MIRROR in resolve_draw_breakpoint.
     std::string rdb_site8_committed_found;
+    // BREAKPOINT LEFTOVERS (DecisionProvider::MergesBreakpointLeftovers, MergeBreakpointLeftovers):
+    // the remaining casts of the list a breakpoint interrupted, handed to the NEXT resolve_draw_breakpoint
+    // call (taken at its entry), and whether it took them -- then the caller stops its list. Lockstep
+    // twin: ApplyPlanDirect's lo_pending / bp_truncate around its impulse-exile branch.
+    std::vector<Action> rdb_leftovers;
+    bool rdb_lo_taken = false;
+    // Gather a list's remaining CASTS for the breakpoint the cast at `from` (a paid impulse-exile site
+    // the provider merges for) is about to open. Returns false (nothing gathered) otherwise.
+    auto gather_leftovers = [&](const std::vector<Action>& list, const std::vector<int>& rest,
+                                const std::string& site_name) -> bool
+    {
+        rdb_leftovers.clear();
+        const CardDefinition* sd = CardDatabase::Instance().Lookup(site_name);
+        if (sd == nullptr || sd->params.impulse_exile <= 0
+            || !ResolveProvider(state).MergesBreakpointLeftovers(*sd)) { return false; }
+        for (int i : rest)
+        {
+            const Action& r = list[static_cast<std::size_t>(i)];
+            if (r.kind == Action::Kind::CastFromHand && !r.sacrifice_land) { rdb_leftovers.push_back(r); }
+        }
+        return !rdb_leftovers.empty();
+    };
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         // Consumed on entry: a nested breakpoint inside this continuation re-enters here and is NOT
@@ -4696,6 +4718,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const std::string site8_committed_found = std::move(rdb_site8_committed_found);
         rdb_site8_committed_found.clear();
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
+        // BREAKPOINT LEFTOVERS: taken here, before any nested breakpoint can hand over its own.
+        std::vector<Action> my_leftovers;
+        my_leftovers.swap(rdb_leftovers);
+        const CardDefinition* const my_lo_site = rdb_site;
+        bool my_lo_taken = false;
+        struct LoTakenOut { bool& out; const bool& v; ~LoTakenOut() { out = v; } } _lo_out{ rdb_lo_taken, my_lo_taken };
         ++m_bp_resolves;        // unit-seam counter only (see AIEngine.h)
         exec_section_reset();   // a breakpoint decision point (twin of bp_searched_plan's reset)
         // karoo_deferred: the executor reserves a Karoo drop for after the main cast loop exactly as
@@ -4934,6 +4962,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // an OPAQUE set (cantrip/staging present) applies enablers first (CastOrderRank-stable,
         // rest in plan order) and a CLEAN set stable-sorts by CastOrderLess -- the exact branch
         // pair of the main cast loop below / TurnSolver's apply.
+        // BREAKPOINT LEFTOVERS: the interrupted list's remaining casts join this continuation, ordered
+        // together by the deck's order (or dropped when they would cost it a payment). Lockstep twin:
+        // ApplyPlanDirect's impulse-exile branch, at the same point (after land + pre-casts).
+        if (!my_leftovers.empty() && my_lo_site != nullptr
+            && ResolveProvider(state).MergesBreakpointLeftovers(*my_lo_site))
+        { my_lo_taken = MergeBreakpointLeftovers(state, extra.actions, extra.searched_order, my_leftovers); }
         std::vector<int> cont_order;
         for (int i = 0; i < static_cast<int>(extra.actions.size()); ++i)
         {
@@ -4996,8 +5030,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                extra.searched_order ? "cont-searched" : (bp_searched_here ? "cont-bp" : "cont"),
                                is_pre_combat_main);
         }
-        for (int ci : cont_order)
+        for (std::size_t cpos = 0; cpos < cont_order.size(); ++cpos)
         {
+            const int ci = cont_order[cpos];
             const Action& a = extra.actions[ci];
             if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); cont_unlock->Fire(&cont_unlock_fired); continue; }
@@ -5022,7 +5057,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
                         }
                     }
+                    // BREAKPOINT LEFTOVERS: this continuation's remaining casts go to the nested one.
+                    const bool lo_gathered = cont_cast_paid
+                        && gather_leftovers(extra.actions,
+                                            std::vector<int>(cont_order.begin() + static_cast<long>(cpos) + 1,
+                                                             cont_order.end()),
+                                            a.card_name);
+                    rdb_lo_taken = false;
                     resolve_draw_breakpoint(bp_depth + 1);
+                    rdb_leftovers.clear();
+                    if (lo_gathered && rdb_lo_taken) { break; }
                 }
             }
             cont_unlock->Fire(&cont_unlock_fired);
@@ -6206,6 +6250,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
             else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
+                // BREAKPOINT LEFTOVERS: this plan's remaining casts go to the continuation (taken by
+                // resolve_draw_breakpoint; on a committed line the rollout already merged them into
+                // the recorded segment), and the plan stops here. Lockstep twin: ApplyPlanDirect.
+                const bool lo_gathered = cast_paid && gather_leftovers(plan.actions, [&]{ std::vector<int> r; const int me = static_cast<int>(&a - plan.actions.data()); for (int q = me + 1; q < static_cast<int>(plan.actions.size()); ++q) { r.push_back(q); } return r; }(), a.card_name);
+                rdb_lo_taken = false;
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
                 // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
@@ -6225,6 +6274,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     resolve_draw_breakpoint(0);
                 }
+                rdb_leftovers.clear();
+                if (lo_gathered && (fd_plan_committed || rdb_lo_taken)) { bp_trunc_exec = true; break; }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
@@ -6387,6 +6438,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
             else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
+                // BREAKPOINT LEFTOVERS: this plan's remaining casts go to the continuation (taken by
+                // resolve_draw_breakpoint; on a committed line the rollout already merged them into
+                // the recorded segment), and the plan stops here. Lockstep twin: ApplyPlanDirect.
+                const bool lo_gathered = cast_paid && gather_leftovers(plan.actions, [&]{ std::vector<int> r; auto it = std::find(ord.begin(), ord.end(), oi); if (it != ord.end()) { r.assign(it + 1, ord.end()); } return r; }(), a.card_name);
+                rdb_lo_taken = false;
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
                 // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
@@ -6406,6 +6462,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     resolve_draw_breakpoint(0);
                 }
+                rdb_leftovers.clear();
+                if (lo_gathered && (fd_plan_committed || rdb_lo_taken)) { bp_trunc_exec = true; break; }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the

@@ -406,6 +406,7 @@ enum Slot : int
     HINATA_HOLD_LETHAL_BURN,  // MTG_HINATA_HOLD_LETHAL_BURN  the hold-a-lone-Crackle rule judges "wins this turn" with the subset walks' own projection (every cast's direct damage + the attack, on a payable subset) via HoldCastUnlessLethal, instead of XCandidates' Crackle-plus-attack estimate -- so a Magma Opus / Soulfire co-cast that makes the turn lethal is no longer held (Hinata d0 gi 157 / 196). docs/design/reality-spasm-crackle-classification.md. Default ON; =0 -> the XCandidates estimate, byte-identical
     HINATA_HOLD_NEEDS_HINATA, // MTG_HINATA_HOLD_NEEDS_HINATA the hold-a-lone-Crackle rule applies only while the combo is reachable: Hinata in play or castable from hand this turn (without her, Reality Spasm nets no mana and a lone Crackle is just burn). A SCOPE change to a USER-approved heuristic -> DEFAULT OFF until the USER decides; =1 is the measured arm
     RITUAL_FLOAT_COLOR_EXACT, // MTG_RITUAL_FLOAT_COLOR_EXACT both subset evaluators credit a FIXED-colour ritual float (Irencrag Feat, the Dragonstorm rituals, Seething Song: {R}) in its own colour instead of wild, so a ritual can no longer "pay" an off-colour pip (Irencrag -> Karrthus {B}{G}). Reaches Dragonstorm, Hinata2, Unpredictable Cyclone. Default ON; =0 -> the wild credit
+    DRAGONSTORM_BP_LEFTOVERS, // MTG_DRAGONSTORM_BP_LEFTOVERS after an Apex of Power breakpoint, the interrupted cast list's remaining casts are ordered TOGETHER with the continuation by the USER's order (dropped when adding them would cost a continuation cast its payment) instead of being cast after it -- after its Dragonstorm (s7000158 T8). Executor + ApplyPlanDirect via MergeBreakpointLeftovers. Default ON; =0 -> cast after the continuation
     COUNT
 };
 
@@ -773,6 +774,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_HOLD_LETHAL_BURN",
         "MTG_HINATA_HOLD_NEEDS_HINATA",
         "MTG_RITUAL_FLOAT_COLOR_EXACT",
+        "MTG_DRAGONSTORM_BP_LEFTOVERS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

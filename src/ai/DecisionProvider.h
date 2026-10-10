@@ -930,6 +930,13 @@ public:
     // (WantsCastOrderingSearch). `reorder` is the plan's non-sacrifice hand casts (`plan_actions` the
     // whole plan, for its pre-cast sacrifices); fill `out` with index orderings over `reorder` and
     // return true, or return false to keep the engine's generator. Default false.
+    // MergesBreakpointLeftovers -- when a breakpoint fired by casting `site` interrupts a cast list (the
+    // main plan or a continuation), order the list's REMAINING casts together with the continuation by
+    // the deck's order (MergeBreakpointLeftovers, ManaPayment.h) instead of casting them after it.
+    // Both apply worlds ask it at the same point (executor resolve_draw_breakpoint / ApplyPlanDirect's
+    // impulse-exile branch). Default false -> the remainder is cast after the continuation, as before.
+    virtual bool MergesBreakpointLeftovers(const CardDefinition& site) const { (void)site; return false; }
+
     virtual bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                         const std::vector<Action>& reorder,
                                         std::vector<std::vector<int>>& out) const
