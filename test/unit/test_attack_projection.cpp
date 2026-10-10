@@ -236,3 +236,57 @@ TEST_CASE("F6 Astrolabe credit: MTG_ATTACK_TAP_ASTROLABE_CREDIT=0 restores the r
     const TurnSolver::Plan g = GreedySolve(SnowBoard(2, 1));
     CHECK((g.wins_this_turn && Casts(g, "Coldsteel Heart")));
 }
+
+// ---- F2: Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER) ---------------------------------
+// No attackers at all, so any projected damage is the trigger's. Oko is two colours ({1}{G}{U}).
+namespace
+{
+GameState CannonsBoard(int opp, int salt, const std::vector<std::string>& hand, bool cannons_out)
+{
+    GameState s = Bare(opp, salt, hand);
+    if (cannons_out) { Put(s, "Mana Cannons", 30); }
+    Put(s, "Forest", 31);
+    Put(s, "Island", 32);
+    Put(s, "Mountain", 33);
+    Put(s, "Forest", 34);
+    Put(s, "Island", 35);
+    Put(s, "Mountain", 36);
+    return s;
+}
+}
+
+TEST_CASE("F2 Cannons: a multicoloured cast under a Cannons deals its colour count")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    const int oko = Threshold([](int l) { return CannonsBoard(l, 0, { "Oko, Thief of Crowns" }, true); },
+                              [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Oko, Thief of Crowns" }); });
+    CHECK(oko == 2);
+    // A Cannons cast EARLIER in the same plan counts (plan order on the generic provider: hand order).
+    const int both = Threshold([](int l) { return CannonsBoard(l, 0, { "Mana Cannons", "Oko, Thief of Crowns" }, false); },
+                               [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Mana Cannons", "Oko, Thief of Crowns" }); });
+    CHECK(both == 2);
+    // ...and a Cannons cast AFTER the multicoloured spell does not.
+    const int after = Threshold([](int l) { return CannonsBoard(l, 0, { "Oko, Thief of Crowns", "Mana Cannons" }, false); },
+                                [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Mana Cannons", "Oko, Thief of Crowns" }); });
+    CHECK(after == 0);
+    // Under the FiveColour USER order Cannons is cast first (rank 4), whatever the hand order.
+    static const FiveColourProvider fc;
+    const int fc_order = Threshold([](int l)
+                                   {
+                                       GameState s = CannonsBoard(l, 0, { "Oko, Thief of Crowns", "Mana Cannons" }, false);
+                                       s.m_provider = &fc;
+                                       return s;
+                                   },
+                                   [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Mana Cannons", "Oko, Thief of Crowns" }); });
+    CHECK(fc_order == 2);
+}
+
+TEST_CASE("F2 Cannons: MTG_ATTACK_CANNONS_TRIGGER=0 projects no trigger damage")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_CANNONS_TRIGGER, 0 } });
+    const int oko = Threshold([](int l) { return CannonsBoard(l, 1, { "Oko, Thief of Crowns" }, true); },
+                              [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Oko, Thief of Crowns" }); });
+    CHECK(oko == 0);
+}
