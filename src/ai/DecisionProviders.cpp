@@ -22718,6 +22718,28 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- BrunaProvider::UseLethalShortCircuit (MTG_BRUNA_LETHAL_SHORTCIRCUIT, default ON) ------------
+// The board-lethal short-circuit (TurnSolver's Solve + EnumeratePlans): when the CURRENT board's
+// attack already kills, consider() scores the attack-only plan first and returns it on a win. Winning
+// this turn is the minimum win turn, so the cut is sound for any deck whose attack projection holds
+// -- it only removes the chance to RANK something else above a sure lethal, which on Bruna is where
+// d0 lost turns once MTG_ATTACK_TAP_NEED_EXACT removed the false lethals that used to hide it. ab3 d0
+// gi1238 (seed 1091239) T6, opponent at 10 and the board swinging for 19: without the cut the plan
+// swapped Almost Perfect in through Arcanum Wings and recast the Wings, tapping Birds of Paradise --
+// the creature wearing Eldrazi Conscription and the only attacker -- and nothing attacked (T6 win ->
+// unwon); with it, d0 attacks. gi1461 recovers only with it too. =0 restores the generic (no-cut)
+// behaviour.
+static bool BrunaLethalShortCircuitEnabled()
+{
+    static const bool on = EnvOn("MTG_BRUNA_LETHAL_SHORTCIRCUIT", true);   // DEFAULT ON; =0 no cut
+    return heurarm::Flag(heurarm::BRUNA_LETHAL_SHORTCIRCUIT, on);
+}
+
+bool BrunaProvider::UseLethalShortCircuit() const
+{
+    return BrunaLethalShortCircuitEnabled();
+}
+
 // ---- BrunaProvider::CastOrderRank (MTG_BRUNA_ORDER, PROPOSED, default OFF) ----------------
 // A USER QUESTION, not an adoption (docs/design/analysis-Bruna.md, Stage 4). Off =>
 // GenericProvider::CastOrderRank, i.e. Sol Ring 5, creatures 10, every other spell 20 (the tutors, the

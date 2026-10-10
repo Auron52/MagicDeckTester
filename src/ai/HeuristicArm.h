@@ -418,6 +418,7 @@ enum Slot : int
     ATTACK_TAP_REPROJECT,     // MTG_ATTACK_TAP_REPROJECT    the MANA half of the attack-tap discount re-projects the board with the spent attacking mana sources TAPPED (PendingAttackDamage), memoised by how many are spent, instead of subtracting their base power -- so a tapped dork also loses its team-pump share (Bogbeast, battle cry, exalted). Default ON; =0 -> base power only
     ATTACK_TEAM_PUMP_ETB,     // MTG_ATTACK_TEAM_PUMP_ETB    a hard-cast etb_team_pump_per_creature creature (Craterhoof) pumps every attacker +X in the projection (X = own creatures once it enters, counted in cast order), not just its printed power (Stompy / SelesnyaLifegain d0). Default ON; =0 -> printed power only
     ATTACK_PLAN_LIFEGAIN,     // MTG_ATTACK_PLAN_LIFEGAIN    the plan's own life gain (Wellwisher {T}, Feed the Clan, Blighted Steppe, Verdant Sun's Avatar's enter trigger) feeds the per-life attack pumps in the projection -- Bogbeast's X, Nykthos Paragon's / Ageless Entity's counters -- through GainLife on a projection copy (SelesnyaLifegain d0). Default ON; =0 -> the pre-plan life gained only
+    BRUNA_LETHAL_SHORTCIRCUIT,// MTG_BRUNA_LETHAL_SHORTCIRCUIT Bruna opts into UseLethalShortCircuit: when the board's attack already kills, the attack-only plan is taken without enumerating casts (an Aura that taps its host, or a dork tapped for a cast, can no longer be picked over a sure lethal). Default ON; =0 -> no short-circuit
     COUNT
 };
 
@@ -797,6 +798,7 @@ inline const char* Name(int slot)
         "MTG_ATTACK_TAP_REPROJECT",
         "MTG_ATTACK_TEAM_PUMP_ETB",
         "MTG_ATTACK_PLAN_LIFEGAIN",
+        "MTG_BRUNA_LETHAL_SHORTCIRCUIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

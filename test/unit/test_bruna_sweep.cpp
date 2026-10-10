@@ -696,6 +696,11 @@ TEST_CASE("Aura host ranking: a gathering attacker is priced -- Colossification 
     for (int k = 0; k < 7; ++k) { b.Put("Forest"); }
     b.Hand("Colossification");
     b.s.players[0].lands_played_this_turn = 1;
+    // Out of attack-only range: Bruna's gather puts the HAND Colossification on her as she attacks
+    // (+20, projected by CountAttackGatherPump), so at 20 life the board is already lethal and Bruna's
+    // board-lethal short-circuit (MTG_BRUNA_LETHAL_SHORTCIRCUIT) rightly takes that attack without
+    // enumerating any cast. This case is about the host ranking, so it is played at 40.
+    b.s.players[1].life = 40;
     CHECK(OnlyHostOf(TurnSolver::EnumerateMainPlans(b.s, true), "Colossification") == pilgrim);
     CHECK(SolveHostOf(b.s, "Colossification") == pilgrim);
     (void)bruna;

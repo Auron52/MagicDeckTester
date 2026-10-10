@@ -416,3 +416,13 @@ TEST_CASE("F4b plan lifegain: MTG_ATTACK_PLAN_LIFEGAIN=0 reads the pre-plan life
     CHECK(Threshold([](int l) { return WellBoard(l, 1); }, TapsForLife) == 11);
     CHECK(Threshold([](int l) { return ParagonBoard(l, 1); }, TapsForLife) == 5);
 }
+
+// ---- F5.1: Bruna opts into the board-lethal short-circuit (MTG_BRUNA_LETHAL_SHORTCIRCUIT) --------
+TEST_CASE("F5.1 Bruna lethal short-circuit: on by default, =0 restores the generic no-cut")
+{
+    const BrunaProvider bruna;
+    heurarm::Clear();
+    CHECK(bruna.UseLethalShortCircuit());
+    ArmScope arm({ { heurarm::BRUNA_LETHAL_SHORTCIRCUIT, 0 } });
+    CHECK_FALSE(bruna.UseLethalShortCircuit());
+}
