@@ -273,6 +273,29 @@ TEST_CASE("Giants discard G11: a rock with no land anywhere is a blank")
     CHECK(Gen(s).front() == 2);
 }
 
+// MTG_GIANTS_ROCK_LIBRARY_LAND (default OFF, a proposed amendment): with a land left in the library the
+// rocks are live mana -- Sol Ring is the first mana slot and Fire Diamond the second, and their 3 mana
+// now count toward reach (the table, dist 0): Flinger (5) is 2 short -> 0.35 x 7(0.85) = 2.08, Titan (6)
+// 3 short -> 0.10 x 7 = 0.70, Behemoth (6, no Giant in play: last) 3 short. The ladder reads Sol,
+// Flinger, Daredevil, Fire Diamond, Titan, Greaves, Behemoth and sheds Pyroclasm, then that ladder
+// backwards. With no land in the library, or the lever off, G11's order stands.
+TEST_CASE("Giants discard G11b: the rock-library amendment keeps a rock live while a land can still be drawn")
+{
+    auto amended = [](const GameState& st, int lever)
+    {
+        heurarm::t_arm[heurarm::GIANTS_ROCK_LIBRARY_LAND] = static_cast<std::int8_t>(lever);
+        std::vector<int> v = Gi(st);
+        heurarm::t_arm[heurarm::GIANTS_ROCK_LIBRARY_LAND] = -1;
+        return v;
+    };
+    const GameState lib = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {}, { "Mountain", kTi });
+    CHECK(amended(lib, 1) == std::vector<int>{ 7, 5, 6, 2, 1, 4, 3, 0 });
+    CHECK(amended(lib, 0) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // the USER's rule as built
+    CHECK(Gi(lib)         == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // default OFF
+    const GameState dry = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {}, { kTi, kFl });
+    CHECK(amended(dry, 1) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // no land can arrive
+}
+
 // Board 5 Mountains + Greaves: haste quota 0, so the hand Greaves is spare (S2) -- after the Mountain
 // past the soft 7th (S1) and before the 3rd Bolt (S3).
 TEST_CASE("Giants discard G12: a Greaves in play makes the hand copy spare; S1 > S2 > S3")

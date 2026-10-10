@@ -201,6 +201,38 @@ TEST_CASE("EDF discard E4: flicker source follows the {C} count -- Emiel with <2
     }
 }
 
+// MTG_EDF_OUTLET_PIPS (default OFF, a proposed amendment): the A/B game that lost a turn -- one {C}
+// source (Mariposa), no white source, two Displacers and an Emiel in hand, no land in hand. The USER's
+// rule as built keeps Emiel and sheds both Displacers; Emiel {2}{W}{W} is two white sources short and
+// Displacer {2}{W} one, so the amendment keeps a Displacer and sheds Emiel first among the spares.
+TEST_CASE("EDF discard E4b: the outlet-pips amendment keeps the outlet closer to castable")
+{
+    auto pips = [](const GameState& st, int lever)
+    {
+        heurarm::t_arm[heurarm::EDF_OUTLET_PIPS] = static_cast<std::int8_t>(lever);
+        std::vector<int> v = Edf(st);
+        heurarm::t_arm[heurarm::EDF_OUTLET_PIPS] = -1;
+        return v;
+    };
+    auto pos = [](const std::vector<int>& o, int idx)
+    { return static_cast<int>(std::find(o.begin(), o.end(), idx) - o.begin()); };
+    const std::vector<std::string> hand = {
+        "Eldrazi Displacer", "Eldrazi Displacer", "Emiel the Blessed", "Living Wish", "Peregrine Drake",
+        "Overgrowth", "Trace of Abundance", "Training Grounds" };
+    const GameState s = MakeEdf(hand, { {"Mariposa Military Base"}, {"Kitchen"}, {"Wild Growth", 1} });
+    const std::vector<int> off = pips(s, 0);
+    CHECK(pos(off, 0) < pos(off, 2));
+    CHECK(pos(off, 1) < pos(off, 2));   // both Displacers shed before the kept Emiel
+    CHECK(Edf(s) == off);               // default OFF
+    const std::vector<int> on = pips(s, 1);
+    CHECK(pos(on, 2) < pos(on, 1));     // Emiel is the worst spare outlet ...
+    CHECK(pos(on, 1) < pos(on, 0));     // ... the 2nd Displacer next; the first is the kept outlet
+    CheckPermutation(s, on);
+    // Two white sources on the board: Emiel is castable, so the amendment changes nothing.
+    const GameState w2 = MakeEdf(hand, { {"Mariposa Military Base"}, {"Conservatory"}, {"Conservatory"} });
+    CHECK(pips(w2, 1) == pips(w2, 0));
+}
+
 TEST_CASE("EDF discard E5: untapper -- Drake on plain lands, Cloud once its two lands make 4+ (Auras included)")
 {
     const std::vector<std::string> hand = {
