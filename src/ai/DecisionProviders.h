@@ -1449,6 +1449,34 @@ public:
     // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
     // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
     int BpChainSlotOptIn() const override { return 0; }
+    // CANONICAL-PREFIX FOLD ON THE SEARCH'S OWN SUBSET WALK (DecisionProvider::FoldSearchOdometerOptIn,
+    // MTG_FOLD_SEARCH_ODO). ADOPTED 2026-10-10 on this deck.
+    //
+    // WHY HERE: the branching census over 64 captured slow keep rollouts showed the search fold site
+    // being called 6,954,270,539 times with `from_odometer=0  with_tag=0  rejected=0` -- i.e. doing
+    // nothing at all -- while the search walk scored 1,033,256,261 subsets, 26x the greedy walk's
+    // 39,284,721. The fold was only ever opted into by Snow, so on this deck the single widest walk
+    // in the census was unfolded.
+    //
+    // COST, measured on the TAIL rather than a median bench (the earlier 0.956x came from
+    // MTG_KEEP_BENCH, which stride-samples the ordinary floor and so is blind to the ~1.5% of
+    // rollouts holding ~72% of generation compute): 0.942x over 64 captured slow rollouts, and
+    // 0.915x stacked with the equip price at its saturation point. The stack also has the BEST
+    // worst-case of any arm measured (246.1 s vs 263.3 s base), which matters more than the
+    // aggregate here because the worst rollout is what holds the generation pool's barrier.
+    //
+    // QUALITY on that sample: 0 of 64 win turns moved, aggregate label identical.
+    //
+    // SOUNDNESS -- the user's bar, checked at runtime rather than argued. This fold's failure mode is
+    // deleting a line outright when the canonical twin is not enumerable (it cost
+    // knights_regression_d0_s2002 gi497 a turn-4 kill). `MTG_FOLD_VERIFY` on this deck reports
+    // `recoverable=11,424,464  UNRECOVERABLE=0` (search=11,379,949): every one of 11.4M rejected
+    // selections had a legal, enumerable twin. See docs/design/search-recoverability-audit.md.
+    //
+    // NOT INERT -- the 36,000-game fleet screen has this deck at 0.997, so adoption MOVES PLAY and
+    // owes a `kittyv2` GT rebaseline in all three tiers (one was already owed from the rebase).
+    // `MTG_FOLD_SEARCH_ODO=0` hard-disables it here, which is how the A/B control survives adoption.
+    bool FoldSearchOdometerOptIn() const override { return true; }
     // THE EQUIP-CHAIN GO-OFF is emitted for this deck only (EquipRouteTrial). This deck is where
     // the engine lives -- Sram, Senior Edificer draws on an Equipment CAST, Puresteel Paladin draws
     // on an Equipment ETB and grants metalcraft equip {0} -- so a free Equipment is two cards and a
