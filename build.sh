@@ -74,20 +74,37 @@ if ! command -v c++ >/dev/null 2>&1 && ! command -v g++ >/dev/null 2>&1; then
   exit 1
 fi
 
-# A LINKED WORKTREE ON THE 9p REPO MOUNT BUILDS ON THE BUILD VOLUME. The repo is a 9p mount of the Windows
-# host folder and has died outright twice (docs/design/repo-mount-failures.md). A binary that lives on it
-# is killed by SIGBUS when a text page cannot be re-read, and every compile pushes its objects through it.
-# The primary checkout's build/ is already a Docker volume (devcontainer.json), so a worktree's build/
-# becomes a symlink into it: build/wt/<worktree>. Only on first build (an existing build/ is left alone),
-# only for a linked worktree, and only when the tree is on 9p while the primary's build/ is not.
-# Builds are recreatable, so nothing is lost if the volume is; sources and artifacts stay in the repo.
-if [ ! -e build ] && [ "$(git rev-parse --git-dir 2>/dev/null)" != "$(git rev-parse --git-common-dir 2>/dev/null)" ] \
-   && command -v findmnt >/dev/null 2>&1 && [ "$(findmnt -n -o FSTYPE -T . 2>/dev/null)" = 9p ]; then
-  primary="$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")"
-  if [ -d "$primary/build" ] && [ "$(findmnt -n -o FSTYPE -T "$primary/build" 2>/dev/null)" != 9p ]; then
-    vol="$primary/build/wt/$(basename "$PWD")"
-    mkdir -p "$vol" && ln -s "$vol" build
-    echo ">>> build/ -> $vol (linked worktree: builds live on the build volume, off the 9p repo mount)"
+# Compile output stays OFF the 9p host mount (USER rule, 2026-10-10). In the devcontainer the checkout is a
+# 9p/drvfs bind of the Windows drive: one connection shared by every container, with no reconnect. On 10-10 it
+# died under heavy agent build + batch I/O (four worktrees compiling into their own build/ on it) and took both
+# containers down for hours. Compile output is regenerable, so it belongs on the ext4 build volume mounted at the
+# primary checkout's build/; source, commits and results stay on the host drive, which is what keeps them safe.
+# A linked worktree on 9p therefore gets build/ -> <primary>/build/wt/<worktree> before anything compiles. An
+# existing 9p build/ is renamed to build.9p-old (kept, not deleted). Nothing changes off 9p or in the primary.
+if [ ! -L build ] && [ "$(stat -f -c %T . 2>/dev/null)" = v9fs ] \
+   && { [ ! -e build ] || [ "$(stat -f -c %T build 2>/dev/null)" = v9fs ]; }; then
+  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  primary="$(dirname "${common:-/nonexistent/.git}")"
+  if [ -n "$common" ] && [ "$primary" != "$(pwd -P)" ] && [ -d "$primary/build" ] \
+     && [ "$(stat -f -c %T "$primary/build")" != v9fs ]; then
+    vol="$primary/build/wt/$(basename "$(pwd -P)")"
+    if [ -e build ]; then
+      if [ -e build.9p-old ]; then
+        echo "build.sh: build/ is on the 9p host mount and build.9p-old already exists; move one of them aside" >&2
+        exit 1
+      fi
+      mv build build.9p-old
+    fi
+    mkdir -p "$vol"
+    ln -s "$vol" build
+    # The build/ ignore pattern matches directories only, so git would list the symlink as untracked.
+    ex="$common/info/exclude"
+    grep -qx '/build' "$ex" 2>/dev/null || echo '/build' >> "$ex"
+    grep -qx '/build.9p-old/' "$ex" 2>/dev/null || echo '/build.9p-old/' >> "$ex"
+    echo ">>> build/ -> $vol (ext4 build volume; compile output stays off the 9p host mount)"
+  else
+    echo "build.sh: WARNING: build/ is on the 9p host mount and no ext4 build volume was found at the" >&2
+    echo "  primary checkout's build/. Heavy compile I/O on 9p can kill the mount for every container." >&2
   fi
 fi
 # A build dir outside the tree must still find THIS tree's src/ai/data/heuristic_defaults.env: the engine
