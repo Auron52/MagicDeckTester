@@ -336,6 +336,36 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
         if (p.controller_index == state.active_player_index && p.card.IsLand())
         { has_other_land = true; break; }
     }
+    // MTG_LAND_BOUNCE_GUARD (default ON; =0 -> any other land suffices). "Another land exists" is not
+    // enough: when the land the bounce would RETURN is itself a Karoo, the drop gains nothing -- the
+    // board ends with one bounce land, entered tapped, and the other back in hand -- while a real land
+    // may be waiting. Bruna d0 gi1933 (seed 1091934) replayed Azorius Chancery over its twin every turn
+    // with Remote Farm in hand. The returned land is predicted by the very ranking BounceKarooLand
+    // takes its pick from (BounceLandCandidates' front), which already avoids a Karoo whenever anything
+    // else is there -- so this refuses exactly the Karoo-for-Karoo swap. Lazy: only asked when a bounce
+    // land is the candidate under the scan.
+    int karoo_swap = -1;   // -1 not asked yet, 0 no, 1 the bounce would return a Karoo
+    auto karoo_returns_karoo = [&]() -> bool
+    {
+        if (karoo_swap >= 0) { return karoo_swap == 1; }
+        karoo_swap = 0;
+        static const bool s_on = EnvOn("MTG_LAND_BOUNCE_GUARD", true);
+        if (!heurarm::Flag(heurarm::LAND_BOUNCE_GUARD, s_on)) { return false; }
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index == state.active_player_index && p.card.IsLand()) { legal.push_back(i); }
+        }
+        if (legal.empty()) { return false; }
+        const std::vector<int> ranked = ResolveProvider(state).BounceLandCandidates(
+            state, state.active_player_index, /*self_index=*/-1, legal);
+        if (ranked.empty()) { return false; }
+        const CardDefinition* rd = CardDatabase::Instance().LookupCached(
+            state.battlefield[static_cast<std::size_t>(ranked.front())].card);
+        if (rd != nullptr && rd->params.etb_bounce_land) { karoo_swap = 1; }
+        return karoo_swap == 1;
+    };
 
     // Tutor-top combo hold (TopResolveEnabled -- the USER's reset, 2026-08-21). A spell//land
     // top-consumer (Turntimber Symbiosis) in hand is the combo's consumer half: tutor_to_top
@@ -429,7 +459,7 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             if (!def) { continue; }
             if (hold_top_consumer && front != nullptr
                 && front->params.look_top_put_creature_count > 0) { continue; }   // combo piece, not the drop
-            if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (def->params.etb_bounce_land && (!has_other_land || karoo_returns_karoo())) { continue; }
             if (LandClosingWindowEnabled())
             {
                 const bool closing = def->params.fastland_max_other_lands >= 0

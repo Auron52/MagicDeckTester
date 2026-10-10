@@ -426,3 +426,34 @@ TEST_CASE("F5.1 Bruna lethal short-circuit: on by default, =0 restores the gener
     ArmScope arm({ { heurarm::BRUNA_LETHAL_SHORTCIRCUIT, 0 } });
     CHECK_FALSE(bruna.UseLethalShortCircuit());
 }
+
+// ---- F5.4: no Karoo-for-Karoo land drop (MTG_LAND_BOUNCE_GUARD) ----------------------------------
+namespace
+{
+GameState KarooBoard()
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 5;
+    s.players[0].lands_played_this_turn = 0;
+    Put(s, "Azorius Chancery", 120);
+    s.players[0].hand.push_back(HandCard("Azorius Chancery", 121));
+    s.players[0].hand.push_back(HandCard("Remote Farm", 122));
+    return s;
+}
+}
+
+TEST_CASE("F5.4 bounce guard: a Chancery that would return the other Chancery yields to Remote Farm")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    CHECK(GreedyLandChoiceIndex(KarooBoard()) == 1);
+    {
+        ArmScope arm({ { heurarm::LAND_BOUNCE_GUARD, 0 } });
+        CHECK(GreedyLandChoiceIndex(KarooBoard()) == 0);   // the legacy pick: the multi-colour Karoo
+    }
+    // A non-Karoo land on the battlefield is what the bounce returns, so the Karoo is a real ramp.
+    GameState s = KarooBoard();
+    Put(s, "Plains", 123);
+    CHECK(GreedyLandChoiceIndex(s) == 0);
+}
