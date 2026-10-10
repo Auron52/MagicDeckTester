@@ -8847,6 +8847,31 @@ static int SumYield(const std::vector<AttackingManaSource>& srcs)
     return y;
 }
 
+// The plan's CASTS in the order the apply worlds realise them, as a projection reads it: the
+// non-sacrifice hand casts stable-sorted by CastOrderLess (the comparator ApplyPlanDirect and the
+// executor both sort by) and arranged by the deck's set rule (ApplyDeckCastArrangement), then the
+// sac-land casts, which both worlds cast after them. The apply's range ladder and payable-order walk
+// can still move a cast later than its rank when paying requires it; reading the rank order is what
+// the deck's (USER-owned) order says should happen.
+static void PlanCastOrder(const GameState& state, const std::vector<Action>& cands,
+                          const std::vector<int>& sel, std::vector<int>& out)
+{
+    out.clear();
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { out.push_back(j); }
+    }
+    std::stable_sort(out.begin(), out.end(), [&](int x, int y)
+    { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
+    ApplyDeckCastArrangement(state, cands, out);
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land) { out.push_back(j); }
+    }
+}
+
 static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pending_atk,
                               const std::vector<AttackingManaSource>& srcs,
                               const std::vector<Action>& cands, AttackTapCtx& ctx)
@@ -8938,6 +8963,78 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     // spent on its own ability pays nothing, and its share of `need` falls on the other attackers.
     const int need = need_exact ? cost_mv - (supply_total - e->yield) : cost_mv - legacy_nc_total;
     return (ctx.pending_atk - e->pending) + AttackTapDiscount(e->srcs, need);
+}
+
+// ---- MTG_ATTACK_CANNONS_TRIGGER: Mana Cannons' cast damage in the this-turn projection ----------
+// "Whenever you cast a multicolored spell, this enchantment deals X damage to any target, where X is
+// the number of colors that spell is" -- collapsed to the opponent's face and fired from
+// FireOnCastTriggers (cast_def.card.IsMulticolored() / ColorCount(), every Cannons on our battlefield).
+// It was in NEITHER consider() site, so a Cannons line's lethal never read as one (FiveColour d0: the
+// emulated-slower games 492 / 1022 / 1405 / 1724 are all "Cannons + a five-colour body" turns). The
+// plan's casts are walked in cast order (PlanCastOrder); a Cannons cast earlier in the plan counts for
+// every multicoloured cast after it, and never for itself (it is on the stack, not the battlefield,
+// while being cast). Direct damage, so it counts in either main phase. Inert (live == false) unless
+// a Cannons is on our battlefield or castable AND a multicoloured cast is on offer.
+static bool AttackCannonsTriggerEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_CANNONS_TRIGGER", true);   // DEFAULT ON; =0 not projected
+    return heurarm::Flag(heurarm::ATTACK_CANNONS_TRIGGER, env_on);
+}
+struct CannonsCtx { bool live = false; int on_bf = 0; };
+static CannonsCtx BuildCannonsCtx(const GameState& state, const std::vector<Action>& cands)
+{
+    CannonsCtx c;
+    if (!AttackCannonsTriggerEnabled()) { return c; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.multicolor_cast_damage_per_color) { ++c.on_bf; }
+    }
+    bool cast_cannons = false, multi = false;
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.multicolor_cast_damage_per_color) { cast_cannons = true; }
+        if (d->card.IsMulticolored()) { multi = true; }
+    }
+    c.live = multi && (c.on_bf > 0 || cast_cannons);
+    return c;
+}
+static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
+                                const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (!c.live) { return 0; }
+    // Order matters only when the plan itself casts a Cannons; otherwise every multicoloured cast
+    // meets the same on-battlefield count.
+    bool casts_cannons = false;
+    int  colours       = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.multicolor_cast_damage_per_color) { casts_cannons = true; }
+        if (d->card.IsMulticolored()) { colours += d->card.ColorCount(); }
+    }
+    if (colours == 0) { return 0; }
+    if (!casts_cannons) { return c.on_bf * colours; }
+    std::vector<int> order;
+    PlanCastOrder(state, cands, sel, order);
+    int on = c.on_bf, dmg = 0;
+    for (int j : order)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (on > 0 && d->card.IsMulticolored()) { dmg += on * d->card.ColorCount(); }
+        if (d->params.multicolor_cast_damage_per_color) { ++on; }
+    }
+    return dmg;
 }
 
 // Pre-computed per-permanent on-cast trigger: damage dealt to the caster when they
@@ -34561,6 +34658,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // AttackTapLoss. Lockstep twin in EnumeratePlans.
     AttackTapCtx atk_tap_ctx;
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
+    // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
+    const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
 
     // Hinata combo: does any candidate float ritual mana (Reality Spasm / Irencrag)? Each Action's
     // gross float was stamped at enumeration (a.ritual_float), so this is a cheap scan -- no
@@ -35767,7 +35866,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             for (int j : sel) { casting.push_back(cands[j].def); }
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
-        bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
+        // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER; 0 unless a Cannons is live).
+        const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
+        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg) >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
         // has_extra_lethal gate, so a deck with no such model never calls it and stays
         // byte-identical. This is a separate channel on purpose: a deck-out is a different loss
@@ -46641,6 +46742,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // The attack this subset forfeits to its own taps -- see AttackTapLoss. Lockstep twin in Solve.
     AttackTapCtx atk_tap_ctx;
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
+    // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
+    const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
 
     // Lands in hand: the shared budget for additional discard costs (retrace, LE).
     int lands_in_hand = 0;
@@ -48505,7 +48608,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                                (credited ? eff : pool), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
-        bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
+        // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER) -- twin of Solve's.
+        const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
+        bool wins = (projected_atk + direct_dmg + cannons_dmg) >= state.Opponent().life;
         // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
         // costs one virtual call behind the has_extra_lethal gate; false for every deck without an
         // alternate-win model -> byte-identical. NOTE this site deliberately does NOT add
