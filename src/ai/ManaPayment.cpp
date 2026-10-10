@@ -3428,6 +3428,23 @@ static bool PayableOrderRitualsOn()
 // Does the projection walk CREDIT this cast's output to the casts after it? Exactly CreditCastOutput's
 // three terms, under FirstUnpayablePosImpl's own skip (an alt-cost cast is passed over before any
 // credit). Cheap stamped fields first; the Treasure-mint term (a definition lookup) only for a minter.
+// MTG_PAYABLE_ORDER_EXACT (DEFAULT ON; =0 -> the plain walk unless the provider opts in via
+// ExactOrderWalk()). The apply site judged a PRODUCER-domain order (MTG_PAYABLE_ORDER_RITUALS) with the
+// exact walk only for Dragonstorm; every other deck got FirstUnpayablePosImpl, which (a) ignores a cast
+// cap -- hinata d0 gi1427 (seed 1331428) T6, {Ornithopter, Irencrag Feat, Crackle}: it accepted
+// "Irencrag, Ornithopter, Crackle", where Irencrag's "only one more spell" leaves Crackle uncastable --
+// and (b) pays a generic pip off wild before a colour (PayFromPool), so a land a LATER cast needs is
+// spent first -- gi1680 (seed 1331681) T7: Island + Orchard + floating {U}, "Sol Ring, Gamble" read as
+// unpayable (the Orchard paid Sol Ring's {1}) and was swapped to "Gamble, Sol Ring", tutoring with the
+// Sol Ring still in hand for Gamble's random discard. The exact walk is the plain walk plus those terms
+// (cast cap, line-aware generic, positional reducers / escalation / impulse float, creature-only land
+// colour) over the same pool and the same per-cast output credit, so the domain and site are unchanged.
+static bool PayableOrderExactOn()
+{
+    static const bool env_on = EnvOn("MTG_PAYABLE_ORDER_EXACT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::PAYABLE_ORDER_EXACT, env_on);
+}
+
 static bool PoCreditedProducer(const GameState& state, const std::vector<Action>& acts, const Action& a)
 {
     if (a.alt_cost) { return false; }
@@ -3507,8 +3524,9 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     // credit a same-turn Medallion's discount, Rite's escalation or Apex's ten, so it would read an
     // arranged order that pays as unpayable and permute it away. Apply site, producer domain only
     // (pool0 is AvailableManaPool there, exactly the walk's own start).
+    // MTG_PAYABLE_ORDER_EXACT extends it to every deck (see PayableOrderExactOn).
     const bool exact = site == 0 && producer_only && extra_wild == 0
-                    && ResolveProvider(state).ExactOrderWalk();
+                    && (PayableOrderExactOn() || ResolveProvider(state).ExactOrderWalk());
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
         if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
