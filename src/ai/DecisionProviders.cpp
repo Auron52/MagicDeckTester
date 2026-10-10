@@ -11655,11 +11655,17 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 //               Siege/Muxus extension). Mountain > Cavern of Souls > Three Tree City. A colourless-only
 //               land with no other red source and < 3 Goblins in play (Three Tree City) is DEAD.
 //               Cavern pays creature spells only, so it is no red source for Bolt or a channel.
+//               COLOUR BEATS THE LAND COUNT (USER 2026-10-10): the only red source for a kept Bolt /
+//               Twinshot channel is kept past the quota, right behind that spell.
 //   ENGINES     1, net of board: Goblin Lackey > Goblin Warchief > Skirk Prospector. AETHER VIAL
 //               (USER): "surplus after turn 1" -- an engine candidate (last) only at the end of turn 1,
-//               otherwise shed with the surplus mana; a 2nd Vial always. A surplus Lackey / Warchief /
-//               Skirk falls into the creature pool.
-//   MULTIPLIERS capped by crowd 0 / 1 / 2 at crowd 0 / 1-2 / 3+, net of board. Chieftain >
+//               otherwise shed with the surplus mana; a 2nd Vial always. A surplus Warchief / Skirk
+//               falls into the creature pool. GOBLIN LACKEY (USER 2026-10-10): "a hand lackey is only
+//               really surplus in the later game where you have nothing expensive in hand" -- every hand
+//               Lackey is kept at the engine position whatever is in play, unless late with nothing
+//               expensive (then it is a creature-pool body).
+//   MULTIPLIERS capped by crowd 0 / 1 / 2 at crowd 0 / 1-2 / 3+ -- NOT netted against lords in play
+//               (USER 2026-10-10: "Creature quotas are less worried about the board"). Chieftain >
 //               Hordemaster = Piledriver > King. PILEDRIVER (USER): "it should be held to a similar
 //               level as our 2-mana lord ... a Piledriver should be played earlier than a lord" --
 //               Piledriver first through turn 2, Hordemaster from turn 3 (USER confirmed). Haste does
@@ -11670,9 +11676,10 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 //               in hand the lone Muxus is SURPLUS -- no ladder slot -- and the FIRST creature shed
 //               (USER confirmed).
 //   CREATURES   Muxus > Siege-Gang > Krenko (crowd-gated) > Pashalik > Mogg War Marshal > Matron >
-//               Twinshot > Chainwhirler > Bolt > Stingscourger, discounted by distance: EV = P(play) x
-//               value, MinotaurProvider's adopted model (hard decay, value = 6 x 0.85^position in the
-//               full order, a duplicate pays cumulative mana), with the erasers -- a resolved Warchief
+//               Twinshot > Chainwhirler > Bolt > Stingscourger, discounted by distance: EV = castability
+//               x value (value = 6 x 0.85^position in the full order, a duplicate pays cumulative mana),
+//               castability from the shared discard_dist model (MTG_DISCARD_DIST_MODEL, default ON; =0
+//               MinotaurProvider's table by sources short), with the erasers -- a resolved Warchief
 //               (generic only), one Lackey put per Lackey per combat, a Vial at mv == charge, Skirk's
 //               fodder as red mana, Twinshot's {1}{R} channel.
 //
@@ -11689,10 +11696,17 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 //     land1 heads the ladder), NOT a land kept beyond the board's 3 -- that would undo "3 flat".
 //   * Sources are LANDS. A Vial or Skirk Prospector fills no land slot (Skirk's fodder is reach in
 //     the distance term only); an empty engine slot is NOT handed to a 4th land.
-//   * Only a Lackey / Warchief / Skirk IN PLAY fills the engine slot -- a Vial in play does not, or a
-//     ticking Vial would push the deck's best card (Lackey) into the creature pool.
+//   * Only a Lackey / Warchief / Skirk IN PLAY fills the engine slot (a Vial in play does not); it
+//     makes a hand Warchief / Skirk surplus, never a hand Lackey (USER 2026-10-10).
+//   * Hand Lackey surplus (USER 2026-10-10, readings of "later game" / "expensive"): late = turn >= 5;
+//     expensive = a hand Goblin creature (staged included, Lackeys excluded) costing more, after the
+//     resolved Warchiefs, than NEXT turn's mana (lands in play + one drop if a live land is in hand +
+//     Skirk's fodder). Two hand Lackeys are both kept: the ruling names no count.
 //   * Surplus engines rank just above Stingscourger (Lackey > Warchief > Skirk), so the USER's
 //     "then Stingscourger" stays the first non-Muxus creature shed.
+//   * Distance model: a put next turn (a Lackey in play, a Vial at charge) is castability 1; a hand
+//     Lackey's put makes the card certain from our 2nd turn on; Twinshot takes the better of its cast
+//     and its channel, turn by turn.
 //   * crowd = Goblin creatures in play (tokens included) + min(3, Goblin creatures in hand that are
 //     not multipliers): counting the capped lords themselves would make "crowd 0" unreachable while
 //     a lord is in hand.
@@ -11769,7 +11783,7 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
 
     // ---- 1. board census (own permanents) -----------------------------------------------------
     int board_lands = 0, board_red_any = 0, board_red_cavern = 0, board_goblins = 0, board_fodder = 0;
-    int board_lackeys = 0, board_mults = 0, board_vials = 0;
+    int board_lackeys = 0, board_vials = 0;
     bool board_engine = false, board_haste = false, skirk_on = false;
     struct Reducer { const std::string* tribe; int amount; };
     std::array<Reducer, 8> reducers{};
@@ -11806,7 +11820,6 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
             { reducers[static_cast<std::size_t>(n_reducers++)] = { &p.reduces_spell_subtype, p.reduces_spell_subtype_amount }; }
         }
         if (IsSacManaOutlet(p)) { board_engine = true; skirk_on = true; }
-        if (is_mult(d)) { ++board_mults; }
         if (p.grants_haste && !p.subtypes_affected.empty()) { board_haste = true; }
         if (p.upkeep_adds_charge)
         {
@@ -11898,13 +11911,51 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
     }
 
     // ---- 4. the engine slot (net of board), lands, crowd ---------------------------------------
+    const int skirk_ramp = skirk_on ? board_fodder : 0;   // "Sacrifice a Goblin: Add {R}"
+    // A card's cost after the resolved Warchief(s): generic only, floored at 0.
+    auto eff_cost = [&](const CardDefinition* d) -> int
+    {
+        const ManaCost& mc = d->card.m_mana_cost;
+        int generic = mc.generic;
+        for (int k = 0; k < n_reducers; ++k)
+        {
+            const Reducer& r = reducers[static_cast<std::size_t>(k)];
+            if (CardHasSubtype(d->card, *r.tribe)) { generic -= r.amount; }
+        }
+        return mc.ManaValue() - mc.generic + std::max(0, generic);
+    };
+    // GOBLIN LACKEY (USER 2026-10-10): "For Goblins a hand lackey is only really surplus in the later
+    // game where you have nothing expensive in hand." So a hand Lackey is kept at the engine position
+    // whatever is in play (a Skirk, a Warchief, another Lackey) or already kept -- and is SURPLUS (a
+    // creature-pool body) only when it is LATE and NOTHING in hand is EXPENSIVE. Agent readings:
+    // late = turn >= 5; expensive = a Goblin creature in hand (staged included, Lackeys excluded)
+    // whose cost after the resolved Warchiefs exceeds NEXT turn's mana (lands in play + a land drop
+    // if a live land is in hand + Skirk's fodder), i.e. one a Lackey put actually saves mana on.
+    constexpr int kLateTurn = 5;
+    const int mana_next_turn = board_lands + (lands.empty() ? 0 : 1) + skirk_ramp;
+    bool expensive_in_hand = false;
+    for (const Card& hc : ap.hand)
+    {
+        const CardDefinition* d = def_of(hc);
+        if (d == nullptr || !is_goblin_creature(d->card) || is_lackey(d->params)) { continue; }
+        if (eff_cost(d) > mana_next_turn) { expensive_in_hand = true; break; }
+    }
+    const bool lackey_surplus = s.turn_number >= kLateTurn && !expensive_in_hand;
     std::stable_sort(engines.begin(), engines.end(), [&](int a, int b)
     { return engine_rank(defs[static_cast<std::size_t>(a)]) < engine_rank(defs[static_cast<std::size_t>(b)]); });
-    int engine_keep = -1;
+    std::vector<int> engine_keep;   // the engine position: the one slot, plus every kept hand Lackey
+    bool slot_filled = board_engine;
     for (int e : engines)
     {
-        if (engine_keep < 0 && !board_engine) { engine_keep = e; continue; }
-        if (engine_rank(defs[static_cast<std::size_t>(e)]) == 3) { vials.push_back(e); }   // the turn-1 Vial
+        const int r = engine_rank(defs[static_cast<std::size_t>(e)]);
+        if (r == 0)   // Goblin Lackey: kept unless late with nothing expensive to put
+        {
+            if (lackey_surplus) { surplus_engine[static_cast<std::size_t>(e)] = 1; pool.push_back(e); }
+            else                { engine_keep.push_back(e); slot_filled = true; }
+            continue;
+        }
+        if (!slot_filled) { engine_keep.push_back(e); slot_filled = true; continue; }
+        if (r == 3) { vials.push_back(e); }   // the turn-1 Vial
         else { surplus_engine[static_cast<std::size_t>(e)] = 1; pool.push_back(e); }
     }
     std::sort(vials.begin(), vials.end());
@@ -11923,14 +11974,39 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
         const int sc = land_score(lands[static_cast<std::size_t>(k)]);
         if (sc == 2) { ++red_any; } else if (sc == 1) { ++red_cavern; }
     }
-    const int skirk_ramp = skirk_on ? board_fodder : 0;   // "Sacrifice a Goblin: Add {R}"
-    const int reach      = board_lands + kept_lands + skirk_ramp;
+    // COLOUR BEATS THE LAND COUNT (USER 2026-10-10, cross-deck: "Colour beats the land count is
+    // correct."): a land that gives a KEPT spell a colour nothing in play or already kept provides is
+    // kept even past "3 flat". Here that is red for a NON-creature spell -- Lightning Bolt, or Twinshot
+    // Sniper's channel -- because Cavern of Souls' colour pays creature spells only and Three Tree City
+    // is colourless. Every pool card is kept (the creature pool is uncapped), so a Bolt / Twinshot there
+    // asks for one; the best red land past the quota is kept and joins the ladder right behind the
+    // first spell that needs it (the Creature Giving / Melira Pod / EldraziFlicker shape), so it gives
+    // way just before that spell does. Skirk's fodder in play is red mana, so it answers too (agent
+    // reading).
+    auto needs_nc_red = [&](int i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { return false; }
+        if (!d->card.IsCreature() && d->card.m_mana_cost.red > 0) { return true; }
+        return d->params.channel_cost.has_value() && d->params.channel_cost->red > 0;
+    };
+    int colour_land = -1;
+    if (red_any == 0 && skirk_ramp == 0
+        && std::any_of(pool.begin(), pool.end(), [&](int i) { return needs_nc_red(i); }))
+    {
+        for (std::size_t k = static_cast<std::size_t>(kept_lands); k < lands.size(); ++k)
+        { if (land_score(lands[k]) == 2) { colour_land = lands[k]; ++red_any; break; } }
+    }
+    const int reach      = board_lands + kept_lands + (colour_land >= 0 ? 1 : 0) + skirk_ramp;
     red_any += skirk_ramp;
     const int red_creature = red_any + red_cavern;         // Cavern's colour pays creature spells only
 
+    // The cap is NOT netted against lords already in play (USER 2026-10-10: "Creature quotas are less
+    // worried about the board than land quotas. This is because you can always add more creatures and
+    // sometimes this speeds up the clock."); the crowd itself still counts the Goblins in play.
     const int crowd    = board_goblins + std::min(3, hand_bodies);
     const int mult_cap = crowd == 0 ? 0 : (crowd <= 2 ? 1 : 2);
-    const int mult_keep = std::min(std::max(0, mult_cap - board_mults), static_cast<int>(mults.size()));
+    const int mult_keep = std::min(mult_cap, static_cast<int>(mults.size()));
 
     // ---- 5. multiplier keep order ---------------------------------------------------------------
     const bool early = s.turn_number <= 2;   // Piledriver over the 2-mana lord through turn 2
@@ -11975,47 +12051,19 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
              > CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
     });
 
-    std::vector<int> dist(un, 0);
-    for (int i : pool)
-    {
-        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
-        if (d == nullptr) { continue; }
-        const ManaCost& mc = d->card.m_mana_cost;
-        int generic = mc.generic;
-        for (int k = 0; k < n_reducers; ++k)   // a resolved Warchief: generic only, floored at 0
-        {
-            const Reducer& r = reducers[static_cast<std::size_t>(k)];
-            if (CardHasSubtype(d->card, *r.tribe)) { generic -= r.amount; }
-        }
-        generic = std::max(0, generic);
-        int copies = 0;   // a duplicate pays cumulative mana (copies held earlier in hand)
-        for (int j = 0; j < i; ++j)
-        {
-            const Card& hj = ap.hand[static_cast<std::size_t>(j)];
-            if (!hj.m_is_staged && hj.m_name == ap.hand[static_cast<std::size_t>(i)].m_name) { ++copies; }
-        }
-        const int need = (mc.ManaValue() - mc.generic + generic) * (1 + copies);
-        const int red_have = d->card.IsCreature() ? red_creature : red_any;
-        int dd = std::max({ 0, need - reach, mc.red - red_have });
-        if (d->params.channel_cost.has_value())   // Twinshot: {1}{R} from hand, not a creature spell
-        {
-            const ManaCost& cc = *d->params.channel_cost;
-            dd = std::min(dd, std::max({ 0, cc.ManaValue() - reach, cc.red - red_any }));
-        }
-        dist[static_cast<std::size_t>(i)] = dd;
-    }
-    // Erasers, each spent on the highest-value card it can deploy. A Lackey puts a Goblin permanent
-    // card: one in play puts next combat, one in hand a turn later.
+    // Erasers, each spent on the highest-value card it can deploy: 1 = deployed next turn (a Lackey in
+    // play puts it next combat; a Vial at mv == charge), 2 = a turn later (a Lackey in hand: cast it,
+    // then it connects).
+    std::vector<char> erase(un, 0);
     {
         int now = board_lackeys, later = red_creature > 0 ? hand_lackeys : 0;
-        std::vector<char> zeroed(un, 0);
         for (int i : byval)
         {
             if (now <= 0 && later <= 0) { break; }
             const CardDefinition* d = defs[static_cast<std::size_t>(i)];
             if (d == nullptr || !is_goblin_creature(d->card)) { continue; }
-            if (now > 0) { dist[static_cast<std::size_t>(i)] = 0; zeroed[static_cast<std::size_t>(i)] = 1; --now; }
-            else { dist[static_cast<std::size_t>(i)] = std::min(dist[static_cast<std::size_t>(i)], 1); --later; }
+            if (now > 0) { erase[static_cast<std::size_t>(i)] = 1; --now; }
+            else         { erase[static_cast<std::size_t>(i)] = 2; --later; }
         }
         for (int k = 0; k < n_vial_charge; ++k)   // a Vial puts a creature with mv == its charge
         {
@@ -12024,23 +12072,116 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
             for (int i : byval)
             {
                 const CardDefinition* d = defs[static_cast<std::size_t>(i)];
-                if (d == nullptr || !d->card.IsCreature() || zeroed[static_cast<std::size_t>(i)]) { continue; }
+                if (d == nullptr || !d->card.IsCreature() || erase[static_cast<std::size_t>(i)] == 1) { continue; }
                 if (CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(i)]) != c) { continue; }
-                dist[static_cast<std::size_t>(i)] = 0; zeroed[static_cast<std::size_t>(i)] = 1;
+                erase[static_cast<std::size_t>(i)] = 1;
                 break;
             }
+        }
+    }
+    // A duplicate pays cumulative mana (copies held earlier in hand).
+    auto need_of = [&](int i)
+    {
+        int copies = 0;
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& hj = ap.hand[static_cast<std::size_t>(j)];
+            if (!hj.m_is_staged && hj.m_name == ap.hand[static_cast<std::size_t>(i)].m_name) { ++copies; }
+        }
+        return eff_cost(defs[static_cast<std::size_t>(i)]) * (1 + copies);
+    };
+    // DISTANCE -> castability factor. MTG_DISCARD_DIST_MODEL (default ON): the shared model
+    // (docs/design/discard-distance-model.md; USER 2026-10-10: "it makes sense to have a smarter model
+    // if we can") -- P(castable by each of our next turns) from the lands in play, the KEPT hand lands
+    // played one a turn, and the library's land / red-source counts, discounted per turn. Skirk's
+    // fodder is red mana in play; Cavern's colour pays creature spells only, so Bolt and Twinshot's
+    // channel read a census without it. =0: MinotaurProvider's table by sources short, exactly as before.
+    static const bool s_dist_env = EnvOn("MTG_DISCARD_DIST_MODEL", true);   // DEFAULT ON; =0 -> the table
+    const bool dist_model = heurarm::Flag(heurarm::DISCARD_DIST_MODEL, s_dist_env);
+    std::vector<double> factor(un, 1.0);
+    if (!dist_model)
+    {
+        static const double kP[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };   // MinotaurProvider's hard decay
+        for (int i : pool)
+        {
+            const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+            if (d == nullptr) { continue; }
+            const ManaCost& mc = d->card.m_mana_cost;
+            const int red_have = d->card.IsCreature() ? red_creature : red_any;
+            int dd = std::max({ 0, need_of(i) - reach, mc.red - red_have });
+            if (d->params.channel_cost.has_value())   // Twinshot: {1}{R} from hand, not a creature spell
+            {
+                const ManaCost& cc = *d->params.channel_cost;
+                dd = std::min(dd, std::max({ 0, cc.ManaValue() - reach, cc.red - red_any }));
+            }
+            const char e = erase[static_cast<std::size_t>(i)];
+            if (e == 1) { dd = 0; } else if (e == 2) { dd = std::min(dd, 1); }
+            factor[static_cast<std::size_t>(i)] = dd < 5 ? kP[dd] : 0.02;
+        }
+    }
+    else
+    {
+        constexpr int kRed = static_cast<int>(Color::Red);
+        discard_dist::Census cen = discard_dist::BuildCensus(s, me);
+        cen.board_mana += skirk_ramp;
+        cen.board_src[static_cast<std::size_t>(kRed)] += skirk_ramp;
+        std::vector<discard_dist::LandDrop> kept_cr, kept_nc;   // creature spell / non-creature spell
+        for (int k = 0; k < kept_lands + (colour_land >= 0 ? 1 : 0); ++k)
+        {
+            const int li_k = k < kept_lands ? lands[static_cast<std::size_t>(k)] : colour_land;
+            const CardDefinition* ld = defs[static_cast<std::size_t>(li_k)];
+            discard_dist::LandDrop drop = discard_dist::LandDropOf(ld);
+            kept_cr.push_back(drop);
+            if (ld != nullptr && ld->params.colored_creature_only) { drop.colours = 0; }
+            kept_nc.push_back(drop);
+        }
+        bool nc_built = false;
+        discard_dist::Census cen_nc;
+        auto census_nc = [&]() -> const discard_dist::Census&
+        {
+            if (nc_built) { return cen_nc; }
+            cen_nc = cen;
+            cen_nc.board_src[static_cast<std::size_t>(kRed)] -= board_red_cavern;
+            for (const Card& lc : ap.library)
+            {
+                if (!CleanupDiscardIsLand(lc)) { continue; }
+                const CardDefinition* ld = def_of(lc);
+                if (ld != nullptr && ld->params.colored_creature_only && makes_red(ld))
+                { --cen_nc.lib_src[static_cast<std::size_t>(kRed)]; }
+            }
+            nc_built = true;
+            return cen_nc;
+        };
+        auto pips_of = [](const ManaCost& mc)
+        { return std::array<int, 5>{ mc.white, mc.blue, mc.black, mc.red, mc.green }; };
+        for (int i : pool)
+        {
+            const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+            const char e = erase[static_cast<std::size_t>(i)];
+            if (d == nullptr || e == 1) { continue; }   // factor 1: castable (or put) next turn
+            const bool creature = d->card.IsCreature();
+            std::array<double, discard_dist::kHorizon> p = discard_dist::CastProbByTurn(
+                creature ? cen : census_nc(), need_of(i), pips_of(d->card.m_mana_cost),
+                creature ? kept_cr : kept_nc);
+            if (d->params.channel_cost.has_value())   // Twinshot: either route
+            {
+                const ManaCost& cc = *d->params.channel_cost;
+                const std::array<double, discard_dist::kHorizon> pc = discard_dist::CastProbByTurn(
+                    census_nc(), cc.ManaValue(), pips_of(cc), kept_nc);
+                for (std::size_t t = 0; t < p.size(); ++t) { p[t] = std::max(p[t], pc[t]); }
+            }
+            if (e == 2) { for (std::size_t t = 1; t < p.size(); ++t) { p[t] = 1.0; } }   // put on turn 2
+            factor[static_cast<std::size_t>(i)] = discard_dist::CastFactor(p);
         }
     }
     std::vector<double> ev(un, 0.0);
     std::vector<int>    value_pos(un, 0);
     {
-        static const double kP[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };   // MinotaurProvider's hard decay
         double v = 6.0;
         for (std::size_t k = 0; k < byval.size(); ++k)
         {
             const std::size_t i = static_cast<std::size_t>(byval[k]);
-            const int dd = dist[i];
-            ev[i] = (dd < 5 ? kP[dd] : 0.02) * v;
+            ev[i] = factor[i] * v;
             value_pos[i] = static_cast<int>(k);
             v *= 0.85;
         }
@@ -12065,18 +12206,24 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
         {
             case S_L: if (land_left > 0) { taken.push_back(lands[li++]); --land_left; } break;
             case S_C: if (ci < pool.size()) { taken.push_back(pool[ci++]); } break;
-            case S_E: if (engine_keep >= 0) { taken.push_back(engine_keep); } break;
+            case S_E: for (int e : engine_keep) { taken.push_back(e); } break;
             case S_M: if (mult_left > 0) { taken.push_back(mults[mi++]); --mult_left; } break;
         }
     }
     while (ci < pool.size()) { taken.push_back(pool[ci++]); }   // creature4..
+    if (colour_land >= 0)   // right behind the first (most protected) spell that needs its red
+    {
+        auto it = std::find_if(taken.begin(), taken.end(), [&](int i) { return needs_nc_red(i); });
+        taken.insert(it == taken.end() ? it : it + 1, colour_land);
+    }
 
     // ---- 8. the shed order --------------------------------------------------------------------------
     std::vector<int> shed;
     shed.reserve(un);
     for (int i : dead_lands) { shed.push_back(i); }
     for (int i : dupes)      { shed.push_back(i); }
-    for (std::size_t k = lands.size(); k > li; --k) { shed.push_back(lands[k - 1]); }   // colourless first
+    for (std::size_t k = lands.size(); k > li; --k)                                     // colourless first
+    { if (lands[k - 1] != colour_land) { shed.push_back(lands[k - 1]); } }
     for (int i : vials)      { shed.push_back(i); }
     for (std::size_t k = mults.size(); k > mi; --k) { shed.push_back(mults[k - 1]); }   // King first
     if (no_route_muxus >= 0) { shed.push_back(no_route_muxus); }                        // first creature
@@ -13027,6 +13174,12 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // Muxus (analysis-goblins.md, the searched-slower audit). Curve (user 2026-08-02): t=1 (NEXT turn)
     // is ACCEPTABLE -- "you don't always have mana for any of them this turn" -- so t1 is only a mild
     // 0.85; the steep 0.45/step decay begins at t>=2 (genuinely stuck): 1.0 / 0.85 / 0.38 / 0.17.
+    // MTG_GOBLIN_TUTOR_VIAL_EXACT (default ON; =0 restores the old estimate). Aether Vial puts a creature
+    // whose mana value EQUALS its charge, and the charge never falls (one more per upkeep): a card at or
+    // above the charge is a Vial put in mv - charge upkeeps, one BELOW it has no Vial route at all. The
+    // old read credited every card at or below the charge (`max(0, mv - charge)`, `charge >= mv`).
+    static const bool s_vial_exact = EnvOn("MTG_GOBLIN_TUTOR_VIAL_EXACT", true);
+    const bool vial_exact = heurarm::Flag(heurarm::GOBLIN_TUTOR_VIAL_EXACT, s_vial_exact);
     auto turns_to_deploy = [&](const Card& c, bool arriving = false) -> int
     {
         const int mv = c.m_mana_cost.ManaValue();
@@ -13060,7 +13213,11 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         }
         if (lackey_now)               { t = 0; }   // free-drop any Goblin this turn (ignores mana)
         else if (lackey_persist)      { t = std::min(t, 1); }
-        if (vial_charge >= 0)         { t = std::min(t, std::max(0, mv - vial_charge)); } // Vial: +1 charge/turn
+        if (vial_charge >= 0)                                    // Vial: +1 charge/turn
+        {
+            if (!vial_exact)              { t = std::min(t, std::max(0, mv - vial_charge)); }
+            else if (mv >= vial_charge)   { t = std::min(t, mv - vial_charge); }
+        }
         return std::max(0, t);
     };
     // Opportunity cost: if the hand ALREADY holds a deployable-this-turn threat, another card we can't
@@ -13157,7 +13314,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                                       p.etb_damage_each_opponent * gamesetup::OpponentHeads());
         if (etb_face > 0)
         {
-            const bool enters = lackey_now || mv <= untapped_mana || (vial_charge >= 0 && vial_charge >= mv);
+            const bool vial_put = vial_charge >= 0 && (vial_exact ? vial_charge == mv : vial_charge >= mv);
+            const bool enters = lackey_now || mv <= untapped_mana || vial_put;
             if (enters) { burst = std::max(burst, etb_face); }
         }
         // Siege-Gang: cast it, then sac the tokens it makes for sac_outlet_damage each ({1}{R}/activation).
