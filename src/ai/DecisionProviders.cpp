@@ -35185,10 +35185,11 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     for (int k = reg_lands; k < keep_lands; ++k) { take(lands[at(k)]); }   // W lands kept past the 3
     if (!lg_sole) { take(kept_lg); }
     for (std::size_t k = 2; k < elf_keep; ++k) { take_elf(k); }
-    // MTG_SELESNYA_ELF_WINDOW (default OFF, a proposed amendment for the USER): every other Elf
-    // castable within the two-turn window (mana value <= M2 with the kept Elves) is kept ABOVE the soft
-    // payoff(s), in the USER's Elf order, instead of shed as surplus past the mana target.
-    static const bool s_elf_window = EnvOn("MTG_SELESNYA_ELF_WINDOW");
+    // MTG_SELESNYA_ELF_WINDOW (ADOPTED default ON, USER 2026-10-10; =0 -> the rule as first built):
+    // every other Elf castable within the two-turn window (mana value <= M2 with the kept Elves) is
+    // kept ABOVE the soft payoff(s), in the USER's Elf order, instead of shed as surplus past the mana
+    // target (it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9).
+    static const bool s_elf_window = EnvOn("MTG_SELESNYA_ELF_WINDOW", true);
     if (heurarm::Flag(heurarm::SELESNYA_ELF_WINDOW, s_elf_window))
     {
         const int m2 = project_m2(elf_keep);
@@ -37510,11 +37511,12 @@ std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
     const bool want_c_outlet = c_sources >= 2;   // "Displacer if 2+ colourless sources, else Emiel"
     auto outlet_key_base = [&](const CardDefinition* d) -> int   // lower = more suitable
     { return ((d->params.blink_cost->colorless > 0) == want_c_outlet) ? 0 : 1; };
-    // MTG_EDF_OUTLET_PIPS (default OFF, a proposed amendment for the USER): an outlet still to be CAST
+    // MTG_EDF_OUTLET_PIPS (ADOPTED default ON, USER 2026-10-10; =0 -> the rule as first built): an
+    // outlet still to be CAST
     // (hand / library) pays 2 per {W} pip our white sources -- board, the kept lands, a land win con --
     // cannot cover, so an outlet closer to castable outranks the {C}-count preference (with no white
     // at all, Displacer is one source short and Emiel two). A resolved outlet keeps the base key.
-    static const bool s_outlet_pips = EnvOn("MTG_EDF_OUTLET_PIPS");
+    static const bool s_outlet_pips = EnvOn("MTG_EDF_OUTLET_PIPS", true);
     const bool outlet_pips = heurarm::Flag(heurarm::EDF_OUTLET_PIPS, s_outlet_pips);
     int w_sources = board_w;
     if (outlet_pips)

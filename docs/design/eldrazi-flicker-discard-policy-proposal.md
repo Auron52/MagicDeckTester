@@ -146,6 +146,22 @@ Deck-specific (verbatim):
   if it is a land."* -- a SPARE draw land sheds as a land (reading R8 confirmed), but the ONLY
   win con / draw source is kept in the win-con slot even when it is a land.
 
+#### Amendment ADOPTED (USER 2026-10-10): the flicker source closer to castable (MTG_EDF_OUTLET_PIPS)
+
+Root-caused from the pooled A/B (`logs/discard_impl/ab1`, gi 1424, turn 8 -> 9): with one {C} source
+(Mariposa) and NO white source, "Displacer if 2+ colourless, else Emiel" kept Emiel ({2}{W}{W}) and shed
+both Displacers; only one white source ever arrived, and a Yavimaya Coast two turns later would have
+flipped the rule back. The amendment: a flicker source still to be CAST (hand / library) pays 2 per
+{W} pip our white sources -- board lands and their land Auras, the kept hand lands, a land win con --
+cannot cover; a resolved outlet keeps the base key. So with no white Displacer (one short) outranks
+Emiel (two short); with two white sources Emiel is castable and the rule stands. Measured
+(`logs/discard_impl/ab2`, 6,600 paired fresh games): d0 4 faster / 1 slower (net -3 turns), d3 and
+shipped settings unchanged. The one slower game is a trade-off, not a defect: the deck drew Adarkar
+Wastes on turn 7, which gave Emiel her {W}{W} a turn before the Displacer line went off. USER: *"The
+others seems reasonable."* (EDF and Selesnya). Default ON; `=0` restores the rule as first built. Test E4b.
+Agent reading: kept hand land Auras do not count as white sources (which Auras are kept depends on the
+outlet's mana target, so counting them would be circular).
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)

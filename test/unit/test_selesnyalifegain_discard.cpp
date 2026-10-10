@@ -85,6 +85,15 @@ std::vector<int> SelArmDist(const GameState& s, int arm, int dist)
     return v;
 }
 std::vector<int> SelArm(const GameState& s, int arm) { return SelArmDist(s, arm, -1); }
+// The rule as first built (MTG_SELESNYA_ELF_WINDOW=0, adopted ON 2026-10-10): the S / M cases were
+// derived for it; each changed case pins it here and states the window order beside it.
+std::vector<int> SelNoWindow(const GameState& s, int dist)
+{
+    heurarm::t_arm[heurarm::SELESNYA_ELF_WINDOW] = 0;
+    std::vector<int> v = SelArmDist(s, 1, dist);
+    heurarm::t_arm[heurarm::SELESNYA_ELF_WINDOW] = -1;
+    return v;
+}
 std::vector<int> Sel(const GameState& s)  { return SelArmDist(s, 1, 0); }   // the =0 distance arm
 std::vector<int> SelM(const GameState& s) { return SelArmDist(s, 1, 1); }   // the shared model
 std::vector<int> Gen(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
@@ -217,8 +226,11 @@ TEST_CASE("Selesnya discard S5: castability first, Wave with 8+ mana is a real p
         { "Genesis Wave", "Forest", "Elvish Archdruid", "Elvish Mystic", "Blossoming Bogbeast",
           "Verdant Sun's Avatar", "Craterhoof Behemoth", "Ageless Entity" },
         { "Forest", "Forest", "Forest", "Priest of Titania", "Llanowar Elves" });
+    CHECK(SelNoWindow(s, 0) == std::vector<int>{ 1, 5, 0, 3, 6, 7, 4, 2 });
+    // Elf window (default): the surplus Mystic (1 <= M2) is kept above the soft Craterhoof -- ladder
+    // Archdruid, Bogbeast, Ageless, Mystic, Craterhoof -- so Craterhoof sheds before it.
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 1, 5, 0, 3, 6, 7, 4, 2 });
+    CHECK(o == std::vector<int>{ 1, 5, 0, 6, 3, 7, 4, 2 });
     CHECK(Gen(s).front() == 6);   // generic sheds Craterhoof
 }
 
@@ -233,8 +245,12 @@ TEST_CASE("Selesnya discard S6: a reachable, enabled Paragon is promoted to a ha
         { "Nykthos Paragon", "Ageless Entity", "Blossoming Bogbeast", "Llanowar Elves",
           "Priest of Titania", "Elvish Mystic", "Branchloft Pathway", "Feed the Clan" },
         { "Forest", "Brushland", "Forest", "Forest" });
+    CHECK(SelNoWindow(s, 0) == std::vector<int>{ 5, 3, 1, 7, 6, 0, 2, 4 });
+    // Elf window (default): the surplus Llanowar and Mystic are kept above the soft Ageless, in the
+    // USER's Elf order -- ladder ..., Feed, Llanowar, Mystic, Ageless -- so Ageless sheds first, then
+    // Mystic, Llanowar.
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 5, 3, 1, 7, 6, 0, 2, 4 });
+    CHECK(o == std::vector<int>{ 1, 5, 3, 7, 6, 0, 2, 4 });
     CHECK(Gen(s).front() == 0);   // generic sheds the Paragon
 }
 
@@ -314,8 +330,12 @@ TEST_CASE("Selesnya discard S11: poor mana keeps the cheapest effective payoffs"
         { "Ageless Entity", "Craterhoof Behemoth", "Feed the Clan", "Elvish Archdruid",
           "Accomplished Alchemist", "Accomplished Alchemist", "Nykthos Paragon", "Blossoming Bogbeast" },
         { "Forest", "Forest", "Forest" });
+    CHECK(SelNoWindow(s, 0) == std::vector<int>{ 1, 4, 5, 6, 2, 0, 7, 3 });
+    // Elf window (default): the Alchemists (4) are not castable next turn (M1 3) but are within the
+    // window (M2 4), so they are kept above the soft Paragon -- ladder ..., Feed, Alchemist, Alchemist,
+    // Paragon -- and the Paragon sheds right after the surplus Craterhoof.
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 1, 4, 5, 6, 2, 0, 7, 3 });
+    CHECK(o == std::vector<int>{ 1, 6, 5, 4, 2, 0, 7, 3 });
     CHECK(Gen(s).front() == 1);
 }
 
@@ -364,8 +384,11 @@ TEST_CASE("Selesnya discard S13: a held Bogbeast is a lifegain payoff for Feed t
         { "Feed the Clan", "Blossoming Bogbeast", "Verdant Sun's Avatar", "Craterhoof Behemoth",
           "Elvish Archdruid", "Llanowar Elves", "Elvish Mystic", "Genesis Wave" },
         { "Forest", "Forest", "Forest", "Priest of Titania" });
+    CHECK(SelNoWindow(s, 0) == std::vector<int>{ 2, 6, 7, 0, 3, 5, 1, 4 });
+    // Elf window (default): the surplus Mystic is kept above the soft Wave -- ladder ..., Feed, Mystic,
+    // Wave -- so the Wave sheds right after the surplus Avatar, then Mystic.
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 2, 6, 7, 0, 3, 5, 1, 4 });
+    CHECK(o == std::vector<int>{ 2, 7, 6, 0, 3, 5, 1, 4 });
     CHECK(Gen(s).front() == 3);   // generic sheds Craterhoof
 }
 
@@ -378,7 +401,7 @@ TEST_CASE("Selesnya discard S13: a held Bogbeast is a lifegain payoff for Feed t
 // 0.92 = 0.69 > Ageless 0.75 x 0.84 = 0.63 > Avatar 0.75 x 0.80 = 0.60. Target 8 -> all three Elves.
 // Ladder: Priest, Craterhoof, Llanowar, Ageless, Feed, Mystic, Avatar.
 // (Netting the two payoffs in play left ONE soft slot: [7, 1, 5, 3, 0, 4, 2, 6].)
-// MTG_SELESNYA_ELF_WINDOW (default OFF, a proposed amendment): the regression game that lost a turn
+// MTG_SELESNYA_ELF_WINDOW (ADOPTED default ON, USER 2026-10-10): the regression game that lost a turn
 // (selesnya_regression_d0_s2002 gi175, turn-2 cleanup). Board Selesnya Sanctuary; no Elf castable next
 // turn but the Priests; one Priest already meets the mana target (5), so the USER's order as built
 // sheds the Alchemist (4) as a surplus Elf FIRST. Under the amendment it is castable within the window
@@ -398,8 +421,8 @@ TEST_CASE("Selesnya discard S14: the Elf-window amendment keeps a 2-turn-castabl
                                 { "Selesnya Sanctuary" });
     const std::vector<int> off = win(s, 0);
     CHECK(off.front() == 0);              // the Alchemist, as in the real game
-    CHECK(SelArm(s, 1) == off);           // default OFF
     const std::vector<int> on = win(s, 1);
+    CHECK(SelArm(s, 1) == on);            // default ON
     const auto at = std::find(on.begin(), on.end(), 0);
     REQUIRE(at != on.end());
     REQUIRE(at != on.begin());
@@ -429,7 +452,8 @@ TEST_CASE("Selesnya discard M2: a Paragon in play does not waive the hand Parago
         { "Nykthos Paragon", "Ageless Entity", "Blossoming Bogbeast", "Llanowar Elves",
           "Priest of Titania", "Elvish Mystic", "Branchloft Pathway", "Feed the Clan" },
         { "Forest", "Brushland", "Forest", "Forest", "Nykthos Paragon" });
-    CHECK(Sel(s) == std::vector<int>{ 5, 3, 1, 7, 6, 0, 2, 4 });
+    CHECK(SelNoWindow(s, 0) == std::vector<int>{ 5, 3, 1, 7, 6, 0, 2, 4 });
+    CHECK(Sel(s) == std::vector<int>{ 1, 5, 3, 7, 6, 0, 2, 4 });   // S6's window order
     CHECK(Gen(s).front() == 0);
 }
 
@@ -465,8 +489,11 @@ TEST_CASE("Selesnya discard M4: CastFactor x value -- a turn sooner beats the US
         { "Genesis Wave", "Forest", "Elvish Archdruid", "Elvish Mystic", "Blossoming Bogbeast",
           "Verdant Sun's Avatar", "Craterhoof Behemoth", "Ageless Entity" },
         { "Forest", "Forest", "Forest", "Priest of Titania", "Llanowar Elves" });
-    CHECK(SelM(s) == std::vector<int>{ 1, 0, 6, 3, 5, 7, 4, 2 });
-    CHECK(Sel(s)  == std::vector<int>{ 1, 5, 0, 3, 6, 7, 4, 2 });   // =0 (S5)
+    CHECK(SelNoWindow(s, 1) == std::vector<int>{ 1, 0, 6, 3, 5, 7, 4, 2 });
+    CHECK(SelNoWindow(s, 0) == std::vector<int>{ 1, 5, 0, 3, 6, 7, 4, 2 });   // =0 (S5)
+    // Elf window (default): the surplus Mystic is kept above the soft Avatar.
+    CHECK(SelM(s) == std::vector<int>{ 1, 0, 6, 5, 3, 7, 4, 2 });
+    CHECK(Sel(s)  == std::vector<int>{ 1, 5, 0, 6, 3, 7, 4, 2 });   // =0 distance arm (S5)
 }
 
 // USER 2026-10-10 under the model: one Forest in play, no land in hand, no Elf -> mana by turn t is 1 + t.

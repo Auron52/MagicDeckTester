@@ -125,6 +125,18 @@ Deck-specific (verbatim):
   really poor."* -- when no payoff is reachable, the payoff quota is still kept, cheapest effective
   (enabled) payoffs first; poor mana does not empty the bucket.
 
+#### Amendment ADOPTED (USER 2026-10-10): Elves castable within two turns (MTG_SELESNYA_ELF_WINDOW)
+
+Root-caused from the regression tier (`selesnya_regression_d0_s2002` gi 175, turn 7 -> 8): at the turn-2
+cleanup one Priest of Titania already met the Elf mana target (an AGENT reading: the dearest kept
+payoff's cost, floor 5), so Accomplished Alchemist (4, not castable next turn) was shed as a surplus Elf
+ahead of the soft 3rd payoff. The generic arm kept it, cast it on turn 4, and its mana took Genesis Wave
+from X=5 to X=9 on turn 6. The amendment: every other Elf castable within the two-turn window (mana
+value <= the projected M2) is kept ABOVE the soft payoff(s), in the USER's Elf order. Measured
+(`logs/discard_impl/ab2`, 6,600 paired fresh games): no win turn moved (play changed in 4 chunks), and
+it restores gi 175 to turn 7. USER: *"The others seems reasonable."* (EDF and Selesnya). Default ON; `=0`
+restores the rule as first built. Test S14.
+
 #### Implementation notes -- USER rulings 2026-10-10
 * **(a) Creature quotas from the hand.** Payoffs in play no longer count against PAYOFFS 2 + soft 3rd
   (always 2 hard + 1 soft from the hand), a Wellwisher in play no longer fills LIFEGAIN 1, and a
