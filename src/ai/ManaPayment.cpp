@@ -2825,12 +2825,41 @@ static void PayFromPoolLineAware(ManaPool& pool, const ManaCost& cost_in, const 
 // `paid` == nullptr: stop at the first cast that cannot be made and return its position. Otherwise the
 // walk SKIPS it the way the executor does (it stays in hand: no cost, no output, no cast counted),
 // records every position's verdict in (*paid) and still returns the first failure.
+// MTG_EXACT_WALK_CCO (DEFAULT ON; =0 -> every unit of a colored_creature_only land is wild, as the
+// aggregate pool books it). A colored_creature_only source (Unclaimed Territory, Cavern of Souls, Sliver
+// Hive, Secluded Courtyard) makes coloured mana for CREATURE spells only; for anything else it is {C}.
+// AvailableManaPool books it as one WILD unit, so the walk let it pay a noncreature spell's coloured
+// pip -- a lone Territory "paid" Rite of Flame's {R} (unit test). Found classifying the "projected
+// payable, cast unpaid" audit class on dragonstorm d3 s7100081 T2 (Mountain + Territory): that game's
+// own loss is NOT this -- the order does pay with the Territory's {C} on the Medallion's {2}, and the
+// executor spends the floating {R}{R} there instead (the payer's float-first generic) -- but the walk
+// reads it right only because its line-aware generic happens to pick the wild unit for the {2}.
+static bool ExactWalkCcoOn()
+{
+    static const bool on = EnvOn("MTG_EXACT_WALK_CCO", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EXACT_WALK_CCO, on);
+}
+
 static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>& acts,
                               const std::vector<int>& order, std::vector<char>* paid)
 {
     if (paid != nullptr) { paid->assign(order.size(), 0); }
     int first_fail = -1;
     ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
+    // Units of untapped colored_creature_only sources (booked as wild above): {C} for a noncreature cast.
+    int cco = 0;
+    if (ExactWalkCcoOn())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr || !pd->params.colored_creature_only) { continue; }
+            const int y = PermanentManaYield(state, p, *pd);
+            cco += y >= 0 ? y : ManaProducedPerTap(*pd);
+        }
+        cco = std::min(cco, pool.wild);
+    }
     int casts_left = state.casts_remaining_this_turn;   // -1 = unrestricted
     int red = 0, white = 0, blue = 0, black = 0, green = 0;   // same-turn colour reducers cast so far
     thread_local std::vector<InternedName> cast_names;        // names cast so far in this walk
@@ -2872,9 +2901,28 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
                                + (mc.green > 0 ? green : 0);
                 cost.generic = std::max(0, cost.generic - disc);
             }
+            // A noncreature cast sees the creature-only units as {C} (generic only); a creature cast
+            // spends them FIRST (they are good for nothing else).
+            const bool creature = d != nullptr && d->card.IsCreature();
+            const int  restrict = (!creature && cco > 0) ? std::min(cco, pool.wild) : 0;
+            if (restrict > 0) { pool.wild -= restrict; pool.colorless += restrict; }
             if (!pool.CanPay(cost))
-            { if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue; }
+            {
+                if (restrict > 0) { pool.colorless -= restrict; pool.wild += restrict; }
+                if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue;
+            }
+            const int wild_before = pool.wild, cl_before = pool.colorless;
             PayFromPoolLineAware(pool, cost, future);
+            if (restrict > 0)
+            {
+                // Whatever {C} is left beyond the board's own colourless is still creature-only wild.
+                const int left = std::max(0, std::min(restrict, pool.colorless - (cl_before - restrict)));
+                pool.colorless -= left; pool.wild += left;
+                cco -= (restrict - left);
+            }
+            else if (creature && cco > 0)
+            { cco = std::max(0, cco - (wild_before - pool.wild)); }
+            cco = std::min(cco, pool.wild);
         }
         CreditCastOutput(state, acts, a, pool);
         if (d != nullptr)

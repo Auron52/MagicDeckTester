@@ -412,6 +412,7 @@ enum Slot : int
     RITUAL_FLOAT_COLOR_EXACT, // MTG_RITUAL_FLOAT_COLOR_EXACT both subset evaluators credit a FIXED-colour ritual float (Irencrag Feat, the Dragonstorm rituals, Seething Song: {R}) in its own colour instead of wild, so a ritual can no longer "pay" an off-colour pip (Irencrag -> Karrthus {B}{G}). Reaches Dragonstorm, Hinata2, Unpredictable Cyclone. Default ON; =0 -> the wild credit
     DRAGONSTORM_BP_LEFTOVERS, // MTG_DRAGONSTORM_BP_LEFTOVERS after an Apex of Power breakpoint, the interrupted cast list's remaining casts are ordered TOGETHER with the continuation by the USER's order (dropped when adding them would cost a continuation cast its payment) instead of being cast after it -- after its Dragonstorm (s7000158 T8). Executor + ApplyPlanDirect via MergeBreakpointLeftovers. Default ON; =0 -> cast after the continuation
     RITUAL_GUARD_APEX,        // MTG_RITUAL_GUARD_APEX the d0/rollout rituals-for-payoff guard keeps every ritual in a plan holding an impulse-exile spell (Apex of Power), as it already does for a storm tutor: Apex's value is its exile, funded by the mana left after it, so no ritual before it is surplus (with the accel-prefix collapse, calling the cheapest one surplus deleted every Apex line: s7600011). Default ON; =0 -> Apex judged as a fixed-cost payoff
+    EXACT_WALK_CCO,           // MTG_EXACT_WALK_CCO the exact order walk (ExactOrderFirstUnpayable) treats a colored_creature_only source's units (Unclaimed Territory, Cavern of Souls) as {C} for a noncreature cast instead of wild, so it no longer reads a noncreature spell's coloured pip (Rite of Flame's {R}) as payable off the Territory. 0 of 400 paired Dragonstorm games moved. Default ON; =0 -> wild
     COUNT
 };
 
@@ -785,6 +786,7 @@ inline const char* Name(int slot)
         "MTG_RITUAL_FLOAT_COLOR_EXACT",
         "MTG_DRAGONSTORM_BP_LEFTOVERS",
         "MTG_RITUAL_GUARD_APEX",
+        "MTG_EXACT_WALK_CCO",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
