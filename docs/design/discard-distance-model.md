@@ -42,7 +42,11 @@ one card and may play one land.
 * **Mana by turn `t`** = `B` + kept-land mana played by `t` + drawn drops + any per-turn extra mana the
   caller supplies (a dork it will cast, a cost reducer already folded into the cost, ...).
 * **Colour by turn `t`**: for each colour the card needs `p_c` pips of, sources by `t` = board sources +
-  kept colour lands played by `t` + drawn colour lands (`Hypergeometric(N, L_c, t)`).
+  kept colour lands played by `t` + drawn colour lands (`Hypergeometric(N, L_c, t)`) + any per-turn
+  coloured sources the caller supplies with its extra mana (`ColourCredit`; Angels' Giada makes {W}).
+* **Restricted mana** (a source that pays only some spells -- Giada: Angel spells) is the caller's to
+  net out: the census counts every mana permanent, so a caller whose hand mixes payable and unpayable
+  cards removes the restricted board sources from the census for the cards they cannot pay.
 * **`P_by(t)`** = P(mana by `t` >= cost) x product over colours of P(colour sources by `t` >= `p_c`),
   forced monotone in `t`. (Mana and colour share land drops; treating them as independent is the
   stated approximation.)
