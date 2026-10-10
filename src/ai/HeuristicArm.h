@@ -426,6 +426,8 @@ enum Slot : int
     LAND_BOUNCE_GUARD,        // MTG_LAND_BOUNCE_GUARD       the greedy land drop refuses a Karoo bounce land when every other land we control is itself a bounce land -- it would return a Karoo and gain nothing, while a real land waits in hand (Bruna gi1933: Azorius Chancery replayed every turn over Remote Farm). Default ON; =0 -> any other land suffices
     ATTACK_AURA_HOST_TAP,     // MTG_ATTACK_AURA_HOST_TAP    an Aura cast that TAPS its host on entry (Colossification, aura_etb_tap_host) onto a would-be attacker takes that host out of the projected attack, like a {T} ability (Bruna). Default ON; =0 -> the host still counted
     ATTACK_TAP_CREATURE_ONLY, // MTG_ATTACK_TAP_CREATURE_ONLY the attack-tap exact need also covers the NONCREATURE share of the cost from noncreature-spendable supply only: creature-only mana (Somberwald Sage) cannot pay an Aura, so an attacking dork has to (Bruna). Default ON; =0 -> the all-spells need only
+    ATTACK_TAP_ABILITY_KINDS, // MTG_ATTACK_TAP_ABILITY_KINDS the attack-tap ability discount also covers the OTHER {T}-source activation kinds -- Garth One-Eye's conjure (GarthActivate), Krenko's tokens (TapForTokens), Deathrite's exile (GraveyardExileAbility), Stoneforge's put (PutFromHandAbility), Kaldring's replay (GraveyardPlayAbility): each taps its creature, which then cannot attack (FiveColour d0 gi123: an uncharged Garth tap made Unite + Black Lotus read lethal). Default ON; =0 -> ActivatePermAbility only
+    ATTACK_TAP_PAYER_ORDER,   // MTG_ATTACK_TAP_PAYER_ORDER  the attack-tap discount spends attacking mana creatures in the EXECUTOR's tap order -- the provider's ManaSourceRank / ManaSourceHoldValue under this plan's attack-turn traits (a subtype scaler first, the flat dorks, a domain grower, Deathrite last) -- not lowest power first (Stompy d0 held-out: Craterhoof read as tapping four 2-power Elves where the payment taps Archdruid + one). Default ON; =0 -> lowest power first
     COUNT
 };
 
@@ -813,6 +815,8 @@ inline const char* Name(int slot)
         "MTG_LAND_BOUNCE_GUARD",
         "MTG_ATTACK_AURA_HOST_TAP",
         "MTG_ATTACK_TAP_CREATURE_ONLY",
+        "MTG_ATTACK_TAP_ABILITY_KINDS",
+        "MTG_ATTACK_TAP_PAYER_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

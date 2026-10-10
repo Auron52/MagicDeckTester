@@ -520,3 +520,79 @@ TEST_CASE("F5.4 bounce guard: a Chancery that would return the other Chancery yi
     Put(s, "Plains", 123);
     CHECK(GreedyLandChoiceIndex(s) == 0);
 }
+
+// ---- Point 8: Garth's conjure taps Garth (MTG_ATTACK_TAP_ABILITY_KINDS) ----------------------------
+// Garth One-Eye is the only attacker; conjuring Black Lotus ({0}) taps him, so the plan swings for 0.
+namespace
+{
+GameState GarthBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, {});
+    Put(s, "Garth One-Eye", 130);
+    return s;
+}
+bool GarthOnly(const TurnSolver::Plan& p)
+{
+    bool garth = false;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::PlayLand) { continue; }
+        if (a.kind != Action::Kind::GarthActivate) { return false; }
+        garth = true;
+    }
+    return garth;
+}
+}
+
+TEST_CASE("Point 8 ability kinds: a Garth conjure takes Garth out of the attack")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 5: Garth.
+    CHECK(Threshold([](int l) { return GarthBoard(l, 0); }, GarthOnly) == 0);
+}
+
+TEST_CASE("Point 8 ability kinds: MTG_ATTACK_TAP_ABILITY_KINDS=0 keeps the tapped Garth's 5")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_TAP_ABILITY_KINDS, 0 } });
+    CHECK(Threshold([](int l) { return GarthBoard(l, 1); }, GarthOnly) == 5);
+}
+
+// ---- Point 9: the executor's payer order (MTG_ATTACK_TAP_PAYER_ORDER) -----------------------------
+// Three Forests and four 2-power Elves (Archdruid pumps the other three to 2/2; it taps for 4).
+// Craterhoof's 8 leaves 5 to the Elves: on an attack turn the payment taps the scaler first, so
+// Archdruid + one Llanowar pay and Llanowar + Fyndhorn swing -- with Hoof's X = 5: 7 + 7 + Hoof 10 =
+// 24. Lowest-power-first with board-order ties tapped all four Elves: Hoof alone, 10.
+namespace
+{
+GameState ElfHoofBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Craterhoof Behemoth" });
+    Put(s, "Forest", 140);
+    Put(s, "Forest", 141);
+    Put(s, "Forest", 142);
+    Put(s, "Llanowar Elves", 143);
+    Put(s, "Llanowar Elves", 144);
+    Put(s, "Fyndhorn Elves", 145);
+    Put(s, "Elvish Archdruid", 146);
+    return s;
+}
+}
+
+TEST_CASE("Point 9 payer order: Archdruid pays for Craterhoof, the flat Elves swing")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 8: three pumped Elves at 2 + Archdruid 2.
+    CHECK(Threshold([](int l) { return ElfHoofBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Craterhoof Behemoth" }); }) == 24);
+}
+
+TEST_CASE("Point 9 payer order: MTG_ATTACK_TAP_PAYER_ORDER=0 spends lowest power, board order")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_TAP_PAYER_ORDER, 0 } });
+    CHECK(Threshold([](int l) { return ElfHoofBoard(l, 1); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Craterhoof Behemoth" }); }) == 10);
+}
