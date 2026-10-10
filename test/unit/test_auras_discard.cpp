@@ -16,6 +16,10 @@
 // differ. The =0 hatch must return exactly the generic ranking, and the rule must be PREFIX-STABLE
 // (CleanupDiscardShedStable's default): shedding its own first pick and re-ranking leaves the rest in
 // the same order.
+//
+// Every board runs BOTH arms of MTG_DISCARD_DIST_MODEL (the shared distance-to-castable model, USER
+// 2026-10-10): =0 must give the 2026-10-09 order exactly; the model (the default) may reorder only
+// within the USER's tiers. Boards 21-23 are where it does, with the factors derived by hand.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -63,7 +67,14 @@ struct Bf
 
 const char* kPaws = "Light-Paws, Emperor's Voice";
 
-GameState MakeAu(const std::vector<std::string>& hand, const std::vector<Bf>& board)
+const std::vector<std::string> kLib6 = { "Rancor", "Ethereal Armor", "Plains", "Slippery Bogle", "Forest",
+                                         "Hyena Umbra" };
+// The distance-model boards' library: 10 cards, 2 of them Plains (the only lands, the only W sources).
+const std::vector<std::string> kLib10 = { "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Rancor",
+                                          "Hyena Umbra", "Hyena Umbra", "Hyena Umbra", "Hyena Umbra" };
+
+GameState MakeAu(const std::vector<std::string>& hand, const std::vector<Bf>& board,
+                 const std::vector<std::string>& library = kLib6)
 {
     EnsureCardsAud();
     GameState s;
@@ -71,8 +82,7 @@ GameState MakeAu(const std::vector<std::string>& hand, const std::vector<Bf>& bo
     s.turn_number         = 5;
     int num = 1;
     for (const std::string& n : hand) { s.players[0].hand.push_back(Ph(n, num++)); }
-    const char* lib[] = { "Rancor", "Ethereal Armor", "Plains", "Slippery Bogle", "Forest", "Hyena Umbra" };
-    for (const char* n : lib) { s.players[0].library.push_back(Ph(n, num++)); }
+    for (const std::string& n : library) { s.players[0].library.push_back(Ph(n, num++)); }
     for (const Bf& b : board)
     {
         Permanent p;
@@ -88,14 +98,19 @@ GameState MakeAu(const std::vector<std::string>& hand, const std::vector<Bf>& bo
     return s;
 }
 
-std::vector<int> AuArm(const GameState& s, int arm)
+// arm: MTG_AURA_BUCKET_DISCARD; dist: MTG_DISCARD_DIST_MODEL (-1 = unset, i.e. the default).
+std::vector<int> AuArm(const GameState& s, int arm, int dist = -1)
 {
     heurarm::t_arm[heurarm::AURA_BUCKET_DISCARD] = arm;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]  = dist;
     std::vector<int> v = AurasProvider().CleanupDiscardCandidates(s, nullptr);
     heurarm::t_arm[heurarm::AURA_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]  = -1;
     return v;
 }
-std::vector<int> Au(const GameState& s)  { return AuArm(s, 1); }
+std::vector<int> Au(const GameState& s, int dist = -1) { return AuArm(s, 1, dist); }
+std::vector<int> AuOld(const GameState& s)             { return AuArm(s, 1, 0); }   // the =0 proxies
+std::vector<int> AuNew(const GameState& s)             { return AuArm(s, 1, 1); }   // the model
 std::vector<int> Gen(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
 
 // Every hand index exactly once (staged ones fall to tier C at the back).
@@ -110,28 +125,37 @@ void CheckPermutation(const GameState& s, const std::vector<int>& order)
 
 // PREFIX STABILITY: shed the rule's own first pick, re-rank the smaller hand, and the remaining cards
 // must come back in the same order -- all the way down to an empty hand.
-void CheckPrefixStable(GameState s)
+void CheckPrefixStable(GameState s, int dist)
 {
-    std::vector<int> order = Au(s);
+    std::vector<int> order = Au(s, dist);
     while (!s.players[0].hand.empty())
     {
         std::vector<int> rest_numbers;
         for (std::size_t k = 1; k < order.size(); ++k)
         { rest_numbers.push_back(s.players[0].hand[static_cast<std::size_t>(order[k])].m_number); }
         s.players[0].hand.erase(s.players[0].hand.begin() + order.front());
-        order = Au(s);
+        order = Au(s, dist);
         std::vector<int> got_numbers;
         for (int i : order) { got_numbers.push_back(s.players[0].hand[static_cast<std::size_t>(i)].m_number); }
         CHECK(got_numbers == rest_numbers);
     }
 }
 
-void CheckBoard(const GameState& s, const std::vector<int>& want)
+// `want_old`: the order with MTG_DISCARD_DIST_MODEL=0 (the 2026-10-09 rate / power proxies -- the hatch
+// must reproduce it exactly). `want_new`: with the distance model (the default); omitted = the same
+// order, i.e. a board on which every modelled card is castable next turn and the model changes nothing.
+void CheckBoard(const GameState& s, const std::vector<int>& want_old, std::vector<int> want_new = {})
 {
-    const std::vector<int> got = Au(s);
-    CHECK(got == want);
-    CheckPermutation(s, got);
-    CheckPrefixStable(s);
+    if (want_new.empty()) { want_new = want_old; }
+    const std::vector<int> old_got = AuOld(s);
+    const std::vector<int> new_got = AuNew(s);
+    CHECK(old_got == want_old);
+    CHECK(new_got == want_new);
+    CHECK(Au(s) == new_got);   // the model is the default
+    CheckPermutation(s, old_got);
+    CheckPermutation(s, new_got);
+    CheckPrefixStable(s, 0);
+    CheckPrefixStable(s, 1);
 }
 
 }   // namespace
@@ -353,6 +377,58 @@ TEST_CASE("Auras discard 20: a card the design has no class for (a land Aura) sh
           "Plains", "Slippery Bogle" },
         { { "Forest" }, { "Plains" }, { "Gladecover Scout" } });
     CheckBoard(s, { 0, 1, 3, 7, 6, 4, 2, 5 });
+}
+
+// ---- distance to castable: the shared discard_dist model (MTG_DISCARD_DIST_MODEL, USER 2026-10-10) ----
+// Library kLib10: 10 cards, 2 Plains (the only lands, the only W sources). Hand-derived factors, with
+// P_t = P(castable by our t-th next turn) and factor = sum (P_t - P_t-1) 0.75^(t-1) + (1 - P_4) 0.02 0.75^4:
+//   one W pip, no W source in play or kept: P_t = 1 - C(8,t)/C(10,t) = 0.2, 17/45, 8/15, 2/3
+//     -> 0.2 + 0.13333 + 0.0875 + 0.05625 + 0.00211 = 0.47919
+//   {W}{W}, no W source:      P_t = 0, 1/45, 1/15, 2/15  -> 0.01667 + 0.025 + 0.02813 + 0.00548 = 0.07528
+//   {W}{W}, one kept Plains:  P_t = 0, 17/45, 8/15, 2/3  -> 0.28333 + 0.0875 + 0.05625 + 0.00211 = 0.42919
+//   a {G} card with Forests in play, or a {W} one with the kept Plains: P_1 = 1 -> 1.
+
+TEST_CASE("Auras discard 21 (distance): no white source anywhere -- Daybreak Coronet's {W}{W} is the first useful Aura to go")
+{
+    // Board: Forest, Forest, Branchloft (G only), a Bogle wearing Rancor. The hand Forest is the soft 4th
+    // land, so no land is kept hard. EV = rate x factor: Coronet 1.5 x 0.0753 = 0.113 < Mantle 0.5 x 0.479
+    // = 0.240 < Cloak (2/3) x 0.479 = 0.319 < Hyena 1 x 0.479 = 0.479 < Spider 1 < Audacity 2.
+    // Without the model (rate only): Mantle 0.5, Cloak 0.67, Spider 1 = Hyena 1 (hand order), Coronet
+    // 1.5, Audacity 2.
+    const GameState s = MakeAu(
+        { "Daybreak Coronet", "Spider Umbra", "Audacity", "Gladecover Scout", "Forest", "Hyena Umbra",
+          "Armadillo Cloak", "Spirit Mantle" },
+        { { "Forest" }, { "Forest" }, { "Branchloft Pathway" }, { "Slippery Bogle" }, { "Rancor", 3 } }, kLib10);
+    CheckBoard(s, { 3, 4, 7, 6, 1, 5, 0, 2 },
+                  { 3, 4, 0, 7, 6, 5, 1, 2 });
+    CHECK(Gen(s).front() == 6);
+}
+
+TEST_CASE("Auras discard 22 (distance): a KEPT Plains brings Coronet within reach -- above Mantle, still below Spider and Hyena")
+{
+    // Board: Forest, Forest, a Bogle wearing Rancor. The hand Plains covers W (a hard keep); the Forest
+    // is the soft 4th. Coronet 1.5 x 0.429 = 0.644; Mantle 0.5 x 1; Spider 1; Hyena 1 x 1 (the Plains
+    // pays it next turn); Audacity 2.
+    const GameState s = MakeAu(
+        { "Daybreak Coronet", "Spirit Mantle", "Plains", "Spider Umbra", "Hyena Umbra", "Gladecover Scout",
+          "Forest", "Audacity" },
+        { { "Forest" }, { "Forest" }, { "Slippery Bogle" }, { "Rancor", 2 } }, kLib10);
+    CheckBoard(s, { 5, 6, 1, 3, 4, 0, 7, 2 },
+                  { 5, 6, 1, 0, 3, 4, 7, 2 });
+}
+
+TEST_CASE("Auras discard 23 (distance): the creature slot weighs power x castability -- a castable 1/1 over a {W} 2/1 with no white")
+{
+    // Board: Forest, Forest, Branchloft (G only), no creature. Plain tier: Bogle 1 x 1 = 1 > Dauntless
+    // Bodyguard 2 x 0.479 = 0.958 -> the Bogle is the creature slot, the Bodyguard the spare body. (Without
+    // the model: higher power -> the Bodyguard.) Auras: Hyena 0.479 = Armor 0.479 (non-scaler first) <
+    // Spider 1 < Rancor 2 = Audacity 2.
+    const GameState s = MakeAu(
+        { "Slippery Bogle", "Dauntless Bodyguard", "Rancor", "Spider Umbra", "Audacity", "Forest", "Hyena Umbra",
+          "Ethereal Armor" },
+        { { "Forest" }, { "Forest" }, { "Branchloft Pathway" } }, kLib10);
+    CheckBoard(s, { 0, 5, 3, 6, 7, 2, 4, 1 },
+                  { 1, 5, 6, 7, 3, 2, 4, 0 });
 }
 
 // ---- the contract ------------------------------------------------------------------------------------
