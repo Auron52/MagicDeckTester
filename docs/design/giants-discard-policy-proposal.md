@@ -160,6 +160,13 @@ Cross-deck (verbatim):
   so surplus hand lands do not shorten any Giant's distance.
 - The "Colour beats the land count" ruling is inert on this list (mono-red, every land a Mountain) and
   is not separately implemented.
+- TUTOR WIDTH (not a discard rule; same round): `GiantsProvider::TutorSearchWidth` = 7, behind
+  `MTG_GIANTS_TUTOR_WIDTH` (heurarm `GIANTS_TUTOR_WIDTH`, default ON; `=0` the base 6). The list holds
+  seven distinct Giant names for Giant Harbinger, and the generic candidate list is in library (shuffle)
+  order, so the base width 6 left one name unreachable per game (the coverage hole recorded in
+  docs/design/analysis-Pirates.md). A coverage fix: it widens, never narrows. Tests T1 (the width) and
+  T2 (the decklist's seven Giant names are exactly Harbinger's candidates, all inside 7, one outside 6).
+  Changes play (the tutor axis searches one more target); not measured in this step.
 
 
 ---

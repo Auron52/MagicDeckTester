@@ -18,6 +18,7 @@
 // castable probability x 0.75^(turn - 1), + 0.02 x 0.75^4 for the stranded mass, from the board's mana,
 // the KEPT lands (one drop per turn), the kept rocks' mana from the turn they can be cast, and lands drawn
 // at the library's density. Each D case asserts both arms; each differs from the table.
+// T1-T2 pin GiantsProvider::TutorSearchWidth (MTG_GIANTS_TUTOR_WIDTH): 7, one per Giant name.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -26,6 +27,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "deck/DeckLoader.h"
 
 #include <algorithm>
 #include <string>
@@ -413,4 +415,46 @@ TEST_CASE("Giants discard D4: the model prices the Daredevil-discounted, cumulat
     const GameState s = MakeGiants({ kTi, kTi, kFl, kHar, kGol, kM, kM, kBo }, board, Lib(20, 0));
     CHECK(GiD(s) == std::vector<int>{ 1, 4, 6, 7, 3, 2, 0, 5 });
     CHECK(Gi(s)  == std::vector<int>{ 1, 3, 6, 7, 4, 2, 0, 5 });   // the table (=0)
+}
+
+// ---- Giant Harbinger's tutor width (MTG_GIANTS_TUTOR_WIDTH, default ON) -------------------------------
+namespace
+{
+int GiantsWidth(int arm)
+{
+    heurarm::t_arm[heurarm::GIANTS_TUTOR_WIDTH] = arm;
+    const int w = GiantsProvider().TutorSearchWidth();
+    heurarm::t_arm[heurarm::GIANTS_TUTOR_WIDTH] = -1;
+    return w;
+}
+}   // namespace
+
+TEST_CASE("Giants tutor T1: TutorSearchWidth is 7 (one per Giant name); =0 restores the base 6")
+{
+    CHECK(GiantsWidth(1) == 7);
+    CHECK(GiantsWidth(0) == 6);
+    CHECK(GenericProvider().TutorSearchWidth() == 6);   // the base it widens -- moot if that ever passes 7
+}
+
+// The decklist's mainboard holds exactly seven distinct Giant names (cards.json: Inferno Titan, Sunrise
+// Sovereign, Giant Harbinger, Borderland Behemoth, Hamletback Goliath, Surtland Flinger, Tectonic Giant;
+// Stinkdrinker Daredevil is a Goblin Rogue). With the whole mainboard as the library, Giant Harbinger's
+// candidate list is those seven names -- all inside width 7, one outside the base 6.
+TEST_CASE("Giants tutor T2: every Giant name Giant Harbinger can fetch is inside the width")
+{
+    EnsureCardsGd();
+    const Decklist deck = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Giants/Giants.cod"));
+    GameState s;
+    s.active_player_index = 0;
+    for (const Card& c : deck.mainboard) { s.players[0].library.push_back(c); }
+    const CardDefinition* harbinger = CardDatabase::Instance().Lookup(kHar);
+    REQUIRE(harbinger != nullptr);
+    REQUIRE(harbinger->params.tutor_to_top);
+    const std::vector<std::string> cands = GiantsProvider().TutorCandidates(s, 0, harbinger->params);
+    std::vector<std::string> sorted = cands;
+    std::sort(sorted.begin(), sorted.end());
+    const std::vector<std::string> want = { kBeh, kHar, kGol, kTi, kSov, kFl, kTec };   // alphabetical
+    CHECK(sorted == want);
+    CHECK(static_cast<int>(cands.size()) <= GiantsWidth(1));
+    CHECK(static_cast<int>(cands.size()) > GiantsWidth(0));   // the hole the override closes
 }

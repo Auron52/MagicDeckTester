@@ -343,6 +343,9 @@ public:
 //   * CleanupDiscardCandidates -- the USER-settled cleanup-discard buckets (2026-10-09,
 //     docs/design/giants-discard-policy-proposal.md; MTG_GIANTS_BUCKET_DISCARD, default ON, =0
 //     restores the generic max-MV ranking). See the .cpp block.
+// plus one COVERAGE fix (it widens, never narrows):
+//   * TutorSearchWidth 7 -- one per distinct Giant name Giant Harbinger can fetch
+//     (MTG_GIANTS_TUTOR_WIDTH, default ON, =0 restores the base 6).
 // Every other hook inherits GenericProvider byte-for-byte. (Until 2026-10-09 this was an EMPTY
 // derivation, play-neutral by construction.)
 //
@@ -376,6 +379,15 @@ public:
     // Not prefix-stable while the buckets are on: the mana reach counts hand lands, so shedding a
     // surplus Mountain can move a Giant's distance-discounted value (review 2026-10-09). Re-rank per shed.
     bool CleanupDiscardShedStable() const override;
+    // A COVERAGE fix, not a heuristic: Giant Harbinger fetches any Giant, and this list holds SEVEN
+    // distinct Giant names (Inferno Titan, Sunrise Sovereign, Giant Harbinger, Borderland Behemoth,
+    // Hamletback Goliath, Surtland Flinger, Tectonic Giant). The generic candidate list is in LIBRARY
+    // (= shuffle) order and the base width is 6, so in any game the search could never reach one of
+    // them -- which one decided by the shuffle, not by a judgement (found by the Pirates analysis,
+    // docs/design/analysis-Pirates.md, the same hole PiratesProvider's width 9 closes). Width 7 makes
+    // every name reachable; the axis is ADDITIVE (one rollout per extra target), so the cost is bounded.
+    // MTG_GIANTS_TUTOR_WIDTH=0 restores the base 6; MTG_TUTOR_WIDTH still overrides engine-side.
+    int TutorSearchWidth() const override;
 };
 
 // Prevent Damage (Manabarbs / painlands / Tamanoa / Rhox Faithmender / Vito / Dina). Onboarded

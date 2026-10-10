@@ -17563,8 +17563,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Routes to GiantsProvider, a DeckProvider derivation: per the always-own-a-provider rule
         // the deck gets a name and a certificate answer, and it holds exactly ONE judgement hook --
         // the USER-settled cleanup-discard buckets (2026-10-09, GiantsProvider::
-        // CleanupDiscardCandidates, MTG_GIANTS_BUCKET_DISCARD=0 restores Generic). Every other hook
-        // inherits GenericProvider byte-for-byte.
+        // CleanupDiscardCandidates, MTG_GIANTS_BUCKET_DISCARD=0 restores Generic) -- plus one
+        // COVERAGE fix, TutorSearchWidth 7 for Giant Harbinger's seven Giant names
+        // (MTG_GIANTS_TUTOR_WIDTH=0 restores the base 6). Every other hook inherits GenericProvider
+        // byte-for-byte.
         //
         // Signature = Giants-only gated params OR'd across FIVE different cards (Inferno Titan,
         // Borderland Behemoth, Hamletback Goliath, Surtland Flinger, Tectonic Giant) so a
@@ -23402,6 +23404,17 @@ static bool GiantsBucketDiscardEnabled()
 bool GiantsProvider::CleanupDiscardShedStable() const
 {
     return !GiantsBucketDiscardEnabled();
+}
+
+// ---- GiantsProvider::TutorSearchWidth ---------------------------------------
+// Giant Harbinger's tutor axis must be able to reach every Giant NAME in the list -- seven of them --
+// and the base width 6 left one unreachable per game, chosen by the shuffle (the library-order
+// candidate list; see the header note and docs/design/analysis-Pirates.md). A coverage fix: it widens,
+// never narrows, and the axis is additive. MTG_GIANTS_TUTOR_WIDTH=0 restores the base 6.
+int GiantsProvider::TutorSearchWidth() const
+{
+    static const bool on = EnvOn("MTG_GIANTS_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
+    return heurarm::Flag(heurarm::GIANTS_TUTOR_WIDTH, on) ? 7 : GenericProvider::TutorSearchWidth();
 }
 
 std::vector<int> GiantsProvider::CleanupDiscardCandidates(
