@@ -158,17 +158,18 @@ and an unreproducible one-off anomaly is not grounds for a standing 2x tax).
 
 ### If your evidence says a tier WILL regress, rebaseline that tier NOW
 
-**The overnight tier is NOT run between fixes or optimizations (USER, 2026-10-10: *"It isn't
-intended to be run in between each fix (or optimization)"*, after per-change overnight runs had slowed
-every development cycle).** A fix or optimization is validated with unit tests, scenarios, and smoke +
+**The overnight tier is an OCCASIONAL run, usually once a day -- never between fixes or optimizations.**
+That was always the user's design (2026-10-10: *"It isn't intended to be run in between each fix (or
+optimization)"*; *"That was always the design. Whoever set this rule did not consult me. Overnight is an
+occasional thing, usually once a day."*). A fix or optimization is validated with unit tests, scenarios, and smoke +
 regression (every changed game explained). Where the adoption bar needs a slower game checked, check
 THAT GAME directly (`--seed S --game-index G --games 1` at `--depth <win turn> --budget-ms 100`, then
 `--depth 8 --budget-ms 0`), not by re-running a tier. Accept smoke/regression GT for what moved and
 leave the overnight GT to the periodic overnight run, which re-measures and accepts everything that
 landed since the last one in ONE pooled run, with its per-game audit naming every changed game. Say
-in your commit message that the overnight GT is left for that run. (This replaces an older rule here,
-"never leave a tier you know is stale; running and accepting it is your job", which turned every
-play change into another overnight run.) A held-out A/B is still how a LOSSY narrowing or a
+in your commit message that the overnight GT is left for that run. (It replaces a rule an agent added here on
+2026-08-25 without consulting the user -- "never leave a tier you know is stale; running and accepting
+it is your job" -- which turned every play change into another overnight run.) A held-out A/B is still how a LOSSY narrowing or a
 heuristic earns adoption -- but as its own pooled batch scoped to the decks that move, sized to the
 effect, not a full overnight tier.
 

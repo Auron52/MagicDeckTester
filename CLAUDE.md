@@ -208,9 +208,13 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     so it stays off", and never fall back to a generic default. *"There is no case where we should do
     that."*
 
-- **THE OVERNIGHT TIER IS NOT RUN BETWEEN FIXES OR OPTIMIZATIONS (user directive, 2026-10-10).** The
-  user's words: *"It isn't intended to be run in between each fix (or optimization)"* -- per-change
-  overnight runs were slowing every development cycle. Validate a fix with unit tests, scenarios, smoke
+- **THE OVERNIGHT TIER IS AN OCCASIONAL RUN, USUALLY ONCE A DAY -- NEVER BETWEEN FIXES OR
+  OPTIMIZATIONS (the user's design all along, restated 2026-10-10).** The user's words: *"It isn't
+  intended to be run in between each fix (or optimization)"*, *"That was always the design. Whoever set
+  this rule did not consult me. Overnight is an occasional thing, usually once a day."* An agent added a
+  per-change "never leave the overnight tier stale; re-running it is your job" rule to the regression
+  skill on 2026-08-25 (inside measurement commit bd1a9953) without asking, and it turned every play
+  change into another overnight run, slowing every development cycle. Validate a fix with unit tests, scenarios, smoke
   and regression; check a slower game the bar cares about as a single-game repro, not by re-running a
   tier; accept smoke/regression GT and leave the overnight GT to the periodic overnight run, which
   accepts everything landed since the last one in one pooled run. A lossy narrowing or heuristic still
