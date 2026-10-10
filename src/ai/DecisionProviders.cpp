@@ -36489,7 +36489,8 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
 //   cons > Training Grounds below its threshold > then the keep ladder read BACKWARDS (3rd-4th land,
 //   extra Living Wish, Training Grounds, Auras, the 2 lands, win con, untapper, flicker).
 //
-// AGENT READINGS (the USER has not ruled; each is listed in the design doc's implementation notes):
+// AGENT READINGS (each is listed in the design doc's implementation notes; R3 and R8 were CONFIRMED
+// by the USER on 2026-10-10, the rest are still open):
 //   R1  "2+ colourless sources" counts the board's {C} sources (comborules::ColorlessSourceCount) plus
 //       the {C}-capable hand lands this ladder KEEPS (the win-con land, the 2 lands, the 3rd-4th) --
 //       a land past the 4th is about to be shed, so it does not swing the outlet choice.
@@ -36499,7 +36500,7 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
 //   R3  The mana TARGET keeps the USER's per-outlet numbers even when the outlet is already in play
 //       (board mana counts toward it -- that is the net-of-board part). The outlet it is read off is
 //       the slot's: the board's preferred one, the hand's, or what a slot-filling tutor would fetch;
-//       with no outlet anywhere, the preferred one in library/sideboard.
+//       with no outlet anywhere, the preferred one in library/sideboard. (USER 2026-10-10: accepted.)
 //   R4  "Mana" for the target and for Training Grounds' threshold = board land yields (Auras on them
 //       included) + the win-con land + the 2 lands + the Auras kept so far. The 3rd-4th lands sit
 //       BELOW Training Grounds on the ladder, so they do not count toward its threshold.
@@ -36516,6 +36517,12 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
 //       any-colour Aura in hand. A spare draw land or Gorge is a LAND (land pool), not a spare win con;
 //       spare win cons are the finisher creatures (a finisher that is not live -- an Infiltrator with
 //       no opponent library -- first, then farther from castable first).
+//       USER 2026-10-10: "For EDF that is fine as long as we keep our only win-con/draw source even if
+//       it is a land." Held by construction: the WIN CON slot is chosen from the real hand cards
+//       BEFORE the land steps and is never in the land pool, so neither the 4-land cap, the {W}/{U}
+//       cover nor a Living Wish that could fetch a finisher can shed it ahead of its ladder rung
+//       (tests W1-W5). "Only" is read as the only member of the size-1 bucket: a castable finisher in
+//       hand holds the slot and a draw land beside it is a spare land (test W7).
 //   R9  "Less suitable first" spans both roles: every spare for which a strictly better kind is in
 //       play or in hand goes first (outlets before untappers, the proposal's O9 shape), then the rest.
 //   R10 Lands keep {C}-capable first, then more of {W,U,B,G}, then untapped, then hand order; Auras
