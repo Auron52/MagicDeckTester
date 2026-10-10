@@ -11076,20 +11076,29 @@ bool DragonstormProvider::CastUnderCastCap(const GameState& s, const CardDefinit
 // Judged on the subset's own realised order -- the comparator, ArrangeCastOrder and the payable-order
 // fallback, exactly what the apply would do -- with the exact walk: refused only when that walk first
 // fails AT an Apex (with a restrictor in the set) or AT a spliced cast.
+// USER order rule 7 at the SUBSET (MTG_DRAGONSTORM_IRENCRAG_CLOSER, DragonstormIrencragCloserOn in
+// EngineFlags.h): a subset holding the restrictor needs a closer to spend its one remaining cast on --
+// unless it holds an Apex, whose exile may bring the closer (the post-Apex merge then decides, with the
+// exile known: a leftover Irencrag nothing can follow is not cast). Refusing the Apex case too was measured
+// wrong: dragonstorm d0 s8500074 T6 {Apex, Medallion, Irencrag} found its two Scourges in the second exile
+// (T7 win), and without it the d0 runner did not cast the second Apex at all (unwon).
 bool DragonstormProvider::OrderedSubsetRealisable(const GameState& s0, const std::vector<Action>& cands,
                                                   const std::vector<int>& sel) const
 {
     if (!UserOrderOn()) { return true; }
-    bool apex = false, restrictor = false, spliced = false, pre = false;
+    bool apex = false, restrictor = false, spliced = false, pre = false, closer = false;
     for (int j : sel)
     {
         const Action& a = cands[j];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (a.kind == Action::Kind::CastFromHand && d != nullptr && d->params.impulse_exile > 0) { apex = true; }
         if (a.max_casts_after >= 0) { restrictor = true; }
+        else if (a.kind == Action::Kind::CastFromHand && d != nullptr
+                 && (d->params.tutor_to_battlefield || d->card.IsCreature())) { closer = true; }
         if (a.kind == Action::Kind::CastFromHand && a.splice_count > 0) { spliced = true; }
         if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend) { pre = true; }
     }
+    if (restrictor && !closer && !apex && DragonstormIrencragCloserOn()) { return false; }
     if (!(apex && restrictor) && !spliced) { return true; }
     // The plan's pre-cast sacrifices (Lotus Bloom) are applied before its casts in both apply worlds.
     std::optional<GameState> pst;
