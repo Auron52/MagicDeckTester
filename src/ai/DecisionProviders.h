@@ -1109,7 +1109,11 @@ public:
     // HOLD the lone Crackle unless casting it wins THIS turn (5X + optimistic attack >= opp life) or
     // a second copy is already in hand. Off-switch MTG_NO_HINATA_HOLD_CRACKLE. Deterministic on the
     // GameState, so lockstep across the search enumeration, the rollout, and the executor.
+    // MTG_HINATA_HOLD_LETHAL_BURN (default ON): the "wins THIS turn" half moves to the subset walks
+    // (HoldCastUnlessLethal), which count every co-cast's damage on a payable subset; XCandidates then
+    // offers the X and the walks drop every non-winning subset that casts the held Crackle.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    bool HoldCastUnlessLethal(const GameState&, const CardDefinition&) const override;
     // Magma Opus scaled-cast (face-damage) variants (ScaledCastVariants): the deck-specific cost model. More
     // face damage = fewer distinct spread/tap targets = less Hinata discount = more mana. ADOPTED
     // default-ON (2026-07-21); MTG_LEGACY_MAGMA -> {} -> byte-identical over-count path. See the .cpp.

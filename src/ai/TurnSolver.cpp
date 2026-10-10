@@ -34684,6 +34684,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // copies; the deck has no scalable X spell, so every copy was waste). These flags test the
     // exact preconditions the two fills check BEFORE any mutation, and the lambda's draw scan's
     // lookup, so skipping on a 0 flag is byte-identical.
+    // HoldCastUnlessLethal (provider; Hinata's lone Crackle under MTG_HINATA_HOLD_LETHAL_BURN): a cast
+    // the deck holds unless the subset WINS this turn. Flagged once per candidate here; the drop sits at
+    // the subset's `wins` projection below (lockstep twin in EnumeratePlans). false for every other deck.
+    std::vector<unsigned char> cand_held(cands.size(), 0);
+    bool any_held = false;
+    const DecisionProvider& held_provider = ResolveProvider(state);
     std::vector<unsigned char> fill_face_ok(cands.size(), 0), fill_x_ok(cands.size(), 0),
                                cand_draws(cands.size(), 0);
     for (int j = 0; j < m; ++j)
@@ -34700,6 +34706,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
+        if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
+        { cand_held[j] = 1; any_held = true; }
     }
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
@@ -35659,6 +35667,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Hold a sac-land burn (Shard Volley) unless it wins this turn or enables Spectacle -- see
         // HoldSacLandBurn. The integer test keeps every deck without such a card off the scan.
         if (sacrifice_count > 0 && !wins && HoldSacLandBurn(state, cands, sel)) { return; }
+
+        // HoldCastUnlessLethal (see the precompute): a held cast -- Hinata's lone Crackle -- only in a
+        // subset that wins this turn by THIS projection (every cast's damage + the attack, payable).
+        if (any_held && !wins) { for (int j : sel) { if (cand_held[j]) { return; } } }
 
         // Rituals-for-payoff guard (see the flag above), with the STORM heuristic gate the user asked for.
         // Question: may this plan spend MORE ritual mana than the payoff's cost? Default NO -- so we reject
@@ -46981,6 +46993,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // SolveUncached precompute (see that site for the g88 profile evidence): the surplus-FILL
     // probe used to copy every selected Action per subset just for the fill calls to return 0 on
     // their const preconditions. Byte-identical skip.
+    // HoldCastUnlessLethal (provider; Hinata's lone Crackle under MTG_HINATA_HOLD_LETHAL_BURN): a cast
+    // the deck holds unless the subset WINS this turn. Flagged once per candidate here; the drop sits at
+    // the subset's `wins` projection below (lockstep twin in SolveUncached). false for every other deck.
+    std::vector<unsigned char> cand_held(cands.size(), 0);
+    bool any_held = false;
+    const DecisionProvider& held_provider = ResolveProvider(state);
     std::vector<unsigned char> fill_face_ok(cands.size(), 0), fill_x_ok(cands.size(), 0),
                                cand_draws(cands.size(), 0);
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
@@ -46997,6 +47015,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
+        if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
+        { cand_held[j] = 1; any_held = true; }
     }
 
     // SATURATED HUMAN-PLAY COLLAPSE (see HumanEnumSaturated above the function). Evaluated ONCE
@@ -48361,6 +48381,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (drop) { _ct.label = "sac-burn-hold"; return; }
         }
+        // HoldCastUnlessLethal (mirrors Solve::consider): a held cast only in a subset that wins now.
+        if (any_held && !wins)
+        { for (int j : sel) { if (cand_held[j]) { _ct.label = "hold-unless-lethal"; return; } } }
         _ct.label = "OFFERED";
         {
             static const int s_dbg_multi_off = EnvInt("MTG_DBG_MULTI", 0);
