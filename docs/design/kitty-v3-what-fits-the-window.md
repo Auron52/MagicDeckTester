@@ -146,6 +146,67 @@ deck owner's call, never an agent's (USER, 2026-09-20: *"I don't want you fiddli
 settings here. Optimizations are good, but this is not an optimization."*). **It is NOT set for the
 v3 run.** The sanctioned answer to a window running out inside phase A is `finish`.
 
+## OUTCOME, 2026-10-10: the leaf fits and is ADOPTED; it does NOT help generation
+
+The value leaf was generated (phases A-F) and **adopted** at
+`decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.value.json`. Phase E, 8 seeds x 1000 games
+paired: play **-0.00025, t -0.10, 4/4/0** -- a textbook null -- at **0.64x** play cost. Not worse on
+any axis, which is the skill's adoption bar. Phase C.5 returned **CLEAN** (50 games abandoned of
+20,499; V arm 0-0.06%, H arm 0.12-2.00%, worst H4, against v2's worst of 1.62%). Crossover
+`1->1 2->1 3->1 4->2 5->3 6->6 7->6 8->6`, trust UNSET.
+
+**NOT YET VALIDATED AT SCALE.** Phase E read NEUTRAL, and an 8-seed neutral can hide a one-sided cost
+(knights: neutral at 8 seeds, then +0.00020 / t +2.74 / 0-of-16-better on 16 fresh seeds x 2500). The
+fresh-seed check uses disjoint seeds **630000-669999** (16 x 2500, spaced >= `games` so jobs cannot
+replay games -- tighter spacing once manufactured a -14.4 sigma). Adoption is reversible by renaming
+to `.value.DISABLED.json`; a GT rebaseline is not, so **GT waits on that check**.
+
+**HYPOTHESIS 7, REFUTED -- the leaf is not a generation lever.** Paired, same binary, N=2000, d1/b3
+(`logs/kittyv2_swaps/bench_leaf_now.sh`):
+
+| | no leaf | v3's own leaf |
+|---|---|---|
+| CPU ms/rollout | 2408.43 | **2465.03 (1.024x, worse)** |
+| p50 / p90 | 343.1 / 2545.9 | 341.8 / 2511.3 |
+| p99 / max | 45,070 / 250,104 | 47,520 / 254,295 |
+| units/rollout | 8346.15 | 8452.34 |
+
+This lands within 0.001x of arm B's earlier probe using **v2's** sidecar (1.025x), so that probe's
+known defect never mattered -- the conclusion was right the first time.
+
+## THE ACTUAL FIND: the greedy subset walk OBSERVED NO BOUND (fixed, `a28b566e`)
+
+`gamework::CheckDeadline()` has exactly ONE caller, inside `Add()`, which runs once per simulated
+turn-step. The greedy subset walk consults **no budget** -- *"The budget was not exceeded. It was never
+consulted"* -- so the per-game abandon flag was being SET and then ignored by the one region burning
+the time. Neither the unit ceiling nor either wall stage could reach it.
+
+**Proven live, not argued.** Phase C stalled at 99% complete on a single game (`V8_s10010` gi=370)
+that ran **4.07 h against a 3.5 h hard cap** and kept going, holding 31 of 32 cores idle for over an
+hour. V8's mean is 14.5 s/game, so it reached ~970x its own cell. Worse, the cell-condemnation
+fallback that would otherwise have moved on **deliberately stands down whenever a wall cap is armed**
+(*"It exists ONLY because a unit ceiling does not bound time; that premise is false here"*) -- so
+arming the cap removed the only mechanism that could still have rescued the run. The batch monitor
+logged it 23 times: *"bounded by the WALL-CLOCK backstop, so the cell is NOT condemned."*
+
+Fixed with a **strided** poll (`kWalkAbandonStride = 1024`): a per-visit test was measured in
+2026-10-01's wsweep3 at 8-14% core-ms on this very deck for ZERO play change, so the common visit
+stays an increment and a compare, exactly as `kClockStride` already does for the clock.
+
+**Verified inert by measurement rather than by the argument for it.** The harness's own freeze check
+reported *"PLAY UNCHANGED (smoke digests fold to e797ccef2499) -- keeping every game"*, preserving all
+20,499 banked games across the src change; and the keep bench gives units/rollout **8346.15 against
+8346.17** pre-fix, which -- units being deterministic -- is byte-identical work.
+mtg-test 2,645,541/2,645,541.
+
+**WHY IT CHANGES THE PIVOT.** This is a TERMINATION defect, not a pricing one, so it sits outside the
+"we aren't budgeting right" line the user closed. And with the walk now polling, a per-rollout wall cap
+can finally bound the keep generator's tail -- which is the single structural difference that let the
+leaf generation fit a window while the keep generation could not. **The open design question is the
+user's**, because it changes the table's content rather than its schedule: abandoning a keep rollout
+leaves that cell-side unlabelled, so the cell never freezes and R never advances. Phase C solves the
+same problem by backfilling; the keep generator has no equivalent.
+
 ## Where the keep table goes from here
 
 Deferred, with the 176,099-record journal preserved in four copies
