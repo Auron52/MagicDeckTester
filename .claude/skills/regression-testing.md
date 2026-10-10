@@ -158,19 +158,25 @@ and an unreproducible one-off anomaly is not grounds for a standing 2x tax).
 
 ### If your evidence says a tier WILL regress, rebaseline that tier NOW
 
-**Never adopt a change while leaving a tier you already know is stale.** If your
-adoption write-up can say "the overnight tier will show a regression at cell X",
-then you have already done the expensive part — the measurement and the judgement
-that the regression is acceptable. Running and accepting that tier is the cheap
-close-out, and it is **your** job, not the next agent's.
+**The overnight tier is NOT run between fixes or optimizations (USER, 2026-10-10: *"It isn't
+intended to be run in between each fix (or optimization)"*, after per-change overnight runs had slowed
+every development cycle).** A fix or optimization is validated with unit tests, scenarios, and smoke +
+regression (every changed game explained). Where the adoption bar needs a slower game checked, check
+THAT GAME directly (`--seed S --game-index G --games 1` at `--depth <win turn> --budget-ms 100`, then
+`--depth 8 --budget-ms 0`), not by re-running a tier. Accept smoke/regression GT for what moved and
+leave the overnight GT to the periodic overnight run, which re-measures and accepts everything that
+landed since the last one in ONE pooled run, with its per-game audit naming every changed game. Say
+in your commit message that the overnight GT is left for that run. (This replaces an older rule here,
+"never leave a tier you know is stale; running and accepting it is your job", which turned every
+play change into another overnight run.) A held-out A/B is still how a LOSSY narrowing or a
+heuristic earns adoption -- but as its own pooled batch scoped to the decks that move, sized to the
+effect, not a full overnight tier.
 
-**Scope: prefer the FULL tier.** Overnight is ~8 h of wall clock but almost none of your
-attention — launch it, do other work, accept it. `--deck=<name>[,<name>]` exists and is
+**Scope of the periodic run: the FULL tier.** `--deck=<name>[,<name>]` exists and is
 safe (the aggregate rebuild iterates the full mode arrays, so other decks' keys survive),
 but it only narrows the *promotion* when the RESULTS file itself came from a per-deck
 **run**; `--accept` after a full run promotes every key in `test/results/<mode>.env`
-regardless of `--deck`. So: re-run the whole tier unless you have a specific reason not
-to, and reach for `--deck` only when you must.
+regardless of `--deck`.
 
 Record *why* you accepted a known regression, in the ground truth itself:
 `bash test/regression.sh --overnight --accept-with-regressions="<note>"` writes an

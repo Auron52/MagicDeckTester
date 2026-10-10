@@ -208,6 +208,15 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     so it stays off", and never fall back to a generic default. *"There is no case where we should do
     that."*
 
+- **THE OVERNIGHT TIER IS NOT RUN BETWEEN FIXES OR OPTIMIZATIONS (user directive, 2026-10-10).** The
+  user's words: *"It isn't intended to be run in between each fix (or optimization)"* -- per-change
+  overnight runs were slowing every development cycle. Validate a fix with unit tests, scenarios, smoke
+  and regression; check a slower game the bar cares about as a single-game repro, not by re-running a
+  tier; accept smoke/regression GT and leave the overnight GT to the periodic overnight run, which
+  accepts everything landed since the last one in one pooled run. A lossy narrowing or heuristic still
+  earns adoption through a held-out A/B -- scoped to the decks that move and sized to the effect, not
+  a full overnight tier. Details: `.claude/skills/regression-testing.md`.
+
 - **NEVER create merge commits — REBASE local work onto origin (user directive, 2026-08-12).**
   The user wants linear history. `git config pull.rebase true` + `rebase.autoStash true` are
   set in this repo; keep them set on any new clone, and integrate remote work with
