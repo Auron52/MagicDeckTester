@@ -27701,10 +27701,73 @@ static bool GoffExactAutoOn()
 // the lever above.
 static bool GoffExactHere() { return HumanPlayActive() || GoffExactAutoOn(); }
 
+// MTG_EDF_GORGE_RED_SIZING (DEFAULT ON; =0 restores the Gorge branch's unconditional early return).
+// Autonomous play only: the human COMBO OFF button keeps its count, so saved references replay as
+// recorded (the same scoping DrawLandGoOffOn uses).
+static bool GorgeRedSizingOn()
+{
+    if (HumanPlayActive()) { return false; }
+    static const bool env_on = EnvOn("MTG_EDF_GORGE_RED_SIZING", true);
+    return heurarm::Flag(heurarm::EDF_GORGE_RED_SIZING, env_on);
+}
+
+// Does EVERY iteration of this loop hand back a source of the Gorge's {R} pip?
+//
+// A Shivan Gorge ping is `{2}{R}, {T}`, so the Gorge route needs one red PER ITERATION, and the only
+// red a loop renews is a land it untaps. The untap set is the Gorge itself (ApplyBlinkLoop promotes the
+// damage sink to the front of the untap priority -- its own {T} is the ping's, so its mana never pays)
+// plus the top `untaps - 1` lands in FlickerTopLandYields' yield order (same strict-> insertion, so the
+// same tie-break). A land in that set renews red when it produces {R} WITHOUT spending a resource, or
+// carries a land Aura that adds red or any colour. Aether Hub's coloured mode spends {E}, so its red
+// is one-shot however often it is untapped -- that is the EDF gi 671 board (seed 217872, t7): the
+// Hub's one energy was the board's only red, the Gorge pinged once, and the loop sized to "opponent
+// life / Gorge damage" = 10 stopped there, three draws short of the Living Wish the drain route needed.
+//
+// CONSERVATIVE in the direction this function's contract makes safe: a false NO only means the other
+// routes are sized as well (over-sizing realises only what is payable -- ApplyBlinkLoop re-prices
+// every activation), while a false YES is the under-sizing being fixed.
+static bool GorgeRedEachIteration(const GameState& s, int me, const FlickerLoop& loop)
+{
+    int gorge_id = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
+        { gorge_id = p.card.m_number; break; }                 // ApplyBlinkLoop promotes exactly one
+    }
+    const int slots = std::min(kFlickerMaxUntaps, loop.untaps - (gorge_id != 0 ? 1 : 0));
+    if (slots <= 0) { return false; }
+    int top[kFlickerMaxUntaps]  = {0};
+    int topr[kFlickerMaxUntaps] = {0};
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsLand() || p.card.m_number == gorge_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        int y = PermanentManaYield(s, p, *d);
+        int r = 0;
+        if (d->params.energy_per_colored_tap <= 0)
+        {
+            for (Color col : EffectiveProduces(s, me, *d, /*in_hand=*/false))
+            { if (col == Color::Red) { r = 1; break; } }
+        }
+        if (LandAuraColorMask(s, p) & (1 << static_cast<int>(Color::Red))) { r = 1; }
+        for (int i = 0; i < slots; ++i)
+        { if (y > top[i]) { std::swap(y, top[i]); std::swap(r, topr[i]); } }
+    }
+    for (int i = 0; i < slots; ++i) { if (topr[i]) { return true; } }
+    return false;
+}
+
 int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 {
     if (!loop.ok) { return 0; }
     const int life = std::max(1, s.Opponent().life);
+    // MTG_EDF_GORGE_RED_SIZING: the Gorge's count when its {R} is NOT renewed every iteration. It is
+    // then a FLOOR, not the answer: the Gorge fires only while one-shot red lasts, so the routes below
+    // are sized too and the larger count wins (0 = unset, every return below is unchanged).
+    int gorge_floor = 0;
     // ONE ceiling read for the whole function (Session 24). Outside the EXACT pass this triggers
     // that pass exactly once and then every clamp below is an identity; inside it, it is the
     // sanity bound, so the requirement is computed unclamped. The DRAW-LAND route at the bottom
@@ -27757,7 +27820,12 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
             refund = FlickerTopLandYields(s, me, loop.untaps - 1) + sink_yield;
         }
         if (refund > loop.cost_mv + loop.gorge_cost_mv)
-        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, cap); }
+        {
+            const int gorge_n = std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, cap);
+            if (!GorgeRedSizingOn() || GorgeRedEachIteration(s, s.active_player_index, loop))
+            { return gorge_n; }
+            gorge_floor = gorge_n;   // one-shot red: size the other routes as well (see above)
+        }
     }
 
     // THE TWO {T}-LESS SINKS. Sized by MANA rather than by iterations, which is the structural
@@ -27865,8 +27933,9 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // completes and stalls with the finisher still in the library.
         if (iters > 0)
         {
-            return size_for(iters, c_iterations(static_cast<long long>(activations)
-                                                * loop.drain_c_pips));
+            return std::max(gorge_floor,
+                            size_for(iters, c_iterations(static_cast<long long>(activations)
+                                                         * loop.drain_c_pips)));
         }
     }
     if (loop.exile_cost_mv > 0 && s.opponent_library_dealt)
@@ -27878,7 +27947,8 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
                                                    loop.net, cap);
         if (iters > 0)
         {
-            return size_for(iters, c_iterations(static_cast<long long>(cards) * loop.exile_c_pips));
+            return std::max(gorge_floor,
+                            size_for(iters, c_iterations(static_cast<long long>(cards) * loop.exile_c_pips)));
         }
     }
 
@@ -27955,7 +28025,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
             const int by_mana = FlickerIterationsForMana(cards * std::max(1, cost), loop.net,
                                                         FlickerMaxIterations());
             if (by_mana <= 0) { continue; }
-            return std::clamp(std::max(cards, by_mana), 1, FlickerMaxIterations());
+            return std::max(gorge_floor, std::clamp(std::max(cards, by_mana), 1, FlickerMaxIterations()));
         }
     }
 
@@ -27975,9 +28045,9 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int want_mana = static_cast<int>(s.players[s.active_player_index].library.size())
                             + d->card.m_mana_cost.ManaValue();
         const int iters = (want_mana + loop.net - 1) / loop.net;
-        return std::clamp(iters, 1, cap);
+        return std::max(gorge_floor, std::clamp(iters, 1, cap));
     }
-    return 0;   // no way to cash the mana -> no go-off candidate
+    return gorge_floor;   // no way to cash the mana -> no go-off candidate (or the Gorge's one-shot count)
 }
 
 const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");

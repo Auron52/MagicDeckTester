@@ -402,6 +402,7 @@ enum Slot : int
     EXEC_FAILED_CAST_NO_RESOLVE, // MTG_EXEC_FAILED_CAST_NO_RESOLVE the executor's UNCOMMITTED draw-engine branch (the d0 runner / no committed line) no longer runs the post-cast breakpoint re-solve for a cast it could not pay -- the committed branch and ApplyPlanDirect's apply_one already skip it (same doc). Default OFF 2026-10-10: the re-solve after a no-op cast is DELIBERATE (step 31, dfc11ec41, measured this gate at +1351 turns on dragonstorm d0); =1 is an A/B arm only
     PAYABLE_ORDER_RITUALS,    // MTG_PAYABLE_ORDER_RITUALS  MTG_PAYABLE_ORDER's domain admits an apply-site order holding a PRODUCING cast the projection walk credits (a mana ritual, a same-turn rock, a spendable Treasure mint), not only an ETB-Treasure maker / reveal-or-pay cast: a producer's position changes payability (same doc). Default ON; =0 -> the maker / reveal domain only
     SOLVE_VERIFIED_WIN,       // MTG_SOLVE_VERIFIED_WIN      Solve (d0 + rollout leaves): a trial-VERIFIED COMBO OFF route win outranks a merely PROJECTED win, and short-circuits the walk (EDF gi 671; docs/design/discard-round-play-defects-2026-10-10.md s3). Default ON; =0 -> the old (projected win, value, mask) order
+    EDF_GORGE_RED_SIZING,     // MTG_EDF_GORGE_RED_SIZING    FlickerGoOffCount: the Gorge's life/damage count returns early only when every loop iteration renews a red source; one-shot red makes it a floor under the other routes' sizing (EDF gi 671). Autonomous play only. Default ON; =0 -> the unconditional early return
     COUNT
 };
 
@@ -765,6 +766,7 @@ inline const char* Name(int slot)
         "MTG_EXEC_FAILED_CAST_NO_RESOLVE",
         "MTG_PAYABLE_ORDER_RITUALS",
         "MTG_SOLVE_VERIFIED_WIN",
+        "MTG_EDF_GORGE_RED_SIZING",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
