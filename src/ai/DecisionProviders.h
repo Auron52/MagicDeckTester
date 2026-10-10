@@ -607,6 +607,11 @@ public:
     // equip_scale_*, hone_counters_on_enter_or_attack, or aura_enchant_requires "modified" in the
     // list). Re-check if the list gains an Equipment-matters card.
     bool FoldsInertHasteShroudEquips() const override { return true; }
+    // Board-lethal short-circuit (MTG_BRUNA_LETHAL_SHORTCIRCUIT, default ON): when the board's attack
+    // already kills, attack without enumerating casts. Sound -- winning this turn is the minimum win
+    // turn -- and it stops a cast that taps an attacker (an Aura that taps its host, a dork paying for
+    // a cast) being ranked over a sure lethal by a projection that missed the tap.
+    bool UseLethalShortCircuit() const override;
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
