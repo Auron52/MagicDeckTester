@@ -34441,6 +34441,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     g_search_candidate_enum = false;
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     g_search_candidate_enum = saved_sce;
+    // Does any candidate need the deck's order check (a restrictor or a spliced cast)? One pass, so a
+    // deck without either never even scans the subset (see OrderedSubsetRealisable in consider).
+    bool order_check_cands = false;
+    for (const Action& oc : cands)
+    { if (oc.max_casts_after >= 0 || oc.splice_count > 0) { order_check_cands = true; break; } }
     considerstats::Record("solve", is_pre_combat, cands, state);
     int n = static_cast<int>(ap.hand.size());
     // The attack this subset forfeits to its own taps (mana AND non-mana {T} activations) -- see
@@ -35496,9 +35501,6 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 }
             }
             if (after > cands[j].max_casts_after) { return; }   // illegal: too many spells after it
-            // ...and realisable in the deck's own order (Dragonstorm: not only through Irencrag ->
-            // Apex). Lockstep twin in EnumeratePlans. Default true.
-            if (!ResolveProvider(state).RestrictorSubsetRealisable(state, cands, sel)) { return; }
             // ...and the OTHER end of the same rule (MTG_IRENCRAG_WASTE). A cast RESTRICTOR
             // exists to fund THE FINISHER, and the USER's order reserves its one allowed follower
             // for exactly that: "Irencrag Feat must be second last as it can only be cast before
@@ -35537,6 +35539,18 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                            : (after > 0);        // anything at all (adopted loose)
             if (!iren_ok && IrencragWasteGateEnabled() && !OrderingSearchEnabled(state))
             { iren_waste = true; }
+        }
+        // REALISABLE IN THE DECK'S OWN ORDER (DecisionProvider::OrderedSubsetRealisable; default
+        // true). Asked only for a subset holding a cast restrictor or a SPLICED cast -- the two
+        // shapes whose payability the totals above cannot see (Dragonstorm: an Apex payable only
+        // through Irencrag -> Apex; a splice payable only by revealing a copy already cast).
+        // Lockstep twin in EnumeratePlans.
+        if (order_check_cands)
+        {
+            bool ask = false;
+            for (int j : sel)
+            { if (cands[j].max_casts_after >= 0 || cands[j].splice_count > 0) { ask = true; break; } }
+            if (ask && !ResolveProvider(state).OrderedSubsetRealisable(state, cands, sel)) { return; }
         }
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so they
@@ -46422,6 +46436,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Also: a plain Aura targeting a creature CAST this same turn (its stable number). No-op unless the
     // hand holds both an Aura and a creature -> byte-identical for every other deck/state.
     AppendCreatureTargetAuraCandidates(state, cands);
+    // Does any candidate need the deck's order check (a restrictor or a spliced cast)? Twin of Solve's.
+    bool order_check_cands = false;
+    for (const Action& oc : cands)
+    { if (oc.max_casts_after >= 0 || oc.splice_count > 0) { order_check_cands = true; break; } }
     int n = static_cast<int>(ap.hand.size());
     // The attack this subset forfeits to its own taps -- see AttackTapLoss. Lockstep twin in Solve.
     AttackTapCtx atk_tap_ctx;
@@ -48159,9 +48177,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
             }
             if (after > cands[j].max_casts_after) { _ct.label = "irencrag"; return; }
-            // ...and realisable in the deck's own order (lockstep twin in Solve's consider).
-            if (!ResolveProvider(state).RestrictorSubsetRealisable(state, cands, sel))
-            { _ct.label = "irencrag-order"; return; }
             // The other end of the same rule -- see the twin in Solve::consider for the full note.
             // Lockstep: both sites must agree or the enumerator offers a plan the leaf will not score.
             const int  rule    = IrencragRule();
@@ -48185,6 +48200,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (!iren_ok && IrencragWasteGateEnabled() && !OrderingSearchEnabled(state))
             { iren_waste = true; }   // scope: rank-ordered decks only -- see the twin's note
+        }
+        // Realisable in the deck's own order (lockstep twin of Solve's consider -- see there).
+        if (order_check_cands)
+        {
+            bool ask = false;
+            for (int j : sel)
+            { if (cands[j].max_casts_after >= 0 || cands[j].splice_count > 0) { ask = true; break; } }
+            if (ask && !ResolveProvider(state).OrderedSubsetRealisable(state, cands, sel))
+            { _ct.label = "deck-order"; return; }
         }
 
         if (dmgev::CastTriggerBill(state, self_damage, self_damage_max) >= ap.life)

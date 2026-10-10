@@ -1,0 +1,211 @@
+# Dragonstorm: cast in the USER's order everywhere it is decided (`MTG_DRAGONSTORM_USER_ORDER`)
+
+Status: IMPLEMENTED behind ONE lever, `MTG_DRAGONSTORM_USER_ORDER` (heurarm slot `DRAGONSTORM_USER_ORDER`,
+appended), **default ON**; `=0` is byte-identical to the parent commit `d6a760e5` (27 jobs / 540 games:
+Dragonstorm d0 / d3 b10 / shipped, Hinata2 d0 / d3, Mirrorwing d0 / d3). The pooled suite A/B is owed
+(not run here). 2026-10-10.
+
+## The directive
+
+USER, 2026-10-10:
+
+> "We should do things in the order I said, once they become available, so after the breakpoint the cast
+> order should follow my order. If it wasn't doing that it should be fixed."
+
+And the Ruby Medallion ruling the same day:
+
+> "Ruby medallion should be flexible. It should be cast as early as possible while still maintaining the
+> line. It has to be cast later if cost does not allow it to be earlier."
+
+## The order, and every reading taken
+
+Sources: `dragonstorm-search-pruning.md` "Canonical go-off cast order (user-specified)";
+`dragonstorm-cast-order-search.md`; `gi22-durdle-and-irencrag-apex.md` (rules 1-5);
+`dragonstorm-plan-execution-fidelity-bug.md` ("funding sources should be cast first"); the ruling above.
+
+    Ruby Medallion  <  Rite of Flame  <  Pyretic Ritual  <  Desperate Ritual (no splice)  <  Seething Song
+      <  Desperate Ritual (spliced)  <  Apex of Power  <  hard-cast Dragon  <  Irencrag Feat  <  Dragonstorm
+
+Readings (each a choice the USER should confirm; none settles a USER decision silently):
+
+1. **Medallion = the EARLIEST slot at which the whole planned line still pays** (its {2} payable there AND
+   every later cast paid after it, with the Medallion's discount credited to the red spells after it), never
+   after Irencrag. If no slot lets the whole line pay, the slot that pays the MOST of it, earliest on ties.
+   **Several Medallions:** each placed as early as possible in turn (the lexicographically smallest slot
+   vector that pays) -- they may end up apart ("staggered"); the old search inserted them as one block.
+2. **"Once they become available":** a card joins the order when it is castable -- a card exiled by Apex
+   joins at the post-Apex continuation, which is ordered by the same rules.
+3. **Ritual order** is read off card parameters, which reproduces the USER's list for this deck: printed
+   cost ascending (Rite {R} < Pyretic {1}{R} < Seething {2}{R}), the Arcane splice base (Desperate) after a
+   same-cost plain ritual, a SPLICED cast after Seething (more splices first).
+4. **Splice legality wins over the literal slot of a plain Desperate.** A copy that a splice reveals must
+   still be in HAND when the spliced copy is cast. With two copies, "plain Desperate (4) before Seething,
+   spliced Desperate (6) after" is illegal -- the plain one is the revealed one. The plain copy then moves to
+   just after the spliced cast, and only as far as legality needs (with a spare copy in hand it keeps slot
+   4). The old engine executed such illegal splices (21 of 498 d0 phases; it never checked the hand).
+5. **Apex is an enabler**: after the rituals, before a Dragon, Irencrag and Dragonstorm. Irencrag -> Apex
+   (the trap) is never cast, and a subset only payable through the trap is not a line.
+6. **Hard-cast Dragon**: after the rituals and Apex; before Irencrag when Dragonstorm closes; when there is
+   no Dragonstorm, Irencrag goes immediately before the (last) Dragon (rule 2: Irencrag -> Dragon is a kept,
+   low-value line). Two hard-cast Dragons keep plan order between them (the Scourge/Lathliss ETB order is
+   unchanged from before).
+7. **Irencrag second-to-last**: after it only the closer (Dragonstorm or a Dragon) is ever offered; with the
+   cast cap spent nothing is.
+8. **Where the USER's order cannot pay**: MTG_PAYABLE_ORDER's nearest payable permutation (USER-adopted),
+   judged with the same exact walk, which refuses the trap and illegal splices.
+9. **Search**: the cast-ordering search now tries the canonical arranged order and, per rule 5 ("splice-after
+   Seething preferred ... individual-before is the fallback. Needs search."), the same order with the spliced
+   Desperates in front of Seething. It no longer tries every Medallion slot nor a raw hand-order "identity".
+
+## Audit (before = parent commit, after = this change; same seeds)
+
+Instrument: `MTG_USER_ORDER_TRACE=1` (diagnostic, default off; `=2` adds hand / pool / cap) prints a
+`[uo-order]` line per executor cast-order decision (order, exact-walk payability, the Medallion's slot and
+its earliest payable slot) and a `[uo-cast]` line per real cast (paid / staged / splice). Audit script:
+`logs/userorder/audit.py` (gitignored scratch; the classes are defined in its header). One pooled 4-thread
+batch per arm: d0 = 300 games (seeds 7000001+), d3 b10 = 200 (7100001+), shipped (d5 b20 from the
+profile) = 200 (7200001+). Counts are PHASES (game, turn, main) showing the class; pre / post = before /
+after an Apex resolved in that phase.
+
+| class | d0 before | d0 after | d3 before | d3 after | ship before | ship after |
+|---|---|---|---|---|---|---|
+| ritual order not per USER list | 48 / 8 | 0 / 0 | 54 / 8 | 0 / 0 | 36 / 6 | 0 / 0 |
+| hard-cast Dragon before a ritual | 5 / 16 | 0 / 0 | 0 / 1 | 0 / 0 | 0 / 1 | 0 / 0 |
+| hard-cast Dragon before Apex | 3 / 5 | 0 / 0 | 0 | 0 | 0 | 0 |
+| Irencrag before Apex (trap) | 7 / 0 | 0 / 0 | 0 | 0 | 0 | 0 |
+| Irencrag -> non-closer spell | 7 / 0 | 0 / 0 | 0 / 1 | 0 / 0 | 0 | 0 |
+| Irencrag last (nothing after) | 1 / 0 | 1 / 0 (a) | 1 / 0 | 1 / 0 (a) | 0 | 0 |
+| Medallion later than its earliest payable slot | 5 / 12 | 0 / 0 | 2 / 0 | 0 / 0 | 0 | 0 |
+| Medallion earlier than payable (drops the line) | 0 | 0 | 3 / 0 | 0 / 0 | 5 / 0 | 0 / 0 |
+| plain Desperate before a spliced one | 21 / 0 (b) | 3 / 0 (c) | 0 | 1 / 0 (c) | 0 | 3 / 0 (c) |
+| Dragonstorm not last (a later decision) | 0 / 2 | 0 / 4 (d) | 0 | 0 | 0 | 0 |
+| hand ritual / Medallion cast after Apex, not in the pre-Apex plan | 0 / 15 | 0 / 16 (e) | 0 | 0 | 0 / 2 | 0 / 2 (e) |
+| d0 failed-cast re-solve spin (phases with >= 10 failed casts) | 2 | 0 | 0 | 0 | 0 | 0 |
+| Irencrag -> Dragon (allowed, rule 2) | 3 / 0 | 3 / 0 | 8 / 2 | 9 / 4 | 3 / 1 | 3 / 1 |
+
+Example seeds (game seed, turn): ritual order d0 (7000003, 5), d3 (7100008, 4), ship (7200001, 6); Dragon
+before a ritual (7000018, 6); trap (7000028, 5), (7000082, 3), (7000288, 3 -- 331 spin lines); Medallion
+later (7000047, 5), (7100111, 3); Medallion earlier than payable (7200139, 3: Medallion | Seething | Scourge
+on two Mountains -- Seething and Scourge never cast). Repro: `--seed <s> --game-index <s - base> --games 1`
+with `--depth 0 --ignore-play-profile` (d0), `--depth 3 --budget-ms 10 --ignore-play-profile` (d3) or
+`--budget-ms 20` (shipped), base = 7000001 / 7100001 / 7200001.
+
+Remaining, each explained:
+- (a) Irencrag -> Karrthus (7000051 T5) / Kolaghan (7100151 T5): the USER's order, but the subset is
+  colour-infeasible (Irencrag floats only red; the Dragon needs {B}/{G}). An enumeration colour-admission gap,
+  not an order defect.
+- (b) The old comparator put the plain copy first (cheapest cost) and executed the splice off a copy that had
+  left the hand.
+- (c) Legal: a spare copy stays in hand (three Desperates, two cast).
+- (d) Post-breakpoint LEFTOVERS: a main-plan cast still in hand after the Apex continuation re-solve is cast
+  after it (7000158 T8: Scourge after the continuation's Dragonstorm; 7000043 T5). The continuation re-solve
+  did not include it; the executor's main loop then casts the plan's remainder. A decision-structure issue,
+  in both arms; see "Found, not fixed".
+- (e) Subset choices: the d0 greedy's pre-Apex plan left a ritual / Medallion in hand that the post-Apex
+  re-solve then cast. A ritual's net mana is the same either side of Apex, so this is not an ordering loss.
+
+## What changed (all behind the one lever unless noted)
+
+Provider (`src/ai/DecisionProviders.{h,cpp}`, `DragonstormProvider`):
+- `CastOrderRank`: Medallion 110, Rite 120, Pyretic 140, Desperate 150, Seething 160, Apex 180, creature 190,
+  Irencrag 200, Dragonstorm 210 (card-parameter classes). `=0` -> `GenericProvider::CastOrderRank`.
+- `CastOrderActionRank` (new hook, read by the shared `CastOrderLess`): a spliced cast 170+ (more splices
+  first).
+- `ArrangeCastOrder` (new hook; one shared entry `ApplyDeckCastArrangement` in `ManaPayment.cpp`): splice
+  legality, Irencrag before a lone Dragon closer, each Medallion at its earliest payable slot.
+- `ExactOrderWalk` (new hook): `PayableCastOrderCore` (MTG_PAYABLE_ORDER) judges with the exact walk (and an
+  exact-aware order-free bound) at the apply site.
+- `CastOrderingCandidates` (new hook): the search's orderings (canonical arranged + the splice fallback),
+  computed after the plan's Lotus Bloom sacrifice; replaces `DragonstormCastOrderings` for this deck.
+- `CastUnderCastCap` (new hook at the `CollectActions` choke point): after Irencrag resolves only
+  Dragonstorm / a Dragon is offered; a spent cap offers nothing.
+- `OrderedSubsetRealisable` (new hook, both subset evaluators -- Solve's consider and EnumeratePlans, after
+  the restrictor test, only for a subset holding a restrictor or a spliced cast): a subset whose Apex is
+  payable only after Irencrag, or whose splice only by revealing a copy already cast, is not a line.
+
+Engine (`src/ai/ManaPayment.{h,cpp}`, `AIEngine.cpp`, `TurnSolver.cpp`):
+- `ExactOrderFirstUnpayable`: FirstUnpayablePos plus, positionally, a same-turn colour reducer's discount,
+  Rite's graveyard escalation, Apex's ten from hand (none off the exile), the Irencrag cast cap (and the
+  trap), splice legality, and a line-aware generic payment (each colour's surplus over the pips still owed
+  first -- the plain walk spent the Unclaimed Territory's {B} on a ritual's {1}, s7000261 T5).
+- `ApplyDeckCastArrangement` called right after the comparator sort at every cast-order site: executor main
+  (clean / opaque), breakpoint continuation (clean / opaque), the pod / pe continuation appliers; the rollout's
+  `apply_plan_actions` (clean / opaque); the sequential-payability rescue; `CanonicalNonSacCastOrder`; the
+  earliest-win report. A no-op for every other provider (byte-identical).
+- The diagnostic trace (`MTG_USER_ORDER_TRACE`).
+
+Unit cover: `test/unit/test_dragonstorm_user_order.cpp` (11 cases): rank list on/off; comparator incl. the
+spliced Desperate; a plain Desperate keeps its slot with a spare copy; Medallion unpayable first / payable
+after one ritual (and the plain payable fallback does NOT find that slot: its walk sees no discount, its
+order-free bound says nothing pays, it returns Medallion-first untouched); apply level (ApplyPlanDirect):
+the Medallion line casts every spell where the generic order strands the Dragon; an Apex set holding
+Irencrag (Apex before Irencrag; the walk refuses the trap); Irencrag before a lone Dragon (apply level); the
+searched orderings; the cast-cap gate; the trap subset; the payable fallback never buys payability with an
+illegal splice. Full suite 916/916.
+
+## Ruby Medallion: what the old machinery did
+
+- **MTG_PAYABLE_ORDER's nearest payable permutation does NOT yield the earliest payable Medallion slot.** Its
+  walk (FirstUnpayablePos) never credits a same-turn Medallion's discount, so a Medallion is pure cost to it:
+  on a tight line its order-free bound concludes no permutation pays and it returns the order untouched
+  (unit: two Mountains, {Medallion, Rite, Pyretic, Seething, Scourge}: Medallion first, the rest stranded);
+  where a permutation does pay it is the nearest by inversions, which may move a different card. Its domain
+  does cover the set (a ritual is a credited producer under MTG_PAYABLE_ORDER_RITUALS). Hence the explicit
+  placement, and the exact walk inside the fallback.
+- **The depth>0 search did NOT keep the earliest slot that preserves the line.** It tried every slot
+  earliest-first and kept the FIRST of any score tie, so a Medallion-first slot that could not be paid --
+  dropping the rest of the line -- won whenever the win turn came out the same (ship 7200139 T3; 5 shipped /
+  3 d3 phases in 200 games). It also kept a raw hand-order identity and put a plain Desperate after Seething.
+  Now the generator emits the arranged order (Medallion at its earliest payable slot) plus the splice fallback.
+
+## Sanity A/B (NOT a verdict; the pooled suite A/B is owed)
+
+One pooled batch, lever on vs off, paired seeds (d0 7600001+, d3 b10 7700001+), 4 threads:
+
+| cell | games | turn sum on | turn sum off | delta | faster | slower | wall on/off | units on/off |
+|---|---|---|---|---|---|---|---|---|
+| d0 | 300 | 1503 | 1530 | -27 (-0.090/game) | 18 | 3 | -- | -- |
+| d3 b10 | 100 | 451 | 453 | -2 (-0.020/game) | 1 | 0 | 0.81x | 0.86x |
+
+Every slower game, root-caused:
+- **s7600011 gi10 (d0, 6 -> unwon).** Turn 6, after the first Apex, the continuation casts Medallion |
+  Seething | Apex (the USER's order; generic: Seething | Medallion | Apex) -- the Medallion now discounts
+  Seething, leaving 2 mana instead of 1 after the exiled Apex. With that extra mana the d0 Solve's
+  rituals-for-payoff guard (`s_ritual_payoff_guard`, TurnSolver) calls Rite of Flame a SURPLUS ritual in
+  {Apex, Rite, Desperate x2, Seething} and rejects the subset (the guard exempts only a storm tutor, not
+  Apex), and the accel-prefix collapse never enumerates the Rite-less prefix -- so no Apex line survives and
+  the turn stalls. Verified: exempting impulse-exile from the guard as well restores T6 on this arm (and, the
+  same tweak, turns the OFF arm unwon -- the guard / prefix interaction is fragile on both arms). A
+  pre-existing d0-greedy defect, exposed by the extra mana. NOT fixed here (outside the order; see below).
+- **s7600233 gi232 (d0, 6 -> 7).** T3 d0 plan {Rite, Rite, Pyretic, Scourge} on one Mountain. Generic order
+  casts Scourge FIRST (creature 10) -- unpaid -- then burns the rituals for nothing. The USER's order realises
+  the plan: Scourge on T3, attacking T4-T6. Its combat firebreathing then spends one storage-land mana a turn,
+  so on T6 Seething x2 + Dragonstorm is a mana short; kill T7. The old T6 kill rested on its T3 Dragon cast
+  failing.
+- **s7600052 gi51 (d0, 5 -> 6).** The old T5 kill used an ILLEGAL splice: Pyretic, Desperate (plain),
+  Desperate splicing the copy that had just been cast (two copies), Irencrag, Dragonstorm. The legal order
+  (spliced first, {2}{R}{R}) cannot be paid on that board, so the subset is refused and the d0 Solve plays
+  another line.
+
+## Found, not fixed
+
+1. **Rituals-for-payoff guard vs Apex** (gi10 above): `s_ritual_payoff_guard` treats an Apex line as a fixed
+   payoff and calls a cheap ritual surplus; with the accel-prefix collapse no Apex subset survives. Proposed:
+   exempt `impulse_exile` like `tutor_to_battlefield` (an Apex's leftover mana and storm count are spent by the
+   exile), behind its own lever, measured on both arms.
+2. **Post-breakpoint leftovers** (audit note d): the executor (and its rollout twin) cast the pre-breakpoint
+   plan's remaining casts after the continuation re-solve, e.g. a Dragon after the continuation's
+   Dragonstorm. Either the remainder should be offered to the re-solve and not cast after it, or the re-solve
+   should run after the remainder; both change executor/rollout semantics and need their own A/B.
+3. **Splice legality is not enforced by the engine itself** with the lever off: the executor pays (k+1) times
+   the cost and floats (k+1) times the mana without checking the revealed copies are in hand, and the
+   comparator casts the plain copy first. Under the lever the order and the enumeration respect it; with
+   `=0` the old behaviour (21 illegal d0 phases / 300 games) remains.
+4. **Colour admission**: Irencrag -> Karrthus / Kolaghan subsets pass the enumerator although Irencrag floats
+   only red (audit note a).
+5. **The d0 failed-cast re-solve spin** (deliberate, step 31; MTG_EXEC_FAILED_CAST_NO_RESOLVE default OFF):
+   re-solving an unpaid draw-engine cast up to the breakpoint-call cap. The trap subsets that fed it are now
+   refused (0 spin phases after vs 2), but the mechanism is unchanged.
+6. **Searched plans whose casts mostly fail** ("unpaid, decided order cannot pay": 24 d3 / 19 shipped phases):
+   subsets the optimistic enumeration credits admit and the search picks on a score tie with doing less.
+   Unchanged in kind by this work (fewer after: 47 -> 24 d3, 31 -> 19 shipped).

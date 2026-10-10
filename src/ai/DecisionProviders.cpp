@@ -11006,26 +11006,32 @@ bool DragonstormProvider::CastUnderCastCap(const GameState& s, const CardDefinit
     return def.params.tutor_to_battlefield || def.card.IsCreature();
 }
 
-// {rituals, Apex, Irencrag}-style subsets the totals admit but only the Irencrag -> Apex TRAP can pay:
-// in the USER's order Apex comes first and cannot be paid, Irencrag then floats seven red for nothing,
-// and the d0 runner re-solves the failed Apex over and over (dragonstorm d0 s7000219 T5: {Apex,
-// Irencrag} on seven mana). Judged on the subset's own canonical order -- the comparator plus
-// ArrangeCastOrder, exactly what the apply would realise -- with the exact walk: the subset is
-// refused only when that walk first fails AT an Apex. Only subsets holding a restrictor AND an
-// impulse-exile cast reach the walk.
-bool DragonstormProvider::RestrictorSubsetRealisable(const GameState& s0, const std::vector<Action>& cands,
-                                                     const std::vector<int>& sel) const
+// Two subset shapes the order-free totals admit but no order the USER allows can pay:
+//   * {rituals, Apex, Irencrag} payable only through the Irencrag -> Apex TRAP: in the USER's order Apex
+//     comes first and cannot be paid, Irencrag then floats seven red for nothing, and the d0 runner
+//     re-solves the failed Apex over and over (dragonstorm d0 s7000219 T5: {Apex, Irencrag} on seven
+//     mana);
+//   * a SPLICE payable only by revealing a copy already cast: {Desperate, Desperate+splice} with two
+//     copies needs the spliced cast first ({2}{R}{R}) -- the plain-first order "pays" by splicing a card
+//     that has left the hand (SubsetHasIllegalSplice counts copies, not the order; s7600052 T5).
+// Judged on the subset's own realised order -- the comparator, ArrangeCastOrder and the payable-order
+// fallback, exactly what the apply would do -- with the exact walk: refused only when that walk first
+// fails AT an Apex (with a restrictor in the set) or AT a spliced cast.
+bool DragonstormProvider::OrderedSubsetRealisable(const GameState& s0, const std::vector<Action>& cands,
+                                                  const std::vector<int>& sel) const
 {
     if (!UserOrderOn()) { return true; }
-    bool apex = false, pre = false;
+    bool apex = false, restrictor = false, spliced = false, pre = false;
     for (int j : sel)
     {
         const Action& a = cands[j];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (a.kind == Action::Kind::CastFromHand && d != nullptr && d->params.impulse_exile > 0) { apex = true; }
+        if (a.max_casts_after >= 0) { restrictor = true; }
+        if (a.kind == Action::Kind::CastFromHand && a.splice_count > 0) { spliced = true; }
         if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend) { pre = true; }
     }
-    if (!apex) { return true; }
+    if (!(apex && restrictor) && !spliced) { return true; }
     // The plan's pre-cast sacrifices (Lotus Bloom) are applied before its casts in both apply worlds.
     std::optional<GameState> pst;
     if (pre)
@@ -11049,11 +11055,15 @@ bool DragonstormProvider::RestrictorSubsetRealisable(const GameState& s0, const 
     { if (cands[j].kind == Action::Kind::CastFromHand && !cands[j].sacrifice_land) { ord.push_back(j); } }
     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y) { return CastOrderLess(s, cands[x], cands[y]); });
     ArrangeCastOrder(s, cands, ord);
-    const int fail = ExactOrderFirstUnpayable(s, cands, ord);
+    int fail = ExactOrderFirstUnpayable(s, cands, ord);
+    if (fail < 0) { return true; }
+    ApplyPayableCastOrder(s, cands, ord);   // the apply's fallback: the nearest order that pays, if any
+    fail = ExactOrderFirstUnpayable(s, cands, ord);
     if (fail < 0) { return true; }
     const Action& f = cands[ord[fail]];
     const CardDefinition* fd = f.def ? f.def : CardDatabase::Instance().Lookup(f.card_name);
-    return fd == nullptr || fd->params.impulse_exile <= 0;
+    if (f.splice_count > 0) { return false; }
+    return !(restrictor && fd != nullptr && fd->params.impulse_exile > 0);
 }
 
 void DragonstormProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,

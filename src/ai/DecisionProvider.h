@@ -699,14 +699,15 @@ public:
     // inherit it. Default true -> every deck without a rule is byte-identical.
     virtual bool CastUnderCastCap(const GameState& /*s*/, const CardDefinition& /*def*/) const { return true; }
 
-    // RestrictorSubsetRealisable -- a candidate subset holding a cast RESTRICTOR (max_casts_after:
-    // Irencrag Feat): can the deck's own order realise it? Asked by both subset evaluators (Solve's
-    // consider and EnumeratePlans) right after the "too many casts after it" legality test, only for a
-    // subset holding a restrictor. Dragonstorm (MTG_DRAGONSTORM_USER_ORDER): a subset whose Apex of
-    // Power can only be paid AFTER Irencrag -- i.e. only through the Irencrag -> Apex trap the USER
-    // ruled out -- is not a line. Default true.
-    virtual bool RestrictorSubsetRealisable(const GameState& s, const std::vector<Action>& cands,
-                                            const std::vector<int>& sel) const
+    // OrderedSubsetRealisable -- can the deck's own cast order realise this candidate subset? Asked by
+    // both subset evaluators (Solve's consider and EnumeratePlans, lockstep) after the restrictor
+    // legality test, and only for a subset holding a cast RESTRICTOR (max_casts_after) or a SPLICED
+    // cast -- the two shapes whose payability the order-free totals cannot see. Dragonstorm
+    // (MTG_DRAGONSTORM_USER_ORDER): a subset whose Apex of Power can only be paid after Irencrag (the
+    // trap the USER ruled out), or whose splice can only be paid by revealing a copy already cast, is
+    // not a line. Default true.
+    virtual bool OrderedSubsetRealisable(const GameState& s, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel) const
     { (void)s; (void)cands; (void)sel; return true; }
 
     // TakeFreeCast -- the "you may cast it without paying its mana cost" call on a cascade hit /

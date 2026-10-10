@@ -270,7 +270,10 @@ void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& 
 //   * an impulse-exile spell cast FROM HAND (Apex of Power) floats impulse_float_amount (the executor
 //     casts an expiring STAGED copy first, and a cast off the exile floats nothing);
 //   * a max_casts_after cast (Irencrag Feat) allows only that many casts after it, on top of any
-//     restriction already live this turn (casts_remaining_this_turn).
+//     restriction already live this turn (casts_remaining_this_turn); an impulse-exile cast under
+//     that cap (Irencrag -> Apex, the trap the USER ruled out) is refused;
+//   * a SPLICED cast needs its k revealed copies still in hand (same-name casts before it have left);
+//   * the generic is paid line-aware: out of each colour's surplus over the pips still owed first.
 // Returns the first ORDER POSITION that cannot be paid / cast, -1 when every cast pays. Same
 // aggregate-pool colour semantics as FirstUnpayablePos (AvailableManaPool, which holds the float).
 int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& actions,
@@ -280,7 +283,9 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
 // instrument for the USER's Dragonstorm cast order. Prints one [uo-order] line per executor cast-order
 // decision -- the order, whether it pays under the exact walk (and under FirstUnpayablePos), the first
 // Ruby Medallion's position and the EARLIEST slot at which it keeps the whole order payable -- keyed
-// by the game seed. AIEngine prints the matching [uo-cast] line per real cast. Read-only.
+// by the game seed. AIEngine prints the matching [uo-cast] line per real cast. =2 adds a [uo-state]
+// line per decision (hand with staged copies starred, the pool by colour, the cast cap). Read-only.
+// The audit script that reads them: docs/design/dragonstorm-user-cast-order.md.
 bool UserOrderTraceOn();
 void TraceUserCastOrder(const GameState& state, const std::vector<Action>& actions,
                         const std::vector<int>& order, const char* route, bool pre_combat);

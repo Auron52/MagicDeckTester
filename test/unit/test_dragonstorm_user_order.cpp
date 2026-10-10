@@ -438,11 +438,11 @@ TEST_CASE("Dragonstorm USER order: a subset whose Apex is payable only after Ire
     const std::vector<int> sel = { 0, 1 };
     {
         UoArms arms(true);
-        CHECK_FALSE(DsProvUo().RestrictorSubsetRealisable(s, cands, sel));
+        CHECK_FALSE(DsProvUo().OrderedSubsetRealisable(s, cands, sel));
     }
     {
         UoArms arms(false);
-        CHECK(DsProvUo().RestrictorSubsetRealisable(s, cands, sel));
+        CHECK(DsProvUo().OrderedSubsetRealisable(s, cands, sel));
     }
     // The golden line on five Mountains -- rituals, Apex, Irencrag, Dragonstorm -- is realisable.
     const GameState s5 = BoardUo(5, { kStorm, kIren, kApex, kSeeth, kDesp, kPyr, kRite }, 5);
@@ -450,5 +450,29 @@ TEST_CASE("Dragonstorm USER order: a subset whose Apex is payable only after Ire
     for (const char* n : { kStorm, kIren, kApex, kSeeth, kDesp, kPyr, kRite }) { c5.push_back(CastUo(s5, n)); }
     const std::vector<int> all = { 0, 1, 2, 3, 4, 5, 6 };
     UoArms arms(true);
-    CHECK(DsProvUo().RestrictorSubsetRealisable(s5, c5, all));
+    CHECK(DsProvUo().OrderedSubsetRealisable(s5, c5, all));
+}
+
+TEST_CASE("Dragonstorm USER order: the payable fallback never buys payability with an illegal splice")
+{
+    // Two Desperate Rituals in hand, the plan casts one plain and one splicing the other. The spliced cast
+    // must come FIRST (its revealed copy has to be in hand) -- it costs {2}{R}{R} and three mana cannot pay
+    // it. The plain-first order pays, but only by splicing a copy that has already left the hand.
+    const GameState s = BoardUo(3, { kDesp, kDesp, kStorm });
+    std::vector<Action> acts = { CastUo(s, kDesp, 0), CastUo(s, kDesp, 1) };
+    UoArms arms(true);
+    const std::vector<int> plain_first = { 0, 1 };
+    CHECK(ExactOrderFirstUnpayable(s, acts, plain_first) == 1);   // the splice is illegal there
+    const std::vector<int> ord = RealisedUo(s, acts);
+    CHECK(NamesUo(acts, ord) == std::vector<std::string>{ "Desperate Ritual+s1", kDesp });
+    // ...and as a SUBSET it is no line: the only order that pays is the illegal one.
+    CHECK_FALSE(DsProvUo().OrderedSubsetRealisable(s, acts, std::vector<int>{ 0, 1 }));
+    // With four Mountains the legal order pays (spliced first: 4 -> 6, then the plain copy: 2 -> +3).
+    const GameState s4 = BoardUo(4, { kDesp, kDesp, kStorm });
+    std::vector<Action> a4 = { CastUo(s4, kDesp, 0), CastUo(s4, kDesp, 1) };
+    CHECK(DsProvUo().OrderedSubsetRealisable(s4, a4, std::vector<int>{ 0, 1 }));
+    {
+        UoArms off(false);
+        CHECK(DsProvUo().OrderedSubsetRealisable(s, acts, std::vector<int>{ 0, 1 }));
+    }
 }

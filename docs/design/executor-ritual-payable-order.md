@@ -7,6 +7,19 @@ it is a measurement arm only. The pooled A/B is still owed. Found 2026-10-10 whi
 SLOWER smoke game of the discard round: one executor defect, plus a deliberate behaviour first mistaken
 for a second one; neither is in the discard policy.
 
+## Follow-up (2026-10-10): the USER's full order -- `MTG_DRAGONSTORM_USER_ORDER`
+
+USER: "We should do things in the order I said, once they become available, so after the breakpoint the
+cast order should follow my order. If it wasn't doing that it should be fixed." The rank order this doc's
+ORDER_OPAQUE lever applies (rituals 15, Ruby Medallion 16, Irencrag 18, payoff 20, creatures 10) was itself
+not the USER's: Medallion after the rituals, Pyretic/Desperate tied, Irencrag BEFORE Apex (the trap -- 7 d0
+phases in 300 games), a hard-cast Dragon before the rituals that pay it. Superseded for Dragonstorm by
+`DragonstormProvider`'s own rank + set arrangement + exact payable walk, audited before/after in
+**`dragonstorm-user-cast-order.md`**. The levers below stay as they are (ORDER_OPAQUE still routes the Apex
+set through the rank sort; PAYABLE_ORDER_RITUALS still admits the ritual domain -- under the new lever that
+fallback judges with the exact walk, which credits a same-turn Medallion and refuses the trap and illegal
+splices). gi533 (seed 1534, d0) still wins T5, now cast Rite, Pyretic, Desperate, Seething, Apex.
+
 ## The fix (2026-10-10)
 
 | lever (heurarm slot) | what it changes | where |
