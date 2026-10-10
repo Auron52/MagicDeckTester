@@ -201,3 +201,17 @@ Agent readings (not USER-ruled; each is a one-line change if overturned):
    Crossroads) > the sac-draw outlet (Psychotrope) > defender (Shell-Dweller); "Essence Warden last" =
    a non-Fungus, non-Saproling creature carrying `any_creature_enters_lifegain`, kept after even the
    duplicates. "One of each name" counts hand copies only.
+
+## 7. USER rulings (2026-10-10)
+
+Cross-deck (verbatim):
+- *"Colour beats the land count is correct."* -- a land that gives a KEPT spell a colour nothing on the
+  board or already kept provides is kept even past the land quota (Creature Giving, Melira Pod and
+  EldraziDisplacerFlicker already do this; every deck follows it).
+- *"Creature quotas are less worried about the board than land quotas. This is because you can always add
+  more creatures and sometimes this speeds up the clock."* -- creature / threat / payoff quotas are filled
+  from the hand WITHOUT subtracting creatures already in play. Land and mana quotas still count the board;
+  engine, combo-piece and duplicate-legend rules keep the board rules their design states.
+- *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
+  model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
+
