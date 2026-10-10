@@ -1,15 +1,18 @@
 # Executor: a ritual-funded opaque cast can be ordered before its rituals
 
-Status: IMPLEMENTED BEHIND THREE LEVERS (2026-10-10), all default ON, each `=0` restoring the previous
-behaviour exactly; the pooled A/B (below) is still owed. Found 2026-10-10 while root-causing the one SLOWER
-smoke game of the discard round. Two executor defects, both pre-existing, neither in the discard policy.
+Status: IMPLEMENTED BEHIND THREE LEVERS (2026-10-10). `MTG_DRAGONSTORM_ORDER_OPAQUE` and
+`MTG_PAYABLE_ORDER_RITUALS` default ON (`=0` restores the previous behaviour exactly);
+`MTG_EXEC_FAILED_CAST_NO_RESOLVE` default OFF -- the behaviour it gates is DELIBERATE (step 31, below), so
+it is a measurement arm only. The pooled A/B is still owed. Found 2026-10-10 while root-causing the one
+SLOWER smoke game of the discard round: one executor defect, plus a deliberate behaviour first mistaken
+for a second one; neither is in the discard policy.
 
 ## The fix (2026-10-10)
 
 | lever (heurarm slot) | what it changes | where |
 |---|---|---|
 | `MTG_DRAGONSTORM_ORDER_OPAQUE` | `DragonstormProvider::OrderOpaqueCastsByRank()` returns true, so an opaque set (Apex) is cast in CastOrderRank order -- rituals 15, Ruby Medallion 16, Irencrag 18, payoff 20 -- in the executor AND ApplyPlanDirect (one shared `OpaqueCastOrderActive`). It also turns on `ApplyCastOrderRangeLadder` for the deck (inert: no Dragonstorm card has a range or a fallback ladder). | `src/ai/DecisionProviders.cpp` (`DragonstormProvider::OrderOpaqueCastsByRank`) |
-| `MTG_EXEC_FAILED_CAST_NO_RESOLVE` | Defect 2: the executor's uncommitted draw-engine branch, its site-6 partition truncation, and the nested continuation loop no longer arm a breakpoint for an UNPAID cast. | `src/ai/AIEngine.cpp` (`ExecFailedCastNoResolve`, the three main cast loops + `resolve_draw_breakpoint`'s continuation loop) |
+| `MTG_EXEC_FAILED_CAST_NO_RESOLVE` (DEFAULT OFF) | Not a defect (see "Not a defect" below): with it ON, the executor's uncommitted draw-engine branch, its site-6 partition truncation, and the nested continuation loop no longer arm a breakpoint for an UNPAID cast. | `src/ai/AIEngine.cpp` (`ExecFailedCastNoResolve`, the three main cast loops + `resolve_draw_breakpoint`'s continuation loop) |
 | `MTG_PAYABLE_ORDER_RITUALS` | Defect 1: `PayableCastOrderCore` admits an order holding a producing cast the walk credits (ritual float, same-turn rock, spendable Treasure mint) -- APPLY SITE ONLY (site 0: executor + ApplyPlanDirect). The enumeration's rescue retry (site 1) keeps the maker / reveal domain, so subset admission is unchanged. | `src/ai/ManaPayment.cpp` (`PayableOrderRitualsOn`, `PoCreditedProducer`) |
 
 Target game (gi 533, seed 1534, d0): all three ON -> T5; all OFF -> T8 (= HEAD). Alone:
@@ -78,7 +81,16 @@ Fix sketch: admit an order holding a mana-producing ritual cast into the domain 
 unchanged). Bound: exhaustive for <= 7 casts, single moves beyond (as today). Lockstep with
 ApplyPlanDirect's opaque branch. Byte-identical for any order that already pays.
 
-## Defect 2: a FAILED draw-engine cast still runs the post-cast re-solve
+## Not a defect: a FAILED draw-engine cast re-solves the turn (deliberate, step 31)
+
+CORRECTION 2026-10-10: the first write-up (kept below) called this a bug. It is deliberate. Step 31
+(`dfc11ec41`, 2026-10-01) gated only the committed-line replay and left this path alone because "the
+re-solving fallback and the d0 runner have no rollout twin and lean on re-solving after a no-op cast
+(gating them too cost dragonstorm d0 +1351 over the overnight tier)" -- after a failed cast the re-solve
+is the turn's recovery. The lever is therefore DEFAULT OFF and exists only to re-check that verdict now
+that Apex turns are rank-ordered.
+
+The original write-up:
 
 In the executor's cast loop (`src/ai/AIEngine.cpp` ~6212-6235) the uncommitted
 `is_draw_engine || put_armed` branch calls `resolve_draw_breakpoint(0)` without checking `cast_paid`

@@ -283,7 +283,8 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
 // harmless as full depth is the default now.)
 static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");
 
-// MTG_EXEC_FAILED_CAST_NO_RESOLVE (DEFAULT ON; =0 restores the re-solve after a no-op cast). The
+// MTG_EXEC_FAILED_CAST_NO_RESOLVE (DEFAULT OFF -- the re-solve after a no-op cast is DELIBERATE, see
+// HISTORY below; =1 is a measurement arm only). The
 // executor's UNCOMMITTED draw-engine branch -- no committed line, which is every d0-runner turn --
 // armed the post-cast breakpoint re-solve (resolve_draw_breakpoint) whether or not the cast was PAID.
 // The committed branch has checked cast_paid since step 31, and ApplyPlanDirect's apply_one returns
@@ -298,7 +299,7 @@ static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");
 // engine that still cast Apex sets in raw hand order. See docs/design/executor-ritual-payable-order.md.
 static bool ExecFailedCastNoResolve()
 {
-    static const bool on = EnvOn("MTG_EXEC_FAILED_CAST_NO_RESOLVE", true);   // DEFAULT ON; =0 disables
+    static const bool on = EnvOn("MTG_EXEC_FAILED_CAST_NO_RESOLVE");   // DEFAULT OFF (step 31: +1351 when on)
     return heurarm::Flag(heurarm::EXEC_FAILED_CAST_NO_RESOLVE, on);
 }
 
@@ -4128,7 +4129,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // lives. The re-solving fallback (no committed line, and the d0 runner) has no rollout twin, and it
     // LEANS on re-solving after a no-op cast to find another play: gating it too cost dragonstorm d0
     // +1351 turns over the overnight tier and dragonstorm searched +4.
-    // 2026-10-10: that gate is now MTG_EXEC_FAILED_CAST_NO_RESOLVE (default ON, pending its A/B) --
+    // 2026-10-10: that gate is now MTG_EXEC_FAILED_CAST_NO_RESOLVE (default OFF; an A/B arm only) --
     // re-measured alongside the order fixes that remove most failed Apex casts (see its reader).
     bool last_cast_paid = true;
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
