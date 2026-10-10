@@ -5793,9 +5793,29 @@ static bool AuraBucketDiscardEnabled()
     return heurarm::Flag(heurarm::AURA_BUCKET_DISCARD, on);
 }
 
+// The per-card classes and record, at namespace scope rather than inside the function: MSVC 14.51 cannot
+// value-construct a FUNCTION-LOCAL struct whose default member initializers name function-local enumerators
+// (std::vector<Info>(n) -> C2672 'std::construct_at': no matching overloaded function; GCC accepts it). CI
+// windows-latest, 2026-10-10.
+namespace auras_discard
+{
+enum Cls : char { K_STAGED, K_DUP, K_LAND, K_TUTOR, K_DRAWER, K_PLAIN, K_AURA, K_OTHER };
+enum Sub : char { A_USEFUL, A_BLANK, A_DEAD, A_STRANDED };
+enum LandSlot : char { L_HARD, L_SOFT, L_BEYOND };
+struct Info
+{
+    const CardDefinition* d = nullptr;
+    int      mv = 0, marg = 0;   // marg: an Aura's live power if cast now (see section 3)
+    char     cls = K_STAGED, sub = A_USEFUL, land_rank = 0, land_slot = L_BEYOND;
+    unsigned bits = 0;           // a hand land's W/G cover
+    double   fac = 1.0;          // discard_dist CastFactor (section 5b); unread when the model is off
+};
+}   // namespace auras_discard
+
 std::vector<int> AurasProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
+    using namespace auras_discard;
     if (!AuraBucketDiscardEnabled()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
     const int me = s.active_player_index;
     const Player& ap = s.players[me];
@@ -5851,17 +5871,7 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     const bool engine_in_play = tutor_in_play || drawer_in_play;
 
     // ---- 2. per-card class ---------------------------------------------------------------------------
-    enum Cls : char { K_STAGED, K_DUP, K_LAND, K_TUTOR, K_DRAWER, K_PLAIN, K_AURA, K_OTHER };
-    enum Sub : char { A_USEFUL, A_BLANK, A_DEAD, A_STRANDED };
-    enum LandSlot : char { L_HARD, L_SOFT, L_BEYOND };
-    struct Info
-    {
-        const CardDefinition* d = nullptr;
-        int      mv = 0, marg = 0;   // marg: an Aura's live power if cast now (see section 3)
-        char     cls = K_STAGED, sub = A_USEFUL, land_rank = 0, land_slot = L_BEYOND;
-        unsigned bits = 0;           // a hand land's W/G cover
-        double   fac = 1.0;          // discard_dist CastFactor (section 5b); unread when the model is off
-    };
+    // (Cls / Sub / LandSlot / Info live in namespace auras_discard above the function: see the note there.)
     std::vector<Info> info(static_cast<std::size_t>(n));
     bool creature_in_hand = false, scaler_in_hand = false;
     for (int i = 0; i < n; ++i)
