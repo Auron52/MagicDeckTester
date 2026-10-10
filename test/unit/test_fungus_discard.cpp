@@ -239,18 +239,57 @@ TEST_CASE("Fungus discard F5: Mycon preferred as the 1-drop; one of each name fi
     CheckPrefixStable(s);
 }
 
-// Net of board: a Mycon and a Sporecrown already in play fill the core 1-drop and lord slots, so the
-// hand copies are beyond the core -- where the 2nd Sporecrown is kept first (lord), Warden last.
-TEST_CASE("Fungus discard F6: core slots filled from the board; the hand lord leads the rest")
+// USER 2026-10-10: "Creature quotas are less worried about the board than land quotas." A Mycon and a
+// Sporecrown already in play fill NOTHING: the hand Mycon is the core 1-drop and the hand Sporecrown the
+// core lord. Board 5 Forests -> need 0, the hand Forest is surplus. Ladder: Mycon, Sporecrown, then
+// beyond the core Thallid, Tukatongue (rank 2), Psychotrope (3), Shell-Dweller (4), Warden last.
+// Backwards: Warden, Shell-Dweller, Psychotrope, Tukatongue, Thallid, Sporecrown, Mycon.
+// (Netting against the board made both hand copies beyond-core, the Mycon shed before the Sporecrown.)
+TEST_CASE("Fungus discard F6: creatures in play fill no core slot -- the hand Mycon and lord are the core")
 {
     const GameState s = MakeFungus(
         { "Utopia Mycon", "Sporecrown Thallid", "Thallid", "Thallid Shell-Dweller", "Essence Warden",
           "Tukatongue Thallid", "Psychotrope Thallid", "Forest" },
         { "Forest", "Forest", "Forest", "Forest", "Forest", "Utopia Mycon", "Sporecrown Thallid" });
     const std::vector<int> o = Fu(s);
-    CHECK(o == std::vector<int>{ 7, 4, 3, 6, 5, 2, 0, 1 });
+    CHECK(o == std::vector<int>{ 7, 4, 3, 6, 5, 2, 1, 0 });
     CHECK(Gen(s).front() == 6);
-    CheckPermutation(s, o);
+    CheckPrefixStable(s);
+}
+
+// Same ruling for the Sporesower slot and the Season tier's Mycoloth (a partner is a threat): with a
+// Sporesower and a Mycoloth in play, the hand copies still fill their slots. Board 5 Forests -> the
+// hand Forest is surplus; 5 >= 5 -> the tier (Mycoloth alone, no Season) is castable. 1-drop: no Mycon
+// -> the first Thallid. Ladder: Mycoloth, Thallid, Sporecrown, Sporesower, Beastmaster, then beyond the
+// core Tukatongue (a new name) and the 2nd Thallid. Backwards: Thallid, Tukatongue, Beastmaster,
+// Sporesower, Sporecrown, Thallid, Mycoloth. (Netting against the board left the hand Sporesower and
+// Mycoloth beyond the core, kept BELOW Beastmaster.)
+TEST_CASE("Fungus discard F12: a Sporesower and a Mycoloth in play do not fill the hand's slots")
+{
+    const GameState s = MakeFungus(
+        { "Sporesower Thallid", "Mycoloth", "Beastmaster Ascension", "Thallid", "Thallid", "Forest",
+          "Sporecrown Thallid", "Tukatongue Thallid" },
+        { "Forest", "Forest", "Forest", "Forest", "Forest", "Sporesower Thallid", "Mycoloth" });
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 5, 4, 7, 2, 0, 6, 3, 1 });
+    CHECK(Gen(s).front() == 1);   // generic sheds Mycoloth
+    CheckPrefixStable(s);
+}
+
+// The "at most 1" ENABLER rule still counts the board: a Beastmaster in play makes the hand copy
+// surplus (shed right after the surplus land), unlike the creatures above.
+TEST_CASE("Fungus discard F13: a Beastmaster in play still makes the hand copy surplus")
+{
+    const GameState s = MakeFungus(
+        { "Beastmaster Ascension", "Forest", "Sporecrown Thallid", "Thallid", "Mycoloth",
+          "Sporesower Thallid", "Utopia Mycon", "Tukatongue Thallid" },
+        { "Forest", "Forest", "Forest", "Forest", "Forest", "Beastmaster Ascension" });
+    // need 0 -> Forest(1) surplus; Beastmaster(0) surplus (one in play). Ladder: Mycoloth(4), Mycon(6),
+    // Sporecrown(2), Sporesower(5), then Thallid(3), Tukatongue(7) beyond the core.
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 1, 0, 7, 3, 5, 2, 6, 4 });
+    CHECK(Gen(s).front() == 4);   // generic sheds Mycoloth
+    CheckPrefixStable(s);
 }
 
 // The candidate-B list (param-keyed, never a name): Saproling Burst's fade-counter tokens make it a
