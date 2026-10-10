@@ -373,6 +373,7 @@ enum Slot : int
     SELESNYA_ELF_WINDOW,      // MTG_SELESNYA_ELF_WINDOW   SelesnyaLifegain discard: an Elf castable within two turns (mana value <= the projected M2) is kept ABOVE the soft payoff(s) instead of shed as surplus past the mana target (an agent reading: the dearest kept payoff's cost, floor 5) (as first built it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     GIANTS_ROCK_LIBRARY_LAND, // MTG_GIANTS_ROCK_LIBRARY_LAND Giants discard: a mana rock is "dead" only when no land is in play, in hand OR left in the library (a proposed amendment of the USER's "a rock with no land anywhere is blank" -- it shed Sol Ring on landless turn-2 hands with a Mountain on the next draw). Default OFF (the USER's rule as built) until the USER rules
     SOLVE_VERIFIED_WIN,       // MTG_SOLVE_VERIFIED_WIN      Solve (d0 + rollout leaves): a trial-VERIFIED COMBO OFF route win outranks a merely PROJECTED win, and short-circuits the walk (EDF gi 671; docs/design/discard-round-play-defects-2026-10-10.md s3). Default ON; =0 -> the old (projected win, value, mask) order
+    EDF_GORGE_RED_SIZING,     // MTG_EDF_GORGE_RED_SIZING    FlickerGoOffCount: the Gorge's life/damage count returns early only when every loop iteration renews a red source; one-shot red makes it a floor under the other routes' sizing (EDF gi 671). Autonomous play only. Default ON; =0 -> the unconditional early return
     COUNT
 };
 
@@ -707,6 +708,7 @@ inline const char* Name(int slot)
         "MTG_SELESNYA_ELF_WINDOW",
         "MTG_GIANTS_ROCK_LIBRARY_LAND",
         "MTG_SOLVE_VERIFIED_WIN",
+        "MTG_EDF_GORGE_RED_SIZING",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

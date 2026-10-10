@@ -150,3 +150,72 @@ TEST_CASE("EDF d0: a trial-verified COMBO OFF route outranks a projected win (MT
     CHECK(on.wins_this_turn);
     CHECK(on.actions.size() == 1);
 }
+
+// ---- 2. MTG_EDF_GORGE_RED_SIZING ---------------------------------------------------------------------
+// Displacer + Drake loop, a Shivan Gorge, opponent on 10, and NO red source the loop renews: the only
+// red is Aether Hub's coloured mode, which spends {E} (one energy = one red, however often the Hub is
+// untapped). A Mariposa Military Base can draw the 30-card library down. The old sizing returns the
+// Gorge's "life / damage" = 10 before the draw-land route is ever priced; the Gorge then fires once and
+// the loop stops nine iterations into a 29-card dig. With the fix the Gorge count is a floor under the
+// draw-land route's 29.
+TEST_CASE("EDF d0: one-shot red does not let the Gorge's count pre-empt the dig sizing (MTG_EDF_GORGE_RED_SIZING)")
+{
+    EdfBoard b = MakeBoard(
+        {},
+        { { "Yavimaya Coast" }, { "Overgrowth", 0 },
+          { "Yavimaya Coast" }, { "Overgrowth", 2 },
+          { "Brushland" }, { "Adarkar Wastes" }, { "Aether Hub" },
+          { "Shivan Gorge" }, { "Mariposa Military Base" },
+          { "Eldrazi Displacer" }, { "Peregrine Drake" } },
+        Filler(30), /*opp_life=*/10, /*energy=*/1);
+    const Permanent* disp  = nullptr;
+    const Permanent* drake = nullptr;
+    for (const Permanent& p : b.s.battlefield)
+    {
+        if (p.card.m_name.str() == "Eldrazi Displacer") { disp = &p; }
+        if (p.card.m_name.str() == "Peregrine Drake")   { drake = &p; }
+    }
+    REQUIRE(disp != nullptr);
+    REQUIRE(drake != nullptr);
+
+    const auto counts = [&](int arm)
+    {
+        heurarm::t_arm[heurarm::EDF_GORGE_RED_SIZING] = static_cast<std::int8_t>(arm);
+        const std::vector<int> v = EdfProv().BlinkActivationCounts(b.s, *disp, *drake, 3);
+        heurarm::t_arm[heurarm::EDF_GORGE_RED_SIZING] = -1;
+        return v.empty() ? 0 : *std::max_element(v.begin(), v.end());
+    };
+    const int off = counts(0);
+    const int on  = counts(1);
+    CHECK(off == 10);    // the Gorge's life/damage, returned before any other route is sized
+    CHECK(on == 29);     // the library drawn down to one card (Mariposa), the Gorge's 10 a floor under it
+}
+
+// The other side of the same lever: when every iteration DOES renew red (a Fertile Ground on a land the
+// untap set keeps), the Gorge's count is still the answer -- the lever must not over-size a board whose
+// Gorge kills on its own.
+TEST_CASE("EDF d0: a renewed red source keeps the Gorge's own count (MTG_EDF_GORGE_RED_SIZING)")
+{
+    EdfBoard b = MakeBoard(
+        {},
+        { { "Yavimaya Coast" }, { "Overgrowth", 0 },
+          { "Yavimaya Coast" }, { "Overgrowth", 2 },
+          { "Brushland" }, { "Fertile Ground", 4 }, { "Adarkar Wastes" }, { "Aether Hub" },
+          { "Shivan Gorge" }, { "Mariposa Military Base" },
+          { "Eldrazi Displacer" }, { "Peregrine Drake" } },
+        Filler(30), /*opp_life=*/10, /*energy=*/1);
+    const Permanent* disp  = nullptr;
+    const Permanent* drake = nullptr;
+    for (const Permanent& p : b.s.battlefield)
+    {
+        if (p.card.m_name.str() == "Eldrazi Displacer") { disp = &p; }
+        if (p.card.m_name.str() == "Peregrine Drake")   { drake = &p; }
+    }
+    REQUIRE(disp != nullptr);
+    REQUIRE(drake != nullptr);
+    heurarm::t_arm[heurarm::EDF_GORGE_RED_SIZING] = 1;
+    const std::vector<int> v = EdfProv().BlinkActivationCounts(b.s, *disp, *drake, 3);
+    heurarm::t_arm[heurarm::EDF_GORGE_RED_SIZING] = -1;
+    REQUIRE(!v.empty());
+    CHECK(*std::max_element(v.begin(), v.end()) == 10);
+}
