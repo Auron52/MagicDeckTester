@@ -17,6 +17,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <ostream>
@@ -2285,6 +2286,97 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     { Slow().Observe(ms, "keep-rollout", [&]{ return describe_cell(H, comp, pd, r, rs); }); };
 
+    // ---- PER-ROLLOUT WALL BACKSTOP, and what an abandoned rollout does (USER RULING 2026-10-10) ----
+    // Until this existed the keep generator armed NO per-rollout bound of any kind: `gamework` was
+    // armed only by BatchRunner, so `RolloutKeepWinTurn` here ran unbounded. That is not a theoretical
+    // gap. On KittyEquipment v3 it produced single rollouts of 3,405 s / 2,420 s / 2,177 s (56.7 /
+    // 40.3 / 36.3 MINUTES) and the size-7 pool sat at `roll7=217588 (0/s)` for the last hour of a
+    // 9.5 h run, holding the barrier while the box idled. 6,132 rollouts over 30 s cost 220 CPU-h --
+    // about 72% of the whole machine from ~1.5% of the rollouts.
+    //
+    // THE USER'S RULING, in their words: *"Why not just leave it out like we did for this run by
+    // manually cancelling it. That said, if this happens a significant number of times we error out.
+    // Maybe even if it is over something like 10-50 rollouts"*, then: *"We don't want more than 50 for
+    // sure and it might make sense to be even more aggressive, not allowing 10."*
+    //
+    // So: LEAVE IT OUT, and FAIL OUT if it keeps happening.
+    //   * LEAVE IT OUT is sound here and needs no new machinery, which is what made the ruling the
+    //     right call. A cell's rollout count is already per-cell and adaptive ("adaptive sampling adds
+    //     rollouts per-cell, so count varies by cell"), and `recompute` divides by that count and skips
+    //     `c <= 0`. An abandoned rollout therefore leaves its cell with one fewer SAMPLE, not a hole:
+    //     no partial win-turn is folded in, so the label is unbiased-by-construction rather than
+    //     contaminated by a truncated game that would have scored as a late win.
+    //   * FAIL OUT is the point, not a safety valve. A pile of abandoned rollouts is evidence the
+    //     ENGINE needs optimising, and quietly dropping them would convert that signal into a slightly
+    //     thinner table nobody inspects. Same reasoning as the phase-A fail-out in valueleaf.sh.
+    //
+    // WALL ONLY, NO PREDICTIVE STAGE, matching the user's phase-A ruling (*"Yeah, I guess just a
+    // wall-cap is okay. However, we need to let it be relatively soft."*). `Begin(0)` leaves the unit
+    // ceiling disarmed, and with no unit ceiling stage 1 is inert by construction anyway
+    // (GameWorkMeter.h: "NO CEILING => NO STAGE 1") -- so the generation-side work ceiling
+    // MTG_DECISION_WORK_X stays the only unit-denominated bound, exactly as it was.
+    //
+    // THIS CAP IS ONLY MEANINGFUL BECAUSE OF a28b566e. The flag is set by `CheckDeadline` on a
+    // 4,096-unit stride and then has to be OBSERVED. `GameEngine::PlayOutFrom` polls it per turn, and
+    // the greedy subset walk in TurnSolver.cpp polls it on a 1,024-visit stride as of a28b566e --
+    // before that fix the one region that burns these hours consulted no bound at all, so a cap armed
+    // here would have expired and changed nothing.
+    //
+    // A CAP IS A STALL GUARD, NOT THE COST FIX, and the numbers say so plainly: on the v3 evidence a
+    // 1,200 s cap reclaims 3.2 of 220 CPU-h. The cost is the broad 30-300 s band (1,799 rollouts,
+    // 91 CPU-h), which no cap can remove without condemning thousands. Do not reach for a lower cap
+    // as a performance lever -- that is the fail-out's job to refuse.
+    const double rollout_wall_sec = static_cast<double>(EnvInt("MTG_KEEP_ROLLOUT_WALL_SEC", 1200));
+    // Clamped to the user's stated ceiling: *"We don't want more than 50 for sure."* The default sits
+    // at the aggressive end of the range they named, per *"it might make sense to be even more
+    // aggressive, not allowing 10."* A larger request is honoured up to 50 and then capped, loudly.
+    constexpr long long kAbandonFailMax = 50;
+    const long long abandon_fail_at =
+        std::min<long long>(kAbandonFailMax, std::max<long long>(1, EnvInt("MTG_KEEP_ABANDON_FAIL_AT", 10)));
+    std::atomic<long long> abandoned_rollouts{ 0 };
+    std::atomic<bool>      abandon_failed{ false };
+    // WHY THE SIZE-7 PATH LEAVES OUT THE WHOLE CELL-SIDE, not the single rollout. On the continuous
+    // path the fold's `c` is BOTH the sample count and the index into `slot` (`SLOT(i, pd, c)`), and
+    // `slot` is sized to r_max -- so skipping one rollout mid-cell either stalls the prefix (the floor
+    // gate's `if (c < r0) any_below_floor = true` then never clears, hanging the phase) or needs a
+    // second cursor plus slack in the slot array plus a journal field to survive resume. That is
+    // surgery on the most delicate part of the generator, for a sample size the fail-out bounds at
+    // NINE: generation stops at the 10th abandonment, so "leave it out" can never apply to more than
+    // 9 rollouts in a whole run. Dropping the affected CELL-SIDE instead is strictly more
+    // conservative, needs no restructuring, and lands in a state the pipeline already handles -- an
+    // unsampled cell, which `recompute` skips (`c <= 0`) and the model falls back to its prior for.
+    // run_batch (the sub-tables) does leave out the single rollout, because there the accumulation is
+    // a plain sum and `kept` is enough.
+    //
+    // RESUME LIMITATION, stated rather than hidden: the journal has already persisted the cell's
+    // records, and poison is in-memory only, so a RESUMED run re-admits those <= 9 cell-sides with
+    // the substituted value folded in. Bounded to 9 of 213,492 cell-sides and only on a resume after
+    // a fail-out -- which is itself a run the user is meant to inspect, not resume blindly.
+    // Sized here because the cell enumeration above (t.comps / t.cnt.assign) is already final at this
+    // point, so the [i*2+pd] index is stable for the rest of the run.
+    std::vector<char>      poison7(TB(HAND).comps.size() * 2, 0);
+    std::mutex             poison_mtx;
+    // Arm/observe helpers, so the two rollout sites (run_batch and run_one) cannot drift apart.
+    auto arm_rollout = [&]()
+    {
+        if (rollout_wall_sec <= 0.0) { return; }   // =0 disables the backstop entirely
+        gamework::Begin(0);                        // reset + disarm the unit ceiling (wall only)
+        gamework::ArmDeadline(0.0, rollout_wall_sec);
+    };
+    // Returns true when THIS rollout was abandoned (so the caller must drop its sample). Records it,
+    // and trips the fail-out once the count reaches the threshold.
+    auto note_if_abandoned = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs)
+    {
+        if (rollout_wall_sec <= 0.0 || !gamework::Abandoned()) { return false; }
+        const long long n = abandoned_rollouts.fetch_add(1) + 1;
+        std::cerr << "[keepgen] ABANDONED-WALL rollout #" << n << "/" << abandon_fail_at << " after "
+                  << static_cast<long long>(gamework::Elapsed()) << "s (cap "
+                  << static_cast<long long>(rollout_wall_sec) << "s) -- LEFT OUT of its cell: "
+                  << describe_cell(H, comp, pd, r, rs) << "\n" << std::flush;
+        if (n >= abandon_fail_at) { abandon_failed.store(true); }
+        return true;
+    };
+
     // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
     // Instead of periodically snapshotting the whole raw (a fold-blocking multi-MB write every sweep --
     // the last idle source), append one compact record the moment a cell-side completes: its floor
@@ -2488,11 +2580,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const int H = work[w].H, idx = work[w].idx;
         const std::vector<int>& comp = tables[HAND - H].comps[idx];
         double sum = 0.0, sumsq = 0.0;
+        long long kept = 0;                          // rollouts that produced a label (abandoned ones do not)
         std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
         std::set<int>     cell_touched;              // union over this task's rollouts
         if (trace_on) { hit.assign(touch_names.size(), 0); }
         for (long long r = r0; r < r1; ++r)
         {
+            if (abandon_failed.load()) { break; }   // see run_one: stop the queued backlog dead
             // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples WHICH
             // specific members fill the slots (proportional to their deck counts). The library
             // continuation is then RE-SHUFFLED below (see the fix note) so its order is unbiased.
@@ -2529,6 +2623,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
             double wt;
             const auto t_roll = std::chrono::steady_clock::now();
+            arm_rollout();
             if (trace_on)
             {
                 std::fill(hit.begin(), hit.end(), 0);
@@ -2538,7 +2633,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
             capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
-            sum += wt; sumsq += wt * wt;
+            // LEFT OUT, per the user's ruling: a truncated game's win-turn is not a label. Skipping the
+            // accumulate AND the count (below, via `kept`) is what makes this one fewer sample rather
+            // than a contaminated one -- see the ruling block above capture_slow.
+            if (note_if_abandoned(H, comp, pd, r, rs)) { continue; }
+            sum += wt; sumsq += wt * wt; ++kept;
         }
         SizeTable& t = tables[HAND - H];
         double js; double jq; long long jn;
@@ -2551,7 +2650,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             t.sum[idx][pd]   += sum;
             t.sumsq[idx][pd] += sumsq;
             if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
-            t.cnt[idx][pd]   += (r1 - r0);
+            // `kept`, NOT (r1 - r0): an abandoned rollout contributed nothing to sum/sumsq, so counting
+            // it here would divide a short sum by a full n and pull every such cell's mean win-turn
+            // DOWN -- i.e. make the deck look faster exactly on the hands that are hardest to play.
+            t.cnt[idx][pd]   += kept;
             js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
         }
         // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
@@ -2569,6 +2671,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     auto run_one = [&](AIEngine& ai, int w, int pd, long long r,
                        std::vector<char>* hit = nullptr) -> double
     {
+        // FAILED OUT => do no more work. Breaking the PRODUCER alone is not enough: the queue holds up
+        // to QCAP (8 x threads = 256) already-dispatched tasks, and draining those normally would keep
+        // abandoning rollouts at a full cap each -- at 1800 s that is hours of pointless work after the
+        // decision to stop. Bailing HERE is deadlock-free, which stopping the workers is not: a worker
+        // that stops popping leaves the producer blocked in `q_nf.wait(q.size() < QCAP)` with nobody
+        // left to notify it. Measured: with the fail-out at 3 the run reached #28 before this existed.
+        if (abandon_failed.load()) { return std::numeric_limits<double>::quiet_NaN(); }
         const int H = work[w].H, idx = work[w].idx;
         const std::vector<int>& comp = tables[HAND - H].comps[idx];
         const uint64_t rs = cfg.seed + 21'000'000ULL
@@ -2595,10 +2704,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
         const auto t_roll = std::chrono::steady_clock::now();
         double wt;
+        arm_rollout();
         if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
         else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
+        // Abandoned => NOT A LABEL. This path's caller stores the result in a per-(cell,r) slot and
+        // folds it deterministically, so it needs a value it can recognise as absent rather than a
+        // truncated win-turn; NaN is that value and every consumer below tests for it explicitly.
+        if (note_if_abandoned(H, comp, pd, r, rs)) { return std::numeric_limits<double>::quiet_NaN(); }
         return wt;
     };
 
@@ -3594,7 +3708,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     if (w < 0) { continue; }
                     double s = 0.0, q = 0.0;
                     for (long long r = 0; r < c.n; ++r)
-                    { const double wt = run_one(ai, w, c.pd, r); s += wt; q += wt * wt; }
+                    // An abandoned rollout returns NaN (see run_one). Skipping it keeps this
+                    // DIAGNOSTIC's comparison readable instead of turning the whole cell NaN; the
+                    // rollout is left out exactly as it is everywhere else.
+                    { const double wt = run_one(ai, w, c.pd, r);
+                      if (!std::isnan(wt)) { s += wt; q += wt * wt; } }
                     new_sum[k] = s; new_sumsq[k] = q;
                     const long long d = vdone.fetch_add(c.n) + c.n;
                     if (k % 25 == 0)
@@ -4008,9 +4126,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // loop below EXACTLY, but skips size-7 (the vg[0] pool + the m=0 gate) -- both unused for sub-cells --
     // so it never reads size-7 accumulators and is safe to run concurrent with the size-7 floor. Returns
     // the tasks in `out` (empty => the sub-tables have converged). refined_rollouts is bumped as marked.
-    auto compute_sub_wave_tasks = [&](std::vector<Task>& out)
+    // `eps` and `out` are parameters so the SAME marking logic can be run as a read-only DRY RUN at a
+    // different flip_eps (out == nullptr). That is what prices MTG_KEEP_FLIP_EPS without a second
+    // multi-hour generation: on KittyEquipment v3 the first adaptive wave was 50,063 tasks x 16
+    // rollouts ~= 801,000 rollouts, which at the observed 8-13 rollouts/s is 17-28 HOURS for one wave
+    // -- comfortably the dominant phase of the whole generation, far above the size-7 floor's ~6 h. The
+    // wave size is the only number that says what a looser gate would buy, and it was previously
+    // observable only by running the gen to this point. A dry run is pure computation over the tables
+    // (no rollouts), so the diagnostic is nearly free.
+    auto compute_sub_wave_tasks_at = [&](std::vector<Task>* out, double eps) -> long long
     {
-        out.clear();
+        if (out != nullptr) { out->clear(); }
         const double SQRT2 = 1.4142135623730951;
         const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
         std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
@@ -4057,7 +4183,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
                                                      : (kv == thr ? 0.5 : 0.0);
                         const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
-                                                  && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
+                                                  && (kv - thr > 0.0) && (flip <= eps);
                         if (confident_mull) { continue; }
                     }
                     if (!pc.resolved[m][arg][pd] && t.cnt[arg][pd] < r_max) { mark.insert({ m, arg, pd }); }
@@ -4094,19 +4220,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         const double sd   = std::sqrt(se_a * se_a + se_c * se_c);
                         const double p_better = (sd > 0) ? 0.5 * std::erfc(d / (sd * SQRT2))
                                                          : (d == 0.0 ? 0.5 : 0.0);
-                        if (p_better > cfg.flip_eps) { mark.insert({ m, c, pd }); }
+                        if (p_better > eps) { mark.insert({ m, c, pd }); }
                     }
                 }
+        long long marked = 0;
         for (const std::array<int, 3>& mk : mark)
         {
             const int H_idx = mk[0], arg = mk[1], pd = mk[2];
             const long long c   = tables[H_idx].cnt[arg][pd];
             const long long add = std::min<long long>(cfg.r_batch, r_max - c);
             if (add <= 0) { continue; }
-            out.push_back({ work_idx[H_idx][arg], pd, c, c + add });
+            ++marked;
+            if (out == nullptr) { continue; }          // dry run: count only, mutate nothing
+            out->push_back({ work_idx[H_idx][arg], pd, c, c + add });
             refined_rollouts += add;
         }
+        return marked;
     };
+    // The real caller keeps its original name and signature, so every call site below is unchanged.
+    auto compute_sub_wave_tasks = [&](std::vector<Task>& out)
+    { compute_sub_wave_tasks_at(&out, cfg.flip_eps); };
 
     // Floor-pass GEN-TIME PROJECTION + degenerate-cell diagnostic + recommend probe/stop. Fires once when
     // the continuous floor completes: it prices this deck's rollouts at the gen depth, projects the full
@@ -4403,6 +4536,28 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 else
                 { wt = run_one(ai, work_idx[0][i], pd, r, trace_on ? &w_hit : nullptr); }
+                // ABANDONED (wall backstop) => this cell-side is LEFT OUT entirely; see poison7 above.
+                // The fold still runs so the prefix advances and no phase gate hangs, but the cell-side
+                // is zeroed before recompute, so nothing derived from it reaches the table. The
+                // substituted value matters only to a blind resume (poison is in-memory), so it is the
+                // cell's own running mean -- the least-wrong imputation available -- rather than a 0,
+                // which would read as a turn-0 win and make the hardest hands look like the best ones.
+                if (std::isnan(wt))
+                {
+                    // TWO different NaNs reach here and only ONE is an abandonment. After the fail-out,
+                    // run_one returns NaN for every queued task WITHOUT rolling it, and one producer
+                    // iteration can feed every cell before the loop re-checks the flag -- so poisoning
+                    // on NaN alone marked all 106,746 cell-sides and logged "LEFT OUT 106746" when 15
+                    // rollouts had actually been abandoned. Nothing corrupt could escape (a fail-out
+                    // writes neither profile nor raw), but the number was simply false. Poison only
+                    // when the cap is still the reason a rollout came back empty.
+                    const std::size_t pk = static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd);
+                    { std::lock_guard<std::mutex> plk(poison_mtx);
+                      if (pk < poison7.size() && !abandon_failed.load()) { poison7[pk] = 1; } }
+                    const long long cn = tables[0].cnt[i][pd];
+                    wt = cn > 0 ? tables[0].sum[i][pd] / static_cast<double>(cn)
+                                : static_cast<double>(cfg.max_turns);
+                }
                 if (trace_on)   // fold this rollout's cards into the cell's union (same lock as the commit)
                 {
                     std::lock_guard<std::mutex> tk(acc_mtx);
@@ -4720,6 +4875,32 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
             std::vector<Task> wave;
             compute_sub_wave_tasks(wave);   // next wave's argmin sub-cells (empty => converged)
+            // PRICE THE GATE, every wave, read-only. The adaptive bottoming refine is the dominant
+            // phase of a large generation (v3: one wave of 50,063 tasks ~= 801,000 rollouts, 17-28 h),
+            // and flip_eps is the only knob that sizes it -- but its effect was observable ONLY by
+            // running a whole second generation to this point. Dry-running the same marking logic at a
+            // few looser gates turns "raise flip_eps?" from a guess into a priced, user-ownable choice.
+            // Pure computation over the already-folded tables: no rollouts, nothing mutated.
+            // ONCE, on the first wave only. The marking pass enumerates subcompositions for every
+            // size-7 hand at every mull level and runs on the PRODUCER thread -- the same thread that
+            // feeds the size-7 pool -- so repeating it per wave would stall feeding for its duration
+            // on every wave. The first wave is also where the number is worth most: it is the largest,
+            // and it arrives early enough to act on.
+            static bool flip_swept = false;
+            if (!wave.empty() && !flip_swept && EnvOn("MTG_KEEP_FLIP_SWEEP", true))
+            {
+                flip_swept = true;
+                std::cerr << "[keepgen]   flip_eps price (this wave, tasks x<=" << cfg.r_batch
+                          << " rollouts): " << cfg.flip_eps << "=" << wave.size() << " (IN USE)";
+                for (const double e : { 0.05, 0.10, 0.20 })
+                {
+                    if (e <= cfg.flip_eps) { continue; }
+                    std::cerr << "  " << e << "=" << compute_sub_wave_tasks_at(nullptr, e);
+                }
+                std::cerr << "\n            (a looser gate accepts more risk of picking the wrong"
+                             " bottoming line -- it changes the TABLE, so it is a user ruling;"
+                             " MTG_KEEP_FLIP_SWEEP=0 silences this)\n" << std::flush;
+            }
             if (wave.empty())
             { sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); return; }
             sub_wave_pending.store(static_cast<long long>(wave.size()));
@@ -4738,6 +4919,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         };
         for (;;)
         {
+            // FAIL-OUT (user ruling 2026-10-10). Stop FEEDING the moment the abandonment budget is
+            // spent; the in-flight tasks drain normally, so the journal stays consistent and whatever
+            // was banked is still poolable. The refusal itself -- no profile -- is enforced after the
+            // pool joins, where every other "do not ship this" guard in this file lives.
+            if (abandon_failed.load()) { break; }
             const bool refine = refs_ready.load();
             bool any_below_floor = false, any_live = false; any_fed = false;
             // RESUME FIX (2026-09-01): the fused sub-table batches must be drained in the REFINE phase
@@ -5002,6 +5188,29 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         producing.store(false); q_ne.notify_all();
         for (std::thread& th : pool) { th.join(); }
+        // LEAVE OUT the cell-sides that lost a rollout to the wall backstop, BEFORE recompute reads the
+        // accumulators (see poison7). Zeroing the count is what "left out" means to every consumer at
+        // once: recompute skips `c <= 0`, the raw sidecar records no samples for it, and the model falls
+        // back to its prior exactly as it does for a cell nothing ever sampled. Bounded by the fail-out
+        // to at most abandon_fail_at - 1 cell-sides in a whole run.
+        {
+            long long dropped_sides = 0;
+            std::lock_guard<std::mutex> plk(poison_mtx);
+            for (std::size_t k = 0; k < poison7.size(); ++k)
+            {
+                if (!poison7[k]) { continue; }
+                const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
+                S7.sum[i][pd] = 0.0; S7.sumsq[i][pd] = 0.0; S7.cnt[i][pd] = 0;
+                ++dropped_sides;
+            }
+            if (dropped_sides > 0)
+            {
+                std::cerr << "[keepgen] LEFT OUT " << dropped_sides << " size-7 cell-side(s) that lost a"
+                             " rollout to the " << static_cast<long long>(rollout_wall_sec)
+                          << "s wall backstop -- they fall back to their prior, as an unsampled cell does\n"
+                          << std::flush;
+            }
+        }
         recompute();
         // recompute() derives V from the fresh accumulators, so it clobbers the change-detection carry on
         // resolved cells -- re-assert it before the raw/profile/report are written off these tables.
@@ -5010,8 +5219,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // (a dropped mount, a full disk) used to be ignored and the journal deleted anyway, which would have
         // thrown away the whole generation. Retry for up to 2 h (the in-memory tables are the only copy of
         // any work the journal could not bank), and keep the journal unless the raw really landed.
-        bool raw_ok = cfg.out_raw.empty();
-        if (!cfg.out_raw.empty())
+        // ON A FAIL-OUT, DO NOT WRITE THE RAW. Once the backlog bails (run_one returns NaN without
+        // rolling), the in-memory tables hold cells whose rollouts were skipped rather than measured,
+        // so a chunk written from them would be a poolable artifact containing unmeasured cells -- the
+        // worst possible outcome, since pooling is exactly what a chunk is for. The JOURNAL is the
+        // resume artifact and it is append-only and already on disk, holding every cell that genuinely
+        // completed; mullgen.sh's preflight reads it. So skipping the raw loses nothing real.
+        bool raw_ok = cfg.out_raw.empty() || abandon_failed.load();
+        if (!cfg.out_raw.empty() && !abandon_failed.load())
         {
             raw_ok = write_raw_atomic(cfg.out_raw);
             for (int attempt = 1; !raw_ok && attempt <= 240; ++attempt)
@@ -5027,12 +5242,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         if (journal_on && (journal_f.is_open() || journal_failed))
         {
-            if (raw_ok)
+            if (raw_ok && !abandon_failed.load())
             {
                 // Superseded: close and remove it so a later invocation doesn't resume from a stale journal
                 // for an already-finished run.
                 journal_f.close();
                 std::error_code ec; std::filesystem::remove(journal_path, ec);
+            }
+            else if (raw_ok)
+            {
+                // FAILED OUT on abandonments: the run is NOT finished, so the journal is not superseded.
+                // Keeping it is the whole point -- the hours already banked stay resumable once the
+                // engine is fast enough to clear the backstop. (A journal is days of compute; the one
+                // rule this file never bends is that nothing deletes one that still has work in it.)
+                { std::lock_guard<std::mutex> jl(journal_mtx); journal_emit_locked(std::string()); }
+                journal_f.close();
+                std::cerr << "[keepgen] journal KEPT (" << journal_path
+                          << ") -- the run failed out, it did not finish\n" << std::flush;
             }
             else
             {
@@ -5047,6 +5273,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         rollouts_done += fed_total;
         std::cerr << "[keepgen] continuous size-7 DONE: " << fed_total << " rollouts, "
                   << static_cast<long long>(gen_elapsed()) << "s total\n" << std::flush;
+        // THE FAIL-OUT, enforced here rather than at the feed: the raw chunk is already on disk above,
+        // so everything measured stays poolable, and the journal was kept. What must not happen is a
+        // PROFILE -- a table fitted to a run this slow is a table fitted to a labeller that kept being
+        // cut off, and shipping it would convert an optimisation signal into a silently thinner model.
+        if (abandon_failed.load())
+        {
+            const long long n = abandoned_rollouts.load();
+            os << "\nFAILED OUT: " << n << " rollouts hit the " << static_cast<long long>(rollout_wall_sec)
+               << "s per-rollout wall backstop (threshold " << abandon_fail_at << ").\n"
+                  "That many abandoned rollouts is an ENGINE-OPTIMISATION signal, not a cap to loosen:\n"
+                  "the labeller cannot play these hands inside a sane bound, so the table it would\n"
+                  "produce is fitted to a player that kept being cut off. NO PROFILE WAS WRITTEN.\n"
+                  "The raw chunk and the journal are both kept -- resume once the engine is faster.\n"
+                  "Slowest rollouts are in <out_raw>.slow.log; replay them with MTG_KEEP_REPLAY_LIST.\n";
+            std::cerr << "[keepgen] FAILED OUT: " << n << " rollouts abandoned at the "
+                      << static_cast<long long>(rollout_wall_sec) << "s wall backstop (threshold "
+                      << abandon_fail_at << ") -- NO PROFILE. Optimise, then resume.\n" << std::flush;
+            Slow().Dump(os, "at the fail-out");
+            return;
+        }
     }
     // ================================================================================================
 
