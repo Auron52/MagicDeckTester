@@ -2537,8 +2537,13 @@ public:
     // holding a 4+ drop) / ENABLERS (watchers, 2 counting the board) / CREATURES (payoffs, Ocelot
     // Prides, Ranger-Captain, Ajani; variety first), interleaved keep ladder, every hand card named.
     // MTG_CRITTER_BUCKET_DISCARD (default ON; =0 -> GenericProvider::CleanupDiscardCandidates).
+    // Payoff slots fill from the hand (USER 2026-10-10: creature quotas do not net the board); inside
+    // the USER tiers the order is EV = discard_dist CastFactor x value (MTG_DISCARD_DIST_MODEL).
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // False while the buckets AND the distance model are on: the core lands feed the payoffs' EV and
+    // the tail sheds land 3 before the payoffs it priced. Re-rank per shed.
+    bool CleanupDiscardShedStable() const override;
     // Same-turn "cast Ajani + activate" plan variants (see DecisionProvider). DEFAULT ON here;
     // MTG_WALKER_CAST_ACTIVATE=0 restores the cast-only enumeration for the A/B.
     bool SearchesWalkerCastActivation() const override

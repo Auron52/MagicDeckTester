@@ -19020,11 +19020,13 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
 //       the last slot, KEEP's "creatures to fill -> 4th land" gives it to the creature. (Reading it
 //       on the hand BEFORE the shed was tried first and is not prefix-stable: the overflow 4+ drop
 //       sheds before the land it reserved, which then flips to surplus mid-cleanup.)
-//   (c) The payoff slots count payoffs IN PLAY (the brief's net-of-board, and the USER's explicit
-//       exemption of Ocelot is read as saying the other creature quotas DO count the board), the
-//       Ajani -2 Pridemate token included (it resolves the real definition by name). They pick by
-//       variety, then the USER's payoff order; "4-5 drops shed first" is applied to the FILL, not
-//       to the two payoff slots, so the USER's Archangel > Heliod > Serra stays meaningful there.
+//   (c) SUPERSEDED by the USER 2026-10-10 ("Creature quotas are less worried about the board than
+//       land quotas. This is because you can always add more creatures and sometimes this speeds up
+//       the clock."): the payoff slots fill from the HAND without subtracting payoffs in play (the
+//       Ajani -2 Pridemate token included); the watcher quota keeps "2 counting board" as the design
+//       states. The slots pick by variety, then EV (below); "4-5 drops shed first" is applied to the
+//       FILL, not to the two payoff slots, so the USER's Archangel > Heliod > Serra stays the value
+//       order there.
 //   (d) The fill's VALUE order: Pridemate / Voice > Ocelot Pride > Archangel > Heliod > Serra >
 //       Ajani > Ranger-Captain (Serra first at 30+ life). The payoffs keep the USER's order; Ocelot
 //       sits right below the first payoffs, as the ladder places it (payoff > Ocelot > payoff) and
@@ -19035,16 +19037,26 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
 //       name in play does not). Lands are 1 drop each (a Remote Farm is one land). Surplus lands
 //       shed Remote Farm first (enters_tapped), then the highest hand index.
 //   (f) A card no bucket names sheds right after the removal (unreachable on the shipped list).
-// No distance-to-castable term beyond "4-5 drops shed first": the SETTLED block names none.
+//   (g) DISTANCE TO CASTABLE (USER 2026-10-10: "For Distance to castable I think it makes sense to
+//       have a smarter model if we can"): inside the payoff slots' and the fill's USER tiers the order
+//       is EV = the shared discard_dist CastFactor x value (MTG_DISCARD_DIST_MODEL, default ON; =0 ->
+//       value alone, exactly as before). The value is 0.85^(position in the value order); the
+//       LandDrops are the core ladder's lands 1-3 only (see the block at the code).
 //
-// PREFIX-STABLE (DecisionProvider::CleanupDiscardShedStable's default holds): the fill room depends
-// on the core ladder and the 4th-land reservation, never on the hand size, and every class above
-// the protected tail is shed before any card the ladder or the fill relies on, so shedding index 0
-// and re-ranking leaves the rest in order (test_critterlifegain_discard.cpp checks it shed by shed).
+// PREFIX-STABLE with the model OFF: the fill room depends on the core ladder and the 4th-land
+// reservation, never on the hand size, and every class above the protected tail is shed before any
+// card the ladder or the fill relies on (test_critterlifegain_discard.cpp checks it shed by shed).
+// With the model ON the core lands feed the payoffs' EV and the tail sheds land 3 before the payoffs
+// it priced, so CleanupDiscardShedStable() is false: re-rank per shed.
 static bool CritterBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_CRITTER_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::CRITTER_BUCKET_DISCARD, on);
+}
+
+bool CritterLifegainProvider::CleanupDiscardShedStable() const
+{
+    return !(CritterBucketDiscardEnabled() && LifegainBucketsDistModel());
 }
 
 std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
@@ -19069,8 +19081,10 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
     };
     auto is_ocelot = [](const CardParams& p) { return p.endstep_lifegain_tokens > 0; };
 
-    // ---- board census (net of board; Prides in play deliberately NOT counted) ---------------
-    int board_lands = 0, board_watchers = 0, board_payoffs = 0;
+    // ---- board census: lands and watchers count the board; payoffs and Prides deliberately do NOT
+    // (USER 2026-10-10: "Creature quotas are less worried about the board than land quotas. This is
+    // because you can always add more creatures and sometimes this speeds up the clock.") --------
+    int board_lands = 0, board_watchers = 0;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -19078,7 +19092,6 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
         const CardDefinition* d = def_of(p.card);
         if (d == nullptr) { continue; }
         if (is_watcher(d->params)) { ++board_watchers; }
-        if (is_payoff(d->params))  { ++board_payoffs; }
     }
 
     // ---- partition the hand -------------------------------------------------------------------
@@ -19158,7 +19171,7 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
         }
         return best;
     };
-    int lands_n = board_lands, watchers_n = board_watchers, payoffs_n = board_payoffs;
+    int lands_n = board_lands, watchers_n = board_watchers, payoffs_n = 0;   // payoffs: the hand alone
     auto top_up_lands = [&](int target)
     { while (lands_n < target) { const int i = pick_land(); if (i < 0) { break; } take(i); ++lands_n; } };
     auto top_up_watchers = [&](int target)
@@ -19170,16 +19183,60 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
             take(i); ++watchers_n;
         }
     };
+
+    // DISTANCE TO CASTABLE (USER 2026-10-10: "For Distance to castable I think it makes sense to have a
+    // smarter model if we can"; docs/design/discard-distance-model.md). In the payoff slots (after
+    // variety) and in the fill (after variety and 4-5-drops-last) the order is EV = the shared
+    // discard_dist CastFactor x value, never across those USER tiers. The value is 0.85^(position in
+    // the USER's payoff order / the fill's value order). The LandDrops are the lands the CORE ladder
+    // keeps (lands 1-3): the conditional 4th land is left out, because whether it is kept depends on
+    // which creatures the fill keeps -- which is what the factor is ranking (agent reading). A k-th
+    // copy pays for the copies of its name kept or ahead of it (the model's duplicate rule; Prides
+    // included -- their variety exemption is about value, not mana). MTG_DISCARD_DIST_MODEL=0 restores
+    // the value-only order exactly.
+    const bool dist_model = LifegainBucketsDistModel();
+    const discard_dist::Census census = dist_model ? discard_dist::BuildCensus(s, me) : discard_dist::Census{};
+    std::vector<discard_dist::LandDrop> core_drops;
+    if (dist_model)
+    {
+        std::vector<int> by_pick = lands;   // pick_land's order: untapped first, then hand order
+        std::stable_sort(by_pick.begin(), by_pick.end(), [&](int a, int b)
+        {
+            const bool ta = defs[at(a)] != nullptr && defs[at(a)]->params.enters_tapped;
+            const bool tb = defs[at(b)] != nullptr && defs[at(b)]->params.enters_tapped;
+            return !ta && tb;
+        });
+        const std::size_t k = static_cast<std::size_t>(std::max(0, 3 - board_lands));
+        for (std::size_t j = 0; j < by_pick.size() && j < k; ++j)
+        { core_drops.push_back(discard_dist::LandDropOf(defs[at(by_pick[j])])); }
+    }
+    auto ev_of = [&](int i, int value_pos, int copies_ahead) -> double
+    {
+        const double value = LifegainBucketsValue(value_pos);
+        if (!dist_model) { return value; }
+        const int mana = CleanupDiscardManaValue(ap.hand[at(i)]) * (1 + copies_ahead);
+        return discard_dist::CastFactorFor(census, *defs[at(i)], core_drops, mana) * value;
+    };
+    auto copies_taken = [&](int i)
+    {
+        int c = 0;
+        for (int j : taken) { if (ap.hand[at(j)].m_name == ap.hand[at(i)].m_name) { ++c; } }
+        return c;
+    };
     auto top_up_payoffs = [&](int target)
     {
         while (payoffs_n < target)
         {
-            int best = -1, best_key = 0;
+            int best = -1;
+            bool best_rep = false;
+            double best_ev = 0.0;
             for (int i : creatures)
             {
                 if (keep[at(i)] || !is_payoff(defs[at(i)]->params)) { continue; }
-                const int key = (name_kept(i) ? 100 : 0) + payoff_rank(i);   // variety, then the order
-                if (best < 0 || key < best_key) { best = i; best_key = key; }
+                const int copies = copies_taken(i);
+                const bool rep = copies > 0;                                     // variety first
+                const double e = ev_of(i, payoff_rank(i) + 1, copies);           // then EV (value)
+                if (best < 0 || (rep != best_rep ? !rep : e > best_ev)) { best = i; best_rep = rep; best_ev = e; }
             }
             if (best < 0) { break; }
             take(best); ++payoffs_n;
@@ -19205,14 +19262,15 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
     std::vector<int> fill_order;
     for (int i : creatures) { if (!keep[at(i)]) { fill_order.push_back(i); } }
     std::vector<int> copy_ordinal(at(n), 0);   // variety: copies of the name kept or ahead of it; Prides exempt
+    std::vector<double> fill_ev(at(n), 0.0);
     for (std::size_t a = 0; a < fill_order.size(); ++a)
     {
         const int i = fill_order[a];
-        if (is_ocelot(defs[at(i)]->params)) { continue; }
-        int c = name_kept(i) ? 1 : 0;
+        int ahead = 0;   // copies of the name earlier in the fill pool
         for (std::size_t b = 0; b < a; ++b)
-        { if (ap.hand[at(fill_order[b])].m_name == ap.hand[at(i)].m_name) { ++c; } }
-        copy_ordinal[at(i)] = c;
+        { if (ap.hand[at(fill_order[b])].m_name == ap.hand[at(i)].m_name) { ++ahead; } }
+        copy_ordinal[at(i)] = is_ocelot(defs[at(i)]->params) ? 0 : (name_kept(i) ? 1 : 0) + ahead;
+        fill_ev[at(i)] = ev_of(i, fill_value(i) + 1, copies_taken(i) + ahead);   // cost: every copy ahead
     }
     std::sort(fill_order.begin(), fill_order.end(), [&](int a, int b)
     {
@@ -19220,8 +19278,7 @@ std::vector<int> CritterLifegainProvider::CleanupDiscardCandidates(
         const bool ba = CleanupDiscardManaValue(ap.hand[at(a)]) >= 4;
         const bool bb = CleanupDiscardManaValue(ap.hand[at(b)]) >= 4;
         if (ba != bb) { return !ba; }                                                                  // 4-5 drops last
-        const int va = fill_value(a), vb = fill_value(b);
-        if (va != vb) { return va < vb; }                                                              // value
+        if (fill_ev[at(a)] != fill_ev[at(b)]) { return fill_ev[at(a)] > fill_ev[at(b)]; }             // EV (value)
         return a < b;
     });
     // "4th land (only with a 4+ drop)": reserved when the hand that SURVIVES the cleanup -- the core

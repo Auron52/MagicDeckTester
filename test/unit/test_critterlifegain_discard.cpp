@@ -14,7 +14,10 @@
 // implementation lists (each test names the one it pins), not read off the code's output. Every
 // board checks the GENERIC fallback's index 0 (the control arm, which must differ) and that every
 // non-staged index is named exactly once; the hatch case proves MTG_CRITTER_BUCKET_DISCARD=0 restores
-// exactly the generic ranking, and the stability case proves the order is prefix-stable.
+// exactly the generic ranking, and the stability case proves the order is prefix-stable with the
+// distance model off. USER 2026-10-10: the payoff slots no longer subtract payoffs in play (T1, T2,
+// T4, T8), and inside the payoff slots' and the fill's tiers the order is EV = the shared discard_dist
+// CastFactor x value (T1, T4, T5, T9, T12, T13 pin it, each against MTG_DISCARD_DIST_MODEL=0).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -75,11 +78,20 @@ GameState MakeCritter(const std::vector<std::string>& hand, const std::vector<st
     return s;
 }
 
-std::vector<int> Crit(const GameState& s, int arm = 1)
+// `dist` pins MTG_DISCARD_DIST_MODEL (1 = the shared distance model, 0 = value alone, -1 = the env
+// default, which is ON). Test GameStates have an EMPTY library, so the model's factor is exact by hand:
+// castable on our t-th next turn from the board plus the core ladder's kept lands (one per turn, a
+// tapped one a turn late) -> 0.75^(t-1); never within 4 turns -> the floor 0.02 x 0.75^4 = 0.0063.
+// Values are 0.85^position. Payoff slots: Serra at 30+ life 1, Pridemate / Voice 0.85, Archangel
+// 0.7225, Heliod 0.6141, Serra 0.5220. Fill: Serra at 30+ 1, Pridemate / Voice 0.85, Ocelot 0.7225,
+// Archangel 0.6141, Heliod 0.5220, Serra 0.4437, Ajani 0.3771, Ranger-Captain 0.3206.
+std::vector<int> Crit(const GameState& s, int arm = 1, int dist = -1)
 {
     heurarm::t_arm[heurarm::CRITTER_BUCKET_DISCARD] = static_cast<std::int8_t>(arm);
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]     = static_cast<std::int8_t>(dist);
     std::vector<int> v = CritterLifegainProvider().CleanupDiscardCandidates(s, nullptr);
     heurarm::t_arm[heurarm::CRITTER_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]     = -1;
     return v;
 }
 std::vector<int> GenCritter(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
@@ -102,15 +114,15 @@ std::vector<std::string> NamesCritter(const GameState& s, const std::vector<int>
 }
 
 // Shed index 0, re-rank the smaller hand: the rest of the order must come back unchanged, down to
-// one card (DecisionProvider::CleanupDiscardShedStable defaults to true).
+// one card -- with the distance model OFF, the only arm in which CleanupDiscardShedStable() is true.
 void CheckPrefixStableCritter(GameState s)
 {
-    std::vector<int> order = Crit(s);
+    std::vector<int> order = Crit(s, 1, 0);
     while (s.players[0].hand.size() > 1)
     {
         const std::vector<std::string> rest = NamesCritter(s, order, 1);
         s.players[0].hand.erase(s.players[0].hand.begin() + order.front());
-        order = Crit(s);
+        order = Crit(s, 1, 0);
         CHECK(NamesCritter(s, order) == rest);
     }
 }
@@ -146,29 +158,36 @@ GameState CritterT4(const char* slot4)
 
 TEST_CASE("Critter discard T1: Unexpectedly Absent sheds first, not Archangel of Thune")
 {
-    // Board 3 Plains + Soul Warden + Pridemate: lands 1-3, watcher 1 and payoff 1 are full. Core:
-    // Ocelot, payoff #2 = Voice, 2nd watcher = Soul's Attendant. Holding Archangel (MV 5) -> the hand
-    // Plains is the 4th land and the fill room is 7 - 3 - 1 = 3: Heliod, Serra, then Archangel (4-5
-    // drops last). Shed: UA, then the ladder backwards: Plains, Archangel, Serra, Heliod, Attendant,
-    // Voice, Ocelot.
+    // Board 3 Plains + Soul Warden + Pridemate: lands 1-3 and watcher 1 are full; the Pridemate in
+    // play does NOT fill a payoff slot (USER 2026-10-10: creature quotas do not net the board). Board
+    // mana 3, no hand land kept by the core, empty library: Archangel (5) is never castable (EV
+    // 0.7225 x 0.0063); Voice, Heliod, Serra are castable now.
+    // Core: payoff #1 = Voice (0.85), Ocelot, payoff #2 = Heliod (0.614 > Serra 0.522 > Archangel),
+    // 2nd watcher = Soul's Attendant. Fill: Serra, then Archangel (4-5 drops last). Archangel is kept,
+    // so the hand Plains is the 4th land. Shed: UA, then the ladder backwards: Plains, Archangel,
+    // Serra, Attendant, Heliod, Ocelot, Voice.
     const GameState s = CritterT1();
-    const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 1, 2, 0, 6, 7, 5, 3, 4 });
+    const std::vector<int> o = Crit(s, 1, 1);
+    CHECK(o == std::vector<int>{ 1, 2, 0, 6, 5, 7, 4, 3 });
     CheckPermutationCritter(s, o);
+    CHECK(Crit(s) == o);                 // the model is the default
+    // Value alone: payoff #2 = Archangel (0.7225 > Heliod), fill Heliod, Serra.
+    CHECK(Crit(s, 1, 0) == std::vector<int>{ 1, 2, 6, 7, 5, 0, 4, 3 });
     CHECK(GenCritter(s).front() == 0);   // generic max-MV sheds Archangel of Thune
 }
 
 TEST_CASE("Critter discard T2: duplicate legends -- Heliod and Ajani in play, a 2nd Daxos in hand -- shed right after UA")
 {
     // The hand Heliod and Ajani are dead (their names are in play), the 2nd Daxos is dead (a 2nd copy
-    // in hand). Core: watcher #1 = the first Daxos (no watcher in play), payoff #1 = Heliod in play,
-    // Ocelot, payoff #2 = Pridemate (over Archangel). Archangel is held -> 4th land kept; it is the
-    // only fill creature.
+    // in hand). Core: watcher #1 = the first Daxos (no watcher in play); the Heliod in play fills no
+    // payoff slot (USER 2026-10-10), so payoff #1 = Pridemate, Ocelot, payoff #2 = Archangel (the only
+    // payoff left). Archangel is kept -> the hand Plains is the 4th land; nothing is left to fill.
     const GameState s = MakeCritter(
         { kHeliod, kAjani, kDaxos, kDaxos, kPridemate, kOcelot, "Plains", kArch },
         { "Plains", "Plains", "Plains", kHeliod, kAjani });
     const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 0, 1, 3, 6, 7, 4, 5, 2 });
+    CHECK(o == std::vector<int>{ 0, 1, 3, 6, 7, 5, 4, 2 });
+    CHECK(Crit(s, 1, 0) == o);
     CheckPermutationCritter(s, o);
     CHECK(GenCritter(s).front() == 7);   // generic sheds Archangel
 }
@@ -188,35 +207,43 @@ TEST_CASE("Critter discard T3: the land quota counts the board; surplus lands sh
 
 TEST_CASE("Critter discard T4: the 4th land is kept only with a 4+ drop -- then it outlives a spare watcher; without one it is surplus")
 {
-    // Board 3 Plains + 2 watchers + Pridemate. Core: Ocelot, Voice. Spare watchers (beyond 2):
-    // Auriok Champion, the hand Soul Warden -- shed Champion first (the watcher order reversed).
-    // WITH Archangel: the Plains is the 4th land (protected), fill = Heliod, Serra, Archangel.
+    // Board 3 Plains + 2 watchers + Pridemate (which fills no payoff slot). Core: payoff #1 = Voice,
+    // Ocelot, payoff #2 = Heliod (castable now, 0.614; Archangel never castable on 3 mana with an empty
+    // library). Spare watchers (beyond 2): Auriok Champion, the hand Soul Warden -- shed Champion first.
+    // WITH Archangel: fill = Serra, Archangel; Archangel is kept, so the Plains is the 4th land.
     const GameState with_big = CritterT4(kArch);
     const std::vector<int> a = Crit(with_big);
-    CHECK(a == std::vector<int>{ 1, 7, 0, 4, 5, 6, 2, 3 });
+    CHECK(a == std::vector<int>{ 1, 7, 0, 4, 5, 6, 3, 2 });
     CheckPermutationCritter(with_big, a);
     CHECK(GenCritter(with_big).front() == 4);
+    // Value alone: payoff #2 = Archangel; fill Heliod, Serra.
+    CHECK(Crit(with_big, 1, 0) == std::vector<int>{ 1, 7, 0, 5, 6, 4, 3, 2 });
     // WITHOUT a 4+ drop (Ranger-Captain, MV 3, in that slot): the Plains is a surplus land and sheds
-    // first, ahead of the spare watchers.
+    // first, ahead of the spare watchers. Payoff #2 = Heliod; fill Serra, Ranger-Captain.
     const GameState without = CritterT4(kRanger);
     const std::vector<int> b = Crit(without);
-    CHECK(b == std::vector<int>{ 0, 1, 7, 4, 5, 6, 2, 3 });
+    CHECK(b == std::vector<int>{ 0, 1, 7, 4, 5, 6, 3, 2 });
+    CHECK(Crit(without, 1, 0) == b);
     CheckPermutationCritter(without, b);
     CHECK(GenCritter(without).front() == 4);   // generic sheds Ranger-Captain (MV 3, first)
 }
 
 TEST_CASE("Critter discard T5: creature overflow -- the repeat name first, a 2nd Ocelot is NOT a repeat; overflow before spare watchers")
 {
-    // Nine cards (two to shed). Board 3 Plains + 2 watchers + Pridemate. Core: Ocelot #1, Voice #1.
-    // No land in hand, so no 4th land: fill room 7 - 2 = 5. Fill order: first copies (the 2nd Ocelot
-    // counts as one -- agent default) Ocelot, Heliod, Serra, Ranger-Captain, then Archangel (4-5 drops
-    // last); then the repeat Voice -> the overflow. Shed: Voice #2, the spare Champion, then the
-    // protected tail.
+    // Nine cards (two to shed). Board 3 Plains + 2 watchers + Pridemate (no payoff slot filled by it).
+    // Core: payoff #1 = Voice #1, Ocelot #1, payoff #2 = Heliod (the 2nd Voice is a repeat; Heliod
+    // castable 0.614 beats Serra 0.522 and the never-castable Archangel). No land in hand, so no 4th
+    // land: fill room 7 - 3 = 4. Fill: first copies (the 2nd Ocelot counts as one -- agent default;
+    // it costs 2 cumulatively, castable) Ocelot 0.7225, Serra 0.4437, Ranger-Captain 0.3206, then
+    // Archangel (4-5 drops last); then the repeat Voice -> the overflow. Shed: Voice #2, the spare
+    // Champion, then the protected tail.
     const GameState s = MakeCritter(
         { kVoice, kVoice, kOcelot, kOcelot, kArch, kHeliod, kSerraA, kRanger, kChampion },
         { "Plains", "Plains", "Plains", kWarden, kAttendant, kPridemate });
     const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 1, 8, 4, 7, 6, 5, 3, 0, 2 });
+    CHECK(o == std::vector<int>{ 1, 8, 4, 7, 6, 3, 5, 2, 0 });
+    // Value alone: payoff #2 = Archangel; fill Ocelot, Heliod, Serra, Ranger-Captain.
+    CHECK(Crit(s, 1, 0) == std::vector<int>{ 1, 8, 7, 6, 5, 3, 4, 2, 0 });
     CheckPermutationCritter(s, o);
     CHECK(GenCritter(s).front() == 4);   // generic sheds Archangel
 }
@@ -255,42 +282,50 @@ TEST_CASE("Critter discard T7: watchers Warden / Attendant > Champion > Daxos, a
 
 TEST_CASE("Critter discard T8: Ocelot Pride is NOT discounted by Prides in play")
 {
-    // Board: 3 Plains, TWO Ocelot Prides, 2 watchers, 2 payoffs -- every netted slot is full, yet the
-    // Ocelot slot still takes the hand Pride (it is the last card to go). Ajani is held -> the 4th
-    // land is kept; fill Heliod, Serra, Ranger-Captain, then Ajani (4-5 drops last).
+    // Board: 3 Plains, TWO Ocelot Prides, 2 watchers, 2 payoffs. The Ocelot slot still takes the hand
+    // Pride, and -- USER 2026-10-10, "Creature quotas are less worried about the board than land
+    // quotas" -- the two payoffs in play fill NEITHER payoff slot: payoff #1 = Heliod, Ocelot, payoff
+    // #2 = Serra. Ajani is kept in the fill -> the 4th land is kept; fill Ranger-Captain, then Ajani.
+    // (Before the ruling the payoff slots were full from the board and Heliod / Serra were fill.)
     const GameState s = MakeCritter(
         { kOcelot, "Plains", "Plains", kHeliod, kSerraA, kRanger, kChampion, kAjani },
         { "Plains", "Plains", "Plains", kOcelot, kOcelot, kWarden, kAttendant, kPridemate, kVoice });
     const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 2, 6, 1, 7, 5, 4, 3, 0 });
+    CHECK(o == std::vector<int>{ 2, 6, 1, 7, 5, 4, 0, 3 });
+    CHECK(Crit(s, 1, 0) == o);   // the ruling, not the model: value alone gives the same order
     CheckPermutationCritter(s, o);
     CHECK(GenCritter(s).front() == 7);   // generic sheds Ajani (MV 4)
 }
 
 TEST_CASE("Critter discard T9: the 4+ drop and the 4th land compete for the last slot -- KEEP's 'creatures to fill -> 4th land' keeps the creature")
 {
-    // Board 3 Plains + 2 watchers + Pridemate. Core: Ocelot, Voice (2 hand cards). Fill: the 2nd
-    // Ocelot, Heliod, Serra, Ranger-Captain, then Archangel -- five creatures fill the seven-card hand
-    // exactly, so the Plains (the would-be 4th land, ranked below the fill) is the one shed.
+    // Board 3 Plains + 2 watchers + Pridemate. Core: payoff #1 = Voice, Ocelot, payoff #2 = Heliod
+    // (castable; Archangel is not, on 3 mana with an empty library). Fill: the 2nd Ocelot, Serra,
+    // Ranger-Captain, then Archangel -- four creatures fill the seven-card hand exactly, so the Plains
+    // (the would-be 4th land, ranked below the fill) is the one shed.
     const GameState s = MakeCritter(
         { "Plains", kVoice, kOcelot, kOcelot, kHeliod, kSerraA, kRanger, kArch },
         { "Plains", "Plains", "Plains", kWarden, kAttendant, kPridemate });
     const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 0, 7, 6, 5, 4, 3, 1, 2 });
+    CHECK(o == std::vector<int>{ 0, 7, 6, 5, 3, 4, 2, 1 });
+    // Value alone: payoff #2 = Archangel (core) -> the 4th land is reserved and Ranger-Captain is the
+    // creature overflow.
+    CHECK(Crit(s, 1, 0) == std::vector<int>{ 6, 0, 5, 4, 3, 7, 2, 1 });
     CheckPermutationCritter(s, o);
     CHECK(GenCritter(s).front() == 7);   // generic sheds Archangel
 }
 
 TEST_CASE("Critter discard T10: a 4+ drop that is itself creature overflow reserves no 4th land")
 {
-    // As T9 plus a third Ocelot (nine cards, two to shed). The fill now runs Ocelot, Ocelot, Heliod,
-    // Serra, Ranger-Captain and Archangel is the overflow -- the kept hand holds no 4+ drop, so the
-    // Plains is a surplus land: shed the Plains, then Archangel. Kept: 3 lands on board, no 4-drop.
+    // As T9 plus a third Ocelot (nine cards, two to shed). Core: Voice, Ocelot, Heliod. The fill runs
+    // Ocelot, Ocelot (2 and 3 mana cumulatively, both castable), Serra, Ranger-Captain and Archangel is
+    // the overflow -- the kept hand holds no 4+ drop, so the Plains is a surplus land: shed the
+    // Plains, then Archangel. Kept: 3 lands on board, no 4-drop.
     const GameState s = MakeCritter(
         { "Plains", kVoice, kOcelot, kOcelot, kHeliod, kSerraA, kRanger, kArch, kOcelot },
         { "Plains", "Plains", "Plains", kWarden, kAttendant, kPridemate });
     const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 0, 7, 6, 5, 4, 8, 3, 1, 2 });
+    CHECK(o == std::vector<int>{ 0, 7, 6, 5, 8, 3, 4, 2, 1 });
     CheckPermutationCritter(s, o);
     CHECK(GenCritter(s).front() == 7);
     CheckPrefixStableCritter(s);
@@ -312,6 +347,59 @@ TEST_CASE("Critter discard T11: the 4th land counts the board -- with 4 lands in
     CheckPermutationCritter(s, o);
 }
 
+TEST_CASE("Critter discard T12: kept lands feed the model -- an untapped kept Plains casts Heliod next turn, a kept Remote Farm a turn later")
+{
+    // Board 2 Plains + Soul Warden: the core keeps the hand land as land 3. Empty library.
+    //   Plains kept: Heliod {2}{W} castable turn 1 (2 + 1) -> 0.614 > Serra 0.522 -> payoff #1 Heliod,
+    //     Ocelot, payoff #2 Serra, 2nd watcher Soul's Attendant (over Champion), land 3; fill
+    //     Ranger-Captain. Shed: UA, the spare Champion, then the ladder backwards.
+    //   Remote Farm kept (enters tapped): Heliod only on turn 2 (2 + 2) -> 0.75 x 0.614 = 0.461 <
+    //     Serra 0.522 -> payoff #1 Serra, payoff #2 Heliod.
+    std::vector<std::string> hand = { "Plains", kHeliod, kSerraA, kOcelot, kRanger, kChampion, kUAbs, kAttendant };
+    const std::vector<std::string> board = { "Plains", "Plains", kWarden };
+    const GameState plains = MakeCritter(hand, board);
+    CHECK(Crit(plains, 1, 1) == std::vector<int>{ 6, 5, 4, 0, 7, 2, 3, 1 });
+    hand[0] = kRFarm;
+    const GameState farm = MakeCritter(hand, board);
+    const std::vector<int> o = Crit(farm, 1, 1);
+    CHECK(o == std::vector<int>{ 6, 5, 4, 0, 7, 1, 3, 2 });
+    CheckPermutationCritter(farm, o);
+    CHECK(Crit(farm, 1, 0) == std::vector<int>{ 6, 5, 4, 0, 7, 2, 3, 1 });   // value alone: Heliod first
+    CHECK(GenCritter(farm).front() == 1);   // generic sheds Heliod (MV 3, first)
+}
+
+TEST_CASE("Critter discard T13: the distance model never lifts a repeat over a first copy in the payoff slots")
+{
+    // Board 3 Plains + 2 watchers, empty library. Payoff #1 = Pridemate #1. Payoff #2: the 2nd
+    // Pridemate is a repeat (EV 0.85 x floor -- it costs 4 cumulatively) and Archangel a first copy
+    // (EV 0.7225 x floor, lower): variety is a USER tier, so Archangel takes the slot anyway. Archangel
+    // is kept -> the hand Plains is the 4th land. Fill: Ranger-Captain (first copy) then Pridemate #2.
+    const GameState s = MakeCritter(
+        { kPridemate, kPridemate, kArch, kOcelot, "Plains", kUAbs, kChampion, kRanger },
+        { "Plains", "Plains", "Plains", kWarden, kAttendant });
+    const std::vector<int> o = Crit(s, 1, 1);
+    CHECK(o == std::vector<int>{ 5, 6, 4, 1, 7, 2, 3, 0 });
+    CheckPermutationCritter(s, o);
+    CHECK(Crit(s, 1, 0) == o);
+    CHECK(GenCritter(s).front() == 2);   // generic sheds Archangel
+}
+
+TEST_CASE("Critter discard: CleanupDiscardShedStable() is false only while the buckets AND the distance model are on")
+{
+    auto stable = [](int bucket, int dist)
+    {
+        heurarm::t_arm[heurarm::CRITTER_BUCKET_DISCARD] = static_cast<std::int8_t>(bucket);
+        heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]     = static_cast<std::int8_t>(dist);
+        const bool v = CritterLifegainProvider().CleanupDiscardShedStable();
+        heurarm::t_arm[heurarm::CRITTER_BUCKET_DISCARD] = -1;
+        heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]     = -1;
+        return v;
+    };
+    CHECK_FALSE(stable(1, 1));
+    CHECK(stable(1, 0));
+    CHECK(stable(0, 1));
+}
+
 TEST_CASE("Critter discard: MTG_CRITTER_BUCKET_DISCARD=0 restores exactly the generic ranking; the default is the policy")
 {
     const GameState s = CritterT1();
@@ -326,11 +414,11 @@ TEST_CASE("Critter discard: a staged card is never in the policy's order and lan
                               { "Plains", "Plains", "Plains", kWarden, kPridemate });
     s.players[0].hand[8].m_is_staged = true;
     const std::vector<int> o = Crit(s);
-    CHECK(o == std::vector<int>{ 1, 2, 0, 6, 7, 5, 3, 4, 8 });   // T1's order, then the staged Ajani
+    CHECK(o == std::vector<int>{ 1, 2, 0, 6, 5, 7, 4, 3, 8 });   // T1's order, then the staged Ajani
     CheckPermutationCritter(s, o);
 }
 
-TEST_CASE("Critter discard: the shed order is prefix-stable shed by shed")
+TEST_CASE("Critter discard: with the distance model off the shed order is prefix-stable shed by shed")
 {
     CheckPrefixStableCritter(CritterT1());
     CheckPrefixStableCritter(CritterT4(kArch));

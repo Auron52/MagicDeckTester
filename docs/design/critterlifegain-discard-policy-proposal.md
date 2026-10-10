@@ -78,7 +78,9 @@ Agent readings (the USER did not rule; each is pinned by a named test and is the
   reserved, which then flips to surplus mid-cleanup) and it keeps a 4th land for a card it discards.
 - (c) Payoff slots count payoffs in play (the Ajani -2 token included), read from the USER's explicit
   Ocelot exemption; they pick by variety then the USER's payoff order. "4-5 drops shed first" applies
-  to the fill, so Archangel > Heliod > Serra stays meaningful in the payoff slots.
+  to the fill, so Archangel > Heliod > Serra stays meaningful in the payoff slots. *(The first half is
+  OVERRULED 2026-10-10 -- the payoff slots now fill from the hand; see "Implementation notes
+  (2026-10-10)" below.)*
 - (d) The fill's value order: Pridemate / Voice > Ocelot > Archangel > Heliod > Serra > Ajani >
   Ranger-Captain (Serra first at 30+). The payoffs keep the USER's order; Ocelot sits right below the
   first payoffs, as the ladder places it and as the profile measures it (first copy +0.306, second
@@ -86,7 +88,8 @@ Agent readings (the USER did not rule; each is pinned by a named test and is the
 - (e) Variety reads the hand; a Remote Farm is one land; surplus lands shed Remote Farm first, then
   the highest hand index.
 - (f) An unbucketed card sheds right after the removal (unreachable on the shipped list). No further
-  distance-to-castable term: the SETTLED block names none.
+  distance-to-castable term: the SETTLED block names none. *(Superseded 2026-10-10: the shared
+  distance model now orders inside the tiers.)*
 
 Housekeeping done (comments in `DecisionProviders.{h,cpp}`): the provider block's "Ajani x3" and
 "exactly ONE hook", and `LegendKeepIndex`'s "Three Ajani" (now marked as v1; on v2 it only sees
@@ -108,6 +111,46 @@ Cross-deck (verbatim):
   engine, combo-piece and duplicate-legend rules keep the board rules their design states.
 - *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
   model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
+
+#### Implementation notes (2026-10-10) -- the rulings applied
+
+- **Creature quotas vs the board:** the two payoff slots now fill from the HAND and no longer subtract
+  payoffs in play (the Ajani -2 Pridemate token included) -- reading (c)'s netting is gone. The watcher
+  quota keeps "2 counting board" (the design states it); lands keep counting the board; the Ocelot
+  slot already ignored Prides in play. Unconditional (a USER ruling, not an A/B arm). T1, T2, T4 and
+  T8 change with it; T8 shows it alone (the same order with the distance model on or off).
+- **Distance to castable:** in the payoff slots (after variety) and in the fill (after variety and
+  4-5-drops-last) the order is **EV = `discard_dist::CastFactor` x value**, behind
+  `MTG_DISCARD_DIST_MODEL` (heurarm `DISCARD_DIST_MODEL`, default ON; `=0` restores the value-only order
+  exactly). The model never crosses those USER tiers (T13: a castable-looking repeat Pridemate does not
+  take the 2nd payoff slot from a first-copy Archangel). The watcher order is the USER's explicit
+  order and is not touched.
+  * Census: `BuildCensus` once per call.
+  * LandDrops: the lands the CORE ladder keeps (lands 1-3: Plains first, then Remote Farm) (T12: a kept
+    Remote Farm enters tapped, so Heliod is a turn later than with a kept Plains, and Serra takes the
+    first payoff slot).
+  * The k-th copy of a name pays for the copies of it kept or ahead of it (the model's duplicate rule;
+    Prides included -- their variety exemption is about value, not mana).
+- **Not prefix-stable with the model on:** the core's land 3 prices the payoffs and the tail sheds it
+  before them, so `CritterLifegainProvider::CleanupDiscardShedStable()` is false while the buckets and
+  the model are on (re-rank per shed); with `=0` it is true and still tested shed by shed.
+- **New agent readings (USER may overturn):**
+  * (g) The value the factor multiplies is 0.85^position -- payoff slots: Serra at 30+ 1, Pridemate /
+    Voice 0.85, Archangel 0.72, Heliod 0.61, Serra 0.52; fill: Serra at 30+ 1, Pridemate / Voice 0.85,
+    Ocelot 0.72, Archangel 0.61, Heliod 0.52, Serra 0.44, Ajani 0.38, Ranger-Captain 0.32
+    (MinotaurProvider's adopted EV2 spread).
+  * (h) The conditional 4th land is NOT a LandDrop: whether it is kept depends on which creatures the
+    fill keeps, which is what the factor ranks. A kept Archangel / Ajani is therefore priced as if the
+    4th land were not there (the conservative side).
+  * With the model on, a stranded Archangel drops below Heliod and Serra in the payoff slots
+    (its value 0.72 x a small factor), so it now tends to land in the fill instead of a payoff slot --
+    which changes whether the 4th land is reserved (T9: with the model the Plains is shed; with `=0`
+    Archangel is a core payoff, the 4th land is kept and Ranger-Captain is the overflow).
+- **Tests:** `test_critterlifegain_discard.cpp`, 17 cases / 344 assertions. T1, T2, T4, T5, T8, T9,
+  T10 and the staged case re-derived by hand (T1, T2, T4, T5, T8, T9 pin their `=0` order too); T12 (kept
+  lands), T13 (tiers hold) and the stability-flag case are new. Run against the pre-ruling code, all
+  ten changed / new behaviour cases fail (their `=0` assertions too -- the payoff-slot ruling is
+  unconditional); T13, an invariant, passes there.
 
 ---
 
