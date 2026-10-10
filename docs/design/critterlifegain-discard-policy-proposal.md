@@ -93,6 +93,7 @@ Housekeeping done (comments in `DecisionProviders.{h,cpp}`): the provider block'
 Heliod x2). NOT done (out of scope): `DecisionProvider.h:1263` and `:2476` still say "its three
 Ajani"; `cards.json` -- Ranger-Captain of Eos's note names the v1 fetch pool (v2 adds Ocelot Pride,
 MV 1), Auriok Champion's says "4 Champions" and reasons about Orzhov Basilica (v2: 3, no Basilica).
+(All fixed 2026-10-10: both `DecisionProvider.h` comments and both `cards.json` notes.)
 
 
 #### USER rulings (2026-10-10) on the implementation readings

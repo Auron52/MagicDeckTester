@@ -49,7 +49,8 @@ Implemented as `CreatureGivingProvider::CleanupDiscardCandidates` (+ `CleanupDis
 `src/ai/DecisionProviders.cpp`, behind `MTG_CG_BUCKET_DISCARD` (heurarm `CG_BUCKET_DISCARD`, default
 ON). **`=0` is the Defense-of-the-Heart-last patch that shipped 2026-08-06**, kept byte-for-byte, not
 the generic ranking, so the A/B has the three arms asked for: buckets / DotH-last (`=0`) / generic
-(`GenericProvider::CleanupDiscardCandidates`, reachable in tests and as the base class). The stale
+(`GenericProvider::CleanupDiscardCandidates`, reachable in tests and as the base class -- and, since
+401432c4, at runtime with `MTG_CG_BUCKET_DISCARD=0 MTG_CG_DOTH_LAST=0`). The stale
 "spare-copy band" wording in that patch's header comment is fixed (the band was removed as an engine
 rule 2026-08-06/07). Tests: `test/unit/test_creature_giving_discard.cpp`.
 
@@ -127,6 +128,8 @@ Cross-deck (verbatim):
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
+
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** the requested `MTG_CG_DISCARD_V0` arm was not built under that name: **`MTG_CG_BUCKET_DISCARD=0`** IS the shipped Defense-of-the-Heart-last patch, and **`MTG_CG_DOTH_LAST=0`** beside it gives the generic ranking (commit 401432c4, `src/ai/HeuristicArm.h`). `MTG_CG_DISCARD_V0` is read nowhere.
 
 
 Authored per `docs/design/discard-bucket-authoring-brief.md`. Proposed as
