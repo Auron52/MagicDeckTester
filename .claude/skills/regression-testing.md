@@ -21,6 +21,7 @@ The harness lives in `test/`:
 | File | Role | Committed? |
 |------|------|-----------|
 | `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth. `--deck=<name>` restricts the run to one deck's cases (safe with `--accept` — updates only that deck's GT). | yes |
+| `tier_cost.py` | per-deck cost of a tier from its last `batch.log` (`tier_cost.py overnight`): share, worker-h, ms/game, depth split, units share. Thread-wall, so compare shares within a run. Used to size a deck's overnight FULL set ("Sizing a deck's overnight rows") | yes |
 | `regression_deck.sh` | runs ONE deck across modes (`regression_deck.sh <deck> [smoke regression overnight]`) — the per-deck counterpart; each mode still prints its audit and is accepted separately | yes |
 | `audit_changed_games.py` | **the pre-`--accept` report you must read**: per-game SLOWER / faster / play-changed breakdown split by depth. Metric = loss-penalized avg, so a game going from a win to unwon is not special — it is just the maximal slowdown, folded into SLOWER. REPORT-ONLY (always exits 0); auto-run by `regression.sh` on every run. The accept decision is yours, on the net delta. | yes |
 | `classify_turn_later.sh` | auto-classifies each searched-depth SLOWER game (`churn` = recovers at 4x/16x budget vs `PERSISTS` = variance/real), re-running that one game — the generated form of the slowdown classification | yes |
@@ -593,8 +594,10 @@ and do **not** exempt the deck from the suite.
    **mode** within its total budget across **all** decks.
 4. If the deck does not fit a mode's budget, it goes in **no** tier until optimization makes
    it fit — never a subset of tiers, never rows parked "for later". Once added, the rows stay
-   as added: do not shrink an existing deck's rows to make room. `verify_deck.py`'s
-   `regression_tiers` gate fails any partial addition.
+   as added: do not shrink an existing deck's rows to make room. The ONE planned resize is the
+   overnight ENTRY set -> FULL set at the keep-table adoption (next section; USER 2026-10-10 amended
+   the 2026-09-27 "leave them as-is" for exactly this). `verify_deck.py`'s `regression_tiers` gate
+   fails any partial addition.
 5. Run each mode, inspect, `--accept`, and commit the new ground truth **in the same change**
    as the rows. For a per-deck run, pass the SAME `--deck=` to `--accept` — without it the accept
    treats the run as full-mode and drops that tier's earlier `accepted-with-regressions` notes (rows without GT strand NEW keys for whoever runs that tier next).
@@ -606,6 +609,38 @@ and do **not** exempt the deck from the suite.
    Also note a **filtered run pollutes the per-game audit**: decks that did not run keep stale `.wins`
    from an earlier run, and the audit diffs those against current GT, so it reports "play differs" for
    decks you never touched. Check `.wins` mtimes before believing any of it — promotion itself is safe.
+
+### Sizing a deck's overnight rows: the ENTRY set, then the FULL set at the keep-table adoption
+
+USER 2026-10-10: *"Maybe having a cheaper set and adding games after the mulligan profile is done?
+(rebaselining with the new set without the profile just before we adopt)"*.
+
+**Why.** Most decks get the same overnight game counts (d0 4x2000, d3 4x1000 b20, d5 4x500 b40), so a
+deck's share of the tier follows its per-game cost, and a deck WITHOUT a keep table is at its most
+expensive: every game that mulligans first plays out each candidate bottom as a full game (Bruna at d5
+b20: 68.7% of search units, 62% of wall), which the keep table replaces with a lookup. Bruna, restored on
+2026-10-09 at the standard shape, was **28.6% of the 2026-10-10 overnight tier** (6.56 of 22.9 worker-h)
+-- more searched games than Hinata (6,000 vs 2,800) at twice the budget. Its play also moves again at the
+keep-table adoption, so a big pre-adoption sample buys little.
+
+* **ENTRY set** -- a deck enters the suite with it (and a deck restored to the suite without a keep table
+  gets it): overnight `d0 4x2000`, `d3 4x400 b10`, `d5 4x300 b20` (Hinata's shape). Smoke and regression
+  rows are their usual sizes.
+* **FULL set, just BEFORE the keep table is adopted:**
+  1. **Size it by measured per-game cost, not a fixed shape.** The standard shape suits a typical deck; a
+     heavy deck stays near Hinata's shape (Hinata, Fungus and Snow are on it or smaller WITH their keep
+     tables). `python3 test/tier_cost.py overnight` prints each deck's share of the last run; put the
+     deck's projected share in the proposal.
+  2. **Edit the rows, run that deck's overnight rows with the profile ABSENT** (play as it is today):
+     `bash test/regression.sh --overnight --deck=<deck>[,<deck>2hg]`, then accept with the SAME `--deck=`.
+     A GT key is `<deck>_<mode>_d<depth>_s<seed>`; it does NOT encode the game count or the budget, so a
+     resized row re-defines an existing key. Accept the re-definition on its own, before anything moves
+     play, so the adoption diff that follows is like-for-like.
+  3. **Adopt the keep table and measure the adoption on the full set** (`keep_adoption_attribution.py`),
+     as usual.
+* The expected per-deck worker-hours come from `test/tier_cost.py` on a pooled run. Its numbers are
+  per-job THREAD-WALL (they inflate under host contention), so compare SHARES within one run, never
+  absolute hours across runs.
 
 The smoke matrix is also where to pin a few **known-troublesome specific games**
 (by seed) as decks reveal them, so the fast gate catches the bugs that bite.

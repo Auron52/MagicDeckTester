@@ -362,6 +362,11 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     `--measure-all` from **one pooled tier run** (never a per-deck loop — that is the "waves are a
     loop" defect). The gated number is per-game core-ms at the deck's worst *searched* case, not total
     tier time, because total is confounded by the game counts we choose and so is gameable by sizing.
+  * **A deck ENTERS with the small overnight ENTRY set and expands at its keep-table adoption** (USER
+    2026-10-10): before the keep table every mulligan game plays out each candidate bottom as a full game,
+    so the deck is at its most expensive (Bruna at the standard shape was 28.6% of the overnight tier). Expand
+    just before adopting, accept the resized rows with the profile ABSENT, then measure the adoption.
+    `.claude/skills/regression-testing.md`, "Sizing a deck's overnight rows".
   * **If it is over 3x: do NOT add it and do NOT skip the suite.** Report it to the user at the end;
     **getting the deck into that range becomes the first goal**, ahead of both generators. An
     intractable deck is a performance problem to fix, not a deck to quietly exempt.

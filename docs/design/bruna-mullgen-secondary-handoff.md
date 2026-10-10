@@ -78,4 +78,6 @@ IS DAYS OF COMPUTE".
 Report the validation verdicts (keep and bottoming deltas, with seeds-better counts). On a pass the
 profile is live by presence (`decks/Bruna/Bruna.keepmodel.exhaustive.profile.json`). Commit it with
 the gzipped raw sidecar (never the uncompressed raw), then take Bruna's ground truth for the keep-table
-play change on the PRIMARY's current tree.
+play change on the PRIMARY's current tree. **Before that, on the primary:** Bruna's overnight rows are
+the ENTRY set (since 2026-10-10); expand them to the FULL set and accept them with the profile ABSENT,
+then adopt (`.claude/skills/regression-testing.md`, "Sizing a deck's overnight rows").

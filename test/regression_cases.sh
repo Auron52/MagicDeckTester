@@ -1133,19 +1133,27 @@ OVERNIGHT_CASES=(
   "pd 5 5005   75 40"
   "pd 5 6006   75 40"
   "pd 5 7007   75 40"
-  # bruna: RESTORED 2026-10-09, see the SMOKE block.
+  # bruna: RESTORED 2026-10-09, see the SMOKE block. ENTRY SET (regression-testing skill, "Sizing a deck's
+  # overnight rows"): Hinata's shape until Bruna's keep table is adopted. The rows restored on 10-09 were
+  # the pre-removal standard shape (d3 4x1000 b20, d5 4x500 b40) -- 6,000 searched games against
+  # Hinata's 2,800, at twice the budget -- and made Bruna 28.6% of the 2026-10-10 overnight tier (6.56 of
+  # 22.9 worker-h). Without a keep table every mulligan game first plays out each candidate bottom as a
+  # full game (68.7% of search units at d5 b20, analysis-Bruna.md "Slow games"), so this is the deck at
+  # its most expensive. EXPAND when the keep table lands, BEFORE adopting it: size the full set by
+  # measured per-game cost, run + accept Bruna's overnight rows with the profile ABSENT (--deck=bruna),
+  # then adopt and measure the adoption on the full set.
   "bruna 0 4004 2000 0"
   "bruna 0 6006 2000 0"
   "bruna 0 8008 2000 0"
   "bruna 0 10010 2000 0"
-  "bruna 3 4004 1000 20"
-  "bruna 3 5005 1000 20"
-  "bruna 3 6006 1000 20"
-  "bruna 3 7007 1000 20"
-  "bruna 5 4004  500 40"
-  "bruna 5 5005  500 40"
-  "bruna 5 6006  500 40"
-  "bruna 5 7007  500 40"
+  "bruna 3 4004  400 10"
+  "bruna 3 5005  400 10"
+  "bruna 3 6006  400 10"
+  "bruna 3 7007  400 10"
+  "bruna 5 4004  300 20"
+  "bruna 5 5005  300 20"
+  "bruna 5 6006  300 20"
+  "bruna 5 7007  300 20"
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.
