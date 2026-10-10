@@ -11,7 +11,9 @@
 // implementation lists (each test names the reading it pins), not read off the code's output. Every
 // board also checks the GENERIC fallback's index 0 -- the control arm, which must differ -- and that
 // every non-staged index is named exactly once; the hatch case proves MTG_ANGELS_BUCKET_DISCARD=0
-// restores exactly the generic ranking, and the stability case proves the order is prefix-stable.
+// restores exactly the generic ranking, and the stability case proves the order is prefix-stable
+// with the distance model off. USER 2026-10-10: inside the Angel tiers the order is EV = the shared
+// discard_dist CastFactor x value (T3, T8, T10, T11 pin it, each against MTG_DISCARD_DIST_MODEL=0).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -72,11 +74,19 @@ GameState MakeAngels(const std::vector<std::string>& hand, const std::vector<std
     return s;
 }
 
-std::vector<int> Ang(const GameState& s, int arm = 1)
+// `dist` pins MTG_DISCARD_DIST_MODEL (1 = the shared distance model, 0 = value alone, -1 = the env
+// default, which is ON). Test GameStates have an EMPTY library, so the model's factor is exact by hand:
+// a card castable on our t-th next turn from the board plus the KEPT hand lands (one per turn, a tapped
+// one a turn late) gets 0.75^(t-1); one never castable within 4 turns gets the floor 0.02 x 0.75^4 =
+// 0.0063. The value is 0.85^(section 6c position): RV 1, Lyra 0.85, Lightstall 0.7225, Youthful
+// 0.6141, Resplendent 0.5220, Serra 0.4437, Thune 0.3771, Dawnbringer 0.3206.
+std::vector<int> Ang(const GameState& s, int arm = 1, int dist = -1)
 {
     heurarm::t_arm[heurarm::ANGELS_BUCKET_DISCARD] = static_cast<std::int8_t>(arm);
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]    = static_cast<std::int8_t>(dist);
     std::vector<int> v = AngelsProvider().CleanupDiscardCandidates(s, nullptr);
     heurarm::t_arm[heurarm::ANGELS_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]    = -1;
     return v;
 }
 std::vector<int> GenAngels(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
@@ -99,17 +109,17 @@ std::vector<std::string> NamesAngels(const GameState& s, const std::vector<int>&
     return out;
 }
 
-// PREFIX STABILITY (DecisionProvider::CleanupDiscardShedStable defaults to true, so the batched cleanup
-// reads several sheds off ONE consultation): shed index 0, re-rank the smaller hand, and the rest of
-// the order must come back unchanged -- all the way down to one card.
+// PREFIX STABILITY with the distance model OFF (CleanupDiscardShedStable() is true only then, so the
+// batched cleanup reads several sheds off ONE consultation): shed index 0, re-rank the smaller hand,
+// and the rest of the order must come back unchanged -- all the way down to one card.
 void CheckPrefixStableAngels(GameState s)
 {
-    std::vector<int> order = Ang(s);
+    std::vector<int> order = Ang(s, 1, 0);
     while (s.players[0].hand.size() > 1)
     {
         const std::vector<std::string> rest = NamesAngels(s, order, 1);
         s.players[0].hand.erase(s.players[0].hand.begin() + order.front());
-        order = Ang(s);
+        order = Ang(s, 1, 0);
         CHECK(NamesAngels(s, order) == rest);
     }
 }
@@ -168,14 +178,20 @@ TEST_CASE("Angels discard T2: duplicate legends (name in play, or a 2nd copy in 
 TEST_CASE("Angels discard T3: variety WINS over 5-drop-first -- the 2nd copies are the overflow, Thune and Dawnbringer stay")
 {
     // Board 5 Plains (every source slot full). First copies: RV, Lightstall, Resplendent, then the
-    // 5-drops Thune, Dawnbringer -> Angel x5. The repeats (RV, Lightstall, Resplendent) overflow and
-    // shed worst first: Resplendent, Lightstall, RV.
+    // 5-drops Thune, Dawnbringer -> Angel x5 (all castable now: factor 1). The repeats overflow.
+    // Distance model: a 2nd copy pays for the 1st (cumulative cost), so RV #2 and Resplendent #2 cost
+    // 6 against 5 mana and no land to come (empty library) -> floor; Lightstall #2 costs 2 -> 1.0.
+    // EV: Lightstall 0.7225 > RV 0.0063 > Resplendent 0.0033 -> overflow shed Resplendent, RV, Lightstall.
     const GameState s = MakeAngels(
         { kRV, kRV, kLI, kLI, kThune, kDawnbr, kResp, kResp },
         { "Plains", "Plains", "Plains", "Plains", "Plains" });
-    const std::vector<int> o = Ang(s);
-    CHECK(o == std::vector<int>{ 7, 3, 1, 5, 4, 6, 2, 0 });
+    const std::vector<int> o = Ang(s, 1, 1);
+    CHECK(o == std::vector<int>{ 7, 1, 3, 5, 4, 6, 2, 0 });
     CheckPermutationAngels(s, o);
+    CHECK(Ang(s) == o);                 // the model is the default
+    // Value alone (MTG_DISCARD_DIST_MODEL=0): the repeats shed worst value first -- Resplendent,
+    // Lightstall, RV.
+    CHECK(Ang(s, 1, 0) == std::vector<int>{ 7, 3, 1, 5, 4, 6, 2, 0 });
     CHECK(GenAngels(s).front() == 4);   // generic sheds Thune
 }
 
@@ -244,13 +260,19 @@ TEST_CASE("Angels discard T7: a Remote Farm in play is the USER's '2 white' -- t
 
 TEST_CASE("Angels discard T8: the white slots take an UNTAPPED white land first -- the Plains outlives the Remote Farm")
 {
-    // Empty board. White #1 = Plains (untapped), white #2 = Remote Farm; Angels RV, Lightstall,
-    // Youthful; 3rd source Sanctuary; Bishop. UA sheds first, then the ladder backwards.
+    // Empty board. White #1 = Plains (untapped), white #2 = Remote Farm; 3rd source Sanctuary; Bishop.
+    // Distance model over the KEPT lands (empty board, empty library), played W-first then untapped:
+    // Plains on turn 1, Remote Farm on turn 2 (tapped: nothing until turn 3), Sanctuary on turn 3 ->
+    // mana 1 / 1 / 4. Lightstall castable turn 1 (factor 1, EV 0.7225); RV and Youthful turn 3
+    // (0.5625): EV 0.5625 and 0.3454. So the Angels are Lightstall, RV (the mix is satisfied), Youthful.
+    // UA sheds first, then the ladder backwards.
     const GameState s = MakeAngels(
         { kFarm, "Plains", kSanct, kLI, kYV, kBishop, kRV, kUA }, {});
-    const std::vector<int> o = Ang(s);
-    CHECK(o == std::vector<int>{ 7, 5, 2, 4, 3, 6, 0, 1 });
+    const std::vector<int> o = Ang(s, 1, 1);
+    CHECK(o == std::vector<int>{ 7, 5, 2, 4, 6, 3, 0, 1 });
     CheckPermutationAngels(s, o);
+    // Value alone: RV, Lightstall, Youthful.
+    CHECK(Ang(s, 1, 0) == std::vector<int>{ 7, 5, 2, 4, 3, 6, 0, 1 });
     CHECK(GenAngels(s).front() == 6);   // generic sheds Righteous Valkyrie
 }
 
@@ -266,6 +288,63 @@ TEST_CASE("Angels discard T9: a Giada in play is a source (not white) and makes 
     CHECK(o == std::vector<int>{ 0, 1, 2, 6, 7, 5, 3, 4 });
     CheckPermutationAngels(s, o);
     CHECK(GenAngels(s).front() == 4);   // generic sheds Righteous Valkyrie
+}
+
+TEST_CASE("Angels discard T10: a protected Sol Ring in hand adds its mana to the distance model (net of its cost the turn it is cast)")
+{
+    // No hand land, empty library. Sol Ring adds +1 next turn (2 made, 1 paid) and +2 after.
+    // Angels: Lyra ArchDawn {2}{W} (value 0.85), Lightstall {W} (0.7225), Serra {2}{W}{W} (0.4437).
+    const std::vector<std::string> hand = { "Sol Ring", kLyraDawn, kLI, kUA, kStP, kGreaves, kBishop, kSerra };
+    // Board 2 Plains: Lyra castable turn 1 (2 + 1) -> 0.85 beats Lightstall 0.7225; Serra turn 2
+    // (2 + 2) -> 0.333. Order Lyra, Lightstall, Serra (= the value order). Without the Sol Ring credit
+    // Lyra would be stranded at 2 mana and fall below Lightstall.
+    const GameState two = MakeAngels(hand, { "Plains", "Plains" });
+    CHECK(Ang(two, 1, 1) == std::vector<int>{ 3, 4, 5, 6, 7, 2, 1, 0 });
+    // Board 1 Plains: Lyra only on turn 2 (1 + 2) -> 0.6375 < Lightstall 0.7225; Serra never (3 mana,
+    // and one white source for {W}{W}) -> floor. Order Lightstall, Lyra, Serra.
+    const GameState one = MakeAngels(hand, { "Plains" });
+    const std::vector<int> o = Ang(one, 1, 1);
+    CHECK(o == std::vector<int>{ 3, 4, 5, 6, 7, 1, 2, 0 });
+    CheckPermutationAngels(one, o);
+    CHECK(Ang(one, 1, 0) == std::vector<int>{ 3, 4, 5, 6, 7, 2, 1, 0 });   // value alone: Lyra first
+    CHECK(GenAngels(one).front() == 7);   // generic sheds Serra (MV 4)
+}
+
+TEST_CASE("Angels discard T11: the distance model never moves a card across a USER tier")
+{
+    // Board 2 Plains, no hand land, empty library. Serra (4) and Thune (5) are never castable (EV
+    // ~0.003); the 2nd Lightstall costs 2 cumulatively and IS castable (EV 0.7225). Still:
+    //   * variety -- the castable 2nd Lightstall stays BELOW the stranded first copies (it is the
+    //     5th Angel and the first one shed);
+    //   * the cheap/payoff mix -- Serra, the hand's best payoff by EV, is pulled up to 2nd place;
+    //   * 5-drops last -- Thune stays below Youthful Valkyrie.
+    // Angels: Lightstall, Serra, Youthful, Thune, Lightstall #2. Shed: UA, Swords, Greaves, then the
+    // ladder backwards.
+    const GameState s = MakeAngels({ kSerra, kLI, kLI, kThune, kUA, kStP, kGreaves, kYV },
+                                   { "Plains", "Plains" });
+    const std::vector<int> o = Ang(s, 1, 1);
+    CHECK(o == std::vector<int>{ 4, 5, 6, 2, 3, 7, 0, 1 });
+    CheckPermutationAngels(s, o);
+    CHECK(Ang(s, 1, 0) == o);           // the same order by value alone: the tiers decide it all
+    CHECK(GenAngels(s).front() == 3);   // generic sheds Thune
+}
+
+TEST_CASE("Angels discard: the shed order is prefix-stable only with the distance model off")
+{
+    // CleanupDiscardShedStable(): with the model on, the kept lands price the Angels and the ladder's
+    // tail sheds them among those Angels, so the cleanup must re-rank per shed.
+    auto stable = [](int bucket, int dist)
+    {
+        heurarm::t_arm[heurarm::ANGELS_BUCKET_DISCARD] = static_cast<std::int8_t>(bucket);
+        heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]    = static_cast<std::int8_t>(dist);
+        const bool v = AngelsProvider().CleanupDiscardShedStable();
+        heurarm::t_arm[heurarm::ANGELS_BUCKET_DISCARD] = -1;
+        heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]    = -1;
+        return v;
+    };
+    CHECK_FALSE(stable(1, 1));
+    CHECK(stable(1, 0));
+    CHECK(stable(0, 1));
 }
 
 TEST_CASE("Angels discard: MTG_ANGELS_BUCKET_DISCARD=0 restores exactly the generic ranking; the default is the policy")
@@ -287,7 +366,7 @@ TEST_CASE("Angels discard: a staged card is never in the policy's order and land
     CheckPermutationAngels(s, o);
 }
 
-TEST_CASE("Angels discard: the shed order is prefix-stable shed by shed")
+TEST_CASE("Angels discard: with the distance model off the shed order is prefix-stable shed by shed")
 {
     CheckPrefixStableAngels(BoardT1());
     CheckPrefixStableAngels(MakeAngels({ kLyraDawn, kGiada, kGiada, kSerra, kSerra, kResp, kSanct, "Plains" },

@@ -529,9 +529,13 @@ public:
     // "Angels: SETTLED"): MANA (4 sources counting the board, >= 2 white, a 5th soft; Sol Ring and
     // one Giada protected outside the ladder) / ENABLERS (Bishop of Wings, 1) / ANGELS (3-5, variety
     // first), interleaved keep ladder, every hand card named. MTG_ANGELS_BUCKET_DISCARD (default ON;
-    // =0 -> GenericProvider::CleanupDiscardCandidates, the max-MV fallback).
+    // =0 -> GenericProvider::CleanupDiscardCandidates, the max-MV fallback). Inside the USER's Angel
+    // tiers the order is EV = discard_dist CastFactor x value (MTG_DISCARD_DIST_MODEL, USER 2026-10-10).
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // False while the buckets AND the distance model are on: the model's LandDrops are the ladder's
+    // kept lands, which the tail sheds among the Angels they priced. Re-rank per shed.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Bruna, Light of Alabaster (Bant Auras/Equipment voltron, Glittering Wish sideboard; onboarded
