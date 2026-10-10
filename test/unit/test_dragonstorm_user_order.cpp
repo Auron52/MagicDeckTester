@@ -292,15 +292,25 @@ TEST_CASE("Dragonstorm USER order: Ruby Medallion at its EARLIEST PAYABLE slot -
         // its walk never credits the Medallion's discount, so it cannot see that slot 1 pays the line -- the
         // order-free bound (13 to pay against 2 + 10 float) says NO permutation pays and it returns the order
         // untouched: Medallion first, the rest stranded. It does NOT produce the earliest payable slot.
+        // (The plain walk is pinned: MTG_PAYABLE_ORDER_EXACT, default ON since the follow-up round, judges
+        // this producer domain with the exact walk for every deck -- see the block below.)
         UoArms arms(false);
+        heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = 0;
         std::vector<int> ord;
         for (const char* n : { kMed, kRite, kPyr, kSeeth, kScour })
         {
             for (int i = 0; i < static_cast<int>(acts.size()); ++i)
             { if (acts[i].card_name.str() == n) { ord.push_back(i); break; } }
         }
+        std::vector<int> ord_exact = ord;
         ApplyPayableCastOrder(s, acts, ord);
         CHECK(NamesUo(acts, ord) == std::vector<std::string>{ kMed, kRite, kPyr, kSeeth, kScour });
+        // With MTG_PAYABLE_ORDER_EXACT the same fallback credits the discount and finds slot 1 even with the
+        // USER order off: the nearest order that pays is "Rite, Medallion, ...".
+        heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = 1;
+        ApplyPayableCastOrder(s, acts, ord_exact);
+        CHECK(NamesUo(acts, ord_exact) == std::vector<std::string>{ kRite, kMed, kPyr, kSeeth, kScour });
+        heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = -1;
     }
 }
 
@@ -312,6 +322,8 @@ TEST_CASE("Dragonstorm USER order, apply level: the Medallion line casts every s
     {
         CAPTURE(lever);
         UoArms arms(lever);
+        // The generic arm describes the PLAIN walk (pinned; MTG_PAYABLE_ORDER_EXACT would find the paying order).
+        heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = lever ? -1 : 0;
         GameState s = BoardUo(2, { kMed, kRite, kPyr, kSeeth, kScour });
         TurnSolver::Plan plan;
         for (const char* n : { kScour, kSeeth, kPyr, kMed, kRite }) { plan.actions.push_back(CastUo(s, n)); }
@@ -329,6 +341,7 @@ TEST_CASE("Dragonstorm USER order, apply level: the Medallion line casts every s
             // plain walk can find pays the whole line, so the Dragon is never cast.
             CHECK(InHandUo(s, kScour) == 1);
         }
+        heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = -1;
     }
 }
 
