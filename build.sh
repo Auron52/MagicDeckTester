@@ -74,6 +74,40 @@ if ! command -v c++ >/dev/null 2>&1 && ! command -v g++ >/dev/null 2>&1; then
   exit 1
 fi
 
+# Compile output stays OFF the 9p host mount (USER rule, 2026-10-10). In the devcontainer the checkout is a
+# 9p/drvfs bind of the Windows drive: one connection shared by every container, with no reconnect. On 10-10 it
+# died under heavy agent build + batch I/O (four worktrees compiling into their own build/ on it) and took both
+# containers down for hours. Compile output is regenerable, so it belongs on the ext4 build volume mounted at the
+# primary checkout's build/; source, commits and results stay on the host drive, which is what keeps them safe.
+# A linked worktree on 9p therefore gets build/ -> <primary>/build/wt/<worktree> before anything compiles. An
+# existing 9p build/ is renamed to build.9p-old (kept, not deleted). Nothing changes off 9p or in the primary.
+if [ ! -L build ] && [ "$(stat -f -c %T . 2>/dev/null)" = v9fs ] \
+   && { [ ! -e build ] || [ "$(stat -f -c %T build 2>/dev/null)" = v9fs ]; }; then
+  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  primary="$(dirname "${common:-/nonexistent/.git}")"
+  if [ -n "$common" ] && [ "$primary" != "$(pwd -P)" ] && [ -d "$primary/build" ] \
+     && [ "$(stat -f -c %T "$primary/build")" != v9fs ]; then
+    vol="$primary/build/wt/$(basename "$(pwd -P)")"
+    if [ -e build ]; then
+      if [ -e build.9p-old ]; then
+        echo "build.sh: build/ is on the 9p host mount and build.9p-old already exists; move one of them aside" >&2
+        exit 1
+      fi
+      mv build build.9p-old
+    fi
+    mkdir -p "$vol"
+    ln -s "$vol" build
+    # The build/ ignore pattern matches directories only, so git would list the symlink as untracked.
+    ex="$common/info/exclude"
+    grep -qx '/build' "$ex" 2>/dev/null || echo '/build' >> "$ex"
+    grep -qx '/build.9p-old/' "$ex" 2>/dev/null || echo '/build.9p-old/' >> "$ex"
+    echo ">>> build/ -> $vol (ext4 build volume; compile output stays off the 9p host mount)"
+  else
+    echo "build.sh: WARNING: build/ is on the 9p host mount and no ext4 build volume was found at the" >&2
+    echo "  primary checkout's build/. Heavy compile I/O on 9p can kill the mount for every container." >&2
+  fi
+fi
+
 # PGO+LTO mode: its own single-config tree (build/pgo-work/ -> binaries in build/PGO/), trained on the
 # named decks. Explicit Release type, so it can never be the -O0 tree the guard below exists for.
 # See scripts/build_pgo.sh for the why/how and the SRC_TREE stamp scripts/mullgen.sh checks.

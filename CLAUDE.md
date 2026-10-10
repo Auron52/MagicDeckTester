@@ -494,11 +494,39 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     test guarantees). Removing a worktree is destructive for whichever session owns it, so run the
     prune only when the user asks, and show the dry-run list first.
 
+- **IRREPLACEABLE DATA STAYS ON THE HOST DRIVE; ONLY REGENERABLE CHURN GOES ON THE BUILD VOLUME (user
+  directive, 2026-10-10).** In the devcontainer the checkout is a 9p/drvfs bind of the Windows drive:
+  ONE connection shared by every container on the machine, and the Linux 9p client never reconnects.
+  `build/` in the primary checkout is a separate ext4 Docker volume.
+  * **What it cost:** on 2026-10-10 at 14:51 UTC the 9p mount went to `Input/output error` (the first
+    symptom was SIGBUS in binaries executed off it) and stayed dead for ~7 h until the user restarted
+    WSL/Docker. It took down BOTH containers, including the user's other generation. The load at that
+    moment was ours: four agent worktrees each compiling into its own `build/` on 9p, binaries copied
+    into worktree `logs/` and run from there, and two large batches. The user: *"incredibly
+    disruptive"*.
+  * **The remedy is a SPLIT, not a move.** The user rejected moving the repo off the host drive:
+    *"not just switching this problem for another. If we do everything off Windows then we can easily
+    lose it"* (the `/tmp` references loss is the precedent). So:
+    - **On the host drive (the checkout, worktrees under `.claude/worktrees/`):** source, `.git`,
+      uncommitted edits, references, docs, deck artifacts, generation journals, and the final results
+      and summaries of every run.
+    - **On the build volume (`/workspaces/MagicDeckTester/build/`):** compile output, every binary
+      that is EXECUTED, and in-flight batch scratch (per-game logs, manifests, `.out` files while a
+      run is going). Copy the summaries back to the host drive when the run finishes. Losing the
+      volume costs a rebuild; losing 9p then pauses commits but no longer kills runs.
+  * **It is gated for builds.** `./build.sh` in a linked worktree on 9p turns `build/` into a symlink
+    onto `<primary>/build/wt/<worktree>` before anything compiles (an old 9p `build/` is renamed to
+    `build.9p-old`, never deleted; `.git/info/exclude` hides both). Do not replace that symlink.
+  * **Not gated, so it is on you:** never copy a binary into `logs/` (or anywhere on 9p) and run it
+    there; point batch output at `build/scratch/<who>/`; keep concurrent worktree builds to two.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level
   `logs_*` directory. This keeps the repo root uncluttered. Both `logs/` and
   `logs_*/` are gitignored, so this is purely about tidiness, not tracking.
+  In the devcontainer `logs/` is on the 9p host mount: a heavy run writes its in-flight scratch to
+  `build/scratch/` and copies its summaries into `logs/` (rule above).
 
 - **NEVER COMMIT SCREENING / CANDIDATE LISTS — they are not final lists (user directive, 2026-09-17).**
   A deck-screening or list-settling run produces many trial decklists (`<Deck>A`, `<Deck>B`, …). These
