@@ -290,3 +290,129 @@ TEST_CASE("F2 Cannons: MTG_ATTACK_CANNONS_TRIGGER=0 projects no trigger damage")
                               [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Oko, Thief of Crowns" }); });
     CHECK(oko == 0);
 }
+
+// ---- F3: a hard-cast Craterhoof pumps the team (MTG_ATTACK_TEAM_PUMP_ETB) -------------------------
+// Two 2-power attackers and eight Forests. Craterhoof enters as the third creature: X = 3, so the
+// Knights hit for 5 each and the hasty Hoof for 5 + 3 = 8 -- 18, against the 4 + 5 = 9 of its
+// printed power alone.
+namespace
+{
+GameState HoofBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Craterhoof Behemoth" });
+    Put(s, "Venerable Knight", 40);
+    Put(s, "Venerable Knight", 41);
+    for (int k = 0; k < 8; ++k) { Put(s, "Forest", 50 + k); }
+    return s;
+}
+}
+
+TEST_CASE("F3 team pump ETB: Craterhoof's +X reaches every attacker, itself included")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 4: two Knights.
+    CHECK(Threshold([](int l) { return HoofBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Craterhoof Behemoth" }); }) == 18);
+    const TurnSolver::Plan g = GreedySolve(HoofBoard(18, 0));
+    CHECK((g.wins_this_turn && Casts(g, "Craterhoof Behemoth")));
+    const TurnSolver::Plan g19 = GreedySolve(HoofBoard(19, 0));
+    CHECK_FALSE(g19.wins_this_turn);
+}
+
+TEST_CASE("F3 team pump ETB: MTG_ATTACK_TEAM_PUMP_ETB=0 credits the printed power only")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_TEAM_PUMP_ETB, 0 } });
+    CHECK(Threshold([](int l) { return HoofBoard(l, 1); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Craterhoof Behemoth" }); }) == 9);
+}
+
+// ---- F4a: a spent dork loses its team-pump share too (MTG_ATTACK_TAP_REPROJECT) ------------------
+// Blossoming Bogbeast + Llanowar Elves attack: Bogbeast gains 2, then +2/+2 to each attacker -> 3 + 1
+// + 2 x 2 = 8. Elvish Mystic's {G} can only come from the Llanowar, which then cannot attack and gets
+// no pump: Bogbeast alone, 3 + 2 = 5. Subtracting the Llanowar's base power said 7.
+namespace
+{
+GameState BogDorkBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Elvish Mystic" });
+    Put(s, "Blossoming Bogbeast", 60);
+    Put(s, "Llanowar Elves", 61);
+    return s;
+}
+}
+
+TEST_CASE("F4a re-projection: a tapped dork takes its Bogbeast pump share with it")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 8.
+    CHECK(Threshold([](int l) { return BogDorkBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Elvish Mystic" }); }) == 5);
+}
+
+TEST_CASE("F4a re-projection: MTG_ATTACK_TAP_REPROJECT=0 subtracts base power only")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_TAP_REPROJECT, 0 } });
+    CHECK(Threshold([](int l) { return BogDorkBoard(l, 1); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Elvish Mystic" }); }) == 7);
+}
+
+// ---- F4b: the plan's own life gain feeds the per-life pumps (MTG_ATTACK_PLAN_LIFEGAIN) -----------
+// Bogbeast, Wellwisher and two Llanowar Elves. Tapping Wellwisher gains 1 per Elf (3); then the
+// attack: Bogbeast gains 2 more, X = 5, three attackers -> 3 + 1 + 1 + 5 x 3 = 20. Without the plan's
+// gain X read only Bogbeast's own 2: 5 + 2 x 3 = 11.
+namespace
+{
+GameState WellBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, {});
+    Put(s, "Blossoming Bogbeast", 70);
+    Put(s, "Wellwisher", 71);
+    Put(s, "Llanowar Elves", 72);
+    Put(s, "Llanowar Elves", 73);
+    return s;
+}
+// Nykthos Paragon (4/6) + Wellwisher + Llanowar: the tap gains 2 (two Elves) and the Paragon puts two
+// +1/+1 counters on each creature -> Paragon 6 + Llanowar 3 = 9, against 4 + 1 = 5 before.
+GameState ParagonBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, {});
+    Put(s, "Nykthos Paragon", 80);
+    Put(s, "Wellwisher", 81);
+    Put(s, "Llanowar Elves", 82);
+    return s;
+}
+bool TapsForLife(const TurnSolver::Plan& p)
+{
+    bool tap = false;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::PlayLand) { continue; }
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapLifegain)
+        { tap = true; continue; }
+        return false;
+    }
+    return tap;
+}
+}
+
+TEST_CASE("F4b plan lifegain: Wellwisher's gain grows Bogbeast's pump and Paragon's counters")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 14: 3 + 1 + 1 + 1, then Bogbeast's +2 on four attackers.
+    CHECK(Threshold([](int l) { return WellBoard(l, 0); }, TapsForLife) == 20);
+    // Pre-plan attack 6: 4 + 1 + 1.
+    CHECK(Threshold([](int l) { return ParagonBoard(l, 0); }, TapsForLife) == 9);
+}
+
+TEST_CASE("F4b plan lifegain: MTG_ATTACK_PLAN_LIFEGAIN=0 reads the pre-plan life gained only")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_PLAN_LIFEGAIN, 0 } });
+    CHECK(Threshold([](int l) { return WellBoard(l, 1); }, TapsForLife) == 11);
+    CHECK(Threshold([](int l) { return ParagonBoard(l, 1); }, TapsForLife) == 5);
+}
