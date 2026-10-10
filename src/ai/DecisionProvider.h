@@ -692,6 +692,23 @@ public:
     // it." Default false -> every deck without a provider rule is byte-identical.
     virtual bool NeverCast(const CardDefinition& /*def*/) const { return false; }
 
+    // CastUnderCastCap -- with a cast cap live this turn (an Irencrag Feat resolved: "you can cast only
+    // one more spell this turn", GameState::casts_remaining_this_turn >= 0), is `def` worth offering
+    // for what is left of it? Asked at the same CollectActions choke point as NeverCast (and only while
+    // a cap is live), so the search, the breakpoint continuations, the rollouts and the d0 re-solves all
+    // inherit it. Default true -> every deck without a rule is byte-identical.
+    virtual bool CastUnderCastCap(const GameState& /*s*/, const CardDefinition& /*def*/) const { return true; }
+
+    // RestrictorSubsetRealisable -- a candidate subset holding a cast RESTRICTOR (max_casts_after:
+    // Irencrag Feat): can the deck's own order realise it? Asked by both subset evaluators (Solve's
+    // consider and EnumeratePlans) right after the "too many casts after it" legality test, only for a
+    // subset holding a restrictor. Dragonstorm (MTG_DRAGONSTORM_USER_ORDER): a subset whose Apex of
+    // Power can only be paid AFTER Irencrag -- i.e. only through the Irencrag -> Apex trap the USER
+    // ruled out -- is not a line. Default true.
+    virtual bool RestrictorSubsetRealisable(const GameState& s, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel) const
+    { (void)s; (void)cands; (void)sel; return true; }
+
     // TakeFreeCast -- the "you may cast it without paying its mana cost" call on a cascade hit /
     // Breaching Dragonstorm find / Creative Technique find. `found` is the card offered.
     // Default TRUE (take it): against the passive goldfish opponent a free nonland spell is
@@ -895,6 +912,42 @@ public:
     // arc's opaque lever: the global env flag measures, this hook is where a reviewed deck
     // adopts. Default false -> byte-identical.
     virtual bool OrderOpaqueCastsByRank() const { return false; }
+
+    // ---- The deck's FULL cast order beyond a scalar rank (docs/design/dragonstorm-user-cast-order.md)
+    // A per-card CastOrderRank cannot say everything a USER-specified order says. Three hooks carry
+    // the rest; all three default to "nothing", so a deck that overrides none is byte-identical.
+    //
+    // CastOrderActionRank -- the rank of a concrete CAST, given its card's CastOrderRank. The shared
+    // comparator (CastOrderLess) reads this, so a cast's own parameters can move it: Dragonstorm's
+    // spliced Desperate Ritual goes after Seething Song while a plain one goes before it (USER order
+    // items 4-6), which the card definition alone cannot express.
+    virtual int CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+    { (void)s; (void)a; return rank; }
+
+    // ArrangeCastOrder -- the SET-level half: `order` (indices into `actions`) arrives sorted by the
+    // comparator and may be rearranged where the right position depends on the other casts or on
+    // what the line can pay (Dragonstorm: the earliest payable Ruby Medallion slot, Irencrag
+    // second-to-last before its closer, splice legality). Called at every site that sorts a cast
+    // order -- both apply worlds (executor TakeTurn / rollout ApplyPlanDirect, main plan and
+    // breakpoint continuation) through the one shared ApplyDeckCastArrangement, so they agree.
+    virtual void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                                  std::vector<int>& order) const
+    { (void)s; (void)actions; (void)order; }
+
+    // ExactOrderWalk -- judge an order's payability with ExactOrderFirstUnpayable (same-turn reducer
+    // discounts, graveyard ritual escalation, impulse float, the cast cap) inside the payable-order
+    // fallback (MTG_PAYABLE_ORDER), so the fallback and ArrangeCastOrder read one projection and the
+    // fallback does not undo an arranged order its own cruder walk misjudges. Default false.
+    virtual bool ExactOrderWalk() const { return false; }
+
+    // CastOrderingCandidates -- the deck's OWN candidate orderings for the cast-ordering search
+    // (WantsCastOrderingSearch). `reorder` is the plan's non-sacrifice hand casts (`plan_actions` the
+    // whole plan, for its pre-cast sacrifices); fill `out` with index orderings over `reorder` and
+    // return true, or return false to keep the engine's generator. Default false.
+    virtual bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                        const std::vector<Action>& reorder,
+                                        std::vector<std::vector<int>>& out) const
+    { (void)s; (void)plan_actions; (void)reorder; (void)out; return false; }
 
     // The BRANCH-site interior second main (SolveWithLookahead's candidate loop pricing "what does
     // passing buy me") is SEARCHED, unconditionally, for every deck -- there is no hook, no lever,

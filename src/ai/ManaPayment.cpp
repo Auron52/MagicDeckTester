@@ -2511,9 +2511,18 @@ bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
 {
     const CardDefinition* da = OrderDefOf(a);
     const CardDefinition* db = OrderDefOf(b);
-    const int ra = CastOrderKey(state, da, da ? ResolveProvider(state).CastOrderRank(state, *da) : 20);
-    const int rb = CastOrderKey(state, db, db ? ResolveProvider(state).CastOrderRank(state, *db) : 20);
+    const DecisionProvider& prov = ResolveProvider(state);
+    // CastOrderActionRank: the provider may move a concrete cast off its card's rank (a SPLICED
+    // Desperate Ritual after Seething Song -- the USER's Dragonstorm order). Identity by default.
+    const int ra = CastOrderKey(state, da, da ? prov.CastOrderActionRank(state, a, prov.CastOrderRank(state, *da)) : 20);
+    const int rb = CastOrderKey(state, db, db ? prov.CastOrderActionRank(state, b, prov.CastOrderRank(state, *db)) : 20);
     return CastOrderLessRanked(state, a, ra, b, rb);
+}
+
+void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    // The one shared entry, so the executor and the rollout apply cannot drift (see the header).
+    ResolveProvider(state).ArrangeCastOrder(state, acts, order);
 }
 
 // A cast whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade
@@ -2763,6 +2772,176 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
 {
     // AvailableManaPool already includes the turn-scoped float.
     return FirstUnpayablePosImpl(state, acts, order, AvailableManaPool(state, hold), nullptr);
+}
+
+// PayFromPool with a LINE-AWARE generic: the generic is paid first out of each colour's surplus over
+// the coloured pips the rest of the line still needs (largest surplus first), then wild, then
+// whatever is left in PayFromPool's order. PayFromPool spends wild (and every off-colour) before red
+// on generic, so on an aggregate pool a ritual's {1} ate the Unclaimed Territory a later Dragon needed
+// for its {B} -- where the real payer spends the floating red first (dragonstorm d0 s7000261 T5: the
+// walk read "Seething, Kolaghan" as unpayable and the payable fallback cast the Dragon first).
+static void PayFromPoolLineAware(ManaPool& pool, const ManaCost& cost_in, const ManaCost& future)
+{
+    ManaCost cost = cost_in;
+    if (cost_in.hybrid_count > 0)
+    {
+        cost = cost_in.ExpandHybrids(0);
+        for (unsigned bits = 0; bits < (1u << cost_in.hybrid_count); ++bits)
+        {
+            ManaCost c = cost_in.ExpandHybrids(bits);
+            if (pool.CanPayFlat(c)) { cost = c; break; }
+        }
+    }
+    const int gen = cost.generic;
+    cost.generic = 0;
+    PayFromPool(pool, cost);   // the coloured pips, exactly as PayFromPool pays them
+    int left = gen;
+    int* src[6]       = { &pool.white, &pool.blue, &pool.black, &pool.red, &pool.green, &pool.colorless };
+    const int need[6] = { future.white, future.blue, future.black, future.red, future.green, future.colorless };
+    while (left > 0)
+    {
+        int best = -1, best_surplus = 0;
+        for (int k = 0; k < 6; ++k)
+        {
+            const int surplus = *src[k] - need[k];
+            if (surplus > best_surplus) { best_surplus = surplus; best = k; }
+        }
+        if (best < 0) { break; }
+        const int use = std::min(left, best_surplus);
+        *src[best] -= use;
+        left -= use;
+    }
+    if (left > 0) { const int use = std::min(left, pool.wild); pool.wild -= use; left -= use; }
+    int* rest[] = { &pool.colorless, &pool.white, &pool.blue, &pool.black, &pool.green, &pool.red };
+    for (int* r : rest)
+    {
+        if (left <= 0) { break; }
+        const int use = std::min(left, *r); *r -= use; left -= use;
+    }
+}
+
+// See ManaPayment.h. The extra terms are all card-parameter tests, so the walk carries no deck
+// knowledge; it is exact only in the same aggregate-pool sense as FirstUnpayablePos.
+int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& acts,
+                             const std::vector<int>& order)
+{
+    ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
+    int casts_left = state.casts_remaining_this_turn;   // -1 = unrestricted
+    int red = 0, white = 0, blue = 0, black = 0, green = 0;   // same-turn colour reducers cast so far
+    thread_local std::vector<InternedName> cast_names;        // names cast so far in this walk
+    cast_names.clear();
+    const std::vector<Card>& hand = state.ActivePlayer().hand;
+    // The coloured pips still owed by the casts AFTER the current one (the line-aware generic).
+    ManaCost future{};
+    for (int i : order) { if (!acts[i].alt_cost) { AddManaCost(future, acts[i].cost); } }
+    future.generic = 0;
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const Action& a = acts[order[pos]];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!a.alt_cost) { SubManaCost(future, a.cost); future.generic = 0; }
+        if (casts_left == 0) { return pos; }
+        // An impulse-exile cast under a live cast cap (Irencrag Feat -> Apex of Power) is the TRAP the
+        // USER ruled out ("never before Apex"): Apex is the one permitted cast, so its ten mana and its
+        // seven exiled cards are unusable. Not a payment failure, but not a realisable line either.
+        if (casts_left > 0 && d != nullptr && d->params.impulse_exile > 0) { return pos; }
+        if (!a.alt_cost)
+        {
+            ManaCost cost = a.cost;
+            if (d != nullptr && !d->card.m_mana_cost.has_x)
+            {
+                const ManaCost& mc = d->card.m_mana_cost;   // printed pips: the spell's colours
+                const int disc = (mc.red > 0 ? red : 0) + (mc.white > 0 ? white : 0)
+                               + (mc.blue > 0 ? blue : 0) + (mc.black > 0 ? black : 0)
+                               + (mc.green > 0 ? green : 0);
+                cost.generic = std::max(0, cost.generic - disc);
+            }
+            if (!pool.CanPay(cost)) { return pos; }
+            PayFromPoolLineAware(pool, cost, future);
+        }
+        CreditCastOutput(state, acts, a, pool);
+        if (d != nullptr)
+        {
+            if (d->params.ritual_float_gy_self_bonus && !a.alt_cost)
+            {
+                const int prior = static_cast<int>(std::count(cast_names.begin(), cast_names.end(),
+                                                              a.card_name));
+                if (prior > 0) { AddColorToPool(pool, d->params.ritual_float_color, prior); }
+            }
+            if (d->params.impulse_float_amount > 0)
+            {
+                // The executor spends an expiring STAGED copy first (cast_by_name), and a cast off the
+                // exile floats nothing: credit the ten only once every staged copy is used up.
+                int staged = 0;
+                for (const Card& c : hand) { if (c.m_is_staged && c.m_name == a.card_name) { ++staged; } }
+                const int prior = static_cast<int>(std::count(cast_names.begin(), cast_names.end(),
+                                                              a.card_name));
+                if (prior >= staged)
+                { AddColorToPool(pool, a.chosen_float_color.str(), d->params.impulse_float_amount); }
+            }
+            const std::string& rc = d->params.reduces_spell_color;
+            if      (rc == "R") { ++red; }   else if (rc == "W") { ++white; }
+            else if (rc == "U") { ++blue; }  else if (rc == "B") { ++black; }
+            else if (rc == "G") { ++green; }
+        }
+        cast_names.push_back(a.card_name);
+        if (casts_left > 0) { --casts_left; }
+        if (d != nullptr && d->params.max_casts_after >= 0) { casts_left = d->params.max_casts_after; }
+    }
+    return -1;
+}
+
+bool UserOrderTraceOn()
+{
+    static const bool on = EnvOn("MTG_USER_ORDER_TRACE");   // DIAGNOSTIC; DEFAULT OFF
+    return on;
+}
+
+void TraceUserCastOrder(const GameState& state, const std::vector<Action>& acts,
+                        const std::vector<int>& order, const char* route, bool pre_combat)
+{
+    if (!UserOrderTraceOn()) { return; }
+    std::string seq;
+    int mpos = -1;
+    for (int k = 0; k < static_cast<int>(order.size()); ++k)
+    {
+        const Action& a = acts[order[k]];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!seq.empty()) { seq += "|"; }
+        seq += a.card_name.str();
+        if (a.splice_count > 0) { seq += ":s" + std::to_string(a.splice_count); }
+        if (a.kind != Action::Kind::CastFromHand) { seq += ":k" + std::to_string(static_cast<int>(a.kind)); }
+        if (mpos < 0 && d != nullptr && !d->params.reduces_spell_color.empty()) { mpos = k; }
+    }
+    const int fail  = ExactOrderFirstUnpayable(state, acts, order);
+    const int pfail = FirstUnpayablePos(state, acts, order);
+    // The EARLIEST slot for the first Medallion that keeps the whole order payable, never past a
+    // cast restrictor (the one spell after Irencrag belongs to the payoff). -1: no Medallion, or no
+    // slot pays.
+    int mearl = -1;
+    if (mpos >= 0)
+    {
+        std::vector<int> rest;
+        for (int k = 0; k < static_cast<int>(order.size()); ++k) { if (k != mpos) { rest.push_back(order[k]); } }
+        int lim = static_cast<int>(rest.size());
+        for (int k = 0; k < static_cast<int>(rest.size()); ++k)
+        {
+            const Action& a = acts[rest[k]];
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d != nullptr && d->params.max_casts_after >= 0) { lim = k; break; }
+        }
+        for (int slot = 0; slot <= lim; ++slot)
+        {
+            std::vector<int> trial(rest.begin(), rest.begin() + slot);
+            trial.push_back(order[mpos]);
+            trial.insert(trial.end(), rest.begin() + slot, rest.end());
+            if (ExactOrderFirstUnpayable(state, acts, trial) < 0) { mearl = slot; break; }
+        }
+    }
+    std::fprintf(stderr, "[uo-order] gs=%llu t=%d m=%d route=%s pool=%d n=%zu pays=%d ppays=%d mpos=%d mearl=%d seq=%s\n",
+                 static_cast<unsigned long long>(state.game_seed), state.turn_number, pre_combat ? 1 : 2,
+                 route, AvailableManaPool(state).Total(), order.size(), fail, pfail, mpos, mearl,
+                 seq.c_str());
 }
 
 bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& acts)
@@ -3166,8 +3345,16 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         }
         if (hand_exits) { for (const InternedName& n : *hand_exits) { PoRemoveFromHand(hand0, n); } }
     }
+    // ExactOrderWalk (the USER's Dragonstorm order, MTG_DRAGONSTORM_USER_ORDER): judge with the same
+    // exact walk the provider's ArrangeCastOrder placed the order with -- the plain walk does not
+    // credit a same-turn Medallion's discount, Rite's escalation or Apex's ten, so it would read an
+    // arranged order that pays as unpayable and permute it away. Apply site, producer domain only
+    // (pool0 is AvailableManaPool there, exactly the walk's own start).
+    const bool exact = site == 0 && producer_only && extra_wild == 0
+                    && ResolveProvider(state).ExactOrderWalk();
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
+        if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
         if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, pool0, nullptr) < 0; }
         hand = hand0;
         return FirstUnpayablePosImpl(state, acts, ord, pool0, &hand) < 0;
@@ -3180,10 +3367,52 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     {
         ManaPool bound = pool0;
         ManaCost total{};
+        // Exact mode: the walk also credits terms CreditCastOutput does not -- every impulse float
+        // (Apex's ten), every graveyard escalation (k Rites: 0+1+..+k-1 extra), and a same-turn
+        // reducer discounting EVERY spell of its colour. Credit them all, order-free and
+        // optimistically, so the bound stays a NECESSARY condition for the exact walk.
+        int ex_red = 0, ex_white = 0, ex_blue = 0, ex_black = 0, ex_green = 0;
+        if (exact)
+        {
+            std::vector<InternedName> esc;
+            for (int i : order)
+            {
+                const Action& a = acts[i];
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d == nullptr) { continue; }
+                if (d->params.impulse_float_amount > 0)
+                { AddColorToPool(bound, a.chosen_float_color.str(), d->params.impulse_float_amount); }
+                if (d->params.ritual_float_gy_self_bonus && !a.alt_cost)
+                {
+                    const int prior = static_cast<int>(std::count(esc.begin(), esc.end(), a.card_name));
+                    if (prior > 0) { AddColorToPool(bound, d->params.ritual_float_color, prior); }
+                    esc.push_back(a.card_name);
+                }
+                const std::string& rc = d->params.reduces_spell_color;
+                if      (rc == "R") { ++ex_red; }   else if (rc == "W") { ++ex_white; }
+                else if (rc == "U") { ++ex_blue; }  else if (rc == "B") { ++ex_black; }
+                else if (rc == "G") { ++ex_green; }
+            }
+        }
         for (int i : order)
         {
             const Action& a = acts[i];
             CreditCastOutput(state, acts, a, bound);
+            if (exact && !a.alt_cost)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                ManaCost c = a.cost;
+                if (d != nullptr && !d->card.m_mana_cost.has_x)
+                {
+                    const ManaCost& mc = d->card.m_mana_cost;
+                    const int disc = (mc.red > 0 ? ex_red : 0) + (mc.white > 0 ? ex_white : 0)
+                                   + (mc.blue > 0 ? ex_blue : 0) + (mc.black > 0 ? ex_black : 0)
+                                   + (mc.green > 0 ? ex_green : 0);
+                    c.generic = std::max(0, c.generic - disc);
+                }
+                AddManaCost(total, c);
+                continue;
+            }
             if (a.alt_cost) { continue; }
             if (PoIsRevealCostCast(a))
             {

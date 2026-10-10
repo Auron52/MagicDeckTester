@@ -7944,8 +7944,13 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                 for (int j : order) { std::fprintf(stderr, " %s", cands[j].card_name.str().c_str()); }
                 std::fprintf(stderr, "\n"); }
     const DecisionProvider& prov = ResolveProvider(state);
+    // CastOrderActionRank: identity unless the provider moves a concrete cast (a spliced Desperate).
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
+    { return prov.CastOrderActionRank(state, cands[x], prov.CastOrderRank(state, *cands[x].def))
+           < prov.CastOrderActionRank(state, cands[y], prov.CastOrderRank(state, *cands[y].def)); });
+    // The deck's set-level arrangement, as both apply worlds take it (no-op unless the deck arranges:
+    // Dragonstorm's earliest-payable Medallion slot, MTG_DRAGONSTORM_USER_ORDER).
+    ApplyDeckCastArrangement(state, cands, order);
     // Same-subset reveal debit (Daring Buccaneer). This walk never removes a cast card from the
     // scratch hand, so its LIVE EffectiveCost keeps seeing Pirates already cast (two lone Buccaneers
     // would be "rescued" at {R}{R}). Rather than erase-as-it-goes -- which would price only THIS
@@ -22676,6 +22681,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
 
         // A spell the deck's provider proves can have no effect (Snow's Skred) is never offered.
         if (ResolveProvider(state).NeverCast(def)) { continue; }
+        // A live cast cap (Irencrag Feat resolved): the provider names what may take the last slot
+        // (Dragonstorm: only the closer -- USER order, MTG_DRAGONSTORM_USER_ORDER). One int test first.
+        if (state.casts_remaining_this_turn >= 0 && !ResolveProvider(state).CastUnderCastCap(state, def))
+        { continue; }
 
         // Skip spells that need a creature target when none exists. An own-creature pump
         // (Invigorate) needs one of OUR attackers; other creature-targeting spells need an
@@ -35487,6 +35496,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 }
             }
             if (after > cands[j].max_casts_after) { return; }   // illegal: too many spells after it
+            // ...and realisable in the deck's own order (Dragonstorm: not only through Irencrag ->
+            // Apex). Lockstep twin in EnumeratePlans. Default true.
+            if (!ResolveProvider(state).RestrictorSubsetRealisable(state, cands, sel)) { return; }
             // ...and the OTHER end of the same rule (MTG_IRENCRAG_WASTE). A cast RESTRICTOR
             // exists to fund THE FINISHER, and the USER's order reserves its one allowed follower
             // for exactly that: "Irencrag Feat must be second last as it can only be cast before
@@ -42752,6 +42764,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
                     { return CastOrderLess(state, acts[x], acts[y]); });
+                    ApplyDeckCastArrangement(state, acts, ord);   // the deck's set-level order (lockstep: TakeTurn)
                     ApplyCastOrderRangeLadder(state, acts, ord);
                     ApplyEnablerWipeRecheck(state, acts, ord);
                 }
@@ -42787,6 +42800,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, order); }   // land position: ties
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
                 { return CastOrderLess(state, acts[x], acts[y]); });
+                ApplyDeckCastArrangement(state, acts, order);   // the deck's set-level order (lockstep: TakeTurn)
                 // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end
                 // and walk them back only as far as paying for the line requires. Inert with the
                 // lever off / no ranged spell in the set. Mirrored in AIEngine::TakeTurn (lockstep).
@@ -48145,6 +48159,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
             }
             if (after > cands[j].max_casts_after) { _ct.label = "irencrag"; return; }
+            // ...and realisable in the deck's own order (lockstep twin in Solve's consider).
+            if (!ResolveProvider(state).RestrictorSubsetRealisable(state, cands, sel))
+            { _ct.label = "irencrag-order"; return; }
             // The other end of the same rule -- see the twin in Solve::consider for the full note.
             // Lockstep: both sites must agree or the enumerator offers a plan the leaf will not score.
             const int  rule    = IrencragRule();
@@ -50170,7 +50187,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::vector<std::vector<int>> orderings;
         if (ResolveProvider(state).WantsCastOrderingSearch())
         {
-            orderings = DragonstormCastOrderings(reorder);
+            // The deck's own candidates first (DragonstormProvider under MTG_DRAGONSTORM_USER_ORDER:
+            // the USER's order -- canonical arranged order + the splice fallback); the targeted
+            // generator otherwise.
+            if (!ResolveProvider(state).CastOrderingCandidates(state, p.actions, reorder, orderings))
+            { orderings = DragonstormCastOrderings(reorder); }
         }
         else
         {
@@ -67396,6 +67417,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         {
             std::stable_sort(hand_casts.begin(), hand_casts.end(), [&](int x, int y)
             { return CastOrderLess(state, p.actions[x], p.actions[y]); });
+            ApplyDeckCastArrangement(state, p.actions, hand_casts);   // as the apply does
         }
         for (int i : hand_casts) { c.cast_order.push_back(p.actions[i].card_name); }
 
@@ -75430,6 +75452,7 @@ std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& s
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+    ApplyDeckCastArrangement(state, plan.actions, order);   // as the apply does (no-op unless the deck arranges)
     // MTG_PAYABLE_ORDER: the apply finishes the clean-set order with the payable-order fallback, so
     // report that order (viewer: a human's queued order equal to it needs no --cast-order). Lever
     // off -> not applied, byte-identical output (this display never applied the maker hoist).

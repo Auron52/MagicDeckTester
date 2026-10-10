@@ -10936,9 +10936,308 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
     return sim.dmg > 1000000 ? 1000000 : static_cast<int>(sim.dmg);   // clamp: never overflow the win-check
 }
 
-// CastOrderRank: no override. Dragonstorm's ritual (15), Ruby Medallion reducer (16) and Irencrag
-// restrictor (18) tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one
-// implementation, and any future ritual/reducer deck inherits them from its card data.
+// ---- DragonstormProvider: THE USER'S CAST ORDER (MTG_DRAGONSTORM_USER_ORDER) -------------------
+//
+// USER 2026-10-10: "We should do things in the order I said, once they become available, so after the
+// breakpoint the cast order should follow my order. If it wasn't doing that it should be fixed." And on
+// the Medallion, the same day: "Ruby medallion should be flexible. It should be cast as early as possible
+// while still maintaining the line. It has to be cast later if cost does not allow it to be earlier."
+//
+// The order (docs/design/dragonstorm-user-cast-order.md collects the sources): Ruby Medallion (earliest
+// payable slot) < Rite of Flame < Pyretic Ritual < Desperate Ritual (no splice) < Seething Song <
+// Desperate Ritual (spliced) < Apex of Power (enabler) < a hard-cast Dragon < Irencrag Feat < Dragonstorm.
+// The generic tiers it replaces (=0) put the Medallion AFTER the rituals (16 vs 15), tied Pyretic with
+// Desperate (cheapest-first by cost -> plan order), cast Irencrag (18) BEFORE Apex (20) -- the trap the
+// USER ruled out -- and cast a hard-cast Dragon (creature 10) before the rituals that pay for it.
+//
+// Every class is read off CARD PARAMETERS, so the rank is the user's list for this deck's cards:
+//   reducer (reduces_spell_color)                       110   Ruby Medallion
+//   mana ritual, by printed mana value ...              120   Rite of Flame        {R}
+//     ... a same-cost Arcane splice base after the      140   Pyretic Ritual       {1}{R}
+//         plain one (it can still be spliced)           150   Desperate Ritual     {1}{R}
+//                                                       160   Seething Song        {2}{R}
+//   a SPLICED cast (CastOrderActionRank)                170-  Desperate Ritual + splice (more splices first)
+//   impulse-exile enabler                               180   Apex of Power
+//   creature (the hard-cast closer)                     190   the Dragons
+//   cast restrictor (max_casts_after)                   200   Irencrag Feat
+//   storm tutor-to-battlefield                          210   Dragonstorm
+// Anything else keeps its generic rank (no other card in the list is ever a hand cast).
+bool DragonstormProvider::UserOrderOn()
+{
+    static const bool on = EnvOn("MTG_DRAGONSTORM_USER_ORDER", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::DRAGONSTORM_USER_ORDER, on);
+}
+
+int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!UserOrderOn()) { return GenericProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (!p.reduces_spell_color.empty())  { return 110; }
+    if (p.max_casts_after >= 0)          { return 200; }   // before IsManaRitual: Irencrag is both
+    if (p.impulse_exile > 0)             { return 180; }
+    if (p.tutor_to_battlefield)          { return 210; }
+    if (IsManaRitual(def))
+    {
+        const int mv = std::min(3, std::max(1, def.card.m_mana_cost.ManaValue()));
+        return 120 + 20 * (mv - 1) + (p.splice_onto_arcane ? 10 : 0);
+    }
+    if (def.card.IsCreature())           { return 190; }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+int DragonstormProvider::CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+{
+    (void)s;
+    if (!UserOrderOn() || a.splice_count <= 0) { return rank; }
+    // "Desperate Ritual with splice" after Seething Song (the USER's item 6), and among spliced casts
+    // the one splicing MORE first: SubsetHasIllegalSplice admits a set of splice counts only in
+    // descending order (each revealed copy must still be in hand), so ascending would be illegal.
+    return 170 + std::max(0, 9 - std::min(9, a.splice_count));
+}
+
+bool DragonstormProvider::ExactOrderWalk() const { return UserOrderOn(); }
+
+bool DragonstormProvider::CastUnderCastCap(const GameState& s, const CardDefinition& def) const
+{
+    if (!UserOrderOn()) { return true; }
+    // A spent cap: no cast is legal (CastSpellFromHand refuses it), so offering one only buys a failed
+    // cast -- and at d0 a re-solve of it, over and over (the failed-cast re-solve, step 31).
+    if (s.casts_remaining_this_turn == 0) { return false; }
+    return def.params.tutor_to_battlefield || def.card.IsCreature();
+}
+
+// {rituals, Apex, Irencrag}-style subsets the totals admit but only the Irencrag -> Apex TRAP can pay:
+// in the USER's order Apex comes first and cannot be paid, Irencrag then floats seven red for nothing,
+// and the d0 runner re-solves the failed Apex over and over (dragonstorm d0 s7000219 T5: {Apex,
+// Irencrag} on seven mana). Judged on the subset's own canonical order -- the comparator plus
+// ArrangeCastOrder, exactly what the apply would realise -- with the exact walk: the subset is
+// refused only when that walk first fails AT an Apex. Only subsets holding a restrictor AND an
+// impulse-exile cast reach the walk.
+bool DragonstormProvider::RestrictorSubsetRealisable(const GameState& s0, const std::vector<Action>& cands,
+                                                     const std::vector<int>& sel) const
+{
+    if (!UserOrderOn()) { return true; }
+    bool apex = false, pre = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (a.kind == Action::Kind::CastFromHand && d != nullptr && d->params.impulse_exile > 0) { apex = true; }
+        if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend) { pre = true; }
+    }
+    if (!apex) { return true; }
+    // The plan's pre-cast sacrifices (Lotus Bloom) are applied before its casts in both apply worlds.
+    std::optional<GameState> pst;
+    if (pre)
+    {
+        pst.emplace(s0);
+        GameState& st = *pst;
+        std::vector<Action> acts;
+        for (int j : sel) { acts.push_back(cands[j]); }
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::SacForMana)
+            { ApplySacForMana(st, st.active_player_index, a.sac_source_id,
+                              TurnSolver::SacFloatColorFor(st, acts, a), a.ritual_float, a.sac_victim_id); }
+            else if (a.kind == Action::Kind::Suspend)
+            { ApplySuspend(st, st.active_player_index, a.card_name); }
+        }
+    }
+    const GameState& s = pst ? *pst : s0;
+    std::vector<int> ord;
+    for (int j : sel)
+    { if (cands[j].kind == Action::Kind::CastFromHand && !cands[j].sacrifice_land) { ord.push_back(j); } }
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y) { return CastOrderLess(s, cands[x], cands[y]); });
+    ArrangeCastOrder(s, cands, ord);
+    const int fail = ExactOrderFirstUnpayable(s, cands, ord);
+    if (fail < 0) { return true; }
+    const Action& f = cands[ord[fail]];
+    const CardDefinition* fd = f.def ? f.def : CardDatabase::Instance().Lookup(f.card_name);
+    return fd == nullptr || fd->params.impulse_exile <= 0;
+}
+
+void DragonstormProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                           std::vector<int>& order) const
+{
+    if (!UserOrderOn() || order.size() < 2) { return; }
+    auto def_of = [&](int i) -> const CardDefinition*
+    { return acts[i].def ? acts[i].def : CardDatabase::Instance().Lookup(acts[i].card_name); };
+    auto is_cast = [&](int i) { return acts[i].kind == Action::Kind::CastFromHand; };
+
+    // (1) SPLICE LEGALITY. The USER puts a plain Desperate Ritual before Seething Song, but a copy
+    // another Desperate splices must still be IN HAND when that one is cast (the revealed copy stays
+    // in hand and may be cast later). With N copies in hand (counted as SubsetHasIllegalSplice counts
+    // them), the spliced cast after c same-name casts needs N - 1 - c >= k. When it is short, move the
+    // LAST plain copy cast before it to just after the last spliced cast -- one at a time, only as far
+    // as legality needs, so every other plain copy keeps the USER's slot.
+    for (int guard = 0; guard < 8; ++guard)
+    {
+        int bad = -1;
+        for (int pos = 0; pos < static_cast<int>(order.size()) && bad < 0; ++pos)
+        {
+            const Action& a = acts[order[pos]];
+            const CardDefinition* d = def_of(order[pos]);
+            if (!is_cast(order[pos]) || a.splice_count <= 0 || d == nullptr || !d->params.splice_onto_arcane)
+            { continue; }
+            int n_hand = 0;
+            for (const Card& c : s.ActivePlayer().hand) { if (c.m_name == a.card_name) { ++n_hand; } }
+            int before = 0;
+            for (int q = 0; q < pos; ++q)
+            { if (is_cast(order[q]) && acts[order[q]].card_name == a.card_name) { ++before; } }
+            if (n_hand - 1 - before < a.splice_count) { bad = pos; }
+        }
+        if (bad < 0) { break; }
+        const InternedName& nm = acts[order[bad]].card_name;
+        int move_from = -1, last_spliced = -1;
+        for (int q = 0; q < static_cast<int>(order.size()); ++q)
+        {
+            const Action& a = acts[order[q]];
+            if (!is_cast(order[q]) || a.card_name != nm) { continue; }
+            if (a.splice_count > 0) { last_spliced = q; }
+            else if (q < bad)       { move_from = q; }
+        }
+        if (move_from < 0 || last_spliced < 0) { break; }   // nothing plain to move: the set is illegal as given
+        const int idx = order[move_from];
+        order.erase(order.begin() + move_from);
+        order.insert(order.begin() + last_spliced, idx);   // last_spliced shifted down by one: lands after it
+    }
+
+    // (2) IRENCRAG SECOND-TO-LAST. With Dragonstorm in the set the rank already reads "..., Dragon,
+    // Irencrag, Dragonstorm". Without it the rank leaves Irencrag LAST behind a lone Dragon closer --
+    // its seven red wasted and the Dragon paid without them; the USER's rule is Irencrag immediately
+    // before the closer (Irencrag -> Dragon is a low-value but offered line). Only that swap: Irencrag
+    // after Apex stays where it is (never before Apex).
+    if (order.size() >= 2)
+    {
+        const int n = static_cast<int>(order.size());
+        const CardDefinition* dl = def_of(order[n - 1]);
+        const CardDefinition* dp = def_of(order[n - 2]);
+        if (is_cast(order[n - 1]) && is_cast(order[n - 2]) && dl != nullptr && dp != nullptr
+            && dl->params.max_casts_after >= 0 && dp->card.IsCreature())
+        { std::swap(order[n - 1], order[n - 2]); }
+    }
+
+    // (3) RUBY MEDALLION AT ITS EARLIEST PAYABLE SLOT (USER 2026-10-10). Each Medallion goes to the
+    // earliest slot at which the WHOLE order still pays under the exact walk -- its {2} payable there
+    // and every cast after it -- never past Irencrag (the one spell after it belongs to the closer).
+    // With several, the first takes its earliest slot that still lets the rest be placed so the line
+    // pays, then the next, and so on: the lexicographically smallest slot vector that pays (they may
+    // sit together or apart -- "as early as possible" is per Medallion). If no placement pays the
+    // whole line, the one that pays the most of it, lexicographically earliest on ties.
+    std::vector<int> meds, rest;
+    for (int i : order)
+    {
+        const CardDefinition* d = def_of(i);
+        (is_cast(i) && d != nullptr && !d->params.reduces_spell_color.empty() ? meds : rest).push_back(i);
+    }
+    if (meds.empty() || rest.empty()) { return; }
+    int lim = static_cast<int>(rest.size());
+    for (int k = 0; k < static_cast<int>(rest.size()); ++k)
+    {
+        const CardDefinition* d = def_of(rest[k]);
+        if (is_cast(rest[k]) && d != nullptr && d->params.max_casts_after >= 0) { lim = k; break; }
+    }
+    const int m = static_cast<int>(meds.size());
+    std::vector<int> slot(static_cast<std::size_t>(m), 0), best_slots;   // non-decreasing gap indices
+    std::vector<int> trial;
+    int best_reach = -1;
+    auto build = [&](const std::vector<int>& sl)
+    {
+        trial.clear();
+        int mi = 0;
+        for (int g = 0; g <= static_cast<int>(rest.size()); ++g)
+        {
+            while (mi < m && sl[static_cast<std::size_t>(mi)] == g) { trial.push_back(meds[static_cast<std::size_t>(mi++)]); }
+            if (g < static_cast<int>(rest.size())) { trial.push_back(rest[static_cast<std::size_t>(g)]); }
+        }
+    };
+    for (;;)
+    {
+        build(slot);
+        const int fail  = ExactOrderFirstUnpayable(s, acts, trial);
+        const int reach = fail < 0 ? static_cast<int>(trial.size()) : fail;
+        if (reach > best_reach) { best_reach = reach; best_slots = slot; }
+        if (fail < 0) { break; }
+        // next non-decreasing vector in lexicographic order, every entry <= lim
+        int k = m - 1;
+        while (k >= 0 && slot[static_cast<std::size_t>(k)] == lim) { --k; }
+        if (k < 0) { break; }
+        const int v = slot[static_cast<std::size_t>(k)] + 1;
+        for (int j = k; j < m; ++j) { slot[static_cast<std::size_t>(j)] = v; }
+    }
+    build(best_slots);
+    order = trial;
+}
+
+// The searched orderings under the USER's order. Replaces the engine's targeted generator, which
+// emitted (splice-after base, interleaved base, raw identity) x every Medallion slot earliest-first:
+// the search kept the FIRST of any score tie, so a Medallion-first slot that could not be paid (and
+// dropped the rest of the line) beat the payable slot whenever the win turn came out the same
+// (ship s7200139 T3: Medallion | Seething | Scourge on two Mountains -- Seething and Scourge never
+// cast). It also put a PLAIN Desperate after Seething (its splice-after base) and kept a raw hand-order
+// identity. Now: the canonical order -- the comparator plus ArrangeCastOrder, the exact sequence the
+// executor and the rollout apply realise -- and, as the USER's rule 5 asks ("splice-after Seething
+// preferred ... individual-before is the fallback. Needs search."), the same order with the spliced
+// Desperates moved in front of Seething Song, its Medallion placed afresh.
+bool DragonstormProvider::CastOrderingCandidates(const GameState& s0, const std::vector<Action>& plan_actions,
+                                                 const std::vector<Action>& reorder,
+                                                 std::vector<std::vector<int>>& out) const
+{
+    if (!UserOrderOn()) { return false; }
+    // The order is decided where both apply worlds decide it: after the plan's pre-cast sacrifices
+    // (Lotus Bloom's float), which AvailableManaPool does not see until they are applied.
+    std::optional<GameState> pre;
+    for (const Action& a : plan_actions)
+    {
+        if (a.kind != Action::Kind::SacForMana && a.kind != Action::Kind::Suspend
+            && !(a.kind == Action::Kind::CastFromHand && (a.convoke_green > 0 || a.convoke_other > 0)))
+        { continue; }
+        if (!pre) { pre.emplace(s0); }
+        GameState& st = *pre;
+        if (a.kind == Action::Kind::SacForMana)
+        { ApplySacForMana(st, st.active_player_index, a.sac_source_id,
+                          TurnSolver::SacFloatColorFor(st, plan_actions, a), a.ritual_float, a.sac_victim_id); }
+        else if (a.kind == Action::Kind::Suspend)
+        { ApplySuspend(st, st.active_player_index, a.card_name); }
+        else
+        { ApplyConvokeTaps(st, st.active_player_index, a.convoke_green, a.convoke_other); }
+    }
+    const GameState& s = pre ? *pre : s0;
+    const int n = static_cast<int>(reorder.size());
+    std::vector<int> canon(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) { canon[static_cast<std::size_t>(i)] = i; }
+    std::stable_sort(canon.begin(), canon.end(), [&](int x, int y)
+    { return CastOrderLess(s, reorder[x], reorder[y]); });
+    ArrangeCastOrder(s, reorder, canon);
+    out.clear();
+    out.push_back(canon);
+    // The splice fallback: the Desperates at or after the first spliced copy that sits behind the
+    // first Seething-class ritual (a plain ritual of printed mana value 3+), moved in front of it.
+    auto def_of = [&](int i) -> const CardDefinition*
+    { return reorder[i].def ? reorder[i].def : CardDatabase::Instance().Lookup(reorder[i].card_name); };
+    int seeth = -1;
+    for (int k = 0; k < n && seeth < 0; ++k)
+    {
+        const CardDefinition* d = def_of(canon[k]);
+        if (d != nullptr && IsManaRitual(*d) && d->params.max_casts_after < 0 && !d->params.splice_onto_arcane
+            && d->card.m_mana_cost.ManaValue() >= 3) { seeth = k; }
+    }
+    if (seeth < 0) { return true; }
+    int first_spliced = -1;
+    for (int k = seeth + 1; k < n && first_spliced < 0; ++k)
+    { if (reorder[canon[k]].splice_count > 0) { first_spliced = k; } }
+    if (first_spliced < 0) { return true; }
+    const InternedName& nm = reorder[canon[first_spliced]].card_name;
+    std::vector<int> moved, kept;
+    for (int k = 0; k < n; ++k)
+    { (k >= first_spliced && reorder[canon[k]].card_name == nm ? moved : kept).push_back(canon[k]); }
+    std::vector<int> alt(kept.begin(), kept.begin() + seeth);
+    alt.insert(alt.end(), moved.begin(), moved.end());
+    alt.insert(alt.end(), kept.begin() + seeth, kept.end());
+    ArrangeCastOrder(s, reorder, alt);   // the Medallion's earliest payable slot for THIS sequence
+    if (alt != canon) { out.push_back(std::move(alt)); }
+    return true;
+}
 
 // OrderOpaqueCastsByRank (MTG_DRAGONSTORM_ORDER_OPAQUE, DEFAULT ON; =0 -> raw plan order). The tiers
 // above only ever ordered a CLEAN set: Apex of Power (impulse_exile) makes a set ORDER-OPAQUE, and an
