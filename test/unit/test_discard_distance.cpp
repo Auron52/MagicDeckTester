@@ -143,6 +143,19 @@ TEST_CASE("discard_dist: extra mana by turn (a dork the caller will cast) counts
     CHECK(p == std::array<double, 4>{ 0.0, 1.0, 1.0, 1.0 });
 }
 
+TEST_CASE("discard_dist: a coloured credit (a dork's colour) closes a pip short; colourless credit alone does not")
+{
+    // Board 2 mana, one white source; no land anywhere in the library. {1}{W}{W} needs a 2nd white.
+    Census c = Lib(2, 10, 0);
+    c.board_src[kW] = 1;
+    const std::array<int, 5> ww = { 2, 0, 0, 0, 0 };
+    const std::array<int, 4> extra = { 0, 1, 1, 1 };   // a white dork cast next turn, tapping after
+    discard_dist::ColourCredit src{};
+    for (std::size_t t = 1; t < 4; ++t) { src[t][static_cast<std::size_t>(kW)] = 1; }
+    CHECK(discard_dist::CastProbByTurn(c, 3, ww, {}, &extra) == std::array<double, 4>{ 0.0, 0.0, 0.0, 0.0 });
+    CHECK(discard_dist::CastProbByTurn(c, 3, ww, {}, &extra, &src) == std::array<double, 4>{ 0.0, 1.0, 1.0, 1.0 });
+}
+
 TEST_CASE("discard_dist: BuildCensus reads our mana permanents and the library's land / colour counts")
 {
     EnsureCardsDist();

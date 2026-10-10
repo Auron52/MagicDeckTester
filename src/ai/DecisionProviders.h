@@ -209,15 +209,19 @@ double HyperAtLeast(int N, int K, int n, int k);
 
 // P(castable by our t-th next turn), t = 1..kHorizon, monotone. `mana` is the cost AFTER the caller's
 // reductions (and cumulative for a duplicate); `pips` its coloured pips (W U B R G); `kept` the hand
-// lands the bucket rule keeps; `extra[t-1]` mana the caller adds by turn t (a dork it will cast, ...).
+// lands the bucket rule keeps; `extra[t-1]` mana the caller adds by turn t (a dork it will cast, ...);
+// `extra_src[t-1]` the coloured sources among that mana (W U B R G), when it has a colour.
+using ColourCredit = std::array<std::array<int, 5>, kHorizon>;
 std::array<double, kHorizon> CastProbByTurn(const Census& c, int mana, const std::array<int, 5>& pips,
                                             const std::vector<LandDrop>& kept,
-                                            const std::array<int, kHorizon>* extra = nullptr);
+                                            const std::array<int, kHorizon>* extra = nullptr,
+                                            const ColourCredit* extra_src = nullptr);
 // sum_t (P(t) - P(t-1)) x kGamma^(t-1), plus a floor of 0.02 x kGamma^kHorizon for the stranded mass.
 double CastFactor(const std::array<double, kHorizon>& p_by_turn);
 // Convenience: the factor for a card at its printed cost (or `mana_override` >= 0 after reductions).
 double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector<LandDrop>& kept,
-                     int mana_override = -1, const std::array<int, kHorizon>* extra = nullptr);
+                     int mana_override = -1, const std::array<int, kHorizon>* extra = nullptr,
+                     const ColourCredit* extra_src = nullptr);
 }   // namespace discard_dist
 
 class GenericProvider : public DecisionProvider

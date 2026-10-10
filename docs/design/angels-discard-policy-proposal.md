@@ -140,8 +140,15 @@ Cross-deck (verbatim):
     Lightstall 0.72, Youthful 0.61, Resplendent 0.52, Serra 0.44, Thune 0.38, Dawnbringer 0.32 --
     MinotaurProvider's adopted EV2 spread (one place of value is worth less than one turn of delay,
     two places more).
-  * (i) A protected Giada in hand is NOT credited as mana: Angel-only mana a turn late, for two mana
-    now.
+  * (i) ~~A protected Giada in hand is NOT credited as mana~~ -- WITHDRAWN 2026-10-10: it contradicted
+    the USER's "she counts toward our mana total" (the USER asked why she was not counted). A protected
+    Giada in hand is now credited to Angel spells: cast on the first turn the board + kept lands surely
+    pay her {1}{W}, one {W} from the turn after (summoning sickness), carried as a coloured credit
+    (`discard_dist::ColourCredit`). Restricted mana, in hand or on the board, is credited only to a card
+    it can pay, so never to Serra the Benevolent (a planeswalker). On the shipped 60 only the credit
+    itself moves a card (T12: Lyra ArchDawn over Youthful Valkyrie when Giada closes Lyra's third mana);
+    the Serra exclusion and the white of the credit cannot, because every Angel ranked above Serra, and
+    above a {W}{W} Angel, needs a subset of its mana.
 - **Tests:** `test_angels_discard.cpp`, 15 cases / 302 assertions. T3 and T8 change under the model
   and pin the `=0` order beside it; T10 (Sol Ring credit), T11 (tiers hold) and the stability-flag
   case are new. Run against the pre-ruling code, T3, T8, T10 and the flag case fail; T11 (an

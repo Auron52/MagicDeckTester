@@ -895,7 +895,8 @@ Census BuildCensus(const GameState& s, int me)
 
 std::array<double, kHorizon> CastProbByTurn(const Census& c, int mana, const std::array<int, 5>& pips,
                                             const std::vector<LandDrop>& kept,
-                                            const std::array<int, kHorizon>* extra)
+                                            const std::array<int, kHorizon>* extra,
+                                            const ColourCredit* extra_src)
 {
     // Kept lands are played best-first FOR THIS QUERY: a land supplying a colour the board is short of,
     // then an untapped one, then the most mana. At most kHorizon of them matter.
@@ -933,6 +934,11 @@ std::array<double, kHorizon> CastProbByTurn(const Census& c, int mana, const std
         const int played = std::min(t, h);          // kept lands played on turns 1..played
         int mana_t = c.board_mana + (extra != nullptr ? (*extra)[static_cast<std::size_t>(t - 1)] : 0);
         std::array<int, 5> col_t = c.board_src;
+        if (extra_src != nullptr)
+        {
+            for (int k = 0; k < 5; ++k)
+            { col_t[static_cast<std::size_t>(k)] += (*extra_src)[static_cast<std::size_t>(t - 1)][static_cast<std::size_t>(k)]; }
+        }
         for (int i = 0; i < played; ++i)
         {
             const LandDrop& ld = drop[static_cast<std::size_t>(i)];
@@ -965,12 +971,13 @@ double CastFactor(const std::array<double, kHorizon>& p_by_turn)
 }
 
 double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector<LandDrop>& kept,
-                     int mana_override, const std::array<int, kHorizon>* extra)
+                     int mana_override, const std::array<int, kHorizon>* extra,
+                     const ColourCredit* extra_src)
 {
     const ManaCost& mc = d.card.m_mana_cost;
     const std::array<int, 5> pips = { mc.white, mc.blue, mc.black, mc.red, mc.green };
     const int mana = mana_override >= 0 ? mana_override : mc.ManaValue();
-    return CastFactor(CastProbByTurn(c, mana, pips, kept, extra));
+    return CastFactor(CastProbByTurn(c, mana, pips, kept, extra, extra_src));
 }
 }   // namespace discard_dist
 
@@ -18859,9 +18866,14 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
     // Angels order by EV = CastFactor x value instead of value alone; the model never moves a card
     // across a tier. The land slots never read an Angel or Bishop pick, so running them alone first
     // yields exactly the lands the full ladder keeps: those are the LandDrops. A protected Sol Ring in
-    // hand adds its mana from the turn it is cast (net of its own cost that turn); a protected Giada
-    // in hand is not credited (Angel-only mana a turn late, for two mana now -- agent reading). The
-    // k-th copy of a name pays for the copies ahead of it in hand (the model's duplicate rule).
+    // hand adds its mana from the turn it is cast (net of its own cost that turn). A protected Giada in
+    // hand counts as mana too (USER 2026-10-09: "she counts toward our mana total"): she is cast on
+    // the first turn the board and the kept lands surely pay her, and her {W} arrives from the turn
+    // AFTER (summoning sickness). Restricted mana is credited only to a card it can pay -- Giada's
+    // (hand or board) pays Angel spells only, so never Serra the Benevolent, a planeswalker. On the
+    // shipped 60 only the Giada credit itself can move a card: Serra, and the white of the credit, are
+    // already decided by the tiers (every Angel above Serra needs a subset of her mana). The k-th copy
+    // of a name pays for the copies ahead of it in hand (the model's duplicate rule).
     // MTG_DISCARD_DIST_MODEL=0 restores the value-only order exactly.
     const bool dist_model = LifegainBucketsDistModel();
     std::vector<double> ev(at(n), 0.0);
@@ -18885,13 +18897,63 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
             for (int t = 0; t < discard_dist::kHorizon; ++t) { extra[at(t)] = t == 0 ? std::max(0, amount - cost) : amount; }
         }
         const discard_dist::Census census = dist_model ? discard_dist::BuildCensus(s, me) : discard_dist::Census{};
+        auto restricted_pays = [](const CardDefinition* src, const CardDefinition* card)
+        {
+            if (src->params.creature_mana_only && !card->card.IsCreature()) { return false; }
+            return src->params.mana_only_subtype.empty() || CardHasSubtype(card->card, src->params.mana_only_subtype);
+        };
+        std::vector<const CardDefinition*> board_restricted;   // counted by BuildCensus, pays some cards only
+        if (dist_model)
+        {
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != me) { continue; }
+                const CardDefinition* d = def_of(p.card);
+                if (d == nullptr) { continue; }
+                if (!p.card.IsLand() && !d->params.mana_rock && d->tmpl != CardTemplate::ManaDork) { continue; }
+                if (d->params.creature_mana_only || !d->params.mana_only_subtype.empty()) { board_restricted.push_back(d); }
+            }
+        }
+        // The hand Giada's first SURE cast turn (board + kept lands, no draws); her mana from the next.
+        int dork_from = discard_dist::kHorizon;
+        if (dist_model && prot_dork >= 0)
+        {
+            const ManaCost& gc = defs[at(prot_dork)]->card.m_mana_cost;
+            const auto pg = discard_dist::CastProbByTurn(census, gc.ManaValue(),
+                                                         { gc.white, gc.blue, gc.black, gc.red, gc.green },
+                                                         kept_drops, prot_rock >= 0 ? &extra : nullptr);
+            for (int t = 0; t < discard_dist::kHorizon; ++t) { if (pg[at(t)] >= 1.0) { dork_from = t + 1; break; } }
+        }
         for (int i : angels)
         {
             const double value = LifegainBucketsValue(value_rank(i));
             if (!dist_model) { ev[at(i)] = value; continue; }
             const int mana = CleanupDiscardManaValue(ap.hand[at(i)]) * (1 + copy_ordinal[at(i)]);
-            ev[at(i)] = discard_dist::CastFactorFor(census, *defs[at(i)], kept_drops, mana,
-                                                    prot_rock >= 0 ? &extra : nullptr) * value;
+            discard_dist::Census c_i = census;
+            for (const CardDefinition* src : board_restricted)
+            {
+                if (restricted_pays(src, defs[at(i)])) { continue; }
+                c_i.board_mana -= std::max(1, src->params.produces_amount);
+                const unsigned bits = discard_dist::ColourBits(src);
+                for (int k = 0; k < 5; ++k) { if (bits & (1u << k)) { --c_i.board_src[at(k)]; } }
+            }
+            std::array<int, discard_dist::kHorizon> extra_i = extra;
+            discard_dist::ColourCredit src_i{};
+            bool any_extra = prot_rock >= 0, any_src = false;
+            if (prot_dork >= 0 && restricted_pays(defs[at(prot_dork)], defs[at(i)]))
+            {
+                const int amount = std::max(1, defs[at(prot_dork)]->params.produces_amount);
+                const unsigned bits = discard_dist::ColourBits(defs[at(prot_dork)]);
+                for (int t = dork_from; t < discard_dist::kHorizon; ++t)
+                {
+                    extra_i[at(t)] += amount;
+                    any_extra = true;
+                    for (int k = 0; k < 5; ++k) { if (bits & (1u << k)) { ++src_i[at(t)][at(k)]; any_src = true; } }
+                }
+            }
+            ev[at(i)] = discard_dist::CastFactorFor(c_i, *defs[at(i)], kept_drops, mana,
+                                                    any_extra ? &extra_i : nullptr,
+                                                    any_src ? &src_i : nullptr) * value;
         }
     }
     std::vector<int> angel_order = angels;
