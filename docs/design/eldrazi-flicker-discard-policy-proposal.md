@@ -113,6 +113,24 @@ Not measured: EDF is not in the regression suite, so the adoption evidence has t
 A/B (`MTG_EDF_BUCKET_DISCARD=1` vs `=0`) on this deck.
 
 
+#### USER rulings (2026-10-10) on the implementation readings
+
+Cross-deck (verbatim):
+- *"Colour beats the land count is correct."* -- a land that gives a KEPT spell a colour nothing on the
+  board or already kept provides is kept even past the land quota (Creature Giving, Melira Pod and
+  EldraziDisplacerFlicker already do this; every deck follows it).
+- *"Creature quotas are less worried about the board than land quotas. This is because you can always add
+  more creatures and sometimes this speeds up the clock."* -- creature / threat / payoff quotas are filled
+  from the hand WITHOUT subtracting creatures already in play. Land and mana quotas still count the board;
+  engine, combo-piece and duplicate-legend rules keep the board rules their design states.
+- *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
+  model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
+
+Deck-specific (verbatim):
+- EldraziDisplacerFlicker: *"For EDF that is fine as long as we keep our only win-con/draw source even
+  if it is a land."* -- a SPARE draw land sheds as a land (reading R8 confirmed), but the ONLY
+  win con / draw source is kept in the win-con slot even when it is a land.
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
