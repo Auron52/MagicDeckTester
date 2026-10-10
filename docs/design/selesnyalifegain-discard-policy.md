@@ -137,6 +137,19 @@ value <= the projected M2) is kept ABOVE the soft payoff(s), in the USER's Elf o
 it restores gi 175 to turn 7. USER: *"The others seems reasonable."* (EDF and Selesnya). Default ON; `=0`
 restores the rule as first built. Test S14.
 
+#### USER ruling (2026-10-10): the Alchemist package (MTG_SELESNYA_ALCHEMIST_BURST)
+
+USER: *"In Selesnya Accomplished Alchemist is more acceleration than payoff. However, it is a good keep
+with lifegain burst + something expensive like Genesis Wave."* The Alchemist stays an Elf (acceleration),
+last in the Elf order by default. When the hand holds the Alchemist, a lifegain burst and something
+expensive, the burst fills LIFEGAIN 1 even with no lifegain payoff, and the Alchemist ranks FIRST among
+the Elves (the first Elf kept when it is castable next turn; when it is not, the two-turn Elf window keeps
+it above the soft payoff like any Elf). The engine models the package: the Alchemist's second ability
+taps for X = life gained this turn (`mana_per_life_gained`). Agent readings (the USER may overturn):
+"lifegain burst" = a LIFEGAIN-bucket card (Feed the Clan, Wellwisher); "something expensive" = Genesis
+Wave or a payoff costing 6+ (Craterhoof, Verdant Sun's Avatar, Nykthos Paragon). Default ON; `=0`
+restores the order as first built. Test S15.
+
 #### Implementation notes -- USER rulings 2026-10-10
 * **(a) Creature quotas from the hand.** Payoffs in play no longer count against PAYOFFS 2 + soft 3rd
   (always 2 hard + 1 soft from the hand), a Wellwisher in play no longer fills LIFEGAIN 1, and a
