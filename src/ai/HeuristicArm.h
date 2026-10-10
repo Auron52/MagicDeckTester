@@ -387,6 +387,7 @@ enum Slot : int
     DRAGONSTORM_USER_ORDER,   // MTG_DRAGONSTORM_USER_ORDER  Dragonstorm casts in the USER's order everywhere it is decided (USER 2026-10-10: "We should do things in the order I said, once they become available"): Ruby Medallion at its EARLIEST payable slot, Rite < Pyretic < Desperate < Seething < spliced Desperate, Apex, a hard-cast Dragon, Irencrag second-to-last, Dragonstorm last -- rank, comparator, set arrangement, exact payable walk and the searched orderings (docs/design/dragonstorm-user-cast-order.md). Default ON; =0 -> the generic ranks, byte-identical
     ATTACK_DOMAIN_DORK_YIELD, // MTG_ATTACK_DOMAIN_DORK_YIELD the attack-tap projection credits a DOMAIN mana dork (Faeburrow Elder / Bloom Tender) with the pool's own per-tap yield, one mana per colour among our permanents (DomainColors), not PermanentManaYield's static 1 -- which made the exact need ~4 too small and a cheaper plan that really taps Faeburrow read as lethal (FiveColour d0). Default ON; =0 -> the static yield
     ATTACK_TAP_ASTROLABE_CREDIT,// MTG_ATTACK_TAP_ASTROLABE_CREDIT the attack-tap exact need counts supply as the pool total MINUS its phantom conversion units (a fed Arcum's Astrolabe: {1},{T} -> one mana of any colour is a colour conversion, not new mana), so a {S} that only an attacking Boreal Druid can pay charges the Druid (Snow d0 gi1384). Default ON; =0 -> the raw total
+    ATTACK_CANNONS_TRIGGER,   // MTG_ATTACK_CANNONS_TRIGGER  the this-turn damage projection (both consider() sites) adds Mana Cannons' cast trigger: each multicoloured cast of the plan deals its colour count per Cannons on the battlefield, in cast order, a Cannons cast earlier in the same plan counting for the casts after it (FiveColour d0). Default ON; =0 -> not projected
     COUNT
 };
 
@@ -735,6 +736,7 @@ inline const char* Name(int slot)
         "MTG_DRAGONSTORM_USER_ORDER",
         "MTG_ATTACK_DOMAIN_DORK_YIELD",
         "MTG_ATTACK_TAP_ASTROLABE_CREDIT",
+        "MTG_ATTACK_CANNONS_TRIGGER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
