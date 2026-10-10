@@ -18606,6 +18606,26 @@ static void MarkDuplicateLegendsInHand(const GameState& s, const std::vector<con
 static bool BucketShedIsRemoval(const CardDefinition* d)
 { return d != nullptr && (d->tmpl == CardTemplate::Removal || d->params.tuck_to_library); }
 
+// MTG_DISCARD_DIST_MODEL (heurarm DISCARD_DIST_MODEL, default ON): whether the Angels / CritterLifegain
+// buckets order a tier by EV = discard_dist::CastFactor x value (USER 2026-10-10) or by value alone.
+static bool LifegainBucketsDistModel()
+{
+    static const bool on = EnvOn("MTG_DISCARD_DIST_MODEL", true);   // DEFAULT ON; =0 -> value alone
+    return heurarm::Flag(heurarm::DISCARD_DIST_MODEL, on);
+}
+
+// The VALUE the distance model multiplies: a position in the deck's authored value order (0 = best)
+// mapped to 0.85^pos -- MinotaurProvider's adopted EV2 spread, chosen there so that with equal
+// castability the sort reproduces the value order exactly, and one place of value (x1.18) is worth
+// less than one turn of delay (the model's x0.75) while two places (x1.38) are worth more. A loop,
+// not std::pow, so the product is bit-identical on every platform (the Windows parity rule).
+static double LifegainBucketsValue(int pos)
+{
+    double v = 1.0;
+    for (int k = 0; k < pos; ++k) { v *= 0.85; }
+    return v;
+}
+
 // ---- AngelsProvider::CleanupDiscardCandidates -------------------------------
 //
 // THE USER'S DESIGN (2026-10-09; docs/design/angels-discard-policy-proposal.md, "Angels: SETTLED"),
@@ -18657,16 +18677,30 @@ static bool BucketShedIsRemoval(const CardDefinition* d)
 //   (f) The value order is keyed on each card's signature PARAM, so a screening arm that swaps an
 //       Angel keeps the order's meaning; a param-less MV-1 Angel is Lightstall's rank.
 //   (g) "5-drops" = mana value 5 or more (Archangel of Thune, Lyra Dawnbringer); Serra (MV 4) is not.
-// No distance-to-castable term beyond "5-drops shed first": the SETTLED block names none.
+// USER RULINGS 2026-10-10 on those readings: (b) confirmed -- "Creature quotas are less worried about
+// the board than land quotas. This is because you can always add more creatures and sometimes this
+// speeds up the clock." -- the Angel slots fill from the hand without subtracting Angels in play; the
+// Bishop keeps the board rule its design states. And "For Distance to castable I think it makes sense
+// to have a smarter model if we can": inside the tiers above, the Angels order by EV = the shared
+// discard_dist CastFactor x value (MTG_DISCARD_DIST_MODEL, default ON; =0 -> value alone), the value
+// being 0.85^(the section 6c position) (agent reading (h)).
 //
-// PREFIX-STABLE (DecisionProvider::CleanupDiscardShedStable's default holds): every early class is a
-// card the ladder did not take, the ladder takes the best candidate first at every slot, and the
-// ladder-read-backwards tail sheds the last-taken card first, so shedding index 0 and re-ranking
-// leaves the rest in order (test_angels_discard.cpp checks it shed by shed).
+// PREFIX-STABLE with the model OFF (every early class is a card the ladder did not take, the ladder
+// takes the best candidate first at every slot, and the tail sheds the last-taken card first --
+// test_angels_discard.cpp checks it shed by shed). With the model ON the kept lands feed the Angels'
+// EV and the tail sheds kept lands among Angels, so CleanupDiscardShedStable() is false: re-rank.
 static bool AngelsBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_ANGELS_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::ANGELS_BUCKET_DISCARD, on);
+}
+
+// Prefix-stable unless the distance model is on: its LandDrops are the ladder's KEPT lands, and the
+// ladder read backwards sheds a kept land while Angels it priced are still in hand, which can reorder
+// them. Re-rank per shed then (the Giants / Goblins precedent).
+bool AngelsProvider::CleanupDiscardShedStable() const
+{
+    return !(AngelsBucketDiscardEnabled() && LifegainBucketsDistModel());
 }
 
 std::vector<int> AngelsProvider::CleanupDiscardCandidates(
@@ -18774,43 +18808,16 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
         for (std::size_t b = 0; b < a; ++b)
         { if (ap.hand[at(angels[b])].m_name == ap.hand[at(angels[a])].m_name) { ++copy_ordinal[at(angels[a])]; } }
     }
-    std::vector<int> angel_order = angels;
-    std::sort(angel_order.begin(), angel_order.end(), [&](int a, int b)
-    {
-        if (copy_ordinal[at(a)] != copy_ordinal[at(b)]) { return copy_ordinal[at(a)] < copy_ordinal[at(b)]; }  // variety
-        const bool fa = CleanupDiscardManaValue(ap.hand[at(a)]) >= 5;
-        const bool fb = CleanupDiscardManaValue(ap.hand[at(b)]) >= 5;
-        if (fa != fb) { return !fa; }                                                                  // 5-drops last
-        const int va = value_rank(a), vb = value_rank(b);
-        if (va != vb) { return va < vb; }                                                              // value
-        return a < b;
-    });
-    // ">= 1 cheap and >= 1 payoff when the hand has both": it outranks 5-drop-first, so among the
-    // first copies the best card of the OTHER class is pulled up to second place when the top two
-    // would otherwise be the same class.
-    {
-        std::size_t t0 = 0;
-        while (t0 < angel_order.size() && copy_ordinal[at(angel_order[t0])] == 0) { ++t0; }
-        auto pay = [&](int i) { return is_payoff(defs[at(i)]->params); };
-        if (t0 >= 3 && pay(angel_order[0]) == pay(angel_order[1]))
-        {
-            for (std::size_t k = 2; k < t0; ++k)
-            {
-                if (pay(angel_order[k]) == pay(angel_order[0])) { continue; }
-                std::rotate(angel_order.begin() + 1, angel_order.begin() + static_cast<std::ptrdiff_t>(k),
-                            angel_order.begin() + static_cast<std::ptrdiff_t>(k) + 1);
-                break;
-            }
-        }
-    }
 
-    // ---- the keep ladder ------------------------------------------------------------------------
+    // ---- the keep ladder's lambdas (the land slots run FIRST, alone, to know the kept lands) -----
     std::vector<char> keep(at(n), 0);
     std::vector<int> taken;
     taken.reserve(at(n));
     auto take = [&](int i) { keep[at(i)] = 1; taken.push_back(i); };
-    int sources = board_sources + (prot_rock >= 0 ? 1 : 0) + (prot_dork >= 0 ? 1 : 0);
-    int white   = board_white + (prot_rock >= 0 ? white_of(defs[at(prot_rock)]) : 0);
+    const int sources0 = board_sources + (prot_rock >= 0 ? 1 : 0) + (prot_dork >= 0 ? 1 : 0);
+    const int white0   = board_white + (prot_rock >= 0 ? white_of(defs[at(prot_rock)]) : 0);
+    int sources = sources0;
+    int white   = white0;
     auto beyond_rank = [&](int i) -> int   // source order beyond the white floor, best first
     {
         const CardDefinition* d = defs[at(i)];
@@ -18845,6 +18852,78 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
     { while (white < target) { const int i = pick_white(); if (i < 0) { break; } take_land(i); } };
     auto top_up_sources = [&](int target)
     { while (sources < target) { const int i = pick_source(); if (i < 0) { break; } take_land(i); } };
+
+    // DISTANCE TO CASTABLE (USER 2026-10-10: "For Distance to castable I think it makes sense to have a
+    // smarter model if we can"; docs/design/discard-distance-model.md). Inside the USER's explicit
+    // tiers -- one copy per name first -> >= 1 cheap and >= 1 payoff -> 5-drops shed first -- the
+    // Angels order by EV = CastFactor x value instead of value alone; the model never moves a card
+    // across a tier. The land slots never read an Angel or Bishop pick, so running them alone first
+    // yields exactly the lands the full ladder keeps: those are the LandDrops. A protected Sol Ring in
+    // hand adds its mana from the turn it is cast (net of its own cost that turn); a protected Giada
+    // in hand is not credited (Angel-only mana a turn late, for two mana now -- agent reading). The
+    // k-th copy of a name pays for the copies ahead of it in hand (the model's duplicate rule).
+    // MTG_DISCARD_DIST_MODEL=0 restores the value-only order exactly.
+    const bool dist_model = LifegainBucketsDistModel();
+    std::vector<double> ev(at(n), 0.0);
+    {
+        std::vector<discard_dist::LandDrop> kept_drops;
+        if (dist_model)
+        {
+            top_up_white(1); top_up_white(2); top_up_sources(3); top_up_sources(4); top_up_sources(5);
+            for (int i : taken) { kept_drops.push_back(discard_dist::LandDropOf(defs[at(i)])); }
+            std::fill(keep.begin(), keep.end(), 0);
+            taken.clear();
+            sources = sources0;
+            white   = white0;
+        }
+        std::array<int, discard_dist::kHorizon> extra{};
+        if (prot_rock >= 0)
+        {
+            const CardDefinition* rd = defs[at(prot_rock)];
+            const int amount = std::max(1, rd->params.produces_amount);
+            const int cost   = CleanupDiscardManaValue(ap.hand[at(prot_rock)]);
+            for (int t = 0; t < discard_dist::kHorizon; ++t) { extra[at(t)] = t == 0 ? std::max(0, amount - cost) : amount; }
+        }
+        const discard_dist::Census census = dist_model ? discard_dist::BuildCensus(s, me) : discard_dist::Census{};
+        for (int i : angels)
+        {
+            const double value = LifegainBucketsValue(value_rank(i));
+            if (!dist_model) { ev[at(i)] = value; continue; }
+            const int mana = CleanupDiscardManaValue(ap.hand[at(i)]) * (1 + copy_ordinal[at(i)]);
+            ev[at(i)] = discard_dist::CastFactorFor(census, *defs[at(i)], kept_drops, mana,
+                                                    prot_rock >= 0 ? &extra : nullptr) * value;
+        }
+    }
+    std::vector<int> angel_order = angels;
+    std::sort(angel_order.begin(), angel_order.end(), [&](int a, int b)
+    {
+        if (copy_ordinal[at(a)] != copy_ordinal[at(b)]) { return copy_ordinal[at(a)] < copy_ordinal[at(b)]; }  // variety
+        const bool fa = CleanupDiscardManaValue(ap.hand[at(a)]) >= 5;
+        const bool fb = CleanupDiscardManaValue(ap.hand[at(b)]) >= 5;
+        if (fa != fb) { return !fa; }                                                                  // 5-drops last
+        if (ev[at(a)] != ev[at(b)]) { return ev[at(a)] > ev[at(b)]; }                                  // EV (value)
+        return a < b;
+    });
+    // ">= 1 cheap and >= 1 payoff when the hand has both": it outranks 5-drop-first, so among the
+    // first copies the best card of the OTHER class is pulled up to second place when the top two
+    // would otherwise be the same class.
+    {
+        std::size_t t0 = 0;
+        while (t0 < angel_order.size() && copy_ordinal[at(angel_order[t0])] == 0) { ++t0; }
+        auto pay = [&](int i) { return is_payoff(defs[at(i)]->params); };
+        if (t0 >= 3 && pay(angel_order[0]) == pay(angel_order[1]))
+        {
+            for (std::size_t k = 2; k < t0; ++k)
+            {
+                if (pay(angel_order[k]) == pay(angel_order[0])) { continue; }
+                std::rotate(angel_order.begin() + 1, angel_order.begin() + static_cast<std::ptrdiff_t>(k),
+                            angel_order.begin() + static_cast<std::ptrdiff_t>(k) + 1);
+                break;
+            }
+        }
+    }
+
+    // ---- the keep ladder ------------------------------------------------------------------------
     std::size_t next_angel = 0;
     auto take_angel = [&]() { if (next_angel < angel_order.size()) { take(angel_order[next_angel++]); } };
 

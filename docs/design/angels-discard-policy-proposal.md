@@ -92,7 +92,8 @@ Agent readings (the USER did not rule; each is pinned by a named test and is the
   one already in play sheds first among surplus mana (unreachable on the 1-Sol-Ring list).
 - (f) The value order is keyed on each card's signature param, not its name.
 - (g) "5-drops" = mana value 5+ (Thune, Dawnbringer); Serra (4) is not one. No further
-  distance-to-castable term: the SETTLED block names none.
+  distance-to-castable term: the SETTLED block names none. *(Superseded 2026-10-10: the shared
+  distance model now orders inside the tiers -- see "Implementation notes (2026-10-10)" below.)*
 
 Housekeeping done: the stale v1 counts in `DecisionProviders.cpp`'s routing comments ("4 Archangel
 of Thune", "3 Lyra + 2 Giada") and the "Angels holds NO judgement hook" claim. NOT done (out of
@@ -113,6 +114,38 @@ Cross-deck (verbatim):
   engine, combo-piece and duplicate-legend rules keep the board rules their design states.
 - *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
   model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
+
+#### Implementation notes (2026-10-10) -- the rulings applied
+
+- **Creature quotas vs the board:** reading (b) is confirmed as implemented -- the Angel slots fill from
+  the hand and never subtract Angels in play. Unchanged: the Bishop slot keeps "a Bishop in play makes a
+  hand Bishop surplus" (the design states it), as do the Sol Ring / Giada / duplicate-legend rules.
+- **Distance to castable:** inside the USER's Angel tiers (one copy per name first -> >= 1 cheap and
+  >= 1 payoff -> 5-drops shed first) the order is **EV = `discard_dist::CastFactor` x value**, behind
+  `MTG_DISCARD_DIST_MODEL` (heurarm `DISCARD_DIST_MODEL`, default ON; `=0` restores the value-only
+  order exactly). The model never moves a card across a tier: the mix rule pulls up the best card of
+  the missing class BY EV, and a castable repeat stays below a stranded first copy (T11).
+  * Census: `BuildCensus` once per call (board mana, colour sources, the library's land counts).
+  * LandDrops: exactly the lands the ladder KEEPS (white, white, 3rd-5th source). The land slots never
+    read an Angel or Bishop pick, so they are run alone first to learn them.
+  * A protected Sol Ring in hand adds its mana from the turn it is cast, net of its own cost that turn
+    (+1, then +2) (T10).
+  * The k-th copy of a name pays for the copies ahead of it in hand (the model's duplicate rule) (T3).
+- **Not prefix-stable with the model on:** the ladder's tail sheds kept lands among the Angels they
+  priced, so `AngelsProvider::CleanupDiscardShedStable()` is false while the buckets and the model are
+  on (re-rank per shed, the Giants / Goblins precedent); with `=0` it is true and still tested shed by
+  shed.
+- **New agent readings (USER may overturn):**
+  * (h) The value the factor multiplies is 0.85^(section 6c position): RV 1, Lyra ArchDawn 0.85,
+    Lightstall 0.72, Youthful 0.61, Resplendent 0.52, Serra 0.44, Thune 0.38, Dawnbringer 0.32 --
+    MinotaurProvider's adopted EV2 spread (one place of value is worth less than one turn of delay,
+    two places more).
+  * (i) A protected Giada in hand is NOT credited as mana: Angel-only mana a turn late, for two mana
+    now.
+- **Tests:** `test_angels_discard.cpp`, 15 cases / 302 assertions. T3 and T8 change under the model
+  and pin the `=0` order beside it; T10 (Sol Ring credit), T11 (tiers hold) and the stability-flag
+  case are new. Run against the pre-ruling code, T3, T8, T10 and the flag case fail; T11 (an
+  invariant) and every `=0` assertion pass there -- `=0` is the old order.
 
 ---
 
