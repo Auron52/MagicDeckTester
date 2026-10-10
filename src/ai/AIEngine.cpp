@@ -283,6 +283,25 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
 // harmless as full depth is the default now.)
 static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");
 
+// MTG_EXEC_FAILED_CAST_NO_RESOLVE (DEFAULT ON; =0 restores the re-solve after a no-op cast). The
+// executor's UNCOMMITTED draw-engine branch -- no committed line, which is every d0-runner turn --
+// armed the post-cast breakpoint re-solve (resolve_draw_breakpoint) whether or not the cast was PAID.
+// The committed branch has checked cast_paid since step 31, and ApplyPlanDirect's apply_one returns
+// on a failed payment before any arming, so an unpaid cast opening a breakpoint was an executor-only
+// event: the turn was re-solved as though Apex of Power's exile had resolved when it had not
+// (dragonstorm_smoke_d0_s1001 gi533 T5). Off the main-loop sites AND the nested continuation loop
+// (whose "phantom spin" on a failed Apex is what kMaxDrawBreakpointCalls bounds). A failed cast still
+// leaves note_draw_engine's d0 second pass in place, so the turn is re-solved -- after the plan's
+// remaining casts rather than in the middle of them.
+// HISTORY THE A/B MUST WEIGH: step 31 (dfc11ec41, 2026-10-01) measured exactly this gate on the
+// uncommitted path at +1351 turns on dragonstorm d0 over the overnight tier (+4 searched), on an
+// engine that still cast Apex sets in raw hand order. See docs/design/executor-ritual-payable-order.md.
+static bool ExecFailedCastNoResolve()
+{
+    static const bool on = EnvOn("MTG_EXEC_FAILED_CAST_NO_RESOLVE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EXEC_FAILED_CAST_NO_RESOLVE, on);
+}
+
 // Commit-the-line fidelity oracle (MTG_FD_ORACLE): when a recomputed line's searched
 // win exceeds an earlier line's, the committed line we just replayed did NOT realise
 // its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
@@ -4109,6 +4128,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // lives. The re-solving fallback (no committed line, and the d0 runner) has no rollout twin, and it
     // LEANS on re-solving after a no-op cast to find another play: gating it too cost dragonstorm d0
     // +1351 turns over the overnight tier and dragonstorm searched +4.
+    // 2026-10-10: that gate is now MTG_EXEC_FAILED_CAST_NO_RESOLVE (default ON, pending its A/B) --
+    // re-measured alongside the order fixes that remove most failed Apex casts (see its reader).
     bool last_cast_paid = true;
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
@@ -4799,6 +4820,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const std::string site8_committed_found = std::move(rdb_site8_committed_found);
         rdb_site8_committed_found.clear();
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
+        ++m_bp_resolves;        // unit-seam counter only (see AIEngine.h)
         exec_section_reset();   // a breakpoint decision point (twin of bp_searched_plan's reset)
         // karoo_deferred: the executor reserves a Karoo drop for after the main cast loop exactly as
         // ApplyPlanDirect does, so it must tell the breakpoint enumeration the same thing -- a
@@ -5123,8 +5145,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
               exec_cont_land_hook(rdb_land, a); continue; }
             {
                 m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
+                const bool cont_cast_paid = last_cast_paid;   // before the nested re-solve overwrites it
                 const bool put_armed_c = put_in_hand_armed(a.card_name);
-                if (is_draw_engine(a.card_name) || put_armed_c)
+                // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID continuation cast opens no nested
+                // breakpoint either (the rollout's continuation apply_one returns before arming).
+                if ((is_draw_engine(a.card_name) || put_armed_c)
+                    && (cont_cast_paid || !ExecFailedCastNoResolve()))
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
                     pin_rdb_hand();
@@ -6394,7 +6420,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
-                else
+                // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
+                else if (cast_paid || !ExecFailedCastNoResolve())
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
                     pin_rdb_hand();
@@ -6414,7 +6441,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
         }
     }
     else
@@ -6575,7 +6602,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
-                else
+                // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
+                else if (cast_paid || !ExecFailedCastNoResolve())
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
                     pin_rdb_hand();
@@ -6595,7 +6623,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
         }
     }
     }
@@ -6666,7 +6694,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (fd_plan_committed)
             { if (cast_paid) { replay_segment(); } }
-            else
+            // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
+            else if (cast_paid || !ExecFailedCastNoResolve())
             {
                 rdb_site = CardDatabase::Instance().Lookup(a.card_name);
                 pin_rdb_hand();
@@ -6683,7 +6712,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_draw_breakpoint(0);
             }
         }
-        if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+        if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
     }
     }
     }

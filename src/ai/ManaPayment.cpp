@@ -3060,12 +3060,44 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
 // beyond that. None pays -> the given order, untouched.
 //
 // DOMAIN: an order holding a stamped ETB-Treasure maker (Action::rock_mana on an etb_creates_treasures
-// cast) or a reveal-or-pay cast. Everything else returns after one pass over the order (a pure
-// reorder of non-producing, reveal-free casts cannot change the aggregate verdict anyway).
+// cast) or a reveal-or-pay cast -- and, at the APPLY site under MTG_PAYABLE_ORDER_RITUALS (default ON),
+// one holding any other PRODUCING cast the walk credits (CreditCastOutput: a mana ritual's float, a
+// same-turn rock, a spendable Treasure mint). Everything else returns after one pass over the order (a
+// pure reorder of non-producing, reveal-free casts cannot change the aggregate verdict anyway -- and
+// that premise is exactly why a producer belongs IN the domain: its position is what decides whether
+// the casts after it are paid).
 bool PayableOrderOn()
 {
     static const bool env_on = EnvOn("MTG_PAYABLE_ORDER", true);   // DEFAULT ON (adopted 2026-09-27, USER; =0 reverts)
     return heurarm::Flag(heurarm::PAYABLE_ORDER, env_on);
+}
+
+// MTG_PAYABLE_ORDER_RITUALS (DEFAULT ON; =0 -> the maker / reveal domain only). Found 2026-10-10 on
+// dragonstorm_smoke_d0_s1001 gi533: the d0 plan {Desperate, Seething, Rite, Pyretic, Apex of Power}
+// pays exactly 10 in rank order, but Apex makes the set ORDER-OPAQUE and the executor kept raw hand
+// order -- Desperate, Seething, Apex -- so Apex met 8 of its 10 and failed; the old domain gate
+// returned on "no maker, no reveal" and never looked. The walk already credits ritual float
+// (FirstUnpayablePos: "A PRODUCER ... is NOT a decline"), so the projection needs no change; only the
+// gate did. APPLY SITE ONLY (site 0: the executor and ApplyPlanDirect, one shared call -> lockstep).
+// The enumeration's rescue retry (site 1) keeps the maker / reveal domain, so which SUBSETS are
+// admitted is unchanged -- the lever only fixes the order an already-admitted plan is realised in.
+// Byte-identical for every order that projects payable (the rule's first test returns it untouched).
+// See docs/design/executor-ritual-payable-order.md.
+static bool PayableOrderRitualsOn()
+{
+    static const bool env_on = EnvOn("MTG_PAYABLE_ORDER_RITUALS", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::PAYABLE_ORDER_RITUALS, env_on);
+}
+
+// Does the projection walk CREDIT this cast's output to the casts after it? Exactly CreditCastOutput's
+// three terms, under FirstUnpayablePosImpl's own skip (an alt-cost cast is passed over before any
+// credit). Cheap stamped fields first; the Treasure-mint term (a definition lookup) only for a minter.
+static bool PoCreditedProducer(const GameState& state, const std::vector<Action>& acts, const Action& a)
+{
+    if (a.alt_cost) { return false; }
+    if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return true; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.creates_treasures > 0 && MintedTreasureSpendable(state, acts);
 }
 
 namespace
@@ -3108,6 +3140,16 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     bool any = false;
     for (int i : order)
     { if (IsFundingProducerCast(acts[i]) || PoIsRevealCostCast(acts[i])) { any = true; break; } }
+    // MTG_PAYABLE_ORDER_RITUALS: a producing cast admits the order too, at the apply site only (see
+    // PayableOrderRitualsOn). Evaluated only when the maker / reveal scan found nothing, so such an
+    // order holds no reveal-or-pay cast and the walk needs no simulated hand (the hand prices only a
+    // reveal cast -- with none, the hand-tracking walk and the plain one agree cast for cast).
+    bool producer_only = false;
+    if (!any && site == 0 && PayableOrderRitualsOn())
+    {
+        for (int i : order) { if (PoCreditedProducer(state, acts, acts[i])) { any = true; break; } }
+        producer_only = any;
+    }
     if (!any) { return; }
     g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
 
@@ -3115,14 +3157,18 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     if (extra_wild > 0) { pool0.wild += extra_wild; }
     thread_local std::vector<PoHandCard> hand0, hand;
     hand0.clear();
-    for (const Card& c : state.ActivePlayer().hand)
+    if (!producer_only)
     {
-        if (c.m_is_staged) { continue; }
-        hand0.push_back({ c.m_name, CardDatabase::Instance().LookupCached(c) });
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            if (c.m_is_staged) { continue; }
+            hand0.push_back({ c.m_name, CardDatabase::Instance().LookupCached(c) });
+        }
+        if (hand_exits) { for (const InternedName& n : *hand_exits) { PoRemoveFromHand(hand0, n); } }
     }
-    if (hand_exits) { for (const InternedName& n : *hand_exits) { PoRemoveFromHand(hand0, n); } }
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
+        if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, pool0, nullptr) < 0; }
         hand = hand0;
         return FirstUnpayablePosImpl(state, acts, ord, pool0, &hand) < 0;
     };

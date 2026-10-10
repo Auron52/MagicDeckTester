@@ -398,6 +398,9 @@ enum Slot : int
     ATTACK_TAP_NEED_EXACT,    // MTG_ATTACK_TAP_NEED_EXACT the attack-tap discount's mana `need` is the cost beyond every source that is NOT an attacking creature mana source (it used pool_noncreature, which keeps every mana dork, so the discount was dead whenever dorks finished the payment); 0 post-combat. Default ON; =0 -> the legacy need
     ATTACK_TAP_ABILITY_DISCOUNT,// MTG_ATTACK_TAP_ABILITY_DISCOUNT a creature the plan taps for a NON-mana {T} ability (Wellwisher's lifegain) is not an attacker: the this-turn attack projection re-projects the board with those creatures tapped. Default ON; =0 -> not discounted
     ROLLOUT_LAND_ACT_COLOR,   // MTG_ROLLOUT_LAND_ACT_COLOR   the rollout's greedy land drop plays a land supplying a colour (W/U/B/R/G/{C}) that a permanent in play needs for an activated ability and nothing on the board makes (EDF gi 63: Essence Depleter's {C} drain stranded while the playout played Conservatory over Mariposa). Default ON; =0 -> the legacy multi-colour-first drop, byte-identical
+    DRAGONSTORM_ORDER_OPAQUE, // MTG_DRAGONSTORM_ORDER_OPAQUE Dragonstorm opts into OrderOpaqueCastsByRank: an ORDER-OPAQUE set (Apex of Power is a re-solve breakpoint card) is cast in CastOrderRank order -- rituals 15, Ruby Medallion 16, Irencrag 18, payoff 20 -- instead of raw plan (= hand) order, which cast Apex before the rituals that fund it (docs/design/executor-ritual-payable-order.md). Default ON; =0 -> raw plan order
+    EXEC_FAILED_CAST_NO_RESOLVE, // MTG_EXEC_FAILED_CAST_NO_RESOLVE the executor's UNCOMMITTED draw-engine branch (the d0 runner / no committed line) no longer runs the post-cast breakpoint re-solve for a cast it could not pay -- the committed branch and ApplyPlanDirect's apply_one already skip it (same doc). Default ON; =0 -> re-solve after a no-op cast as before
+    PAYABLE_ORDER_RITUALS,    // MTG_PAYABLE_ORDER_RITUALS  MTG_PAYABLE_ORDER's domain admits an apply-site order holding a PRODUCING cast the projection walk credits (a mana ritual, a same-turn rock, a spendable Treasure mint), not only an ETB-Treasure maker / reveal-or-pay cast: a producer's position changes payability (same doc). Default ON; =0 -> the maker / reveal domain only
     COUNT
 };
 
@@ -757,6 +760,9 @@ inline const char* Name(int slot)
         "MTG_ATTACK_TAP_NEED_EXACT",
         "MTG_ATTACK_TAP_ABILITY_DISCOUNT",
         "MTG_ROLLOUT_LAND_ACT_COLOR",
+        "MTG_DRAGONSTORM_ORDER_OPAQUE",
+        "MTG_EXEC_FAILED_CAST_NO_RESOLVE",
+        "MTG_PAYABLE_ORDER_RITUALS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

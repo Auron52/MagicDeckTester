@@ -10861,6 +10861,22 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
 // restrictor (18) tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one
 // implementation, and any future ritual/reducer deck inherits them from its card data.
 
+// OrderOpaqueCastsByRank (MTG_DRAGONSTORM_ORDER_OPAQUE, DEFAULT ON; =0 -> raw plan order). The tiers
+// above only ever ordered a CLEAN set: Apex of Power (impulse_exile) makes a set ORDER-OPAQUE, and an
+// opaque set is cast in raw plan order unless the deck opts in here -- and raw plan order is hand
+// order. The solver's affordability is order-blind (totals), so a {4 rituals, Apex} plan that pays
+// exactly could be realised as "Desperate, Seething, Apex, Rite, Pyretic" and Apex fail at 8 of its 10
+// (dragonstorm_smoke_d0_s1001 gi533: a T5 kill became T8 because the opening-hand Apex sat third in
+// hand). The USER doctrine on the hook (DecisionProvider.h): "We need to order everything, not have
+// search own the order". A plan the cast-ordering search ORDERED (searched_order) keeps its vector
+// order -- this only replaces the raw-hand-order fallback. See
+// docs/design/executor-ritual-payable-order.md.
+bool DragonstormProvider::OrderOpaqueCastsByRank() const
+{
+    static const bool on = EnvOn("MTG_DRAGONSTORM_ORDER_OPAQUE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::DRAGONSTORM_ORDER_OPAQUE, on);
+}
+
 // ---- DragonstormProvider: cleanup discard ------------------------------------------------------
 //
 // THE USER'S DESIGN (2026-10-09), docs/design/dragonstorm-discard-policy-proposal.md "#### Dragonstorm:

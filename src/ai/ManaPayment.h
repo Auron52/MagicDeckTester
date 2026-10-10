@@ -238,6 +238,10 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
 // (its node state still holds the cards Vial puts / suspend / channel remove first: `hand_exits`;
 // a Vial-put ETB Treasure maker's Treasure: `extra_wild`) from SameSubsetRevealSurcharge and the
 // sequential-payability retry, so the subset it prices is the order the apply realises.
+// MTG_PAYABLE_ORDER_RITUALS (default ON): ApplyPayableCastOrder (the apply form ONLY) also takes an
+// order holding a producing cast the walk credits (ritual / same-turn rock / spendable mint) -- an
+// unpayable ritual chain or an opaque set cast in hand order is rescued; the enumerator's ...At form
+// keeps the maker / reveal domain, so subset admission is unchanged.
 // See ManaPayment.cpp for the search order. MTG_PAYABLE_ORDER_STATS prints fire counts at exit.
 bool PayableOrderOn();
 void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& actions,

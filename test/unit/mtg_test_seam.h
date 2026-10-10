@@ -34,4 +34,7 @@ struct MtgTestSeam
     // variant carries (Action::rock_mana -- Search for Tomorrow hard-cast), consumed by the next
     // CastSpellFromHand onto StackEntry::land_put_credit.
     static void SetPendingLandPut(AIEngine& e, const ManaPool& credit) { e.m_pending_land_put = credit; }
+
+    // How many breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine.
+    static long long BpResolves(const AIEngine& e) { return e.m_bp_resolves; }
 };
