@@ -8736,6 +8736,161 @@ static int PendingAttackDamageImpl(const GameState& state)
     return dmg;
 }
 
+// ---- The attack a subset forfeits by TAPPING its own creatures (both consider() sites) ----------
+// A creature tapped this main phase is not a legal attacker (CR 508.1a), whatever tapped it. The
+// this-turn projection (`projected_atk`, the input to `wins`) credits PendingAttackDamage -- the
+// PRE-plan board's attack -- so every tap the plan makes has to come back out of it. Two taps did not:
+//
+// 1. MTG_ATTACK_TAP_NEED_EXACT -- the MANA tap's `need` was dead. AttackTapDiscount spends attacking
+//    creature mana sources against `need` = "the cost beyond what the non-creature pool covers", and
+//    the consider() sites passed pool_noncreature for that pool. But BuildNonCreaturePool is the pool
+//    for NONCREATURE SPELLS -- it drops only creature_mana_only sources (Ancient Ziggurat) and keeps
+//    every mana dork -- so `need` was <= 0 on any board whose dorks finish the payment, i.e. exactly
+//    when the discount matters. SelesnyaLifegain gi344 (seed 2346, d0) T8: Genesis Wave X=4 costs 7
+//    off Sanctuary 2 + Pathway 1 + Llanowar 1 + Archdruid 3, so need = 7 - 7 = 0 and both 2-power
+//    Elves stayed in the projected attack. The exact need is the cost beyond every source that is
+//    NOT an attacking creature mana source: supply - (their summed yield). The payer taps lands and
+//    rocks before creatures (ManaSourceRank's 64+ creature band), so that is what it really spends.
+//    Post-combat there is no attack left to lose (pending_atk is 0 there), so the loss is 0; the old
+//    read could drive projected_atk negative in a main 2.
+// 2. MTG_ATTACK_TAP_ABILITY_DISCOUNT -- a NON-MANA {T} activation in the same plan (Wellwisher's
+//    "{T}: You gain 1 life for each Elf") taps its creature too, and nothing subtracted it. Same game,
+//    discard-policy arm, T8, opponent at 2: the plan "Genesis Wave X=4 + Wellwisher" read as lethal
+//    (6 projected: the dead need above kept both Elves in, and nothing took Wellwisher out) while every
+//    creature that could attack was tapped -- the game was not won by the cap. With only (1) fixed it
+//    still reads 6 - 4 = 2 off Wellwisher's own 2 power. Exact, not additive: the board with the activated
+//    creatures TAPPED is re-projected through the same two functions (PendingAttackDamage,
+//    CollectAttackingManaSources), so battle cry / exalted / team pumps that depend on the attacker
+//    set, and a dork that is both activated and a mana source, all come out right. One copy per
+//    distinct activated SET per enumeration, memoised -- only subsets that activate an attacking
+//    creature's {T} ability ever pay for it.
+// Both DEFAULT ON; =0 restores the legacy projection byte-identically (both off == the old line).
+static bool AttackTapNeedExactEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_TAP_NEED_EXACT", true);   // DEFAULT ON; =0 legacy need
+    return heurarm::Flag(heurarm::ATTACK_TAP_NEED_EXACT, env_on);
+}
+static bool AttackTapAbilityDiscountEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_TAP_ABILITY_DISCOUNT", true);   // DEFAULT ON; =0 legacy
+    return heurarm::Flag(heurarm::ATTACK_TAP_ABILITY_DISCOUNT, env_on);
+}
+
+struct AttackTapCtx
+{
+    bool pre_combat  = false;
+    int  pending_atk = 0;
+    const std::vector<AttackingManaSource>* srcs = nullptr;   // the pre-plan board's (atk_mana_srcs)
+    int  src_yield   = 0;                                     // their summed per-tap yield
+    // Per candidate: the bit of the attacking creature its {T} ability taps, or -1.
+    std::vector<signed char> cand_bit;
+    std::vector<int>         bit_number;                      // bit -> that creature's card number
+    struct Entry
+    {
+        std::uint64_t mask = 0;
+        int pending = 0, yield = 0;
+        std::vector<AttackingManaSource> srcs;
+    };
+    std::vector<Entry> memo;
+};
+
+static int SumYield(const std::vector<AttackingManaSource>& srcs)
+{
+    int y = 0;
+    for (const AttackingManaSource& s : srcs) { y += s.yield; }
+    return y;
+}
+
+static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pending_atk,
+                              const std::vector<AttackingManaSource>& srcs,
+                              const std::vector<Action>& cands, AttackTapCtx& ctx)
+{
+    ctx.pre_combat  = is_pre_combat;
+    ctx.pending_atk = pending_atk;
+    ctx.srcs        = &srcs;
+    ctx.src_yield   = SumYield(srcs);
+    if (!is_pre_combat || pending_atk <= 0 || !AttackTapAbilityDiscountEnabled()) { return; }
+    const int active = state.active_player_index;
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
+        if (!PermAbilityTaps(a.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
+        const Permanent* src = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == active && p.card.m_number == a.sac_source_id) { src = &p; break; }
+        }
+        // Only a creature PendingAttackDamage counted can be lost from it -- the same two tests
+        // CollectAttackingManaSources applies.
+        if (src == nullptr || src->tapped || !src->card.IsCreature()) { continue; }
+        if (!CanAttackFull(*src, state.battlefield, active)) { continue; }
+        if (!ResolveProvider(state).AttackWith(state, *src)) { continue; }
+        int bit = -1;
+        for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+        { if (ctx.bit_number[b] == a.sac_source_id) { bit = b; break; } }
+        if (bit < 0)
+        {
+            if (ctx.bit_number.size() >= 64) { continue; }    // unreachable; dropping one only under-discounts
+            bit = static_cast<int>(ctx.bit_number.size());
+            ctx.bit_number.push_back(a.sac_source_id);
+        }
+        if (ctx.cand_bit.empty()) { ctx.cand_bit.assign(cands.size(), -1); }
+        ctx.cand_bit[j] = static_cast<signed char>(bit);
+    }
+}
+
+// The attack damage the subset loses to its own taps. `cost_mv` is the subset's combined mana value,
+// `supply_total` the pool it was judged payable from (the credited `eff` when credited), and
+// `legacy_nc_total` the pool_noncreature total the legacy need was computed against.
+static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::vector<int>& sel,
+                         int cost_mv, int supply_total, int legacy_nc_total)
+{
+    const bool need_exact = AttackTapNeedExactEnabled();
+    if (need_exact && !ctx.pre_combat) { return 0; }          // no attack left to lose
+    std::uint64_t mask = 0;
+    if (!ctx.cand_bit.empty())
+    {
+        for (int j : sel)
+        {
+            const int b = ctx.cand_bit[static_cast<size_t>(j)];
+            if (b >= 0) { mask |= std::uint64_t{1} << b; }
+        }
+    }
+    if (mask == 0)
+    {
+        const int need = need_exact ? cost_mv - (supply_total - ctx.src_yield)
+                                    : cost_mv - legacy_nc_total;
+        return AttackTapDiscount(*ctx.srcs, need);
+    }
+    const AttackTapCtx::Entry* e = nullptr;
+    for (const AttackTapCtx::Entry& m : ctx.memo) { if (m.mask == mask) { e = &m; break; } }
+    if (e == nullptr)
+    {
+        GameState t = state;
+        for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+        {
+            if (!(mask & (std::uint64_t{1} << b))) { continue; }
+            for (Permanent& p : t.battlefield)
+            {
+                if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
+                { p.tapped = true; break; }
+            }
+        }
+        AttackTapCtx::Entry ne;
+        ne.mask    = mask;
+        ne.pending = PendingAttackDamage(t);
+        ne.srcs    = CollectAttackingManaSources(t);
+        ne.yield   = SumYield(ne.srcs);
+        ctx.memo.push_back(std::move(ne));
+        e = &ctx.memo.back();
+    }
+    // The activated creatures are tapped on `t`, so they are out of its mana-source list too: a dork
+    // spent on its own ability pays nothing, and its share of `need` falls on the other attackers.
+    const int need = need_exact ? cost_mv - (supply_total - e->yield) : cost_mv - legacy_nc_total;
+    return (ctx.pending_atk - e->pending) + AttackTapDiscount(e->srcs, need);
+}
+
 // Pre-computed per-permanent on-cast trigger: damage dealt to the caster when they
 // cast a spell with MV <= max_mv (e.g. Eidolon of the Great Revel).
 struct TriggerSource
@@ -34276,6 +34431,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     g_search_candidate_enum = saved_sce;
     considerstats::Record("solve", is_pre_combat, cands, state);
     int n = static_cast<int>(ap.hand.size());
+    // The attack this subset forfeits to its own taps (mana AND non-mana {T} activations) -- see
+    // AttackTapLoss. Lockstep twin in EnumeratePlans.
+    AttackTapCtx atk_tap_ctx;
+    BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
 
     // Hinata combo: does any candidate float ritual mana (Reality Spasm / Irencrag)? Each Action's
     // gross float was stamped at enumeration (a.ritual_float), so this is a cheap scan -- no
@@ -35328,8 +35487,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // (see CollectAttackingManaSources). `need` = the mana this subset must draw from creature
         // sources, i.e. its cost beyond what the non-creature pool covers; zero whenever the lands
         // alone pay, so a deck that never taps creatures for mana is byte-identical.
-        const int atk_tap_need = combined.ManaValue() - pool_noncreature.Total();
-        const int atk_tap_lost = AttackTapDiscount(atk_mana_srcs, atk_tap_need);
+        // AttackTapLoss: the exact need (MTG_ATTACK_TAP_NEED_EXACT) and the subset's own non-mana
+        // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line.
+        const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, sel, combined.ManaValue(),
+                                               (credited ? eff : pool).Total(), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
@@ -46058,6 +46219,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // hand holds both an Aura and a creature -> byte-identical for every other deck/state.
     AppendCreatureTargetAuraCandidates(state, cands);
     int n = static_cast<int>(ap.hand.size());
+    // The attack this subset forfeits to its own taps -- see AttackTapLoss. Lockstep twin in Solve.
+    AttackTapCtx atk_tap_ctx;
+    BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
 
     // Lands in hand: the shared budget for additional discard costs (retrace, LE).
     int lands_in_hand = 0;
@@ -47883,8 +48047,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // (see CollectAttackingManaSources). `need` = the mana this subset must draw from creature
         // sources, i.e. its cost beyond what the non-creature pool covers; zero whenever the lands
         // alone pay, so a deck that never taps creatures for mana is byte-identical.
-        const int atk_tap_need = combined.ManaValue() - pool_noncreature.Total();
-        const int atk_tap_lost = AttackTapDiscount(atk_mana_srcs, atk_tap_need);
+        // AttackTapLoss: the exact need (MTG_ATTACK_TAP_NEED_EXACT) and the subset's own non-mana
+        // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line. Twin of Solve.
+        const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, sel, combined.ManaValue(),
+                                               (credited ? eff : pool).Total(), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;

@@ -394,6 +394,9 @@ enum Slot : int
     SELESNYA_ELF_WINDOW,      // MTG_SELESNYA_ELF_WINDOW   SelesnyaLifegain discard: an Elf castable within two turns (mana value <= the projected M2) is kept ABOVE the soft payoff(s) instead of shed as surplus past the mana target (an agent reading: the dearest kept payoff's cost, floor 5) (as first built it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     SELESNYA_ALCHEMIST_BURST, // MTG_SELESNYA_ALCHEMIST_BURST SelesnyaLifegain discard, USER 2026-10-10: "Accomplished Alchemist is more acceleration than payoff. However, it is a good keep with lifegain burst + something expensive like Genesis Wave." With the Alchemist, a LIFEGAIN card and Genesis Wave / a 6+ payoff in hand, the Alchemist is the first Elf and the burst fills LIFEGAIN 1. Default ON; =0 -> as first built
     GIANTS_ROCK_LIBRARY_LAND, // MTG_GIANTS_ROCK_LIBRARY_LAND Giants discard: a mana rock is "dead" only when no land is in play, in hand OR left in the library (a proposed amendment of the USER's "a rock with no land anywhere is blank" -- it shed Sol Ring on landless turn-2 hands with a Mountain on the next draw). Default OFF (the USER's rule as built) until the USER rules
+    COLOR_EXACT_SCALED,       // MTG_COLOR_EXACT_SCALED    the colour-exact subset gate (BuildColorFeasibility) no longer stands DOWN on a board holding an untapped scaled mana dork (Priest of Titania / Elvish Archdruid / Accomplished Alchemist) or a live Wirewood Lodge burst: those sources are credited UNBOUNDED supply in their own colours and the rest stays exact -- so a Karoo's {G}{W}, booked as two wild in the flat pool, can no longer read as {W}{W} (SelesnyaLifegain gi344: five turns of an unpayable Nykthos Paragon plan). Sound: it can only reject a subset the board provably cannot pay. Default ON; =0 -> the whole-test stand-down
+    ATTACK_TAP_NEED_EXACT,    // MTG_ATTACK_TAP_NEED_EXACT the attack-tap discount's mana `need` is the cost beyond every source that is NOT an attacking creature mana source (it used pool_noncreature, which keeps every mana dork, so the discount was dead whenever dorks finished the payment); 0 post-combat. Default ON; =0 -> the legacy need
+    ATTACK_TAP_ABILITY_DISCOUNT,// MTG_ATTACK_TAP_ABILITY_DISCOUNT a creature the plan taps for a NON-mana {T} ability (Wellwisher's lifegain) is not an attacker: the this-turn attack projection re-projects the board with those creatures tapped. Default ON; =0 -> not discounted
     COUNT
 };
 
@@ -749,6 +752,9 @@ inline const char* Name(int slot)
         "MTG_SELESNYA_ELF_WINDOW",
         "MTG_SELESNYA_ALCHEMIST_BURST",
         "MTG_GIANTS_ROCK_LIBRARY_LAND",
+        "MTG_COLOR_EXACT_SCALED",
+        "MTG_ATTACK_TAP_NEED_EXACT",
+        "MTG_ATTACK_TAP_ABILITY_DISCOUNT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

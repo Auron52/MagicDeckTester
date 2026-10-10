@@ -3545,11 +3545,37 @@ ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff)
     return c;
 }
 
+// MTG_COLOR_EXACT_SCALED (DEFAULT ON; =0 restores the whole-test stand-down below). A scaled mana
+// dork or a live Wirewood Lodge burst used to switch this gate OFF for the whole board, because their
+// yield can grow inside the plan (an Elf cast earlier raises Priest of Titania's count; a gain of life
+// raises Accomplished Alchemist's) and under-crediting supply is the one error that becomes a false
+// reject. But the stand-down threw away the exactness of every OTHER source with it -- and the flat
+// pool books a Karoo's fixed {G}{W} bundle as two WILD (AddSourceToPool), so on such a board nothing
+// was left to notice that one Selesnya Sanctuary is one {W}. SelesnyaLifegain gi344 (seed 2346, d0),
+// T4-T8: Sanctuary + Branchloft Pathway (G face) + Llanowar + Wellwisher + an untapped Elvish
+// Archdruid; flat pool {g5, wild2} "pays" Nykthos Paragon {4}{W}{W}, SubsetPayable's presence test
+// sees a {W} source, this gate stood down on the Archdruid -- so the d0 plan was "cast Paragon" five
+// turns running while the executor's payment (the backtracker's exact Karoo bundle) correctly refused
+// it and cast nothing. The yield of these sources has no ceiling we can bound, but its COLOURS are
+// fixed by the card ("Add {G} for each Elf"), so they are credited an UNBOUNDED count in their own
+// colours and the gate keeps running: strictly more supply than reality, so it can still only reject
+// what the board provably cannot pay -- here, a second {W} that only a Karoo's one {W} could make.
+// The scaled LAND (Three Tree City, a chosen colour) still stands the test down; no suite deck plays one.
+static bool ColorExactScaledEnabled()
+{
+    static const bool env_on = EnvOn("MTG_COLOR_EXACT_SCALED", true);   // DEFAULT ON; =0 stands down
+    return heurarm::Flag(heurarm::COLOR_EXACT_SCALED, env_on);
+}
+
 ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
                                        const Permanent* skip)
 {
     ColorFeasibility f;
     if (!ColorExactEnabled()) { return f; }
+    const bool scaled_exact = ColorExactScaledEnabled();
+    // Credit for a source whose yield the build cannot bound (see ColorExactScaledEnabled): larger than
+    // any reachable count, small enough that cover[]'s int sums cannot overflow.
+    constexpr int kUnboundedYield = 1 << 20;
     // A SCALED land (Three Tree City: "{2},{T}: add N of a chosen colour", N = creatures you control)
     // is the one conversion shape with no yield ceiling this model can bound -- ScaledManaNetYield
     // reports the NET over its basic {C} tap, not the gross, and under-crediting supply is the one
@@ -3563,12 +3589,13 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         if (d && IsScaledManaLand(*d)) { return f; }
         // Scaled mana DORK (Priest of Titania / Elvish Archdruid): its yield grows as elves cast
         // EARLIER IN THE SAME PLAN resolve, so the build-time credit can under-count supply -- the
-        // one error that turns into a false reject. Same stand-down as the scaled land.
-        if (d && IsScaledManaDork(*d)) { return f; }
+        // one error that turns into a false reject. Same stand-down as the scaled land -- unless
+        // MTG_COLOR_EXACT_SCALED credits it unbounded in its colours (the main walk below).
+        if (d && IsScaledManaDork(*d) && !scaled_exact) { return f; }
         // Untap-land with a live burst (Wirewood Lodge + a 2+ scaled Elf, incl. a TAPPED one this
         // loop's untapped-only walk would miss): converts {C}-class supply into feed-colour supply
-        // this model does not track -- same stand-down as the scaled shapes.
-        if (d && d->params.untap_creature_cost.has_value()
+        // this model does not track -- same stand-down as the scaled shapes (same exception).
+        if (d && d->params.untap_creature_cost.has_value() && !scaled_exact
             && UntapLandBurstNet(state, active, *d) > 0) { return f; }
     }
 
@@ -3638,6 +3665,35 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         // Gated exactly as BuildNonCreaturePool gates it, so the two stay consistent by construction.
         if (noncreature && def->params.colored_creature_only && CcoNoncreaturePoolEnabled())
         { continue; }
+        // MTG_COLOR_EXACT_SCALED: the sources the stand-down above no longer stands down for. Their
+        // yield is unbounded within the plan, their colours are not -- credit an unbounded count in
+        // their OWN colours (see ColorExactScaledEnabled). A scaled dork's colours are its produces
+        // (Priest / Archdruid {G}; Accomplished Alchemist all five, so it covers any pip, exactly as
+        // its "X mana of any one color" can). A live Lodge burst re-taps an Elf, so its extra supply is
+        // the FEED colour the untap costs and the Elf makes ({G}); its own "{T}: Add {C}" is generic.
+        if (scaled_exact)
+        {
+            int smask = -1;
+            if (IsScaledManaDork(*def))
+            {
+                smask = 0;
+                for (Color c : EffectiveProduces(state, active, *def))
+                {
+                    const int ci = static_cast<int>(c);
+                    if (ci >= 0 && ci < 5) { smask |= (1 << ci); }
+                }
+            }
+            else if (def->params.untap_creature_cost.has_value() && UntapLandBurstNet(state, active, *def) > 0)
+            {
+                const std::optional<Color> fc = UntapBurstFeedColor(*def);
+                smask = (fc && static_cast<int>(*fc) < 5) ? (1 << static_cast<int>(*fc)) : 0x1F;
+            }
+            if (smask >= 0)
+            {
+                add(smask, kUnboundedYield);
+                continue;
+            }
+        }
         // CONVERSION sources (Cascade Bluffs "{U/R},{T}: add two of U/R"; Izzet Signet / Ferrous Lake
         // "{1},{T}: add <produces>"). The flat pool books their NET (+1 wild, or {C} when unfed), which
         // no colour set can express -- but their COLOURS are still a hard bound (a Bluffs can never
