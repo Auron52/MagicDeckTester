@@ -596,6 +596,11 @@ public:
     // MTG_BRUNA_BUCKET_DISCARD=0 restores GenericProvider's max-MV fallback (the A/B hatch).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // Board-lethal short-circuit (MTG_BRUNA_LETHAL_SHORTCIRCUIT, default ON): when the board's attack
+    // already kills, attack without enumerating casts. Sound -- winning this turn is the minimum win
+    // turn -- and it stops a cast that taps an attacker (an Aura that taps its host, a dork paying for
+    // a cast) being ranked over a sure lethal by a projection that missed the tap.
+    bool UseLethalShortCircuit() const override;
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
