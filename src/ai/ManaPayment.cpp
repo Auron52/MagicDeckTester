@@ -3600,7 +3600,7 @@ static bool ColorExactScaledEnabled()
 }
 
 ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
-                                       const Permanent* skip)
+                                       const Permanent* skip, bool pending_auras)
 {
     ColorFeasibility f;
     if (!ColorExactEnabled()) { return f; }
@@ -3870,6 +3870,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     // exact test ON for boards where the flat pool is already exact -- a tightening, and the one
     // direction a pre-filter must never move in. Zero mask outside EDF -> byte-identical.
     int pend_units = 0;
+    if (!pending_auras) { return f; }
     if (const int pend_mask = PendingLandAuraColorMask(state, &pend_units))
     { add(pend_mask, pend_units); }
     return f;

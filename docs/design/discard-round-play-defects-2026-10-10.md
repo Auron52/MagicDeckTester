@@ -2,8 +2,9 @@
 
 Status: DEFERRED. Found while root-causing every game the USER's cleanup-discard designs made slower
 (the pooled A/B `logs/discard_impl/ab1` and the smoke / regression tiers at c658e3c2). In each case below
-the discard itself was correct or irrelevant; a pre-existing play defect decided the game. None is fixed:
-each changes play outside the discard and needs its own A/B. Investigation logs are under
+the discard itself was correct or irrelevant; a pre-existing play defect decided the game. Sections 3 and
+4 now have default-ON fixes behind their own levers (see their Status notes); the rest are not fixed.
+Each changes play outside the discard and needs its own A/B. Investigation logs are under
 `logs/discard_impl/rc/<deck>/` (gitignored, local to this checkout).
 
 The ritual-ordering executor defect (Dragonstorm, `MTG_PAYABLE_ORDER`'s domain) has its own doc:
@@ -65,11 +66,31 @@ the Gorge branch's projection (`DecisionProviders.cpp` ~33532) is not trial-veri
 route (~26830-26843). Also: the auto go-off count is sized as opponent life / Gorge damage (10, ~27039)
 and returns before the dig sizing that wanted 19; red was one-shot, so the Gorge fired once.
 
+**Status (2026-10-10): fixed behind two default-ON levers, pooled A/B owed.** Root cause of the ranking:
+the ComboRoute action carried no win in Solve at all (eval 999, no damage term) while every cast plan
+on a Gorge board PROJECTED a win, so any cast plan worth >= 1000 buried it. `MTG_SOLVE_VERIFIED_WIN`
+(TurnSolver.cpp, `route_win_j`): a plan holding the trial-WON route is a win, a verified win dominates a
+projected one, and the route is scored alone before the walk. The sizing: `MTG_EDF_GORGE_RED_SIZING`
+(DecisionProviders.cpp, `GorgeRedEachIteration`): the Gorge's life/damage count returns early only when
+the untap set renews a resource-free red source (Aether Hub's {E} red is one-shot); otherwise it is a
+floor under the drain / exile / draw-land sizing. gi 671: 8 -> 6 (either lever alone gives 6).
+
 ## 4. EldraziDisplacerFlicker, depth 0: three-turn freeze
 
 A/B gi 1261 (seed 218462): the policy arm casts nothing on turns 6-8 although Fertile Ground and Cloud of
 Faeries are castable; the generic arm froze the same way on turns 4-5. A fixture of the real turn-6 board
 freezes with either hand. Which guard picks the empty plan was not found.
+
+**Status (2026-10-10): root-caused and fixed behind `MTG_SOLVE_PENDING_AURA_EXACT` (default ON), pooled
+A/B owed.** The plan was not empty: Solve chose {Eldrazi Displacer} ({2}{W}, eval 300) on a board with no
+white source (Aether Hub without energy, Mariposa, Kitchen). The flat pool counts the Kitchen dual as
+`wild`, and both colour gates (ComputeAvailableColors, BuildColorFeasibility) are widened by every land
+Aura still in HAND (PendingLandAuraColorMask) -- the Fertile Ground made {W} "available" to a subset
+that never casts it. EnumeratePlans can afford that over-admission (a rollout replays the plan); Solve
+cannot (its pick is executed), so the executor failed to pay and cast nothing, every turn. The lever
+re-asks both gates without the in-hand credit and rejects a failing subset unless it casts a land Aura
+and passes the real payer (SubsetPayableWithFilters). gi 1261: 9 (loss) -> 6; generic arm 8 -> 6.
+It is generic Solve code, so it also touches Bruna and Fungus (Wild Growth).
 
 ## 5. Search: tied win turns are broken by scan order
 
