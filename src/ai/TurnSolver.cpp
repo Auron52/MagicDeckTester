@@ -45461,22 +45461,57 @@ inline bool SeqAuraOrderingEnabled()
     return true;
 }
 
+// MTG_AURA_RESTRICTED_NEW_CREATURE (heurarm AURA_RESTRICTED_NEW_CREATURE, DEFAULT ON; =0 -> the hand-creature
+// arm of AppendSequencedAuraCandidates below is never enumerated, byte-identical to before it existed).
+// docs/design/auras-same-turn-restricted-aura-gap.md: "cast Slippery Bogle, cast Ethereal Armor on it, cast
+// Daybreak Coronet on it" is rules-legal (the Armor makes the Bogle "a creature with another Aura attached",
+// CR 303.4a / 601.2c, checked again as the Coronet resolves, CR 608.2b) but neither injector offered the
+// third cast: the sequencing arm iterated battlefield creatures only and the new-creature injector skips
+// restricted Auras. Also gates the cast-ORDERING search's enabler-first guard
+// (OrderingPlacesRestrictedAuraBeforeEnabler), so =0 stays byte-identical there too.
+inline bool AuraRestrictedNewCreatureEnabled()
+{
+    static const bool env = EnvOn("MTG_AURA_RESTRICTED_NEW_CREATURE", true);
+    return heurarm::Flag(heurarm::AURA_RESTRICTED_NEW_CREATURE, env);
+}
+
 // (1) For each restricted aura in hand, inject a cast candidate targeting each controlled creature that
 // is NOT frozen-legal but could be ENABLED by another aura cast this turn. Mirrors CollectActions' aura
 // Action exactly (same hand_index -> joins that card's mutually-exclusive group). Bounded: only fires
 // when the hand holds >= 2 auras (a restricted one + a separate enabler).
+// (1b) ...and each CREATURE IN HAND (by its stable m_number, the way AppendCreatureTargetAuraCandidates
+// targets one): the creature is cast first (CastOrderRank 10), a PLAIN Aura of the same plan enchants it,
+// then the restricted Aura does (MTG_AURA_RESTRICTED_NEW_CREATURE). Offered only while the hand also holds
+// a plain creature Aura -- the only enabler a creature cast this turn can have, since a restricted Aura is
+// never frozen-legal on it -- and only with AppendCreatureTargetAuraCandidates' machinery live, because
+// SubsetHasAuraOnUncastCreature (the subset must cast that creature) and IsAuraOnNewCreature's apply sort
+// (the Auras resolve after it) are what make the injected cast sound; SubsetHasUnenabledRestrictedAura
+// demands the enabler on the SAME number and the enabler-first sort puts it ahead. Bounded by restricted
+// Auras x hand creatures.
 static void AppendSequencedAuraCandidates(const GameState& state, std::vector<Action>& cands)
 {
     if (!SeqAuraOrderingEnabled()) { return; }
     const Player& ap    = state.ActivePlayer();
     const int     active = state.active_player_index;
     int aura_count = 0;
+    bool plain_creature_aura = false;   // (1b): a plain creature Aura in hand -- the enabler
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d && d->params.is_aura) { ++aura_count; }
+        if (d && d->params.is_aura && !d->params.is_land_aura && d->params.aura_enchant_requires.empty())
+        { plain_creature_aura = true; }
     }
     if (aura_count < 2) { return; }   // need a restricted aura AND a separate enabler aura in hand
+    std::vector<int> hand_creatures;  // (1b): hand indices of creatures (stable m_number > 0)
+    if (plain_creature_aura && AuraOnNewCreatureEnabled() && AuraRestrictedNewCreatureEnabled())
+    {
+        for (size_t i = 0; i < ap.hand.size(); ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            if (d && d->card.IsCreature() && ap.hand[i].m_number > 0) { hand_creatures.push_back(static_cast<int>(i)); }
+        }
+    }
 
     for (size_t i = 0; i < ap.hand.size(); ++i)
     {
@@ -45484,13 +45519,8 @@ static void AppendSequencedAuraCandidates(const GameState& state, std::vector<Ac
         if (!def || !def->params.is_aura) { continue; }
         if (def->params.aura_enchant_requires != "another_aura"
             && def->params.aura_enchant_requires != "modified") { continue; }
-        const std::vector<int> frozen = LegalEnchantTargets(state, active, def->params);
-        for (const Permanent& p : state.battlefield)
+        auto inject = [&](int num)
         {
-            if (p.controller_index != active || !p.card.IsCreature()) { continue; }
-            const int num = p.card.m_number;
-            if (num <= 0) { continue; }
-            if (std::find(frozen.begin(), frozen.end(), num) != frozen.end()) { continue; }  // already legal
             Action a;
             a.kind           = Action::Kind::CastFromHand;
             a.card_name      = ap.hand[i].m_name;
@@ -45501,7 +45531,17 @@ static void AppendSequencedAuraCandidates(const GameState& state, std::vector<Ac
             a.card_mv        = def->card.m_mana_cost.ManaValue();
             a.enchant_target = num;
             cands.push_back(std::move(a));
+        };
+        const std::vector<int> frozen = LegalEnchantTargets(state, active, def->params);
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || !p.card.IsCreature()) { continue; }
+            const int num = p.card.m_number;
+            if (num <= 0) { continue; }
+            if (std::find(frozen.begin(), frozen.end(), num) != frozen.end()) { continue; }  // already legal
+            inject(num);
         }
+        for (int ci : hand_creatures) { inject(ap.hand[static_cast<size_t>(ci)].m_number); }   // (1b)
     }
 }
 
@@ -45562,8 +45602,12 @@ static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
 // battlefield. The frozen-snapshot LegalEnchantTargets misses this (the creature isn't in play at start
 // of phase), so a just-cast creature could never carry a same-turn Aura -- and with NO prior creature the
 // Aura was entirely uncastable. Default on; MTG_LEGACY_NO_AURA_NEW_CREATURE reverts (byte-identical:
-// injects nothing). Restricted Auras (another_aura/modified) are OUT of scope here -- a fresh creature
-// satisfies those only via other same-turn casts, which the aura-aura sequencing already models.
+// injects nothing). Restricted Auras (another_aura/modified) are not injected HERE: a fresh creature
+// satisfies those only once a plain Aura of the same plan is on it, so they are offered by the
+// sequencing injector's hand-creature arm (AppendSequencedAuraCandidates (1b),
+// MTG_AURA_RESTRICTED_NEW_CREATURE), which leans on this injector's reject and apply sort. (Until
+// 2026-10-10 this note claimed the aura-aura sequencing already modelled the case; it iterated
+// battlefield creatures only, so neither injector did -- docs/design/auras-same-turn-restricted-aura-gap.md.)
 inline bool AuraOnNewCreatureEnabled()
 {
     static const bool s_off = EnvOn("MTG_LEGACY_NO_AURA_NEW_CREATURE");
@@ -45589,7 +45633,7 @@ static void AppendCreatureTargetAuraCandidates(const GameState& state, std::vect
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (!def || !def->params.is_aura) { continue; }
-        if (!def->params.aura_enchant_requires.empty()) { continue; }   // plain auras only (see note above)
+        if (!def->params.aura_enchant_requires.empty()) { continue; }   // plain auras only (restricted: (1b) above)
         // "Enchant LAND" auras are is_aura too, and they must never reach this injector: its whole
         // job is to offer an aura onto a creature being cast in the same plan, which for Wild Growth
         // / Fertile Ground / Overgrowth / Trace of Abundance is an illegal target class (CR 303.4).
@@ -45661,7 +45705,8 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
 
 // True iff `a` is an Aura cast whose target creature is NOT on the battlefield (frozen) -- i.e. a
 // creature cast THIS turn. Such an Aura must resolve AFTER its target, so it is stable-sorted to the end
-// of plan.actions (the apply honours plan-action order here). Plain Auras only (the injector's scope).
+// of plan.actions (the apply honours plan-action order here). Plain Auras, and -- since
+// MTG_AURA_RESTRICTED_NEW_CREATURE -- a restricted one riding a plain Aura onto the same new creature.
 static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
@@ -45706,6 +45751,27 @@ static bool OrderingPlacesAuraBeforeCreature(const GameState& state, const std::
         const CardDefinition* cd = CardDatabase::Instance().Lookup(a.card_name);
         if (cd && cd->card.IsCreature() && a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
         { cast_nums.insert(ap.hand[a.hand_index].m_number); }
+    }
+    return false;
+}
+
+// True iff `acts` (in order) casts a CONDITIONAL restricted Aura (IsConditionalRestrictedAura: its target is
+// not legal on the frozen board) before any other Aura of the ordering has been cast onto that same creature.
+// Such an ordering is illegal (CR 601.2c: Daybreak Coronet needs "another Aura attached" as it is cast), and
+// the apply does not re-check the Enchant restriction, so it would attach anyway. The canonical plan order is
+// enabler-first by construction; only the cast-ORDERING search (human play / claude-play) can produce this.
+// Gated with MTG_AURA_RESTRICTED_NEW_CREATURE, whose hand-creature candidates are the main new source of
+// such orderings (a creature in play had the same exposure).
+static bool OrderingPlacesRestrictedAuraBeforeEnabler(const GameState& state, const std::vector<Action>& acts)
+{
+    std::vector<int> dressed;   // targets an Aura of this ordering has already enchanted
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
+        if (IsConditionalRestrictedAura(state, a)
+            && std::find(dressed.begin(), dressed.end(), a.enchant_target) == dressed.end()) { return true; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+        if (d != nullptr && d->params.is_aura && !d->params.is_land_aura) { dressed.push_back(a.enchant_target); }
     }
     return false;
 }
@@ -45983,9 +46049,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // later phase). The subset machinery below reads the per-Action valuation scalars.
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     considerstats::Record("enum", is_pre_combat, cands, state);
-    // Human-play only: inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature
-    // that an Ethereal Armor cast this same turn will enable) so the viewer can play within-turn-dependent
-    // aura lines. No-op in the autonomous search (HumanPlayActive() false) -> byte-identical.
+    // Inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature that an Ethereal
+    // Armor cast this same turn will enable) -- on a creature in play, and on a creature in HAND the plan
+    // also casts (MTG_AURA_RESTRICTED_NEW_CREATURE). Autonomous default since increment 2(a)
+    // (SeqAuraOrderingEnabled); no restricted aura in hand -> injects nothing -> byte-identical.
     AppendSequencedAuraCandidates(state, cands);
     // Also: a plain Aura targeting a creature CAST this same turn (its stable number). No-op unless the
     // hand holds both an Aura and a creature -> byte-identical for every other deck/state.
@@ -47961,8 +48028,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         // An Aura targeting a creature CAST this turn must resolve after that creature (the apply honours
         // plan-action order), so stable-sort such Auras to the end (key 1 vs 0). No-op unless the injector
-        // added one -> byte-identical otherwise. Both this and the sort above key plain-vs-conditional
-        // disjointly (an injected Aura is plain), so they compose.
+        // added one -> byte-identical otherwise. The two sorts compose: the sort above leaves every
+        // conditional restricted Aura after its enabler, and this one is stable, so on a creature cast
+        // this turn the order comes out creature -> plain enabler -> restricted Aura
+        // (MTG_AURA_RESTRICTED_NEW_CREATURE puts both Auras in key 1 here, the enabler first), and on a
+        // creature in play the enabler and its restricted Aura both stay key 0, in the order above.
         // Same argument as the sort above (see its note): no candidate with enchant_target > 0 means
         // IsAuraOnNewCreature is false for every action, so the sort cannot reorder anything.
         // `fill_action` is covered: it is always a copy of some cands[j] whose X / face damage
@@ -49798,6 +49868,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // Drop an ordering that casts an Aura on a this-turn creature BEFORE that creature (it would
             // mis-attach to an existing creature). No-op unless such an Aura+creature line is present.
             if (AuraOnNewCreatureEnabled() && OrderingPlacesAuraBeforeCreature(state, cand.actions)) { continue; }
+            // ...or a restricted Aura on a not-yet-legal creature before its enabler Aura (same fallback below).
+            if (AuraRestrictedNewCreatureEnabled() && OrderingPlacesRestrictedAuraBeforeEnabler(state, cand.actions))
+            { continue; }
 
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
             std::vector<std::string> dropped;
