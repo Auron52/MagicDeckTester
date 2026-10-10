@@ -412,6 +412,8 @@ enum Slot : int
     PAYABLE_ORDER_EXACT,      // MTG_PAYABLE_ORDER_EXACT MTG_PAYABLE_ORDER's apply site judges a PRODUCER-domain order (ritual float / same-turn rock, no maker or reveal cast) with the exact order walk for EVERY deck, not only a provider opting in via ExactOrderWalk(): the plain walk ignores a cast cap (Irencrag Feat -> "only one more spell", hinata d0 gi1427 T6) and pays a generic pip off an any-colour land a later cast needed (Sol Ring's {1} vs Gamble's {R}, hinata d0 gi1680 T7), so it permuted payable orders away. Default ON; =0 -> plain walk outside Dragonstorm
     PAYABLE_ORDER_DYNAMIC_DECLINE, // MTG_PAYABLE_ORDER_DYNAMIC_DECLINE MTG_PAYABLE_ORDER keeps an order holding a cast with a live DYNAMIC per-target discount (Hinata, Dawn-Crowned; Soulfire) as given -- its stamped cost is only right at the position the enumeration gave it -- the rule LadderProjectable already applies. Both sites. Default ON; =0 -> walked like any other order
     DRAGONSTORM_IRENCRAG_CLOSER, // MTG_DRAGONSTORM_IRENCRAG_CLOSER (USER order, rule 7) Irencrag Feat needs a CLOSER (Dragonstorm or a Dragon) after it: a Dragonstorm subset holding the restrictor, no closer and no Apex is refused, and the post-Apex merge does not cast a LEFTOVER Irencrag that no closer follows and no Apex precedes (it stays in hand) -- dragonstorm d0 s7000035 T5 cast it alone after an empty continuation. A subset WITH an Apex stays admitted (its exile may bring the closer: s8500074). Shared reader DragonstormIrencragCloserOn (EngineFlags.h). Default ON; =0 -> cast as before
+    ATTACK_DOMAIN_DORK_YIELD, // MTG_ATTACK_DOMAIN_DORK_YIELD the attack-tap projection credits a DOMAIN mana dork (Faeburrow Elder / Bloom Tender) with the pool's own per-tap yield, one mana per colour among our permanents (DomainColors), not PermanentManaYield's static 1 -- which made the exact need ~4 too small and a cheaper plan that really taps Faeburrow read as lethal (FiveColour d0). Default ON; =0 -> the static yield
+    ATTACK_TAP_ASTROLABE_CREDIT,// MTG_ATTACK_TAP_ASTROLABE_CREDIT the attack-tap exact need counts supply as the pool total MINUS its phantom conversion units (a fed Arcum's Astrolabe: {1},{T} -> one mana of any colour is a colour conversion, not new mana), so a {S} that only an attacking Boreal Druid can pay charges the Druid (Snow d0 gi1384). Default ON; =0 -> the raw total
     COUNT
 };
 
@@ -785,6 +787,8 @@ inline const char* Name(int slot)
         "MTG_PAYABLE_ORDER_EXACT",
         "MTG_PAYABLE_ORDER_DYNAMIC_DECLINE",
         "MTG_DRAGONSTORM_IRENCRAG_CLOSER",
+        "MTG_ATTACK_DOMAIN_DORK_YIELD",
+        "MTG_ATTACK_TAP_ASTROLABE_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

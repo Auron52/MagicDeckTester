@@ -7901,6 +7901,26 @@ static bool PendingFilterInHand(const GameState& state)
 // order a competent payment spends them (cover the cost losing as little combat damage as possible),
 // so the discount stays the smallest honest one rather than a worst case.
 struct AttackingManaSource { int power; int yield; };
+
+// MTG_ATTACK_DOMAIN_DORK_YIELD -- a DOMAIN dork's yield is the pool's, not the card's static amount.
+// PermanentManaYield returns ManaProducedPerTap = 1 for Faeburrow Elder / Bloom Tender, but the pool
+// they feed (AddSourceToPool: `if (def.params.domain_mana) amt = prod.size()`) credits one mana per
+// colour among our permanents -- up to 5. The exact need (MTG_ATTACK_TAP_NEED_EXACT) is
+// cost - (supply - sum of attacking-source yields): `supply` held Faeburrow's 5 and the yield sum only
+// its 1, so 4 of its mana read as NON-attacker supply and the need came out 4 too small. A cheaper
+// plan that really taps Faeburrow (5 power) then projected no tap at all and read as lethal, and d0
+// ranks a projected win above everything (FiveColour, the ab3 slower games; emulated with
+// produces_amount 5 in cards.json: -47 turns on the ab3 seeds, -201 on 6000 held-out). This applies
+// the pool's own rule: DomainColors(state, active).size(), the same list EffectiveProduces returns for
+// a domain source, plus a land aura's share exactly as PermanentManaYield folds it (0 on a creature).
+// Only FiveColour has domain dorks, so every other deck is byte-identical. Default ON; =0 -> the
+// static yield.
+static bool AttackDomainDorkYieldEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_DOMAIN_DORK_YIELD", true);   // DEFAULT ON; =0 static yield
+    return heurarm::Flag(heurarm::ATTACK_DOMAIN_DORK_YIELD, env_on);
+}
+
 static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameState& state)
 {
     std::vector<AttackingManaSource> out;
@@ -7952,7 +7972,9 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
             }
         }
 
-        const int y = PermanentManaYield(state, p, *def);
+        int y = PermanentManaYield(state, p, *def);
+        if (def->params.domain_mana && AttackDomainDorkYieldEnabled())
+        { y = static_cast<int>(DomainColors(state, active).size()) + LandAuraBonus(state, p); }
         out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def) });
     }
     std::sort(out.begin(), out.end(),
@@ -8221,6 +8243,22 @@ static bool AttackTapAbilityDiscountEnabled()
     static const bool env_on = EnvOn("MTG_ATTACK_TAP_ABILITY_DISCOUNT", true);   // DEFAULT ON; =0 legacy
     return heurarm::Flag(heurarm::ATTACK_TAP_ABILITY_DISCOUNT, env_on);
 }
+// 3. MTG_ATTACK_TAP_ASTROLABE_CREDIT -- the exact need's `supply` was the pool's raw Total(), which
+//    counts a fed Arcum's Astrolabe ("{1}, {T}: Add one mana of any color", no free mode) as one more
+//    unit. It is not one: it CONVERTS a unit another source already supplied (AddSourceToPool tags it
+//    ManaPool::wild_phantom for exactly that reason, and CanPayFlat's amount precheck already takes it
+//    back out). Left in, it covers one unit of need that only an attacking creature can really pay.
+//    Snow d0 gi1384 (seed 1551385) T5, opponent at 11: after Coldsteel Heart + the Scrying Sheets look,
+//    the re-solve's {Frost Augur look} ({S}) read `supply 2 (phantom 1), attacking yield 1` -> need
+//    1 - (2 - 1) = 0, so only Augur's own 1 power came off and it projected 12 - 1 = 11, lethal; the
+//    only real untapped source was Boreal Druid, which paid the {S} and could not attack -> 10, a turn
+//    lost. Supply is now Total() - min(wild_phantom, wild), CanPayFlat's own amount. Default ON; =0
+//    restores the raw total.
+static bool AttackTapAstrolabeCreditEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_TAP_ASTROLABE_CREDIT", true);   // DEFAULT ON; =0 raw total
+    return heurarm::Flag(heurarm::ATTACK_TAP_ASTROLABE_CREDIT, env_on);
+}
 
 struct AttackTapCtx
 {
@@ -8287,13 +8325,16 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
 }
 
 // The attack damage the subset loses to its own taps. `cost_mv` is the subset's combined mana value,
-// `supply_total` the pool it was judged payable from (the credited `eff` when credited), and
+// `supply` the pool it was judged payable from (the credited `eff` when credited), and
 // `legacy_nc_total` the pool_noncreature total the legacy need was computed against.
 static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::vector<int>& sel,
-                         int cost_mv, int supply_total, int legacy_nc_total)
+                         int cost_mv, const ManaPool& supply, int legacy_nc_total)
 {
     const bool need_exact = AttackTapNeedExactEnabled();
     if (need_exact && !ctx.pre_combat) { return 0; }          // no attack left to lose
+    // MTG_ATTACK_TAP_ASTROLABE_CREDIT: a phantom conversion unit is not supply (see the lever).
+    const int supply_total = supply.Total()
+        - (AttackTapAstrolabeCreditEnabled() ? std::min(supply.wild_phantom, supply.wild) : 0);
     std::uint64_t mask = 0;
     if (!ctx.cand_bit.empty())
     {
@@ -34494,7 +34535,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // AttackTapLoss: the exact need (MTG_ATTACK_TAP_NEED_EXACT) and the subset's own non-mana
         // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line.
         const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, sel, combined.ManaValue(),
-                                               (credited ? eff : pool).Total(), pool_noncreature.Total());
+                                               (credited ? eff : pool), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
@@ -46867,7 +46908,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // AttackTapLoss: the exact need (MTG_ATTACK_TAP_NEED_EXACT) and the subset's own non-mana
         // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line. Twin of Solve.
         const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, sel, combined.ManaValue(),
-                                               (credited ? eff : pool).Total(), pool_noncreature.Total());
+                                               (credited ? eff : pool), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
