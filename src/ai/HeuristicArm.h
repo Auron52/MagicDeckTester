@@ -386,6 +386,10 @@ enum Slot : int
     WK_BUCKET_DISCARD,        // MTG_WK_BUCKET_DISCARD        WhiteKnights (its extras over the Knights rule): the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     SELESNYA_BUCKET_DISCARD,  // MTG_SELESNYA_BUCKET_DISCARD  SelesnyaLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     CG_DOTH_LAST,             // MTG_CG_DOTH_LAST             Creature Giving, under MTG_CG_BUCKET_DISCARD=0 only: the 2026-08-06 patch ranking every Defense of the Heart last. Default ON; =0 with the buckets off -> the generic max-MV ranking (the USER's three-arm A/B: generic / patch / buckets)
+    DISCARD_DIST_MODEL,       // MTG_DISCARD_DIST_MODEL       the shared distance-to-castable model for the USER discard buckets (docs/design/discard-distance-model.md; USER 2026-10-10: "it makes sense to have a smarter model"): P(castable by turn t) from the library's land / colour counts, kept land drops and the board, discounted per turn. Default ON; =0 -> each deck's previous proxy
+    GIANTS_TUTOR_WIDTH,       // MTG_GIANTS_TUTOR_WIDTH       Giants: TutorSearchWidth 7 -- the deck holds 7 distinct Giant names for Giant Harbinger against the base width 6, so one name was unreachable per game (coverage, recorded in analysis-Pirates.md). Default ON; =0 -> the base 6
+    GOBLIN_TUTOR_VIAL_EXACT,  // MTG_GOBLIN_TUTOR_VIAL_EXACT  Goblins: the searched-tutor ranking credits an Aether Vial put only at mana value == charge (the card's rule; charge never falls), not <= charge. Default ON; =0 -> the old <= estimate
+    AURA_RESTRICTED_NEW_CREATURE,// MTG_AURA_RESTRICTED_NEW_CREATURE a restricted Aura (Daybreak Coronet / Lion Umbra) is offered onto a creature cast the SAME turn, enabled by a plain Aura cast on it first (docs/design/auras-same-turn-restricted-aura-gap.md). Default ON; =0 -> never enumerated
     COUNT
 };
 
@@ -733,6 +737,10 @@ inline const char* Name(int slot)
         "MTG_WK_BUCKET_DISCARD",
         "MTG_SELESNYA_BUCKET_DISCARD",
         "MTG_CG_DOTH_LAST",
+        "MTG_DISCARD_DIST_MODEL",
+        "MTG_GIANTS_TUTOR_WIDTH",
+        "MTG_GOBLIN_TUTOR_VIAL_EXACT",
+        "MTG_AURA_RESTRICTED_NEW_CREATURE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

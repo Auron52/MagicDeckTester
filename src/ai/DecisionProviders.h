@@ -14,6 +14,9 @@
 #include "HeuristicArm.h"   // per-job A/B levers read inline by the provider hooks below
 #include "../core/EnvFlags.h"   // EnvOn -- the env_default half of a per-job lever
 
+#include <array>
+#include <vector>
+
 struct Decklist;
 
 // Standing unpruned-vs-pruned A/B switch (MTG_UNPRUNED). When set, every
@@ -174,6 +177,48 @@ class DecisionProvider;
 std::string TakeTutorProofSet();
 std::vector<std::string> RankedTutorCandidates(const DecisionProvider& prov, const GameState& s,
                                                int controller, const CardParams& pp);
+
+// ---- discard_dist: the shared distance-to-castable model for the cleanup-discard buckets ----------
+// docs/design/discard-distance-model.md. USER 2026-10-10: "For Distance to castable I think it makes
+// sense to have a smarter model if we can." Replaces the fixed P(play)-by-sources-short table (1.0 / 0.70
+// / 0.35 / 0.10 / 0.03) with: the board's mana, the KEPT hand lands played one per turn, and lands drawn
+// from the library at its actual land / colour density (counts only -- never order), discounted per turn
+// of delay. A deck combines the factor with its own value: EV = CastFactor x value.
+namespace discard_dist
+{
+constexpr int    kHorizon = 4;      // our next 4 turns: draw 1, then at most one land drop, each
+constexpr double kGamma   = 0.75;   // value kept per turn of delay (a goldfish deck closes on T4-6)
+
+// The board and library, read once per CleanupDiscardCandidates call. Colours are W U B R G (Color order).
+struct Census
+{
+    int board_mana = 0;                 // next turn: lands + mana rocks + mana creatures we control
+    std::array<int, 5> board_src{};     // per colour: how many of those can make it (a dual counts for both)
+    int lib_n = 0, lib_lands = 0;       // library size and lands in it
+    std::array<int, 5> lib_src{};       // per colour: library lands that can make it
+};
+Census BuildCensus(const GameState& s, int me);
+
+// One kept hand land: what it adds the turn after it is played (the same turn unless it enters tapped).
+struct LandDrop { int mana = 1; unsigned colours = 0; bool tapped = false; };
+LandDrop LandDropOf(const CardDefinition* d);
+
+// P(X >= k), X ~ Hypergeometric(population N, K successes, n draws). Fixed-order products of small
+// integer ratios: bit-identical on every platform (no std::pow / lgamma -- the Windows parity rule).
+double HyperAtLeast(int N, int K, int n, int k);
+
+// P(castable by our t-th next turn), t = 1..kHorizon, monotone. `mana` is the cost AFTER the caller's
+// reductions (and cumulative for a duplicate); `pips` its coloured pips (W U B R G); `kept` the hand
+// lands the bucket rule keeps; `extra[t-1]` mana the caller adds by turn t (a dork it will cast, ...).
+std::array<double, kHorizon> CastProbByTurn(const Census& c, int mana, const std::array<int, 5>& pips,
+                                            const std::vector<LandDrop>& kept,
+                                            const std::array<int, kHorizon>* extra = nullptr);
+// sum_t (P(t) - P(t-1)) x kGamma^(t-1), plus a floor of 0.02 x kGamma^kHorizon for the stranded mass.
+double CastFactor(const std::array<double, kHorizon>& p_by_turn);
+// Convenience: the factor for a card at its printed cost (or `mana_override` >= 0 after reductions).
+double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector<LandDrop>& kept,
+                     int mana_override = -1, const std::array<int, kHorizon>* extra = nullptr);
+}   // namespace discard_dist
 
 class GenericProvider : public DecisionProvider
 {

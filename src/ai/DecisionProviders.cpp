@@ -824,6 +824,156 @@ static std::vector<int> CleanupDiscardRankingCounted(const GameState& s,
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- discard_dist: the shared distance-to-castable model -------------------------------------------
+// docs/design/discard-distance-model.md; the API and its approximations are documented in
+// DecisionProviders.h. Used by the USER-settled discard buckets behind MTG_DISCARD_DIST_MODEL.
+namespace discard_dist
+{
+double HyperAtLeast(int N, int K, int n, int k)
+{
+    if (k <= 0) { return 1.0; }
+    if (N <= 0 || K <= 0 || n <= 0) { return 0.0; }
+    n = std::min(n, N);
+    K = std::min(K, N);
+    if (k > std::min(n, K)) { return 0.0; }
+    auto choose = [](int a, int b) -> double
+    {
+        if (b < 0 || b > a) { return 0.0; }
+        double r = 1.0;
+        for (int i = 1; i <= b; ++i) { r = r * static_cast<double>(a - b + i) / static_cast<double>(i); }
+        return r;
+    };
+    double hits = 0.0;
+    for (int x = k; x <= std::min(n, K); ++x) { hits += choose(K, x) * choose(N - K, n - x); }
+    return std::min(1.0, hits / choose(N, n));
+}
+
+static unsigned ColourBits(const CardDefinition* d)
+{
+    unsigned bits = 0;
+    if (d == nullptr) { return 0; }
+    for (Color c : d->params.produces)
+    { if (c != Color::Colorless) { bits |= 1u << static_cast<int>(c); } }
+    return bits;
+}
+
+LandDrop LandDropOf(const CardDefinition* d)
+{
+    LandDrop ld;
+    if (d == nullptr) { return ld; }
+    ld.mana    = std::max(1, d->params.produces_amount);
+    ld.colours = ColourBits(d);
+    ld.tapped  = d->params.enters_tapped;
+    return ld;
+}
+
+Census BuildCensus(const GameState& s, int me)
+{
+    Census c;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const bool land = p.card.IsLand();
+        if (!land && !d->params.mana_rock && d->tmpl != CardTemplate::ManaDork) { continue; }
+        c.board_mana += std::max(1, d->params.produces_amount);
+        const unsigned bits = ColourBits(d);
+        for (int k = 0; k < 5; ++k) { if (bits & (1u << k)) { ++c.board_src[static_cast<std::size_t>(k)]; } }
+    }
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    c.lib_n = static_cast<int>(pl.library.size());
+    for (const Card& lc : pl.library)
+    {
+        if (!CleanupDiscardIsLand(lc)) { continue; }
+        ++c.lib_lands;
+        const unsigned bits = ColourBits(CardDatabase::Instance().LookupCached(lc));
+        for (int k = 0; k < 5; ++k) { if (bits & (1u << k)) { ++c.lib_src[static_cast<std::size_t>(k)]; } }
+    }
+    return c;
+}
+
+std::array<double, kHorizon> CastProbByTurn(const Census& c, int mana, const std::array<int, 5>& pips,
+                                            const std::vector<LandDrop>& kept,
+                                            const std::array<int, kHorizon>* extra)
+{
+    // Kept lands are played best-first FOR THIS QUERY: a land supplying a colour the board is short of,
+    // then an untapped one, then the most mana. At most kHorizon of them matter.
+    unsigned short_bits = 0;
+    for (int k = 0; k < 5; ++k)
+    {
+        if (pips[static_cast<std::size_t>(k)] > c.board_src[static_cast<std::size_t>(k)]) { short_bits |= 1u << k; }
+    }
+    std::array<LandDrop, kHorizon> drop{};
+    int h = 0;
+    {
+        std::vector<char> used(kept.size(), 0);
+        for (; h < kHorizon && h < static_cast<int>(kept.size()); ++h)
+        {
+            int best = -1;
+            for (std::size_t i = 0; i < kept.size(); ++i)
+            {
+                if (used[i]) { continue; }
+                if (best < 0) { best = static_cast<int>(i); continue; }
+                const LandDrop& a = kept[i];
+                const LandDrop& b = kept[static_cast<std::size_t>(best)];
+                const bool ha = (a.colours & short_bits) != 0, hb = (b.colours & short_bits) != 0;
+                if (ha != hb) { if (ha) { best = static_cast<int>(i); } continue; }
+                if (a.tapped != b.tapped) { if (!a.tapped) { best = static_cast<int>(i); } continue; }
+                if (a.mana > b.mana) { best = static_cast<int>(i); }
+            }
+            used[static_cast<std::size_t>(best)] = 1;
+            drop[static_cast<std::size_t>(h)] = kept[static_cast<std::size_t>(best)];
+        }
+    }
+    std::array<double, kHorizon> out{};
+    double prev = 0.0;
+    for (int t = 1; t <= kHorizon; ++t)
+    {
+        const int played = std::min(t, h);          // kept lands played on turns 1..played
+        int mana_t = c.board_mana + (extra != nullptr ? (*extra)[static_cast<std::size_t>(t - 1)] : 0);
+        std::array<int, 5> col_t = c.board_src;
+        for (int i = 0; i < played; ++i)
+        {
+            const LandDrop& ld = drop[static_cast<std::size_t>(i)];
+            if (i + 1 == t && ld.tapped) { continue; }   // played this turn, enters tapped: nothing yet
+            mana_t += ld.mana;
+            for (int k = 0; k < 5; ++k) { if (ld.colours & (1u << k)) { ++col_t[static_cast<std::size_t>(k)]; } }
+        }
+        const int free_drops = t - played;            // turns whose land drop needs a DRAWN land
+        double p = 1.0;
+        const int need = mana - mana_t;                // each drawn land counted as 1 mana, untapped
+        if (need > 0) { p = need > free_drops ? 0.0 : HyperAtLeast(c.lib_n, c.lib_lands, t, need); }
+        for (int k = 0; k < 5 && p > 0.0; ++k)
+        {
+            const int need_c = pips[static_cast<std::size_t>(k)] - col_t[static_cast<std::size_t>(k)];
+            if (need_c <= 0) { continue; }
+            p *= need_c > free_drops ? 0.0 : HyperAtLeast(c.lib_n, c.lib_src[static_cast<std::size_t>(k)], t, need_c);
+        }
+        p = std::max(p, prev);                         // castable by t implies castable by t+1
+        out[static_cast<std::size_t>(t - 1)] = p;
+        prev = p;
+    }
+    return out;
+}
+
+double CastFactor(const std::array<double, kHorizon>& p_by_turn)
+{
+    double f = 0.0, prev = 0.0, g = 1.0;
+    for (double p : p_by_turn) { f += (p - prev) * g; prev = p; g *= kGamma; }
+    return f + (1.0 - prev) * 0.02 * g;               // the stranded still order by value
+}
+
+double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector<LandDrop>& kept,
+                     int mana_override, const std::array<int, kHorizon>* extra)
+{
+    const ManaCost& mc = d.card.m_mana_cost;
+    const std::array<int, 5> pips = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+    const int mana = mana_override >= 0 ? mana_override : mc.ManaValue();
+    return CastFactor(CastProbByTurn(c, mana, pips, kept, extra));
+}
+}   // namespace discard_dist
+
 std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
