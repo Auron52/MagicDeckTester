@@ -3445,6 +3445,36 @@ static bool PayableOrderExactOn()
     return heurarm::Flag(heurarm::PAYABLE_ORDER_EXACT, env_on);
 }
 
+// MTG_PAYABLE_ORDER_DYNAMIC_DECLINE (DEFAULT ON; =0 -> such an order is walked like any other). A cast
+// whose cost carries a live DYNAMIC per-target discount (Hinata, Dawn-Crowned's {1} per target, the
+// Soulfire own-target discount) was priced for the board at the position the enumeration gave it; the
+// board changes as the line resolves, so walking it at another position judges a cost that is about to
+// change underneath it. LadderProjectable has always declined exactly this class; MTG_PAYABLE_ORDER did
+// not. Declining keeps the order as given, at both sites -- the same as an order outside the domain.
+static bool PayableOrderDynamicDeclineOn()
+{
+    static const bool env_on = EnvOn("MTG_PAYABLE_ORDER_DYNAMIC_DECLINE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::PAYABLE_ORDER_DYNAMIC_DECLINE, env_on);
+}
+
+// LadderProjectable's dynamic-cost test, alone (its spectacle and missing-definition declines are not
+// part of this lever).
+static bool PoDynamicDiscount(const GameState& state, const std::vector<Action>& acts,
+                              const std::vector<int>& order)
+{
+    const int active = state.active_player_index;
+    for (int i : order)
+    {
+        const Action& a = acts[i];
+        if (a.alt_cost) { continue; }
+        const CardDefinition* d = OrderDefOf(a);
+        if (d == nullptr) { continue; }
+        if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return true; }
+        if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return true; }
+    }
+    return false;
+}
+
 static bool PoCreditedProducer(const GameState& state, const std::vector<Action>& acts, const Action& a)
 {
     if (a.alt_cost) { return false; }
@@ -3504,6 +3534,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         producer_only = any;
     }
     if (!any) { return; }
+    if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return; }
     g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
 
     ManaPool pool0 = AvailableManaPool(state);   // already includes the turn-scoped float
