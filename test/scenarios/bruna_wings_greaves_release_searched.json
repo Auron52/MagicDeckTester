@@ -1,0 +1,65 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Razorverge Thicket",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Birds of Paradise",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Remote Farm",
+      "controller": 0,
+      "tapped": false,
+      "depletion_counters": 1
+    },
+    {
+      "name": "Birds of Paradise",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Somberwald Sage",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Lightning Greaves",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Somberwald Sage"
+    }
+  ],
+  "hand": [
+    "Eldrazi Conscription",
+    "Botanical Sanctum"
+  ],
+  "library_top": [
+    "Open the Armory",
+    "Forest",
+    "Mother of Runes"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "library": [
+    "Arcanum Wings"
+  ],
+  "depth": 8,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "expect_win_turn": 6,
+  "comment": "Bruna overnight s5005 gi759 (2026-10-10), from its T4. Here the T4 root SEARCHES the Open the Armory continuation (\"Wings -> Somberwald Sage, Greaves Sage -> Birds\"), so the committed records are the Wings cast then the Greaves move. The executor's replay used to cast first and dispatch the move in its trailing pass, i.e. Wings into Greaves' shroud and onto Birds #9 by the fallback; it now opens the rollout's CastSectionUnlock over the records, which fires the release ahead of the cast (FAILS, no win by T6, on the pre-fix tree)."
+}

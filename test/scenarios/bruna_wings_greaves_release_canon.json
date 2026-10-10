@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Razorverge Thicket",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Birds of Paradise",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Remote Farm",
+    "Eldrazi Conscription",
+    "Somberwald Sage",
+    "Botanical Sanctum",
+    "Birds of Paradise"
+  ],
+  "library_top": [
+    "Seaside Citadel",
+    "Lightning Greaves",
+    "Open the Armory",
+    "Forest",
+    "Mother of Runes"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "library": [
+    "Arcanum Wings"
+  ],
+  "depth": 8,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "expect_win_turn": 6,
+  "comment": "Bruna overnight s5005 gi759 (2026-10-10), from its T2. T4's Open the Armory finds Arcanum Wings; the line the search proves casts it on the Greaves'd Somberwald Sage after moving Greaves to Birds of Paradise (an unbranched-canon continuation: its board activations are not applied, but the release inside its cast section is). The committed line used to record only the Wings cast, so the executor cast it into shroud, the fallback put it on Birds #9, the T5 Conscription swap armed the Birds that then paid the Wings recast, and the T6 kill slipped to T7. The search now records the fired release and the executor's replay opens the same CastSectionUnlock (FAILS T7 on the pre-fix tree)."
+}

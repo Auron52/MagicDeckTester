@@ -490,6 +490,46 @@ private:
     std::vector<int> m_prev;
 };
 
+// THE CAST SECTION'S UNLOCK HALF, as one object -- the lockstep helper for every apply of a list of
+// casts, in both worlds. A cast section installs the list's reserve (TurnSolver::PlanReserveSources)
+// and fires TurnSolver::ApplyManaUnlockEquips once before its first cast (the constructor) and again
+// after each cast (Fire), so a planned Equip that unlocks a dork's mana (haste) or RELEASES an Aura's
+// target (moves Lightning Greaves' shroud off the creature a pending Aura names, CR 303.4a / 702.18a)
+// lands between the casts that need it instead of in the trailing pass.
+//
+// It used to be two statements repeated at each site, and the executor wrote them for the MAIN plan
+// only. The rollout's apply runs EVERY breakpoint continuation through the same apply_plan_actions
+// (so through this), but none of the executor's continuation appliers fired it -- replay_recorded,
+// resolve_draw_breakpoint, the pod and site-9 passes. Bruna s5005 gi759 (2026-10-10): T4's Open the
+// Armory finds Arcanum Wings, and the continuation the search scored is "Wings -> Somberwald Sage,
+// move Greaves Sage -> Birds of Paradise". The rollout moved Greaves first and Wings landed on the
+// Sage; the executor cast Wings at the still-shrouded Sage, the target was illegal on resolution, the
+// fallback put it on Birds #9 -- and from there the committed T5 swap armed the creature that then
+// paid the Wings recast, so the T6 kill slipped to T7. Every site now builds this object; the reserve
+// lives exactly as long as it does, so a caller ends the cast section by destroying it.
+//
+// `record` (rollout only): the Equips that fire are appended there. The search's breakpoint sink uses
+// it for an unbranched-canon continuation, whose board activations are otherwise neither applied nor
+// recorded (Plan::cont_canon) -- yet an unlock/release inside its casts IS applied, so the committed
+// line must carry it or the executor's replay cannot realise it.
+class CastSectionUnlock
+{
+public:
+    CastSectionUnlock(GameState& state, const std::vector<Action>& acts,
+                      std::vector<Action>* record = nullptr)
+        : m_state(state), m_acts(acts), m_reserve(TurnSolver::PlanReserveSources(state, acts))
+    { Fire(record); }
+    // Fire every unlock / release whose pieces are on the battlefield now. Returns how many fired.
+    int Fire(std::vector<Action>* record = nullptr)
+    { return TurnSolver::ApplyManaUnlockEquips(m_state, m_acts, record); }
+    CastSectionUnlock(const CastSectionUnlock&)            = delete;
+    CastSectionUnlock& operator=(const CastSectionUnlock&) = delete;
+private:
+    GameState&                 m_state;
+    const std::vector<Action>& m_acts;
+    PlanSourceReserveScope     m_reserve;
+};
+
 // ---- LINE-SCOPED UNPAID COST ("what does the committed line still owe?") ----------------------
 //
 // A GREEDY mid-line mana sink -- today, exactly one: REPLICATE -- spends from

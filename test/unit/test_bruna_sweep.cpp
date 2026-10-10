@@ -1494,3 +1494,68 @@ TEST_CASE("Width: the Bruna gather pin is consumed by combat even when no gather
     CHECK(b.s.scripted_bruna_gather == -1);
     CHECK(b.s.scripted_combat_aura_swap == -1);
 }
+
+// ---- Continuation cast section (s5005 gi759, 2026-10-10) ---------------------------------------
+// T4: Open the Armory finds Arcanum Wings, and the continuation the search scored is "Wings -> the
+// Greaves'd Somberwald Sage, move Greaves Sage -> Birds of Paradise". The rollout applies every
+// continuation through apply_plan_actions, whose cast section fires that release BEFORE the Aura. The
+// executor's continuation appliers (replay_recorded, resolve_draw_breakpoint, the pod and site-9
+// passes) never opened one: the replay cast Wings at the still-shrouded Sage, the resolution fallback
+// put it on Birds #9, and the committed T5 swap then armed the Birds that paid the Wings recast -- T6
+// became T7. Every cast section, in both worlds, is now the one CastSectionUnlock object; this pins
+// its contract on that board, over the continuation's records as the search writes them.
+TEST_CASE("Continuation cast section: a recorded Greaves release lands before the Aura it frees (s5005 gi759)")
+{
+    BoardBs b;
+    b.Put("Razorverge Thicket");
+    b.Put("Seaside Citadel");
+    b.Put("Botanical Sanctum");
+    const int birds   = b.Put("Birds of Paradise");
+    const int sage    = b.Put("Somberwald Sage");
+    const int greaves = b.Put("Lightning Greaves");
+    for (Permanent& p : b.s.battlefield) { if (p.card.m_number == greaves) { p.equipped_to = sage; } }
+    b.Hand("Arcanum Wings");
+    auto sage_perm = [&]() -> const Permanent&
+    {
+        for (const Permanent& p : b.s.battlefield) { if (p.card.m_number == sage) { return p; } }
+        FAIL("no Sage");
+        return b.s.battlefield.front();
+    };
+    // The control: Greaves' shroud binds our own Aura spell (CR 702.18a / 303.4a).
+    REQUIRE_FALSE(CreatureTargetableByAuraSpell(sage_perm(), b.s, 0));
+
+    Action wings;
+    wings.kind           = Action::Kind::CastFromHand;
+    wings.card_name      = std::string("Arcanum Wings");
+    wings.enchant_target = sage;
+    Action move;
+    move.kind          = Action::Kind::Equip;
+    move.card_name     = std::string("Lightning Greaves");
+    move.sac_source_id = greaves;
+    move.sac_victim_id = birds;
+    // Both orders the records come in: a searched continuation records its activations after its
+    // casts, an unbranched-canon one records the fired release ahead of the cast it frees.
+    for (const std::vector<Action>& recs : { std::vector<Action>{ wings, move }, std::vector<Action>{ move, wings } })
+    {
+        GameState keep = b.s;
+        std::vector<Action> fired;
+        {
+            CastSectionUnlock section(b.s, recs, &fired);   // opening the section is the up-front fire
+            CHECK(EquipHostOf(b.s, greaves) == birds);
+            REQUIRE(fired.size() == 1);
+            CHECK(fired[0].kind == Action::Kind::Equip);
+            CHECK(fired[0].sac_victim_id == birds);
+            CHECK(CreatureTargetableByAuraSpell(sage_perm(), b.s, 0));
+            CHECK(section.Fire(&fired) == 0);              // fired once; the next fire finds nothing
+        }
+        b.s = keep;
+    }
+    // No Aura left to free -> nothing moves (a Greaves move with no target behind it is not a release).
+    {
+        GameState t = b.s;
+        t.players[0].hand.clear();
+        const std::vector<Action> recs{ wings, move };
+        CastSectionUnlock section(t, recs);
+        CHECK(EquipHostOf(t, greaves) == sage);
+    }
+}

@@ -4502,6 +4502,27 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         int rec_scry = -1;
         int rec_bounce = -1;
         std::vector<Action> rec_acts;   // board activations, dispatched after the casts (below)
+        // The records' CAST SECTION (CastSectionUnlock -- lockstep with the rollout's
+        // apply_plan_actions, which applied this continuation): opened at the first cast-like record
+        // (the land and precasts come first in both worlds), fired again after each non-sacrifice
+        // hand cast or Vial put -- AFTER that cast's own nested replay, as the rollout fired it after
+        // apply_one returned -- and closed before the trailing activations. A Greaves move recorded
+        // with an Aura that targets the creature it leaves therefore lands BEFORE the Aura, not
+        // after it (Bruna s5005 gi759). One section per recorded continuation: the end-of-main
+        // catch-all can hand several main-level segments over at once (Action::rec_bp_ord), and the
+        // rollout applied each in its own apply_plan_actions.
+        std::vector<Action> rec_unlock_acts;   // the open section's records (outlives rec_unlock)
+        std::optional<CastSectionUnlock> rec_unlock;
+        int rec_unlock_ord = 0;
+        auto rec_section = [&](int ord)
+        {
+            if (rec_unlock && rec_unlock_ord == ord) { return; }
+            rec_unlock.reset();
+            rec_unlock_acts.clear();
+            for (const Action& r : recs) { if (r.rec_bp_ord == ord) { rec_unlock_acts.push_back(r); } }
+            rec_unlock.emplace(state, rec_unlock_acts);
+            rec_unlock_ord = ord;
+        };
         for (const Action& a : recs)
         {
             if (a.cont_pins)
@@ -4511,6 +4532,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 rec_scry = a.cont_pins->scry;
                 rec_bounce = a.cont_pins->bounce;
             }
+            if (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard
+                || a.kind == Action::Kind::ActivateVial)
+            { rec_section(a.rec_bp_ord); }
             if (a.kind == Action::Kind::PlayLand)
             { std::optional<ScriptedTopChoice> _rstc;   // the continuation land's own scry pin
               if (rec_scry >= 0) { _rstc.emplace(rec_scry); rec_scry = -1; }
@@ -4552,7 +4576,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (TurnSolver::IsTrailingActivation(a.kind)) { rec_acts.push_back(a); }
             // Nested breakpoint casts this recorded draw engine (or dug Treasure Hunt) revealed.
             if (!a.breakpoint_casts.empty()) { replay_recorded(a.breakpoint_casts); }
+            if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+                || a.kind == Action::Kind::ActivateVial)
+            { rec_unlock->Fire(); }
         }
+        // A cast-less continuation still opened its section (the rollout's up-front fire).
+        if (!rec_unlock && !recs.empty()) { rec_section(recs.front().rec_bp_ord); }
+        rec_unlock.reset();  // ...which ends before the trailing activations, as apply_plan_actions does
         if (!rec_acts.empty()) { exec_continuation_activations(rec_acts); }
     };
 
@@ -4824,6 +4854,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
         }
         PlanSoulbondDeclineScope _sbd_cont(extra.soulbond_decline);   // Plan::soulbond_decline, continuation twin
+        // The continuation's CAST SECTION (CastSectionUnlock) -- the rollout applied this continuation
+        // through apply_plan_actions, which opens one before ordering its casts and fires it again after
+        // each non-sacrifice cast / Vial put; it closes before the trailing activations (reset below).
+        // Without it a Greaves move the continuation planned ahead of an Aura on the creature it
+        // leaves happened only in the trailing pass, after the Aura had been cast into shroud
+        // (Bruna s5005 gi759, the canon route of the same continuation replay_recorded carries).
+        std::vector<Action> cont_unlock_fired;
+        std::optional<CastSectionUnlock> cont_unlock;
+        cont_unlock.emplace(state, extra.actions, &cont_unlock_fired);
         // Continuation casts in the SAME canonical order the rollout's apply_plan_actions
         // realises (ordering-audit 2026-08-15, item 2: this loop ran in RAW plan order, so a
         // continuation holding more than one cast could execute a different sequence than the
@@ -4889,7 +4928,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int ci : cont_order)
         {
             const Action& a = extra.actions[ci];
-            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); continue; }
+            if (a.kind == Action::Kind::ActivateVial)
+            { deploy_via_vial(a.card_name); resolve_now(); cont_unlock->Fire(&cont_unlock_fired); continue; }
             {
                 m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
                 const bool put_armed_c = put_in_hand_armed(a.card_name);
@@ -4910,6 +4950,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     resolve_draw_breakpoint(bp_depth + 1);
                 }
             }
+            cont_unlock->Fire(&cont_unlock_fired);
         }
         for (const Action& a : extra.actions)
         {
@@ -4920,6 +4961,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+        }
+        cont_unlock.reset();   // the cast section ends here, as the rollout's apply_plan_actions does
+        // An unbranched-canon continuation dispatches no activations below, so the Equips its cast
+        // section fired would leave no log line; every other route logs them in the trailing pass.
+        if (extra.cont_canon && m_logger)
+        {
+            for (const Action& f : cont_unlock_fired)
+            {
+                std::string host = "#" + std::to_string(f.sac_victim_id);
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == state.active_player_index && p.card.m_number == f.sac_victim_id)
+                    { host = p.card.m_name.str(); break; }
+                }
+                m_logger->LogAbility(f.sac_source_id, f.card_name.str(), "equip -> " + host);
+            }
         }
         // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
         // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw
@@ -5232,6 +5289,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                  && (ca.convoke_green > 0 || ca.convoke_other > 0))
                         { ApplyConvokeTaps(state, state.active_player_index, ca.convoke_green, ca.convoke_other); }
                     }
+                    // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
+                    std::optional<CastSectionUnlock> pod_unlock;
+                    pod_unlock.emplace(state, extra.actions);
                     std::vector<int> pod_cont_order;
                     for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
                     {
@@ -5255,6 +5315,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                      ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
                                      ca.convoke_other, ca.phyrexian_life, ca.evoke);
                         resolve_now();
+                        pod_unlock->Fire();
                     }
                     for (const Action& ca : extra.actions)
                     {
@@ -5268,6 +5329,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             resolve_now();
                         }
                     }
+                    pod_unlock.reset();   // the cast section ends before the trailing activations
                     exec_trailing_activations(extra.actions);
                 }
             }
@@ -6017,10 +6079,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // equip pass below. Once up front (both pieces may already be out) and once after each cast.
     // The reserve scope is the other half -- it stops the enabler casts from spending the payoff's
     // scarce colour before the unlock lands. Both no-ops for every plan without that pairing.
-    // See TurnSolver::ApplyManaUnlockEquips / ::ManaUnlockColorReserve.
-    PlanSourceReserveScope _unlock_reserve(TurnSolver::PlanReserveSources(state, plan.actions));
-    auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, plan.actions); };
-    fire_unlock();
+    // See TurnSolver::ApplyManaUnlockEquips / ::ManaUnlockColorReserve; both halves live in
+    // CastSectionUnlock (ManaPayment.h), which each continuation applier below builds as well.
+    CastSectionUnlock _unlock(state, plan.actions);
+    auto fire_unlock = [&]() { _unlock.Fire(); };
     // Cast-ordering search (C): a committed plan with searched_order set carries an
     // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
     // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
@@ -6473,6 +6535,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                          && (ca.convoke_green > 0 || ca.convoke_other > 0))
                 { ApplyConvokeTaps(state, state.active_player_index, ca.convoke_green, ca.convoke_other); }
             }
+            // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
+            std::optional<CastSectionUnlock> pe_unlock;
+            pe_unlock.emplace(state, extra.actions);
             std::vector<int> pe_cont_order;
             for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
             {
@@ -6497,9 +6562,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_now();
                 walker_cast_activation(ca);
             };
-            for (int ci : pe_cont_order) { pe_cast(extra.actions[ci]); }
+            for (int ci : pe_cont_order) { pe_cast(extra.actions[ci]); pe_unlock->Fire(); }
             for (const Action& ca : extra.actions)
             { if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land) { pe_cast(ca); } }
+            pe_unlock.reset();   // the cast section ends before the trailing activations
             exec_trailing_activations(extra.actions);
         }
     }

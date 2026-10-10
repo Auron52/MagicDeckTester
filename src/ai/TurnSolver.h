@@ -1856,7 +1856,10 @@ public:
     // (AIEngine::TakeTurn), through this one function so the two stay in lockstep. Self-gating on
     // "the host is a still-locked mana source", so an equip onto a beater is untouched and still
     // fires in the trailing pass. Returns how many fired. Off-switch: MTG_NO_HASTE_DORK_CREDIT.
-    static int ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts);
+    // `fired` (optional) receives a copy of each Equip action it applied, in firing order. Callers
+    // reach it through CastSectionUnlock (ManaPayment.h), the one object every cast section uses.
+    static int ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts,
+                                     std::vector<Action>* fired = nullptr);
     // PROOF INSTRUMENT for the AURA CAST HOST RANKING (MTG_TRACE=hostproof; the executor calls it on
     // every committed autonomous main-phase plan). For a plan casting creature Auras it scores every
     // legal combination of hosts with the shared key (AuraPlanHostKey) and traces whether the

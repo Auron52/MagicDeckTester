@@ -1759,13 +1759,15 @@ A0 all off 84.97M / 3663; +PRECOMBAT 77.45M / 3662; +KEY 79.60M / 3660 (the fix 
 * The 6 slower searched games: s4004 gi208, s6006 gi452, gi631 recover at stage 1 (`--depth <old turn>
   --budget-ms 100`). s4004 gi585 (T4 -> T5) and s7007 gi755 (T5 -> T6) do not recover at `--depth 8
   --budget-ms 0` -- and neither does the BASE binary there (T5 / T6): the old faster win was budget luck.
-  **s5005 gi759 (T6 -> T7) is not luck:** base T6 at d8 b0, new T7, and the EQUIP lever alone flips it. Root
-  cause: a pre-existing executor/rollout payment gap -- the search's simulation of "swap in Eldrazi
-  Conscription + recast the Wings" leaves the 10-power Birds attacking, the executor pays the recast's {1}{U}
-  with that Birds (`[fd-diverge]` predicted T6, realized T7). The fold only changed the board the gap showed
-  on (the old line's idle Greaves move had made the search's simulation of that plan come out with no attack).
-  Recorded as deferred work: `docs/design/bruna-wings-recast-payment-divergence.md`. `[fd-diverge]` count on
-  the 725 searched suite games: 1 before, 1 after (the same land-light seed 3018 game).
+  **s5005 gi759 (T6 -> T7) is not luck:** base T6 at d8 b0, new T7, and the EQUIP lever alone flips it.
+  ~~Root cause: a pre-existing executor/rollout payment gap~~ -- CORRECTED and FIXED 2026-10-10
+  (`docs/design/bruna-wings-recast-payment-divergence.md`): there was no payment gap. On T4 the committed
+  line's Open the Armory continuation is "Wings -> the Greaves'd Sage, Greaves -> Birds #9"; the rollout fires
+  that shroud release before the Aura (`apply_plan_actions`' cast section) but the executor's continuation
+  appliers never did, so the executor cast Wings into shroud and the fallback put it on Birds #9 -- which the
+  T5 Conscription swap then armed and the shared payer then tapped for the recast. Fixed by one cast-section
+  object (`CastSectionUnlock`) built by every cast section in both worlds; the game wins T6 at d8 b0 and d3 b20.
+  `[fd-diverge]` count on the 725 searched suite games: 1 before, 1 after (the same land-light seed 3018 game).
 * `mtg-test` 561/561, scenarios 158/158, viewer protocol `--strict` 556 refs: 0 play-drift / 0 board-diverged /
   0 enum-gap.
 

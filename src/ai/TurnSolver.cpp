@@ -9985,7 +9985,8 @@ static bool PlanHasPendingAuraOn(const GameState& state, const std::vector<Actio
     return false;
 }
 
-int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts)
+int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts,
+                                      std::vector<Action>* fired_out)
 {
     const int active = state.active_player_index;
     int fired = 0;
@@ -10018,6 +10019,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
                                                      a.sac_victim_id),
                                   /*for_creature=*/false)) { continue; }
             ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
+            if (fired_out != nullptr) { fired_out->push_back(a); }
             ++fired;
         }
     }
@@ -10061,6 +10063,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
                                                  a.sac_victim_id),
                               /*for_creature=*/false)) { continue; }
         ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
+        if (fired_out != nullptr) { fired_out->push_back(a); }
         ++unlocked;
     }
     // The colour reservation exists only to carry the payoff's scarce colour PAST the enabler casts
@@ -36655,12 +36658,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // OWN apply_trailing_activations call, so an inline dispatch there would apply it twice). Both
     // of those sites are !s_human_play-gated today; this makes the guarantee structural instead.
     bool human_seq_inline = false;
+    // Armed by apply_continuation_plan for an UNBRANCHED-CANON continuation (Plan::cont_canon) and
+    // consumed at the entry of the apply_plan_actions call it wraps: that cast section records the
+    // Equips its CastSectionUnlock fires into the breakpoint sink. A canon continuation's board
+    // activations are neither applied nor recorded (apply_continuation_activations returns first),
+    // but an unlock / shroud release inside its casts IS applied -- so without this record the
+    // committed line holds the Aura cast and not the Greaves move that made its target legal, and the
+    // executor's replay casts into shroud (Bruna s5005 gi759). A searched continuation needs nothing:
+    // its activations are recorded by apply_continuation_activations, and the executor's replay
+    // fires the same unlock over its records. Only the RECORD changes; the apply is untouched.
+    bool cont_canon_cast_section = false;
     // Every breakpoint CONTINUATION apply goes through here, never a bare apply_plan_actions(extra..),
     // so a continuation is applied under the same plan-level scopes it was scored with.
     auto apply_continuation_plan = [&](const TurnSolver::Plan& cp)
     {
         PlanSoulbondDeclineScope _sbd(cp.soulbond_decline);   // Plan::soulbond_decline, lockstep w/ executor
+        const bool saved_canon = cont_canon_cast_section;
+        cont_canon_cast_section = cp.cont_canon;
         apply_plan_actions(cp.actions, cp.searched_order);
+        cont_canon_cast_section = saved_canon;
     };
     // DIAGNOSTIC (MTG_LINE_ORDER_TRACE, default OFF, zero cost when off): one line per action the
     // main-phase apply performs, in the order it performs it. The realised sequence is otherwise
@@ -39354,11 +39370,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // battlefield -- not in the trailing equip pass, which runs after every cast. Once up front
         // (both pieces may already be out) and once after each cast below. The reserve scope is the
         // other half: it stops the enabler casts from spending the payoff's scarce colour before the
-        // unlock lands. Mirrored in AIEngine::TakeTurn through the same two functions -> lockstep.
-        // Both no-ops for every other plan.
-        PlanSourceReserveScope _unlock_reserve(TurnSolver::PlanReserveSources(state, acts));
-        auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, acts); };
-        fire_unlock();
+        // unlock lands. Both live in CastSectionUnlock (ManaPayment.h), which every executor cast
+        // section -- the main plan AND each continuation applier -- builds too -> lockstep.
+        // No-ops for every other plan.
+        const bool rec_unlock = cont_canon_cast_section;   // consumed: a nested section re-arms its own
+        cont_canon_cast_section = false;
+        auto unlock_sink = [&]() -> std::vector<Action>*
+        { return (rec_unlock && out_breakpoint != nullptr && !sink_stack.empty()) ? sink_stack.back() : nullptr; };
+        CastSectionUnlock _unlock(state, acts, unlock_sink());
+        auto fire_unlock = [&]() { _unlock.Fire(unlock_sink()); };
         if (explicit_order)
         {
             // HUMAN-ORDER INTERLEAVE: consume the arm here so a continuation re-entering this
