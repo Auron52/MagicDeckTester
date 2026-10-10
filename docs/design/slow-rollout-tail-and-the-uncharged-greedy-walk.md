@@ -926,3 +926,223 @@ degenerate-width guard `MTG_ODO_FLAT_FALLBACK`, default 1,000,000 lines). It is 
 waste. And the guard is **not** tripping here: those counters are AGGREGATES over 634,308 calls, so
 per node the payoff side is ~17 lines, not 11 M. Reading an aggregate as a per-node width is the
 mistake to avoid.
+
+---
+
+# KITTYEQUIPMENT v3, 2026-10-10: a SECOND deck's tail, and what it changes about this document
+
+This document's standing conclusion is *"the per-rollout axis is nearly exhausted; the cell-count
+axis is not"*, with the ranked table topping out at 1.33–2.41x and the instruction **"do not re-open
+the budget direction expecting more than this table."** That was measured on Fungus. KittyEquipment
+v3 is the second deck to hit the same wall, and it **qualifies two of the claims above rather than
+repeating them** — the shape of its tail is materially worse than Fungus's, and the mechanism it
+bills to is different.
+
+## The accounting, from the killed run's own slow log
+
+`decks/KittyEquipment/v3-adelbert-gauntlets/*.raw.json.slow.log`, 9.5 h / 32 cores, R=30 (`fast`),
+d1/b3, `MTG_DECISION_WORK_X=1000`:
+
+| | Fungus candidate-b | **KittyEquipment v3** |
+|---|---|---|
+| rollouts >= 30 s | 576 | **6,132** |
+| their cost | 48.6 core-h | **220.3 core-h** |
+| share of ALL generation compute | 32.6% | **~72%** |
+| share of rollouts they are | 0.084% | **~1.5%** |
+| worst single rollout | 16,319 s | **3,405 s (56.7 min)** |
+| ceiling from PERFECT tail elimination | 1.48x | **~3.6x** |
+
+So on this deck the >= 30 s tail is not a 1.48x prize, it is most of the machine. The *worst single
+rollout* is milder than Fungus's; the tail is far **broader**. That difference is what makes the
+per-rollout axis worth re-opening here when it was closed there.
+
+**The stall is separate from the cost, and it is worse.** The run's own monitor ended at
+`roll7=217588 (0/s) ... frozen=0/106746 (0.0%)` — the size-7 pool fed ZERO rollouts for its last
+hour while three rollouts of 56.7 / 40.3 / 36.3 minutes held the barrier, and not one of 106,746
+cells had frozen in 9.5 h.
+
+## THE KEEP GENERATOR ARMED NO PER-ROLLOUT BOUND AT ALL
+
+Found by grep, not by inference: `gamework::Begin` has exactly four call sites, and only
+`BatchRunner.cpp:1790` arms it. `analyzer/main.cpp:618` and `GoldFishRunner.cpp:949` both pass 0
+(deliberately disarmed). `ExhaustiveKeep.cpp`'s `run_one` / `run_batch` never called it — so every
+keep rollout in this repo's history ran with **no unit ceiling and no wall deadline**, which is the
+whole explanation for a 56.7-minute rollout. `MTG_DECISION_WORK_X` bounds a *decision*, not a game.
+
+A cap here is only meaningful because of `a28b566e`: the flag is set by `CheckDeadline` on a
+4,096-unit stride and then has to be OBSERVED, and before that fix the greedy subset walk — the one
+region burning these hours — polled nothing.
+
+## A CAP IS A STALL GUARD, NOT A COST FIX
+
+Exceedance counts over the 6,132 captured slow rollouts, with the full-run figure extrapolated by
+the ~15.6x of the run that had not been done:
+
+| cap | exceeded | CPU-h above the cap | extrapolated full run |
+|---|---|---|---|
+| 120 s | 1,799 | 91.1 | ~28,000 |
+| 300 s | 548 | 40.0 | ~8,500 |
+| 600 s | 151 | 15.6 | ~2,400 |
+| 1,200 s | 30 | **3.2** | ~470 |
+| 1,800 s | 7 | 1.1 | ~110 |
+| 2,400 s | 3 | 0.4 | ~47 |
+
+**At 1,200 s a cap reclaims 3.2 of 220 CPU-h.** The cost is the broad 30–300 s band (1,799 rollouts,
+91 CPU-h), which no cap can remove without condemning thousands. Do not reach for a lower cap as a
+performance lever.
+
+It also follows that **no cap satisfies a 10-abandonment budget on this deck at the current engine
+speed** — not even 2,400 s. That is the fail-out working as intended: its verdict is "optimise".
+
+## USER RULING 2026-10-10 — leave it out, and fail out
+
+> *"Why not just leave it out like we did for this run by manually cancelling it. That said, if this
+> happens a significant number of times we error out. Maybe even if it is over something like 10-50
+> rollouts."* ... *"We don't want more than 50 for sure and it might make sense to be even more
+> aggressive, not allowing 10."*
+
+Shipped as `MTG_KEEP_ROLLOUT_WALL_SEC` (default 1,200; `=0` disables) and
+`MTG_KEEP_ABANDON_FAIL_AT` (default **10**, hard-clamped to **50**). Wall only, no predictive stage,
+matching the user's phase-A ruling; with no unit ceiling stage 1 is inert by construction anyway.
+
+Two different "leave it out"s, for a reason worth recording:
+
+* **Sub-tables (`run_batch`)** leave out the single ROLLOUT. The accumulation is a plain sum, so a
+  `kept` counter is enough, and `t.cnt += kept` instead of `(r1 - r0)` is what keeps a short sum from
+  being divided by a full n — which would pull exactly the hardest hands' mean win-turn DOWN.
+* **Size-7 (the continuous path)** leaves out the whole CELL-SIDE. There the fold's `c` is both the
+  sample count and the index into `slot` (`SLOT(i, pd, c)`), and `slot` is sized to `r_max`: skipping
+  one rollout mid-cell either stalls the prefix (the floor gate's `if (c < r0) any_below_floor = true`
+  never clears, hanging the phase) or needs a second cursor, slack in the slot array and a new
+  journal field to survive resume. That is surgery on the most delicate part of the generator for a
+  sample the fail-out bounds at NINE. Zeroing the cell-side lands it in a state the pipeline already
+  handles — an unsampled cell, which `recompute` skips and the model falls back to its prior for —
+  and is strictly more conservative. **Resume limitation, stated not hidden:** poison is in-memory,
+  so a resumed run re-admits those <= 9 cell-sides with a substituted value.
+
+## MEASURING ON THE TAIL — and the two verdicts a MEDIAN bench got wrong
+
+`MTG_KEEP_REPLAY_LIST` (this document's own instrument) replays captured slow rollouts
+byte-identically to the gen's `run_one`. Two levers had been priced with `MTG_KEEP_BENCH`, which
+stride-samples the ORDINARY floor — blind to the 1.5% of rollouts holding 72% of the compute
+(`bench-n-decides-median-vs-tail`). Both were re-priced here on the identical 64 captured rollouts.
+
+**`MTG_KEEP_BENCH=1` is load-bearing in that A/B, not an optimisation.** It makes the equivalence
+cache skip the `play_digest` comparison, so every arm resolves the SAME 15 buckets in the same order.
+Without it a lever that moves play re-discovers, the work index `w` shifts, the replay list's seed
+check fails, and the arm silently replays a different and smaller set of rollouts. Both arms also pin
+`MTG_PGO=0`: measured here, PGO is 1.10x faster than Release on this workload, and with `src` dirty
+`harness_bin` switches between them on its own.
+
+| lever | median bench (earlier) | **TAIL, 64 captured rollouts** | win turns moved |
+|---|---|---|---|
+| value leaf (v3's own) | 1.024x | **1.0x** (aggregate over the same cells) | — |
+| `MTG_FOLD_SEARCH_ODO` | 0.956x | **0.942x** | **0 of 64**, `sum_wt` identical |
+
+So the median bench was **not** misleading for either one: the leaf is not a tail fix, and the fold
+is a real ~6% that the bulk number already had about right. The pre-registered suspicion that a
+median bench had hidden a large tail win is **refuted** — worth recording, because it is the second
+time on this deck that a plausible mechanism survived argument and died on measurement.
+
+## WHERE THE TAIL'S UNITS ACTUALLY GO
+
+`MTG_BF_CENSUS=1 MTG_ROLLOUT_STATS=1` over the 64 tail rollouts, `units_total=164,593,595`:
+
+| bucket | units | share |
+|---|---|---|
+| **`equip_route`** | 53,591,450 | **32.6%** |
+| `la_cand` | 30,245,915 | 18.4% |
+| `fs_pre` | 25,539,904 | 15.5% |
+| `rollout_step` | 25,168,091 | 15.3% |
+| `greedy_fallback` | 20,655,302 | 12.5% |
+
+and the branching shape:
+
+```
+bf_census    decisions=5,353,965  candidates=33,931,459  mean_width=6.34  max_width=2440
+bf_scored    greedy_subsets=39,284,721   search_subsets=1,033,256,261        (26x)
+bf_foldsite  search calls=6,954,270,539  from_odometer=0  with_tag=0  rejected=0
+bf_foldsite  greedy calls=45,952,314     from_odometer=43,873,261
+bf_width     raw=33,931,459  distinct_exact=30,340,037  collapse=1.125x
+```
+
+Three things follow.
+
+1. **`equip_route` is the largest single bucket, at a third of the tail.** Unlike Fungus, where the
+   cost was a token-doubler feeding a sacrifice outlet, this deck's tail bills to the equip-route
+   DFS. So this document's "the engine axis tops out near 1.3–2.4x" was a statement about *Fungus's*
+   mechanism; a different deck bills elsewhere and has to be re-measured, not inherited.
+2. **The search fold site is called 6.95 BILLION times and folds nothing** (`from_odometer=0`),
+   because `FoldSearchOdometerOptIn` is a per-deck opt-in that only Snow takes. That is what the
+   0.942x arm above buys back.
+3. **Width identities bound their own prize at 1.125x** on `la_cand` (18.4% of units), i.e. ~2%
+   overall. Not the win, and this document's warning against reading `distinct_srcblind` as
+   achievable applies unchanged.
+
+## THE PRE-REGISTERED OBLIGATION THIS RUN TRIGGERED
+
+`DecisionProviders.cpp`, above `NodeUnits()`:
+
+> `!! BEFORE THE NEXT value-leaf OR mulligan GENERATION ON THIS DECK, RE-MEASURE THE WALL. The bound
+> this constant exists to enforce is relaxed 4x ... a future regeneration must not inherit this
+> number unchecked.`
+
+`MTG_EQUIP_ROUTE_NODE_UNITS` is 2, lowered from 8 on the SCREENING/goldfish shape. The same comment
+records that the GENERATION shapes were measured only at 1 and 8, with 1 "proven catastrophic"
+there — so for generation the lever points **up**, and this is exactly the regeneration the note was
+left for. Arms at 4 / 8 / 16 are measured in `logs/kitty_tail_diag/` by `ab_tail.sh`; the price is
+the shape CLAUDE.md blesses (`ChargeDecisionUnits` returns on `budget == nullptr`, so it is provably
+inert at an unlimited root and monotone in budget below it).
+
+## THE FULL TAIL A/B, 2026-10-10 — nine arms, identical 64 captured rollouts
+
+`logs/kitty_tail_diag/ab_tail.sh` + `compare_arms.sh`. Cells pinned (`MTG_KEEP_BENCH=1`), both arms
+`MTG_PGO=0`, `MTG_DECISION_WORK_X=1000`. `changed` = rollouts whose win turn moved; `sum_wt` is the
+aggregate label (299 everywhere except where noted).
+
+| arm | tail cpu | vs base | worst rollout | win turns moved |
+|---|---|---|---|---|
+| base (committed defaults) | 9114.2 s | 1.000x | 263.3 s | — |
+| `MTG_SOLVE_CHARGE_W=16` | 8984.7 | 0.986x | 249.8 | 0 |
+| `MTG_EQUIP_ROUTE_NODE_UNITS=4` | 8913.0 | 0.978x | 261.7 | 0 |
+| `=8` | 8767.6 | 0.962x | 256.1 | 0 |
+| `=16` | 8770.0 | **0.962x (saturated)** | 251.7 | 0 |
+| `MTG_FOLD_SEARCH_ODO=1` | 8586.8 | 0.942x | 247.5 | 0 |
+| `MTG_FOLD_SEARCH_ODO=1` + `MTG_FOLD_VERIFY=1` | 8508.6 | 0.934x | 255.6 | 0 |
+| `MTG_FOLD_SEARCH_ODO=1` + `MTG_SOLVE_CHARGE_W=16` | 8509.8 | 0.934x | 247.2 | 0 |
+| **`MTG_FOLD_SEARCH_ODO=1` + `MTG_EQUIP_ROUTE_NODE_UNITS=8`** | **8337.1** | **0.915x** | **246.1** | **0** |
+| `MTG_SOLVE_CHARGE_W=4` | 8232.3 | 0.903x | **329.5 (25% WORSE)** | **2** |
+
+**The noise floor is ~1%**, established by accident and worth keeping: the `odo` and `odo_verify`
+arms differ only by VERIFY's extra bookkeeping, yet the one doing MORE work came in 0.8% FASTER. So
+read 0.962 vs 0.962 as "saturated", not as two measurements, and treat anything under ~1.5% as noise.
+
+Four things this table settles.
+
+1. **The best available is 0.915x, label-identical.** The two levers stack nearly additively (0.942 x
+   0.962 = 0.906 predicted, 0.915 measured) and the stack also has the **best worst-case of any arm**
+   — which matters more than the aggregate here, because the worst rollout is what holds the pool's
+   barrier.
+2. **`MTG_SOLVE_CHARGE_W` is NOT the lever it looks like.** W=4 is the cheapest aggregate on the
+   board (0.903x) but it moves two labels and makes the worst rollout **25% worse**; and the curve is
+   **non-monotonic** — W=16 is 0.986x, worse than W=4. A heavier charge exhausts the budget sooner and
+   pushes work into a costlier fallback, the same displacement that flattens the equip price. A single
+   measurement at one weight would have been actively misleading.
+3. **The equip price saturates at 8.** 16 measures identical, so the knee is 8 and the whole available
+   win from that direction is 3.8%.
+4. **The engine axis on this deck is ~8.5%, not a multiple.** That is this document's original Fungus
+   conclusion holding on a second deck, by a different mechanism. Nothing here changes feasibility:
+   against a generation whose dominant phase is a multi-day bottoming refine, 0.915x is rounding.
+
+**NONE OF IT IS ADOPTED, and the generation did NOT run under any of it.** A keep table is fitted to
+the labeller's play, so generating under a lever the engine does not ship fits the table to a player
+we do not play — the "generation-side rules" the user rejected outright. `MTG_FOLD_SEARCH_ODO` is the
+strongest candidate (0.942x alone, 0.915x stacked, and `MTG_FOLD_VERIFY` reports
+`recoverable=11,424,464  UNRECOVERABLE=0` on this deck, so the completeness bar is met), but the fleet
+screen has kitty at 0.997 — not inert — so adoption changes play and owes a GT rebaseline plus a
+held-out quality A/B. That is a user ruling, not an agent's.
+
+**One gap the cap does not close:** discovery rollouts do not go through `run_one`/`run_batch`, so
+`MTG_KEEP_ROLLOUT_WALL_SEC` does not bound them — a 33 s discovery rollout is visible in the policy
+test's own log. That is the same unbackstopped phase this document flagged in 2026-09-24 and it is
+still open.
