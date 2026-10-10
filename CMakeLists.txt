@@ -301,6 +301,7 @@ add_executable(mtg-test
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
     test/unit/test_edf_blink_target.cpp
+    test/unit/test_edf_d0_play.cpp
     test/unit/test_critter_lifegain.cpp
     test/unit/test_mass_death_sba.cpp
     test/unit/test_selesnya_lifegain.cpp

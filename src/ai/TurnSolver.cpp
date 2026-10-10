@@ -34554,6 +34554,40 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     const bool has_extra_lethal = provider.HasExtraLethalModel();
     std::vector<const CardDefinition*> casting;   // reused per subset (only when has_extra_lethal)
 
+    // A TRIAL-VERIFIED WIN OUTRANKS A PROJECTED ONE (MTG_SOLVE_VERIFIED_WIN, DEFAULT ON; =0 restores
+    // the old (projected win, value, mask) order byte-identically).
+    //
+    // The ranking below is (wins, value, mask), and `wins` is a PROJECTION: attack + direct damage +
+    // the provider's ExtraLethalDamage addend, which is optimistic by contract ("an over-claim costs
+    // a mis-ranked plan, never a phantom win"). Inside the search that contract holds -- a rollout
+    // replays the plan. Here it does not: Solve IS the d0 decision (and every rollout leaf), so the
+    // mis-ranked plan is the one that gets played. The COMBO OFF route action (ComboRoute, WIN) is the
+    // opposite kind of claim: CollectActions emits it only after EdfComboRouteTrial ran the whole
+    // go-off on a copy of THIS board and the opponent died. Yet it carried no win at all in this
+    // ranking (no damage term) -- only eval 999 -- so any cast plan the Gorge projection called lethal
+    // with eval >= 1000 buried it. EDF gi 671 (seed 217872, d0) t7: the route trial WON (19 draws) and
+    // was on the menu; the runner took Training Grounds + Wild Growth + Drake + Displacer (eval 1000,
+    // projected win via the Gorge, `[edf-goff-cut] t7 projected=1 verified=0`), whose go-off fell
+    // short (its red was one-shot -- see MTG_EDF_GORGE_RED_SIZING) and won a turn later.
+    //
+    // Fix: a plan containing the verified route IS a win this turn (the trial proved it), and among
+    // winning plans a verified one dominates an unverified one. Sound by construction: no plan can do
+    // better than win this turn, so preferring the proven win can never cost a turn, while preferring
+    // the projection can (it did). A projected win still dominates every non-win, as before.
+    // `route_win_j` is -1 for every deck whose provider emits no ComboRoute (all but EDF) and for every
+    // EDF board whose trial did not win, so all of those are byte-identical.
+    static const bool s_verified_win_env = EnvOn("MTG_SOLVE_VERIFIED_WIN", true);
+    int route_win_j = -1;
+    if (heurarm::Flag(heurarm::SOLVE_VERIFIED_WIN, s_verified_win_env))
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            // chosen_x > 3 is the WIN form (999); DEVELOP is chosen_x 1 (see the emission site).
+            if (cands[j].kind == Action::Kind::ComboRoute && cands[j].chosen_x > 3)
+            { route_win_j = j; break; }
+        }
+    }
+
     // Dragonstorm acceleration-prefix collapse (HEURISTIC; provider-owned + MTG_UNPRUNED(AccelPrefix)-
     // gated -> byte-identical for every non-Dragonstorm deck and for Dragonstorm under MTG_UNPRUNED). When
     // on, GroupChoiceNonPrefixAccel below collapses the 2^K ritual-accelerant powerset to the K+1 cheapest-
@@ -35511,6 +35545,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // the ritual-payoff guard).
         if (!wins && has_extra_lethal && provider.ProjectsAlternateWin(state, casting))
         { wins = true; }
+        // MTG_SOLVE_VERIFIED_WIN (see route_win_j): the trial-verified COMBO OFF route wins this turn
+        // whatever the damage projection says. `sel` was sorted on entry.
+        const bool verified_win = route_win_j >= 0
+                               && std::binary_search(sel.begin(), sel.end(), route_win_j);
+        if (verified_win) { wins = true; }
         // MTG_IRENCRAG_WASTE, deferred from the restrictor loop: drop a subset that casts the cast
         // restrictor with nothing after it to spend its float -- unless the plan WINS, which is the
         // USER's stated exception ("do 3 for lethal if no Crackle is present").
@@ -35612,6 +35651,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (enumstats::Enabled()) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
         bool better;
         if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
+        else if (wins && route_win_j >= 0
+                 && verified_win != std::binary_search(best_sel.begin(), best_sel.end(), route_win_j))
+        { better = verified_win; }                                               // a VERIFIED win dominates a projected one
         else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
         else                               { better = mask < best_mask; }        // tie -> smallest mask
         if (!better) { return; }
@@ -35808,6 +35850,21 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (++s_dbg_nogoff <= 20)
             { std::fprintf(stderr, "[edf-goff-cut] t%d no goff cand\n", state.turn_number); }
         }
+    }
+
+    // ---- Verified COMBO OFF route short-circuit (MTG_SOLVE_VERIFIED_WIN; see route_win_j) -----------
+    // The route's WIN is already verified by execution (its trial killed the opponent on a copy of
+    // this board), so under the ranking above nothing the powerset could find outranks it: a verified
+    // this-turn win dominates every plan, projected wins included. Score it alone and, when it is the
+    // best, return it -- the same plan the full walk would settle on, without walking (the walk is
+    // this deck's slow tail; see the EDF cut above). consider() still owns feasibility: if it rejects
+    // the subset, `best` is untouched and the walk runs exactly as before.
+    if (route_win_j >= 0)
+    {
+        std::vector<int> route_sel{ route_win_j };
+        consider(route_sel);
+        if (best.wins_this_turn && best_sel.size() == 1 && best_sel[0] == route_win_j)
+        { return materialize_best(); }
     }
 
     // ---- Persist-loop go-off short-circuit (Melira Pod; sibling of the storm/EDF cuts) --------------
