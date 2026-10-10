@@ -2633,11 +2633,6 @@ public:
     const char* Name() const override { return "Landfall"; }
 };
 
-// Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
-// cleanup-discard bucket policy; everything else inherits Generic. The deck routed to
-// GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it
-// riding GoblinsProvider) until that policy was authored, user-amended and measured -- a deck earns
-// its own provider only once it has a hook to hold.
 // Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /
 // Murderous Redcap + free sac outlets, Birthing Pod + Chord of Calling as the tutors). Exists
 // FIRST for routing correctness: Carrion Feeder / Bloodthrone Vampire carry sac_creature_outlet,
@@ -2645,8 +2640,10 @@ public:
 // (Mirrorwing, StompySurprise, Minotaur, Dragons) -- and GoblinsProvider::DeferSacOutletPreCombat
 // would then defer the outlets to a second main this deck does not have, silently DELETING the
 // persist loop from the autonomous search (verified live before this fix: zero outlet activations
-// across 8 probe games under provider=Goblins). Inherits every Generic hook; deck-specific
-// narrowings are added here only once measured (the Minotaur/Dragons rule).
+// across 8 probe games under provider=Goblins). It has since gained the deck-specific hooks
+// declared below (flicker / revive / tutor / put targeting, fodder sacs, cleanup discard), each
+// with its own provenance comment; every other hook inherits Generic, and further narrowings are
+// added here only once measured (the Minotaur/Dragons rule).
 class MeliraPodProvider : public DeckProvider
 {
 public:
@@ -2699,6 +2696,11 @@ public:
     bool CleanupDiscardShedStable() const override;
 };
 
+// Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
+// cleanup-discard bucket policy; everything else inherits Generic. The deck routed to
+// GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it
+// riding GoblinsProvider) until that policy was authored, user-amended and measured -- a deck earns
+// its own provider only once it has a hook to hold.
 class MinotaurProvider : public DeckProvider
 {
 public:

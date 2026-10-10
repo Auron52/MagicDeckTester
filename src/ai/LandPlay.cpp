@@ -389,7 +389,7 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
     // manabase-sequencing principle, not a deck quirk, which is why it is built here in the shared
     // ranker rather than in a provider.
     //
-    // WHY IT MATTERS HERE. On Fluctuator 38 of 42 lands enter tapped, so two mana on turn two IS
+    // WHY IT MATTERS HERE. On Fluctuator 34 of 42 lands enter tapped, so two mana on turn two IS
     // the deck (untapped T2 drop: 3.554 avg / 58% T3 wins; tapped: 4.306 / 6.5%), and the ranker
     // spent the untapped land on turn one in ~42% of the games where it had the choice. That was
     // INVARIANT across d3 and d5 -- not because the search is blind to the trade, but because it

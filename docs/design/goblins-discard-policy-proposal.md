@@ -66,7 +66,8 @@ played earlier than a lord."
 - SHED: dead Three Tree City -> 2nd Muxus in hand -> surplus mana (colourless land, lands, Vial after
   T1) -> lords over the cap (King first) -> surplus creatures (no-route Muxus first, then
   Stingscourger, up the order) -> ladder tail.
-- Housekeeping: fix Muxus's cards.json oracle_text / bracket note (above). goblins2hg: every face term
+- Housekeeping: fix Muxus's cards.json oracle_text / bracket note (above) -- fixed 2026-10-10, with
+  the matching `DecisionProvider.h` LegendKeepIndex comment. goblins2hg: every face term
   through OpponentHeads(). IsSubtypeCostReducer is defined below GoblinsProvider (compile order).
 
 
@@ -162,6 +163,8 @@ Deck-specific (verbatim):
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
+
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** `MTG_GOBLINS_BUCKET_DISCARD` shipped as **`MTG_GOBLIN_BUCKET_DISCARD`** (heurarm slot `GOBLIN_BUCKET_DISCARD`, `src/ai/HeuristicArm.h`); the old name is read nowhere, so setting it is a silent no-op.
 
 
 Authored per `docs/design/discard-bucket-authoring-brief.md` for the 2026-09-23 sweep. **Nothing is

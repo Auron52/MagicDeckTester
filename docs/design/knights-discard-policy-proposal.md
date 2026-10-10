@@ -136,6 +136,8 @@ Cross-deck (verbatim):
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
 
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** `MTG_SEARCHED_VIAL`, cited below as the Vial charge's searched axis, was the out-of-band rollout probe and was DELETED in d1832b52 (2026-09-30, the no-greedy hard rule; see `AIEngine::DecideVialCharge`); the in-search Vial-charge axis is **`MTG_VIAL_AXIS`** (default OFF since 3efbe969, `src/ai/EngineFlags.h`). The old name is read nowhere.
+
 
 Authored to `docs/design/discard-bucket-authoring-brief.md` for the 2026-09-23 per-deck sweep.
 Deliverable is this document; no `.cpp`/`.h` was touched. Every card characteristic below was read

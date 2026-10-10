@@ -828,7 +828,7 @@ Nothing consumes the 1 in line one, so line two **dominates** it. Deferring the 
 nothing now and buys a full extra mana on every later turn. That is ordinary manabase sequencing,
 not a deck quirk, so it is built in the shared ranker rather than in this deck's provider.
 
-**Why it bites here.** 38 of 42 lands enter tapped, so two mana on turn two IS the deck — an
+**Why it bites here.** 34 of 42 lands enter tapped, so two mana on turn two IS the deck — an
 untapped T2 drop averages **3.554 (58% T3 wins)** against **4.306 (6.5%)** for a tapped one — and
 the ranker spent the untapped land on turn one in **~42% of the games where it had the choice**.
 

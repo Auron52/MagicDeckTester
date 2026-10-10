@@ -1332,7 +1332,8 @@ public:
     // never use a walker the turn it was cast (the CritterLifegain 5d finding: Ajani idled a
     // turn). Generic = MTG_WALKER_CAST_ACTIVATE (default OFF): FiveColour's Jared/Oko/Bolas would
     // gain the same reach, but that is a GT-moving change to measure per game before adopting
-    // there. CritterLifegainProvider opts in (its three Ajani are the deck's engine).
+    // there. CritterLifegainProvider opts in (written when the list ran three Ajani; the current
+    // CritterLifegain list runs one).
     virtual bool SearchesWalkerCastActivation() const
     { return EnvOn("MTG_WALKER_CAST_ACTIVATE"); }
 
@@ -2587,7 +2588,7 @@ public:
     //
     // Exactly one copy survives, and the ETB is already banked before this state-based action runs,
     // so the choice is only ever "which BODY survives". For a body whose sole use is ATTACKING --
-    // Hinata (static + flier), Haytham (ETB + lord), Muxus (its trigger is "enters or attacks") --
+    // Hinata (static + flier), Haytham (ETB + lord), Muxus (ETB reveal + an attack pump) --
     // the only within-turn content is "can the survivor attack now", and keeping the OLDEST already
     // answers that correctly because the oldest is the un-sick one. Every other difference observed
     // (tapped, sickness, temp pump) is erased by the next untap step, after which the copies are
@@ -2599,8 +2600,9 @@ public:
     // It duplicated ZERO times in 600 games. Revisit this hook if a deck runs a legend with a tap
     // ability or a sacrifice outlet that actually duplicates; until then the base rule is not a
     // placeholder, it is the answer.
-    // (CritterLifegainProvider overrides this for its three Ajani, Strength of the Pride -- see
-    // that class: the walker-aware keep moved a FiveColour d0 game when tried here generically.)
+    // (CritterLifegainProvider overrides this; written for v1's three Ajani, Strength of the
+    // Pride -- the current list runs one. See that class: the walker-aware keep moved a
+    // FiveColour d0 game when tried here generically.)
     virtual int LegendKeepIndex(const GameState& /*s*/, int /*controller*/,
                                 const std::vector<int>& duplicates) const
     {

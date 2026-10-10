@@ -20149,8 +20149,9 @@ static bool HasteAccessThisTurn(const GameState& state)
 
 // A battlefield attacker whose POWER scales with what else you cast makes every permanent cast
 // pre-combat a potential pump: Faeburrow Elder (domain_self_pump -- any new-colour permanent),
-// Adeline (power_equals_creature_count -- any creature), Predatory Sliver (scales_per_matching --
-// any matching body), and domain_mana (a live Elder/Bloom Tender taps for MORE colours after a
+// Adeline (power_equals_creature_count -- any creature), a scales_per_matching lord (any matching
+// body; no cards.json entry sets it today -- Predatory Sliver is a flat +1/+1 lord, not one), and
+// domain_mana (a live Elder/Bloom Tender taps for MORE colours after a
 // new-colour cast -- mana coupling, the USER's floating-mana/BOTH boundary class). Conservative:
 // presence alone fires the guard (no can-attack / colour-delta analysis) -- over-firing keeps
 // casts pre-combat, never drops one.

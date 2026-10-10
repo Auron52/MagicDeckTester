@@ -98,7 +98,7 @@ Housekeeping done: the stale v1 counts in `DecisionProviders.cpp`'s routing comm
 of Thune", "3 Lyra + 2 Giada") and the "Angels holds NO judgement hook" claim. NOT done (out of
 scope, `cards.json`): Bishop of Wings' note ("the deck's 3 Lyra Dawnbringer and 2 Giada"), Lyra
 Dawnbringer's ("LEGEND RULE is live at 3 copies"), Youthful Valkyrie's ("all four copies"), Seraph
-Sanctuary's ("4 of 24 lands" -- v2 runs 23).
+Sanctuary's ("4 of 24 lands" -- v2 runs 23). (All four fixed in cards.json 2026-10-10.)
 
 
 #### USER rulings (2026-10-10) on the implementation readings

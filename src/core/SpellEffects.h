@@ -4182,8 +4182,9 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // Matches on creature.m_subtypes (e.g. "Sliver") against params.subtypes_affected.
 // Pass all_creature_types = true for animated permanents (e.g. Mutavault) which have
 // all creature types and therefore match any lord.
-// For lords with scales_per_matching = true (e.g. Predatory Sliver), the bonus scales
-// with the number of other matching permanents on the battlefield.
+// For lords with scales_per_matching = true, the bonus scales with the number of other
+// matching permanents on the battlefield. (No cards.json entry sets it today. Predatory Sliver
+// is NOT an example: it is a flat lord, "Sliver creatures you control get +1/+1".)
 // `self` (when non-null) is the permanent whose bonus we are computing; a lord with
 // lord_excludes_self ("Other ... get +1/+1") does not apply to itself. Pass the
 // battlefield permanent at combat/damage time; pass nullptr for hand-card evaluation

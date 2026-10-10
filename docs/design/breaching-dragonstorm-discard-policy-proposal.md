@@ -118,6 +118,8 @@ Cross-deck (verbatim):
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
 
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** `MTG_BREACHING_BUCKET_DISCARD` shipped as **`MTG_BREACH_BUCKET_DISCARD`** (heurarm slot `BREACH_BUCKET_DISCARD`, `src/ai/HeuristicArm.h`); the old name is read nowhere, so setting it is a silent no-op.
+
 
 Authored from `docs/design/discard-bucket-authoring-brief.md` (the 2026-09-23 per-deck sweep).
 **This document is the deliverable; no `.cpp`/`.h` was touched.** Integration is central, as

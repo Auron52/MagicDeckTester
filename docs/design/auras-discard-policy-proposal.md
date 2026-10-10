@@ -133,6 +133,8 @@ Deck-specific (verbatim):
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
 
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** `MTG_AURAS_BUCKET_DISCARD` (heurarm slot `AURAS_BUCKET_DISCARD`) shipped as **`MTG_AURA_BUCKET_DISCARD`** (slot `AURA_BUCKET_DISCARD`, `src/ai/HeuristicArm.h`); the old name is read nowhere, so setting it is a silent no-op.
+
 
 Authored per `docs/design/discard-bucket-authoring-brief.md` for the 2026-09-23 per-deck sweep.
 Proposes `AurasProvider::CleanupDiscardCandidates` behind a default-on

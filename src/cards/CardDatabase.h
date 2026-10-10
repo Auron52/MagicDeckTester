@@ -272,7 +272,8 @@ struct CardParams
     int death_trigger_damage = 0;
 
     // Lord scaling: if true, the P/T bonus scales per other matching creature on the
-    // battlefield rather than being a flat bonus (e.g. Predatory Sliver).
+    // battlefield rather than being a flat bonus. No cards.json entry sets it today (Predatory
+    // Sliver is a FLAT lord, "Sliver creatures you control get +1/+1", not an example).
     bool scales_per_matching = false;
 
     // Attack trigger: deal this much damage to the opponent per attacker that matches
