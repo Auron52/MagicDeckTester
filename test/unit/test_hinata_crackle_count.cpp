@@ -12,6 +12,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -59,6 +60,14 @@ struct CrackleArm
     explicit CrackleArm(bool on) : prev(heurarm::t_arm[heurarm::CRACKLE_COUNT_EXACT])
     { heurarm::t_arm[heurarm::CRACKLE_COUNT_EXACT] = on ? 1 : 0; }
     ~CrackleArm() { heurarm::t_arm[heurarm::CRACKLE_COUNT_EXACT] = prev; }
+};
+
+// RAII pin of any heurarm lever on the calling thread.
+struct Pin
+{
+    int slot; std::int8_t prev;
+    Pin(int sl, bool on) : slot(sl), prev(heurarm::t_arm[sl]) { heurarm::t_arm[sl] = on ? 1 : 0; }
+    ~Pin() { heurarm::t_arm[slot] = prev; }
 };
 
 // Hinata, Dawn-Crowned + `lands` Islands on our side, `hand` in hand, opponent at 20.
@@ -132,6 +141,9 @@ TEST_CASE("IsCrackleCountSpell: Crackle yes, Reality Spasm no, an ordinary {X} b
 
 TEST_CASE("HinataProvider::XCandidates holds a lone non-lethal Crackle even with a Reality Spasm in hand")
 {
+    // The XCandidates ESTIMATE path (MTG_HINATA_HOLD_LETHAL_BURN=0); with that lever on the same hold
+    // is applied by the subset walks instead -- see the HOLD_LETHAL_BURN cases below.
+    Pin estimate(heurarm::HINATA_HOLD_LETHAL_BURN, false);
     const HinataProvider hp;
     const CardDefinition& crackle = DefHc(kCrackle);
 
@@ -211,4 +223,155 @@ TEST_CASE("Reality Spasm with Hinata in play: X targets -> {X} discounted away -
     const GameState bare = HinataBoard(3, { kSpasm }, /*with_hinata=*/false);
     CHECK(HinataGenericDiscount(spasm, bare, 3) == 0);
     CHECK(HinataGenericDiscount(crackle, bare, 3, 2) == 0);
+}
+
+// ---- MTG_HINATA_HOLD_LETHAL_BURN: the hold's "wins THIS turn" judged by the subset walks -------------
+namespace
+{
+// Hinata + Ornithopter of Paradise (both able to attack) + 6 Mountains + 6 Islands, land drop spent,
+// pre-combat, `hand` in hand. 13 mana: Crackle's max X is 4 ({9}{R}{R} after her {1}-per-target -- 3
+// targets: the face and the two creatures) with 2 left, which is exactly Magma Opus at one face
+// damage ({U}{R}: six distinct targets). Hinata swings for 4; the Ornithopter is held for mana.
+//   Crackle X=4 alone + attack      = 20 + 4     = 24
+//   Crackle X=4 + Magma (1) + attack = 20 + 1 + 4 = 25
+// `salt` only keeps the per-thread Solve memo (keyed on the state) from serving one arm to the other.
+GameState BurnBoard(const std::vector<std::string>& hand, int opp_life, int salt)
+{
+    EnsureCardsHc();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 6;
+    s.players[0].life     = 20 + salt;
+    s.players[1].life     = opp_life;
+    int num = 1;
+    auto put = [&](const char* n)
+    {
+        Permanent p;
+        p.card              = DefHc(n).card;
+        p.card.m_number     = num++;
+        p.controller_index  = 0;
+        p.owner_index       = 0;
+        p.entered_this_turn = false;
+        s.battlefield.push_back(p);
+    };
+    put("Hinata, Dawn-Crowned");
+    put("Ornithopter of Paradise");
+    for (int i = 0; i < 6; ++i) { put("Mountain"); put("Island"); }
+    s.players[0].lands_played_this_turn = 1;
+    for (const std::string& n : hand) { Card c = DefHc(n.c_str()).card; c.m_number = num++; s.players[0].hand.push_back(c); }
+    for (int k = 0; k < 10; ++k) { Card c = DefHc("Island").card; c.m_number = 900 + k; s.players[0].library.push_back(c); }
+    return s;
+}
+
+bool CastsHc(const TurnSolver::Plan& p, const std::string& name)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { return true; } }
+    return false;
+}
+
+TurnSolver::Plan GreedyHc(const GameState& s)
+{
+    return TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+}
+
+bool AnyPlanCasts(const GameState& s, const std::string& name)
+{
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    { if (CastsHc(p, name)) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("HOLD_LETHAL_BURN: the provider hands the hold to the subset walks (on) or estimates it (off)")
+{
+    const HinataProvider hp;
+    const CardDefinition& crackle = DefHc(kCrackle);
+    const GameState lone = BurnBoard({ kCrackle, "Magma Opus" }, 25, 0);
+    const GameState two  = BurnBoard({ kCrackle, kCrackle }, 25, 0);
+    {
+        Pin on(heurarm::HINATA_HOLD_LETHAL_BURN, true);
+        CHECK(hp.HoldCastUnlessLethal(lone, crackle));
+        CHECK(hp.XCandidates(lone, crackle, 4) == std::vector<int>{ 4 });   // offered; the walks hold it
+        CHECK_FALSE(hp.HoldCastUnlessLethal(two, crackle));                // a real second copy: free
+        CHECK_FALSE(hp.HoldCastUnlessLethal(lone, DefHc("Magma Opus")));   // only the Crackle is held
+        CHECK_FALSE(DefaultProvider().HoldCastUnlessLethal(lone, crackle)); // every other deck: never
+    }
+    {
+        Pin off(heurarm::HINATA_HOLD_LETHAL_BURN, false);
+        CHECK_FALSE(hp.HoldCastUnlessLethal(lone, crackle));
+        CHECK(hp.XCandidates(lone, crackle, 4).empty());                   // 20 + 4 < 25 -> held here
+    }
+}
+
+TEST_CASE("HOLD_LETHAL_BURN: a Crackle that is lethal only WITH a Magma Opus co-cast is cast (on), held (off)")
+{
+    const HinataProvider hp;
+    // Lethal with the co-cast: 25.
+    {
+        Pin on(heurarm::HINATA_HOLD_LETHAL_BURN, true);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 25, 1);
+        s.m_provider = &hp;
+        const TurnSolver::Plan g = GreedyHc(s);
+        CHECK(CastsHc(g, kCrackle));
+        CHECK(CastsHc(g, "Magma Opus"));
+        CHECK(AnyPlanCasts(s, kCrackle));
+    }
+    {
+        Pin off(heurarm::HINATA_HOLD_LETHAL_BURN, false);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 25, 2);
+        s.m_provider = &hp;
+        CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));   // the estimate (24 < 25) held the kill
+        CHECK_FALSE(AnyPlanCasts(s, kCrackle));
+    }
+    // Not lethal even with the co-cast (26): no plan casts the lone Crackle under either arm.
+    for (bool arm : { true, false })
+    {
+        Pin pin(heurarm::HINATA_HOLD_LETHAL_BURN, arm);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, arm ? 3 : 4);
+        s.m_provider = &hp;
+        CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));
+        CHECK_FALSE(AnyPlanCasts(s, kCrackle));
+    }
+    // A second copy lifts the hold: a chip Crackle is a legal plan again under both arms.
+    for (bool arm : { true, false })
+    {
+        Pin pin(heurarm::HINATA_HOLD_LETHAL_BURN, arm);
+        GameState s = BurnBoard({ kCrackle, kCrackle }, 26, arm ? 5 : 6);
+        s.m_provider = &hp;
+        CHECK(AnyPlanCasts(s, kCrackle));
+    }
+}
+
+// ---- MTG_HINATA_HOLD_NEEDS_HINATA (default OFF, the USER's call): hold only while the combo is live ---
+TEST_CASE("HOLD_NEEDS_HINATA: no Hinata in play or castable -> a lone Crackle is plain burn (on); held (off)")
+{
+    const HinataProvider hp;
+    const CardDefinition& crackle = DefHc(kCrackle);
+    // 4 Islands, no Hinata anywhere: X = 2 is 10 + 0 attack < 20 -> the estimate holds.
+    const GameState none     = HinataBoard(4, { kCrackle, kSpasm }, /*with_hinata=*/false);
+    // ...Hinata in HAND with 4 sources (her mana value): castable this turn -> the combo is live.
+    const GameState castable = HinataBoard(4, { kCrackle, "Hinata, Dawn-Crowned" }, /*with_hinata=*/false);
+    // ...and in play.
+    const GameState in_play  = HinataBoard(4, { kCrackle, kSpasm });
+    for (bool lethal_burn : { true, false })
+    {
+        Pin lb(heurarm::HINATA_HOLD_LETHAL_BURN, lethal_burn);
+        auto held = [&](const GameState& s)
+        { return lethal_burn ? hp.HoldCastUnlessLethal(s, crackle) : hp.XCandidates(s, crackle, 2).empty(); };
+        {
+            Pin off(heurarm::HINATA_HOLD_NEEDS_HINATA, false);   // the default: hold regardless
+            CHECK(held(none));
+            CHECK(held(castable));
+            CHECK(held(in_play));
+        }
+        {
+            Pin on(heurarm::HINATA_HOLD_NEEDS_HINATA, true);
+            CHECK_FALSE(held(none));
+            CHECK(held(castable));
+            CHECK(held(in_play));
+        }
+    }
+    // Default is OFF.
+    CHECK_FALSE(heurarm::Flag(heurarm::HINATA_HOLD_NEEDS_HINATA, EnvOn("MTG_HINATA_HOLD_NEEDS_HINATA")));
 }
