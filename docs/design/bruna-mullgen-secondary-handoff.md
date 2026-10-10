@@ -9,16 +9,23 @@ its journal cannot pool. Do not copy it.
 ## 1. What to build
 
 Check out `origin/phase-1-2-deck-analyzer` at a commit whose **`src` tree hash is
-`cd0001a35b9611100972081c2400a3693c47e2be`**. HEAD at the time of writing (`9e56a277`) has that tree.
+`5c5cd74c291abaea32ba84eef384947b2dad0662`**. `5b4f963f` (the Wings-recast payment fix) is the first
+commit with that tree; later docs/GT-only commits keep it.
+
+**Not `cd0001a3`.** An earlier version of this doc named src `cd0001a3` (`9e56a277`). That tree predates
+the payment fix, which changes Bruna's play (the executor now carries out the Greaves moves the search
+planned), so a keep table generated there is fitted to play that no longer ships. A run already going
+on `cd0001a3` should be reported before deciding whether to restart it.
 
 ```bash
-git rev-parse HEAD:src     # must print cd0001a35b9611100972081c2400a3693c47e2be
+git rev-parse HEAD:src     # must print 5c5cd74c291abaea32ba84eef384947b2dad0662
 ./build.sh                 # NEVER raw cmake (an empty build type is -O0, ~10x slower)
 ```
 
-**Do not rebase or pull this checkout while the generation runs.** A later engine change (one is in
-flight: the Wings-recast payment fix) moves Bruna's play digest, and the generator's own validation
-step compares against the ground truth of the tree it is running on. Use a dedicated checkout or
+**Do not rebase or pull this checkout while the generation runs.** A later engine change can move
+Bruna's play digest, and the generator's own validation step (the regression tier,
+`regression.sh --deck=bruna`) compares against the ground truth of the tree it is running on; that
+ground truth is consistent at `5b4f963f`. Use a dedicated checkout or
 worktree for the run.
 
 ## 2. Everything it needs is tracked in git
@@ -56,7 +63,7 @@ IS DAYS OF COMPUTE".
   happens, stop and report; do not edit the number.
 - **Hand space:** 671,400 seven-card hands (1,342,800 cells counting play and draw), plus 494,354
   smaller-hand batches.
-- **Rollout cost on the primary:** 0.356 core-s at d1 b3 (Release, 24 cores), after the width
+- **Rollout cost on the primary:** 0.356 core-s at d1 b3 (Release, 24 cores; measured at src `cd0001a3`, before the payment fix, not re-measured), after the width
   collapses (0.437 before).
 - **Estimate:** ~2.8 days on 24 cores at similar per-core speed. Scale by your box:
   `wall ≈ 2.8 d × (24 / your cores) × (primary per-core speed / yours)`. Treat it as central with a
