@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 114d1651  date 2026-10-09
+# Regression ground truth -- commit b77a1675  date 2026-10-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -26,6 +26,9 @@
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
+# accepted-with-regressions (smoke, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
+# accepted-with-regressions (regression, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
+# accepted-with-regressions (overnight, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -149,9 +152,9 @@ bruna2hg_smoke_d3_s1001=5.5000/774533ea4ce7f561
 bruna_smoke_d0_s1001=6.2560/02241b8dafc23b80
 bruna_smoke_d3_s1001=4.8933/d2f585183739c7f3
 bruna_smoke_d5_s1001=4.9333/f414c5dff0118648
-snow_smoke_d0_s1001=6.4660/ae25442a03503915
-snow_smoke_d3_s1001=6.0000/13ce3a7e1c79588b
-snow_smoke_d5_s1001=6.0000/d90c911f6a435617
+snow_smoke_d0_s1001=6.2250/4b5e8f6a53ee5955
+snow_smoke_d3_s1001=5.8600/4e5006b213eba677
+snow_smoke_d5_s1001=5.7800/2e8f6008d83f1320
 
 # --- regression ---
 fungus_regression_d0_s2002=5.6900/7f90c5ec3fa0dd16
@@ -320,11 +323,11 @@ bruna_regression_d3_s2002=5.1667/94ecd3ec2782666f
 bruna_regression_d3_s3003=5.0933/0058df3fd7d1874e
 bruna_regression_d5_s2002=5.0667/2222562c92b3bcd1
 bruna_regression_d5_s3003=5.1333/b165579637e627ef
-snow_regression_d0_s2002=6.4410/db2a18d6a341b2e9
-snow_regression_d3_s2002=6.0000/7bc7feadd0c2313a
-snow_regression_d3_s3003=5.8167/5f24e959ffddfd0c
-snow_regression_d5_s2002=5.9667/a83eca61b3e07eca
-snow_regression_d5_s3003=5.8667/8568df0fcf6f3aee
+snow_regression_d0_s2002=6.2290/b7e3e2bf40d6e69f
+snow_regression_d3_s2002=5.6500/a3334acbcf0f61ad
+snow_regression_d3_s3003=5.7667/9bcf429fa60da63d
+snow_regression_d5_s2002=5.6667/0296afd77c55dd9d
+snow_regression_d5_s3003=5.8667/ace405b571978ed0
 
 # --- overnight ---
 fungus_overnight_d0_s4004=5.6445/1d8f7891cc7454b7
@@ -731,12 +734,12 @@ fluctuator_overnight_d5_s4004=3.5400/3fe27d7826bdb0a5
 fluctuator_overnight_d5_s5005=3.5480/22194e860d23a7b6
 fluctuator_overnight_d5_s6006=3.5600/880f3f09f6aea59a
 fluctuator_overnight_d5_s7007=3.6360/2f27e1e2d5c14fb6
-snow_overnight_d0_s4004=6.4150/b0b9843ac7751515
-snow_overnight_d3_s4004=5.8000/0295eb655f385a40
-snow_overnight_d3_s5005=5.8533/c6765800cb8cec69
-snow_overnight_d3_s6006=5.8800/663961ec478923ee
-snow_overnight_d3_s7007=5.8933/bb484a5d4ba27c96
-snow_overnight_d5_s4004=5.8000/e707f644e8b64fbf
-snow_overnight_d5_s5005=5.8400/fb5b194cc3e58e3e
-snow_overnight_d5_s6006=5.8900/09dcecf87c05add3
-snow_overnight_d5_s7007=6.0000/c773f7ff58a3991c
+snow_overnight_d0_s4004=6.2050/209f9da9968c56dc
+snow_overnight_d3_s4004=5.6333/ab442f36a10f3bcd
+snow_overnight_d3_s5005=5.6400/90dd7ea1ed033d0f
+snow_overnight_d3_s6006=5.6067/fd694a859fe0c4b8
+snow_overnight_d3_s7007=5.7133/88df28bba2c84726
+snow_overnight_d5_s4004=5.6400/2d6cf6fa54bb23d2
+snow_overnight_d5_s5005=5.6300/023d95d8e696a823
+snow_overnight_d5_s6006=5.6500/b92e72338c0d783e
+snow_overnight_d5_s7007=5.7200/0a36e8bea6a5ead5

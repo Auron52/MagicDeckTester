@@ -964,6 +964,84 @@ unverified on `a500d466`.**
 > GT.** Holding the GT step back as a deliberate call, rather than bundling it into the adoption, is the
 > only reason this did not land as a corrupt baseline.
 
+#### 9.4m-pre.1 CONFIRMED ON THE NEW ENGINE BY REGRESSION ALONE (2026-10-09) — the A/B re-run was wrong to propose
+
+**USER RULING: *"Just the regression tests is correct. I refuse to have you looping on the whole
+acceptance test."*** Correct, and Rule 0 says it in as many words — regenerate/re-verify when a change
+moves this deck's play, **"confirmed by a *regression*, not by a digest diff"**. Proposing another ~82 h
+confounded A/B pair for a *re-verification* confused the first-adoption gate (which needs the A/B) with
+the still-adopted check (which needs a regression). Do not repeat that.
+
+**It is also the cleaner experiment, which is the part worth keeping.** `f81aea16` accepted snow GT on
+another box, where only the committed `.gz` exists — so **that GT is new-engine play WITHOUT the profile**.
+Rebuild on HEAD and the engine matches the GT's engine exactly, leaving the profile as the *only* variable.
+Rebuilt at `a500d466`, profile live, `bash test/regression.sh --deck=snow`:
+
+| case | GT (new engine, no profile) | with profile | delta | games |
+|---|---:|---:|---:|---:|
+| snow_regression_d0_s2002 | 6.4410 | 6.2290 | **-0.2120** | 1000 |
+| snow_regression_d3_s2002 | 6.0000 | 5.6500 | **-0.3500** | 60 |
+| snow_regression_d3_s3003 | 5.8167 | 5.7667 | **-0.0500** | 60 |
+| snow_regression_d5_s2002 | 5.9667 | 5.6667 | **-0.3000** | 30 |
+| snow_regression_d5_s3003 | 5.8667 | 5.8667 | 0.0000 | 30 |
+
+**4 faster, 1 tie, 0 slower; mean -0.182t.** The profile demonstrably still helps on `a500d466`, so by
+Rule 0's own bar it **stays adopted**. Cost: one 4m35s batch, not 82 h.
+
+`Result: 0 passed, 5 failed` / `REGRESSION DETECTED` is the *expected* reading and not a rejection — every
+snow key necessarily moves, because GT was accepted without the profile.
+
+**Churn in both directions, recorded rather than buried.** Within the 1000-game d0 case there were **130
+slower games and one win->loss (`gi31: 7->loss`)**; suite-wide, 17 searched games slower and 47
+play-changed at equal score. That is ordinary for a mulligan-policy change (different hands kept ⇒
+different games) and the aggregates are what the bar reads, but it is not a clean sweep. Note also that
+only d0 carries 1000 games; the d3/d5 cases are 30-60 games and individually noisy — the -0.212t on d0 is
+the load-bearing number.
+
+#### 9.4m-pre.2 ALL THREE TIERS REBASELINED 2026-10-09/10 — 16/17 cases faster, 0 slower, 0 unexplained games
+
+Every tier re-measured on `a500d466` with the profile live, then accepted. **17 keys, every one snow:**
+
+| tier | cases | result | mean |
+|---|---:|---|---:|
+| smoke | 3 | **3 faster, 0 slower** | **-0.200t** |
+| regression | 5 | 4 faster, 1 tie, 0 slower | **-0.182t** |
+| overnight | 9 | **9 faster, 0 slower** | **-0.215t** |
+
+**Every changed game is attributed — this is the step that nearly got skipped.** The GT header's own
+history shows each prior keep-table adoption (SelesnyaLifegain, Soldiers) recorded an
+`--accept-with-regressions` note *and* ran `test/keep_adoption_attribution.py`. The first pass here
+accepted all three tiers with **neither**. Re-done properly:
+
+| tier | mulligan count | bottom | order-only | **unexplained** |
+|---|---:|---:|---:|---:|
+| smoke | 619 | 50 | 2 | **0** |
+| regression | 620 | 65 | 3 | **0** |
+| overnight | 1011 | 102 | 0 | **0** |
+
+2,472 changed games, all explained, and `off == committed GT` / `on == run under audit` **True on both
+sides of all 17 cases** — so the table is provably the only difference and it never leaked into play.
+That is what justifies the searched-SLOWER counts (17 smoke/regression, 88 overnight): mulligan churn,
+not play regressions.
+
+> **ORDERING TRAP, hit here: `keep_adoption_attribution.py` must run BEFORE `--accept`.** Its own
+> docstring says so — "the committed gt_logs are the OLD side" — and an accept *overwrites* those logs,
+> destroying the baseline the attribution proves itself against. Having accepted first, the only reason
+> this was recoverable is that `test/regression_gt.txt` **and** `test/gt_logs/` had been copied to
+> `logs/gt_backup_2026-10-09/` beforehand; the old side was restored, the attribution run, and all three
+> tiers re-accepted with the note. **Back up both before any accept**, and prefer: run -> attribute ->
+> accept.
+
+Verification of the final state: 17 keys changed and **all `snow_*`**; the re-accepted values are
+**byte-identical** to the first accept's; **706 real key lines before and after**; no duplicate keys;
+**all 26 prior `accepted-with-regressions` notes carried forward** plus the 3 new ones (29 total — the
+filtered-accept carry-all branch working as designed); `check_gt_logs.py` **706 consistent, 0 STALE,
+0 missing**.
+
+(Counting note: `grep -c '='` on the GT file reads 715 -> 718, which looks like 3 keys appearing from
+nowhere. It is the three new note lines, which contain `R=30`/`K=17`. Count real keys with
+`grep -vE '^#' | grep -c '='`.)
+
 ### 9.4m WHAT REMAINS — two deliberate calls, neither taken
 
 1. **Commit the artifacts.** Staged and ready (`gzip -k`, so the live uncompressed profile is untouched —
