@@ -18,4 +18,7 @@ struct MtgTestSeam
     static void CastSpellFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail,
                                   int chosen_x)
     { e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), chosen_x); }
+
+    // How many breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine.
+    static long long BpResolves(const AIEngine& e) { return e.m_bp_resolves; }
 };

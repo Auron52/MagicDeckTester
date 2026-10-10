@@ -1180,6 +1180,12 @@ public:
     // Irencrag-style cast-restrictor (18) before the rank-20 payoff, so their float is online to pay
     // it" is now the GENERIC card-parameter tiering -- it was written out identically here and in
     // HinataProvider, and any future ritual deck now inherits it from its card data.
+    //
+    // OrderOpaqueCastsByRank: that order also governs an ORDER-OPAQUE set (MTG_DRAGONSTORM_ORDER_OPAQUE,
+    // default ON). Apex of Power is a re-solve breakpoint card, so without the opt-in a plan holding
+    // it was cast in RAW plan (= hand) order and Apex could precede the rituals that pay for it
+    // (dragonstorm_smoke_d0_s1001 gi533, docs/design/executor-ritual-payable-order.md).
+    bool OrderOpaqueCastsByRank() const override;
 
     // Opt in to the acceleration-prefix collapse (UseAccelPrefixCollapse): the go-off hand's ritual
     // accelerants are enumerated cheapest-first prefix-only rather than powerset. HEURISTIC,
