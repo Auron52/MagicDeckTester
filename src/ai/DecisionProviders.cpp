@@ -11044,6 +11044,18 @@ int DragonstormProvider::CastOrderActionRank(const GameState& s, const Action& a
 
 bool DragonstormProvider::ExactOrderWalk() const { return UserOrderOn(); }
 
+// MTG_DRAGONSTORM_BP_LEFTOVERS (DEFAULT ON; =0 -> the remainder is cast after the continuation, as
+// before). Found by the USER-order audit: dragonstorm d0 s7000158 T8 (Scourge cast after the
+// continuation's Dragonstorm), s7000043 T5, and the 2026-10-10 suite-A/B game s1191413 T3 (Irencrag cast
+// LAST after the continuation's Utvara, its seven red wasted). Only an Apex of Power site, and only with
+// the USER order on (the merge orders by it).
+bool DragonstormProvider::MergesBreakpointLeftovers(const CardDefinition& site) const
+{
+    static const bool on = EnvOn("MTG_DRAGONSTORM_BP_LEFTOVERS", true);   // DEFAULT ON; =0 disables
+    return site.params.impulse_exile > 0 && UserOrderOn()
+        && heurarm::Flag(heurarm::DRAGONSTORM_BP_LEFTOVERS, on);
+}
+
 bool DragonstormProvider::CastUnderCastCap(const GameState& s, const CardDefinition& def) const
 {
     if (!UserOrderOn()) { return true; }

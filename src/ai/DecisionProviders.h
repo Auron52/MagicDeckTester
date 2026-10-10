@@ -1221,6 +1221,10 @@ public:
                                  const std::vector<int>& sel) const override;
     // The lever (heurarm slot DRAGONSTORM_USER_ORDER).
     static bool UserOrderOn();
+    // After an Apex of Power breakpoint, the interrupted list's remaining casts are ordered TOGETHER with
+    // the continuation (MTG_DRAGONSTORM_BP_LEFTOVERS) -- USER: "after the breakpoint the cast order should
+    // follow my order"; a leftover Dragon or Irencrag no longer lands after the continuation's Dragonstorm.
+    bool MergesBreakpointLeftovers(const CardDefinition& site) const override;
     //
     // OrderOpaqueCastsByRank: that order also governs an ORDER-OPAQUE set (MTG_DRAGONSTORM_ORDER_OPAQUE,
     // default ON). Apex of Power is a re-solve breakpoint card, so without the opt-in a plan holding
