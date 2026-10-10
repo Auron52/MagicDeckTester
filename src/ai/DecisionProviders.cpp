@@ -34194,15 +34194,28 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
 //             Alchemist.
 //   LIFEGAIN  1 (Feed the Clan > Wellwisher) while a lifegain payoff (Paragon / Ageless, and
 //             Bogbeast -- its pump is the life gained this turn) is held or in play.
-//   PAYOFFS   2 + a soft 3rd, net of board, ranked by castability x enablement; equal ones Bogbeast >
+//   PAYOFFS   2 + a soft 3rd FROM THE HAND, ranked by castability x enablement; equal ones Bogbeast >
 //             Paragon > Craterhoof > Ageless > Avatar. Paragon / Ageless are enabled only with a
 //             lifegain source in hand or play (Feed, Wellwisher, Blossoming Sands, Blighted Steppe,
 //             Avatar, Bogbeast); one Paragon is kept when reachable soon and enabled. Genesis Wave is
 //             kept only with 8+ mana within 2 turns (X = 5).
 //   SHED      dead Sanctuary -> surplus lands -> lifegain with no payoff -> payoffs not reachable /
 //             not enabled (Wave below 8 mana first) -> surplus Elves beyond the target -> keep tail.
+// USER 2026-10-10: *"Creature quotas are less worried about the board than land quotas. This is because
+// you can always add more creatures and sometimes this speeds up the clock."* -- payoffs and a Wellwisher
+// in play fill no PAYOFFS / LIFEGAIN slot (LANDS and the Elf mana target still count the board).
+// *"For SelesnyaLifegain you want to keep the cheapest effective payoffs if mana is really poor."* --
+// poor mana never empties the payoff bucket: the quota is kept, cheapest EFFECTIVE (enabled) payoffs
+// first when none is reachable; Genesis Wave keeps its own 8-mana rule.
 //
-// CASTABILITY is a two-turn projection: M1 = board lands + board dorks + the first kept land drop;
+// CASTABILITY -- the shared model (MTG_DISCARD_DIST_MODEL, default ON; docs/design/
+// discard-distance-model.md): P(castable by each of our next 4 turns) from discard_dist::BuildCensus, the
+// KEPT lands as land drops (a Karoo +1, a Pathway either face) and the best Elf deployment below as extra
+// mana (board dorks scaled from turn 1, the deployed Elves from turn 2); the effective payoffs are ranked
+// by CastFactor x value (value = the USER's tie order as a mild multiplier, 1.00 Bogbeast ... 0.80
+// Avatar), a payoff castable within no turn of the horizon after every one that is, cheapest first.
+// =0 restores the previous two-turn projection exactly:
+// M1 = board lands + board dorks + the first kept land drop;
 // M2 = board lands + two kept land drops + the board dorks AND the best next-turn deployment of the
 // castable hand Elves within M1, with Priest / Archdruid re-counted over the new Elves. A payoff is
 // distance 1 if it is castable off M1, 2 off M2, unreachable otherwise; castability ranks first
@@ -34227,8 +34240,9 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
 //   * the mana TARGET is the dearest kept payoff's cost (Wave = 8), floor 5 (the cheapest payoff) with
 //     none kept; Elves are kept in the USER's order until M2 reaches it, the rest are surplus, an Elf
 //     that cannot be cast next turn first.
-//   * the payoff quota counts payoffs in play; a Wellwisher in play fills LIFEGAIN 1; surplus
-//     lifegain and surplus castable payoffs (past 2 + soft 3rd) shed with their bucket's group.
+//   * surplus lifegain and surplus castable payoffs (past 2 + soft 3rd) shed with their bucket's group.
+//   * "reachable soon" (the Paragon hard slot) and the Wave's "8+ mana within 2 turns" stay on the
+//     deterministic two-turn projection in both arms -- they are USER thresholds, not the ranking.
 //   * a reachable Wave ranks right after Craterhoof among equals (the USER's list does not name it);
 //     the kept Paragon takes a HARD slot (the 2nd) when castability alone would leave it soft or out.
 //   * "not reachable / not enabled": Waves first, then the largest gap first (a reachable but
@@ -34307,9 +34321,11 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     auto lg_payoff = [&](int k) { return gated(k) || k == P_BOGBEAST; };
 
     // ---- 1. board census ------------------------------------------------------------------------
-    int board_lands = 0, board_land_mana = 0, board_w = 0, board_payoffs = 0, board_lifegain_cards = 0;
+    // A payoff or a Wellwisher in play fills no slot (USER 2026-10-10); the board only answers "is a
+    // lifegain payoff / source in play" and supplies the mana.
+    int board_lands = 0, board_land_mana = 0, board_w = 0;
     int elf_own = 0, elf_all = 0;
-    bool board_lg_source = false, board_lg_payoff = false, board_paragon = false;
+    bool board_lg_source = false, board_lg_payoff = false;
     std::vector<const CardDefinition*> board_dorks;
     for (const Permanent& p : s.battlefield)
     {
@@ -34328,14 +34344,8 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         if (d == nullptr) { continue; }
         if (is_dork(*d)) { board_dorks.push_back(d); if (makes_w(d->params.produces)) { ++board_w; } }
         const int k = pay_kind(*d);
-        if (k != P_NONE)
-        {
-            ++board_payoffs;
-            if (lg_payoff(k))   { board_lg_payoff = true; }
-            if (k == P_PARAGON) { board_paragon = true; }
-        }
+        if (k != P_NONE && lg_payoff(k)) { board_lg_payoff = true; }
         if (lg_source(d->params, false)) { board_lg_source = true; }
-        if (is_lifegain_card(*d))        { ++board_lifegain_cards; }
     }
     auto board_sub = [&](const std::string& sub, bool all) -> int
     {
@@ -34490,13 +34500,56 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     };
     const int m2_pot = project_m2(castable.size());
 
-    // ---- 5. PAYOFFS: castability x enablement, 2 + a soft 3rd, net of board ------------------------
-    // `gap` = the mana (and W sources) a payoff is still SHORT at the two-turn horizon -- its distance
-    // to castable once it is out of reach, so a 1-short Ageless outlives an 8-drop (review fix).
-    struct PayInfo { int idx; int kind; int eff; int dist; int gap; bool enabled; };
+    // ---- 5. PAYOFFS: castability x enablement, 2 + a soft 3rd FROM THE HAND --------------------------
+    // `dist` / `gap` = the deterministic two-turn projection above (1 = off M1, 2 = off M2, 3 = out of
+    // reach; gap = the mana and W sources still short at M2). It always decides the USER thresholds --
+    // the Wave's "8+ mana within 2 turns" and the Paragon's "reachable soon" -- and, under
+    // MTG_DISCARD_DIST_MODEL=0, the ranking too. `ev` = the shared model's CastFactor x value.
+    struct PayInfo
+    {
+        int idx; int kind; int eff; int dist; int gap; bool enabled; bool effective; bool stranded; double ev;
+    };
     const bool lg_available = board_lg_source || hand_lg_sources > 0;
     constexpr int kWaveX = 5;   // USER: "8+ mana within 2 turns (X = 5)"
-    std::vector<PayInfo> good, bad;
+    static const bool s_dist_env = EnvOn("MTG_DISCARD_DIST_MODEL", true);   // DEFAULT ON; =0 -> the 2-turn projection
+    const bool dist_model = heurarm::Flag(heurarm::DISCARD_DIST_MODEL, s_dist_env);
+    // The model's value: the USER's tie order (Bogbeast > Paragon > Craterhoof > Wave > Ageless > Avatar)
+    // as a mild multiplier, so castability dominates and equal castability falls back to the USER's order.
+    auto pay_value = [](int kind) { return 1.0 - 0.04 * static_cast<double>(kind); };
+    discard_dist::Census census;
+    std::vector<discard_dist::LandDrop> kept_drops;
+    std::array<int, discard_dist::kHorizon> extra{};
+    if (dist_model)
+    {
+        census = discard_dist::BuildCensus(s, me);
+        for (int k = 0; k < keep_lands; ++k)
+        {
+            const CardDefinition* d = defs[at(lands[at(k)])];
+            discard_dist::LandDrop ld = discard_dist::LandDropOf(d);
+            if (is_karoo(d)) { ld.mana = 1; }   // its drop returns a land: +1, as in the projection
+            if (d != nullptr)   // a Pathway can enter as either face
+            {
+                for (Color c : d->params.mdfc_back_produces)
+                { if (c != Color::Colorless) { ld.colours |= 1u << static_cast<int>(c); } }
+            }
+            kept_drops.push_back(ld);
+        }
+        // The census counts each mana creature in play at its printed 1; the projection knows better:
+        // Priest / Archdruid scale with the Elves (from turn 1), and the best next-turn deployment of the
+        // castable hand Elves taps from turn 2 on.
+        int census_dorks = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me || p.card.IsLand()) { continue; }
+            const CardDefinition* d = def_of(p.card);
+            if (d != nullptr && !d->params.mana_rock && d->tmpl == CardTemplate::ManaDork)
+            { census_dorks += std::max(1, d->params.produces_amount); }
+        }
+        const int dorks_best = m2_pot - board_land_mana - drops2;
+        extra[0] = board_dork_mana - census_dorks;
+        for (int t = 1; t < discard_dist::kHorizon; ++t) { extra[static_cast<std::size_t>(t)] = dorks_best - census_dorks; }
+    }
+    std::vector<PayInfo> all_pay;
     for (int i : payoffs)
     {
         const CardDefinition& d = *defs[at(i)];
@@ -34507,24 +34560,73 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         const int wreq = d.card.m_mana_cost.white;
         pi.dist = (pi.eff <= m1 && w1 >= wreq) ? 1 : (pi.eff <= m2_pot && w2 >= wreq) ? 2 : 3;
         pi.gap  = std::max(0, pi.eff - m2_pot) + std::max(0, wreq - w2);
-        pi.enabled = !gated(pi.kind) || lg_available;
-        (pi.dist <= 2 && pi.enabled ? good : bad).push_back(pi);
+        pi.enabled   = !gated(pi.kind) || lg_available;
+        pi.effective = pi.enabled && (pi.kind != P_WAVE || pi.dist <= 2);   // the Wave's own 8-mana rule
+        pi.stranded  = false;
+        pi.ev        = 0.0;
+        if (dist_model)
+        {
+            const ManaCost& mc = d.card.m_mana_cost;
+            const std::array<int, 5> pips = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+            const std::array<double, discard_dist::kHorizon> pr =
+                discard_dist::CastProbByTurn(census, pi.eff, pips, kept_drops, &extra);
+            pi.stranded = pr[static_cast<std::size_t>(discard_dist::kHorizon - 1)] <= 0.0;
+            pi.ev       = discard_dist::CastFactor(pr) * pay_value(pi.kind);
+        }
+        all_pay.push_back(pi);
     }
-    std::stable_sort(good.begin(), good.end(), [](const PayInfo& a, const PayInfo& b)
+    std::vector<PayInfo> good, bad;
+    if (!dist_model)
     {
-        if (a.dist != b.dist) { return a.dist < b.dist; }
-        if (a.kind != b.kind) { return a.kind < b.kind; }
-        return a.idx < b.idx;
-    });
-    const int keep_pay = std::max(0, 3 - board_payoffs);
-    const int hard_pay = std::max(0, 2 - board_payoffs);
-    if (!board_paragon)   // "keep one Paragon when reachable soon and enabled": a HARD slot
+        // The previous distance logic, exactly: reachable within 2 turns and enabled, nearer first.
+        for (const PayInfo& pi : all_pay) { (pi.dist <= 2 && pi.enabled ? good : bad).push_back(pi); }
+        std::stable_sort(good.begin(), good.end(), [](const PayInfo& a, const PayInfo& b)
+        {
+            if (a.dist != b.dist) { return a.dist < b.dist; }
+            if (a.kind != b.kind) { return a.kind < b.kind; }
+            return a.idx < b.idx;
+        });
+        // USER 2026-10-10: "keep the cheapest effective payoffs if mana is really poor" -- with nothing
+        // reachable, the effective payoffs (enabled; never a Wave below its 8) fill the quota, cheapest
+        // first, instead of all shedding before the Elves.
+        if (good.empty())
+        {
+            std::vector<PayInfo> rest;
+            for (const PayInfo& pi : bad) { (pi.effective ? good : rest).push_back(pi); }
+            bad.swap(rest);
+            std::stable_sort(good.begin(), good.end(), [](const PayInfo& a, const PayInfo& b)
+            {
+                if (a.eff != b.eff) { return a.eff < b.eff; }
+                if (a.kind != b.kind) { return a.kind < b.kind; }
+                return a.idx < b.idx;
+            });
+        }
+    }
+    else
     {
-        const int target = hard_pay > 0 ? hard_pay - 1 : keep_pay - 1;
+        // The model ranks every EFFECTIVE payoff, so the quota is never emptied by poor mana; one
+        // castable within no turn of the horizon follows every one that is, cheapest first (USER).
+        for (const PayInfo& pi : all_pay) { (pi.effective ? good : bad).push_back(pi); }
+        std::stable_sort(good.begin(), good.end(), [](const PayInfo& a, const PayInfo& b)
+        {
+            if (a.stranded != b.stranded) { return !a.stranded; }
+            if (!a.stranded && a.ev != b.ev) { return a.ev > b.ev; }
+            if (a.stranded && a.eff != b.eff) { return a.eff < b.eff; }
+            if (a.kind != b.kind) { return a.kind < b.kind; }
+            return a.idx < b.idx;
+        });
+    }
+    // 2 hard + a soft 3rd, filled from the hand: a payoff in play fills none (USER 2026-10-10).
+    constexpr int keep_pay = 3;
+    constexpr int hard_pay = 2;
+    // "keep one Paragon when reachable soon and enabled": a HARD slot -- a Paragon in play no longer
+    // waives it (the creature-quota ruling).
+    {
+        const int target = hard_pay - 1;
         for (std::size_t p = 0; p < good.size(); ++p)
         {
-            if (good[p].kind != P_PARAGON) { continue; }
-            if (target >= 0 && static_cast<int>(p) > target)
+            if (good[p].kind != P_PARAGON || good[p].dist > 2) { continue; }
+            if (static_cast<int>(p) > target)
             { std::rotate(good.begin() + target, good.begin() + static_cast<std::ptrdiff_t>(p), good.begin() + static_cast<std::ptrdiff_t>(p) + 1); }
             break;
         }
@@ -34546,7 +34648,8 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         const int rb = defs[at(b)]->params.cast_lifegain > 0 ? 0 : 1;
         return ra < rb;
     });
-    const int lg_quota = (board_lg_payoff || holding_lg_payoff) ? std::max(0, 1 - board_lifegain_cards) : 0;
+    // A Wellwisher in play fills no LIFEGAIN slot (USER 2026-10-10: creature quotas are filled from the hand).
+    const int lg_quota = (board_lg_payoff || holding_lg_payoff) ? 1 : 0;
     const int kept_lg  = (lg_quota > 0 && !lifegain.empty()) ? lifegain.front() : -1;
     // The kept lifegain card is the ONLY source enabling a kept Paragon / Ageless: ladder it right
     // after the first such payoff, so the pair gives way together.
@@ -34598,15 +34701,17 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     for (int i : other) { put(i); }
     for (auto it = lands.rbegin(); it != lands.rend(); ++it)       { if (!kept[at(*it)]) { put(*it); } }
     for (auto it = lifegain.rbegin(); it != lifegain.rend(); ++it) { if (!kept[at(*it)]) { put(*it); } }
-    std::stable_sort(bad.begin(), bad.end(), [](const PayInfo& a, const PayInfo& b)
+    std::stable_sort(bad.begin(), bad.end(), [&](const PayInfo& a, const PayInfo& b)
     {
         // Waves below 8 first (USER); then FARTHEST from castable first -- "based on how castable"
         // (review fix 2026-10-09: the USER's tie order alone shed a 1-short Ageless before an
-        // 8-drop); a reachable-but-unenabled payoff has gap 0 and so goes last; the USER's order
-        // reversed only on an equal gap.
+        // 8-drop); under the model the lowest CastFactor x value goes first; under =0 the largest gap
+        // (a reachable-but-unenabled payoff has gap 0 and so goes last); the USER's order reversed
+        // only on a tie.
         const bool wa = a.kind == P_WAVE, wb = b.kind == P_WAVE;
         if (wa != wb) { return wa; }
-        if (a.gap != b.gap) { return a.gap > b.gap; }
+        if (dist_model) { if (a.ev != b.ev) { return a.ev < b.ev; } }
+        else if (a.gap != b.gap) { return a.gap > b.gap; }
         if (a.kind != b.kind) { return a.kind > b.kind; }
         return a.idx < b.idx;
     });

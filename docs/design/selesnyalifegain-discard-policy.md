@@ -95,8 +95,9 @@ Agent readings (not USER-ruled; each is a one-line change if overturned):
   the amount of life you gained this turn") Bogbeast, so a Feed the Clan beside a held / in-play
   Bogbeast has a payoff. Bogbeast is still NOT gated for enablement (its own attack gains 2 first).
   Not extended to Accomplished Alchemist (its mana also scales with life gained this turn) -- open.
-6. Quotas net of board: payoffs in play count against 2 + soft 3rd; a Wellwisher in play fills
-   LIFEGAIN 1.
+6. ~~Quotas net of board: payoffs in play count against 2 + soft 3rd; a Wellwisher in play fills
+   LIFEGAIN 1.~~ Superseded by the USER's 2026-10-10 creature-quota ruling: both are filled from the
+   hand (see "Implementation notes -- USER rulings 2026-10-10").
 7. A reachable Genesis Wave ranks right after Craterhoof among equals (the USER's tie list does not
    name it). The kept Paragon takes the 2nd HARD slot when castability alone would leave it soft or out.
 8. Within "payoffs not reachable / not enabled": Waves first (USER), then the largest GAP first (REVIEW
@@ -124,3 +125,34 @@ Deck-specific (verbatim):
   really poor."* -- when no payoff is reachable, the payoff quota is still kept, cheapest effective
   (enabled) payoffs first; poor mana does not empty the bucket.
 
+#### Implementation notes -- USER rulings 2026-10-10
+* **(a) Creature quotas from the hand.** Payoffs in play no longer count against PAYOFFS 2 + soft 3rd
+  (always 2 hard + 1 soft from the hand), a Wellwisher in play no longer fills LIFEGAIN 1, and a
+  Paragon in play no longer waives "keep one Paragon when reachable soon and enabled". LANDS 3 and the
+  Elf mana target still count the board; "a lifegain payoff / source in play" is still read.
+* **(b) Poor mana never empties the bucket.** USER: *"you want to keep the cheapest effective payoffs if
+  mana is really poor."* EFFECTIVE = enabled (Paragon / Ageless need a lifegain source) and, for
+  Genesis Wave, its own "8+ mana within 2 turns" rule (still the deterministic two-turn projection). On
+  the `MTG_DISCARD_DIST_MODEL=0` arm, when no payoff is reachable within 2 turns, the effective ones fill
+  the quota cheapest first (then the USER's tie order); under the model every effective payoff is
+  ranked, so the quota is filled whenever one exists, and a payoff castable within no turn of the
+  model's horizon ("stranded") follows every one that is, cheapest first.
+* **(c) The shared distance model** (docs/design/discard-distance-model.md), behind
+  `heurarm::DISCARD_DIST_MODEL` / `MTG_DISCARD_DIST_MODEL`, default ON: `BuildCensus` once; the KEPT
+  lands as `LandDrop`s (a Karoo counts +1 -- its drop returns a land; a Pathway counts for either face's
+  colour); the best-Elf-deployment projection as `extra` mana -- the scaled board dorks over the
+  census's 1-each from turn 1, the best next-turn deployment of the castable hand Elves from turn 2.
+  Effective payoffs are ranked by **CastFactor x value**, value = the USER's tie order as a mild
+  multiplier (Bogbeast 1.00, Paragon 0.96, Craterhoof 0.92, Wave 0.88, Ageless 0.84, Avatar 0.80 --
+  agent reading: a turn's delay, x0.75, outweighs the whole tie order). Non-effective payoffs shed first
+  (Waves first, then the lowest CastFactor x value). `=0` reproduces the previous two-turn projection
+  and its gap ordering exactly (rulings (a) and (b) apply to both arms).
+* Agent readings in (c): the Paragon's "reachable soon" (its hard slot) and the Wave's 8-mana rule stay
+  on the deterministic two-turn projection in both arms (USER thresholds, not the ranking); the model
+  inherits the projection's next-turn-only Elf deployment (turns 3-4 add no further Elves) and its
+  Alchemist-yields-1.
+* Accomplished Alchemist as a lifegain payoff: left as is -- still open for the USER.
+* Tests: `test/unit/test_selesnyalifegain_discard.cpp` 21 cases. The S-cases now pin the =0 arm; S1,
+  S3b, S8, S11 re-derived for (a) / (b); S11b keeps the gap-ordering check; M1 (payoffs in play, both
+  arms), M2 (a Paragon in play), M3-M5 (the model: drawn land drops, CastFactor x value, stranded
+  cheapest-first). S1, S3b, S8, S11, M1, M2, M3, M4, M5 fail on the pre-ruling code.
