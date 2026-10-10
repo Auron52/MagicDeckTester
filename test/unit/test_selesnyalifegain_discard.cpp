@@ -73,14 +73,20 @@ GameState MakeSel(const std::vector<std::string>& hand, const std::vector<std::s
     return s;
 }
 
-std::vector<int> SelArm(const GameState& s, int arm)
+// `dist`: the MTG_DISCARD_DIST_MODEL arm -- 0 = the previous two-turn projection (the S-cases were derived
+// for it, and pin that =0 still reproduces it), 1 = the shared discard_dist model (the M-cases), -1 = env.
+std::vector<int> SelArmDist(const GameState& s, int arm, int dist)
 {
     heurarm::t_arm[heurarm::SELESNYA_BUCKET_DISCARD] = arm;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]      = dist;
     std::vector<int> v = SelesnyaLifegainProvider().CleanupDiscardCandidates(s, nullptr);
     heurarm::t_arm[heurarm::SELESNYA_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]      = -1;
     return v;
 }
-std::vector<int> Sel(const GameState& s) { return SelArm(s, 1); }
+std::vector<int> SelArm(const GameState& s, int arm) { return SelArmDist(s, arm, -1); }
+std::vector<int> Sel(const GameState& s)  { return SelArmDist(s, 1, 0); }   // the =0 distance arm
+std::vector<int> SelM(const GameState& s) { return SelArmDist(s, 1, 1); }   // the shared model
 std::vector<int> Gen(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
 
 void CheckPermutation(const GameState& s, const std::vector<int>& order)
@@ -94,17 +100,22 @@ void CheckPermutation(const GameState& s, const std::vector<int>& order)
 
 }   // namespace
 
-// No land in play and only a Sanctuary in hand: it would return ITSELF -- dead, first. Everything else
-// is out of reach (M1 = M2 = 0): payoffs unreachable (Craterhoof, Paragon, Bogbeast -- the USER's order
-// reversed), then the uncastable Elves farthest first, then the kept Feed the Clan (a Paragon is held).
-TEST_CASE("Selesnya discard S1: a dead Selesnya Sanctuary is shed first")
+// No land in play and only a Sanctuary in hand: it would return ITSELF -- dead, first. M1 = M2 = 0, so
+// no payoff is reachable -- and poor mana no longer empties the bucket (USER 2026-10-10: "keep the
+// cheapest effective payoffs if mana is really poor"): Bogbeast (5), Paragon (6) hard, Craterhoof (8)
+// soft. The uncastable Elves (farthest first) shed before them. Ladder: Bogbeast, Paragon, Feed (a
+// lifegain payoff is held), Craterhoof. Under the model every payoff is stranded (0 lands, W
+// impossible), so it is also cheapest-first and the order is the same in both arms.
+// (Before the ruling all three payoffs shed first: [0, 7, 4, 6, 3, 2, 1, 5].)
+TEST_CASE("Selesnya discard S1: a dead Selesnya Sanctuary is shed first; poor mana keeps the payoffs")
 {
     const GameState s = MakeSel(
         { "Selesnya Sanctuary", "Llanowar Elves", "Priest of Titania", "Elvish Archdruid",
           "Nykthos Paragon", "Feed the Clan", "Blossoming Bogbeast", "Craterhoof Behemoth" },
         {});
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 0, 7, 4, 6, 3, 2, 1, 5 });
+    CHECK(o == std::vector<int>{ 0, 3, 2, 1, 7, 5, 4, 6 });
+    CHECK(SelM(s) == o);
     CHECK(Gen(s).front() == 7);   // generic max-MV sheds Craterhoof
     CheckPermutation(s, o);
 }
@@ -163,8 +174,10 @@ TEST_CASE("Selesnya discard S3: a held Bogbeast keeps a Feed the Clan; Wave belo
 }
 
 // No lifegain payoff held or in play (Craterhoof / Avatar / Wave only) -> Feed the Clan and Wellwisher
-// are "lifegain with no payoff", Wellwisher first (Feed > Wellwisher). All three payoffs are out of
-// reach (M2 = 5): Wave first, then Craterhoof (3 short) before Avatar (2 short).
+// are "lifegain with no payoff", Wellwisher first (Feed > Wellwisher). Nothing is reachable (M2 = 5):
+// the Wave below 8 is not effective and sheds; Avatar (7) and Craterhoof (8) are effective and now KEEP
+// the bucket, cheapest first (USER 2026-10-10). Target 8 -> both Elves. Ladder: Llanowar, Avatar,
+// Mystic, Craterhoof. (Before the ruling they shed: [5, 6, 1, 0, 2, 7, 4, 3].)
 TEST_CASE("Selesnya discard S3b: lifegain with no payoff goes right after the surplus land")
 {
     const GameState s = MakeSel(
@@ -172,7 +185,7 @@ TEST_CASE("Selesnya discard S3b: lifegain with no payoff goes right after the su
           "Forest", "Wellwisher", "Verdant Sun's Avatar" },
         { "Forest", "Forest", "Forest" });
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 5, 6, 1, 0, 2, 7, 4, 3 });
+    CHECK(o == std::vector<int>{ 5, 6, 1, 0, 2, 4, 7, 3 });
     CHECK(Gen(s).front() == 2);   // generic sheds Craterhoof
 }
 
@@ -241,16 +254,19 @@ TEST_CASE("Selesnya discard S7: Paragon / Ageless with no lifegain source are no
     CHECK(Gen(s).front() == 2);   // generic sheds Craterhoof
 }
 
-// A Wellwisher in play fills LIFEGAIN 1 (net of board) and is the enabling source: the hand Feed the
-// Clan is surplus lifegain, right after the surplus Forest.
-TEST_CASE("Selesnya discard S8: a Wellwisher in play fills LIFEGAIN 1")
+// USER 2026-10-10 (creature quotas are filled from the hand): a Wellwisher in play no longer fills
+// LIFEGAIN 1, so the hand Feed the Clan is KEPT (a lifegain payoff is held). M1 = 3, M2 = 7 (Priest +
+// Llanowar); Bogbeast, Ageless distance 2; target 5 -> Priest alone. Ladder: Priest, Bogbeast,
+// Ageless, Feed; backwards after the surplus Forest and Elves (Mystic, Llanowar, Archdruid).
+// (Netting against the board shed the Feed right after the Forest: [5, 0, 6, 2, 7, 1, 4, 3].)
+TEST_CASE("Selesnya discard S8: a Wellwisher in play does not fill LIFEGAIN 1")
 {
     const GameState s = MakeSel(
         { "Feed the Clan", "Ageless Entity", "Llanowar Elves", "Priest of Titania", "Blossoming Bogbeast",
           "Forest", "Elvish Mystic", "Elvish Archdruid" },
         { "Forest", "Forest", "Forest", "Wellwisher" });
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 5, 0, 6, 2, 7, 1, 4, 3 });
+    CHECK(o == std::vector<int>{ 5, 6, 2, 7, 0, 1, 4, 3 });
     CHECK(Gen(s).front() == 1);   // generic sheds Ageless (MV 5, first)
 }
 
@@ -286,21 +302,36 @@ TEST_CASE("Selesnya discard S10: the order is not prefix-stable, which is why th
     CHECK(o != std::vector<int>{ 5, 1, 0, 4, 2, 3 });          // the batched remainder
 }
 
-// REVIEW FIX S-1: an out-of-reach payoff is ordered by its DISTANCE to castable ("based on how
-// castable"), the USER's tie order only on an equal gap. Board 3 Forests, no land in hand: M1 = 3, M2 =
-// 4 (Archdruid alone; the Alchemists cost 4). Every payoff is out of reach: Craterhoof 4 short and
-// Paragon 4 (2 mana + 2 W sources) -> Craterhoof first on the tie; then Ageless and Bogbeast, 1 short
-// each -> Ageless first. The two uncastable Alchemists next, then the kept Feed and Archdruid.
-// (The tie order alone shed the 1-short Ageless FIRST, before the 8-drop.)
-TEST_CASE("Selesnya discard S11: unreachable payoffs shed farthest first")
+// THE USER'S POOR-MANA RULING (2026-10-10): "keep the cheapest effective payoffs if mana is really
+// poor". Board 3 Forests, no land in hand: M1 = 3, M2 = 4 (Archdruid alone; the Alchemists cost 4) --
+// NOTHING is reachable. The quota is kept anyway, cheapest effective first: Bogbeast (5) and Ageless (5)
+// hard, Paragon (6) soft; Craterhoof (8) is the surplus 4th and sheds first. Then the uncastable
+// Alchemists. Target 6 -> Archdruid. Ladder: Archdruid, Bogbeast, Ageless, Feed, Paragon.
+// (Before the ruling every payoff shed, farthest first: [1, 6, 0, 7, 4, 5, 2, 3].)
+TEST_CASE("Selesnya discard S11: poor mana keeps the cheapest effective payoffs")
 {
     const GameState s = MakeSel(
         { "Ageless Entity", "Craterhoof Behemoth", "Feed the Clan", "Elvish Archdruid",
           "Accomplished Alchemist", "Accomplished Alchemist", "Nykthos Paragon", "Blossoming Bogbeast" },
         { "Forest", "Forest", "Forest" });
     const std::vector<int> o = Sel(s);
-    CHECK(o == std::vector<int>{ 1, 6, 0, 7, 4, 5, 2, 3 });
-    CHECK(o != Gen(s));   // generic: [1, 6, 0, 7, 4, 5, 3, 2] -- same front, different tail
+    CHECK(o == std::vector<int>{ 1, 4, 5, 6, 2, 0, 7, 3 });
+    CHECK(Gen(s).front() == 1);
+}
+
+// REVIEW FIX S-1 (=0 arm): an out-of-reach payoff is ordered by its DISTANCE to castable, the USER's tie
+// order only on an equal gap. Board 3 Forests + Llanowar: M1 = 4; Archdruid deploys -> M2 = 6. Bogbeast
+// and Ageless (5) are reachable and kept; out of reach: Craterhoof 2 short and Paragon 2 (W) -> Craterhoof
+// first on the tie; then Avatar (1 short). (The tie order alone would shed the Avatar first.)
+TEST_CASE("Selesnya discard S11b: unreachable payoffs shed farthest first")
+{
+    const GameState s = MakeSel(
+        { "Ageless Entity", "Craterhoof Behemoth", "Feed the Clan", "Blossoming Bogbeast", "Nykthos Paragon",
+          "Verdant Sun's Avatar", "Forest", "Elvish Archdruid" },
+        { "Forest", "Forest", "Forest", "Llanowar Elves" });
+    const std::vector<int> o = Sel(s);
+    CHECK(o == std::vector<int>{ 6, 1, 4, 5, 2, 0, 3, 7 });
+    CHECK(Gen(s).front() == 1);
 }
 
 // REVIEW FIX S-3: M2 is the BEST next-turn deployment, not the greedy one in keep order. Board 2
@@ -336,4 +367,89 @@ TEST_CASE("Selesnya discard S13: a held Bogbeast is a lifegain payoff for Feed t
     const std::vector<int> o = Sel(s);
     CHECK(o == std::vector<int>{ 2, 6, 7, 0, 3, 5, 1, 4 });
     CHECK(Gen(s).front() == 3);   // generic sheds Craterhoof
+}
+
+// ---- USER 2026-10-10 (a): payoffs in play fill no payoff slot -----------------------------------------
+// Board 3 Forests + Bogbeast + Paragon in play. =0 arm: M1 = 3, M2 = 6 (Priest + Llanowar); Ageless (5)
+// is the one reachable payoff and now takes a HARD slot (2 + soft 3rd from the hand); Craterhoof (2 short)
+// and Avatar (1 short) shed. Target 5 -> Priest, Llanowar. Ladder: Priest, Ageless, Llanowar, Feed.
+// Model arm: census 3 lands, Elves add 3 from turn 2 -> by turn 2 there are 6 mana + 2 drawn Forests, so
+// Craterhoof (8) and Avatar (7) are also castable on turn 2 and every payoff is kept: ev Craterhoof 0.75 x
+// 0.92 = 0.69 > Ageless 0.75 x 0.84 = 0.63 > Avatar 0.75 x 0.80 = 0.60. Target 8 -> all three Elves.
+// Ladder: Priest, Craterhoof, Llanowar, Ageless, Feed, Mystic, Avatar.
+// (Netting the two payoffs in play left ONE soft slot: [7, 1, 5, 3, 0, 4, 2, 6].)
+TEST_CASE("Selesnya discard M1: payoffs in play do not fill the hand's payoff slots")
+{
+    const GameState s = MakeSel(
+        { "Ageless Entity", "Craterhoof Behemoth", "Llanowar Elves", "Elvish Mystic", "Feed the Clan",
+          "Verdant Sun's Avatar", "Priest of Titania", "Forest" },
+        { "Forest", "Forest", "Forest", "Blossoming Bogbeast", "Nykthos Paragon" });
+    CHECK(Sel(s)  == std::vector<int>{ 7, 1, 5, 3, 4, 2, 0, 6 });
+    CHECK(SelM(s) == std::vector<int>{ 7, 5, 3, 4, 0, 2, 1, 6 });
+    CHECK(Gen(s).front() == 1);
+}
+
+// (a) for the "keep one Paragon" rule: a Paragon in play no longer waives the hard slot for a reachable,
+// enabled hand Paragon. Board S6's + a Paragon in play: the hand Paragon still takes the 2nd hard slot
+// and the result is S6's exactly. (Netting: 1 hard + 1 soft, no promotion -> the Paragon was surplus
+// and every Elf too: [0, 5, 3, 4, 1, 7, 6, 2].)
+TEST_CASE("Selesnya discard M2: a Paragon in play does not waive the hand Paragon's hard slot")
+{
+    const GameState s = MakeSel(
+        { "Nykthos Paragon", "Ageless Entity", "Blossoming Bogbeast", "Llanowar Elves",
+          "Priest of Titania", "Elvish Mystic", "Branchloft Pathway", "Feed the Clan" },
+        { "Forest", "Brushland", "Forest", "Forest", "Nykthos Paragon" });
+    CHECK(Sel(s) == std::vector<int>{ 5, 3, 1, 7, 6, 0, 2, 4 });
+    CHECK(Gen(s).front() == 0);
+}
+
+// ---- (c) the shared distance model (default arm). The library is 20 Forests, so every draw is a G land:
+// mana by turn t = census (lands + mana creatures at 1) + the projection's extra + kept drops + one drawn
+// land per turn with no kept land left; W can come only from the board or a kept land. CastFactor =
+// 0.75^(t-1) for the first castable turn t (0.02 x 0.75^4 if none within 4 turns, "stranded").
+
+// S3's board. Census 3 Forests; Llanowar + Mystic deploy next turn -> extra 2 from turn 2. Bogbeast (5):
+// turn 2 (5 mana) -> 0.75 x 1.00. Avatar (7, GG): turn 2, 5 mana + 2 drawn Forests -> 0.75 x 0.80 =
+// 0.60 -- castable and KEPT, where the =0 projection (no drawn lands) shed it as unreachable. The Wave
+// (8 not within 2 turns on its own rule) sheds first among payoffs. Target 7 -> both Elves.
+// Ladder: Llanowar, Bogbeast, Mystic, Avatar, Feed.
+TEST_CASE("Selesnya discard M3: the model sees drawn land drops -- an Avatar castable on turn 2 is kept")
+{
+    const GameState s = MakeSel(
+        { "Genesis Wave", "Feed the Clan", "Blossoming Bogbeast", "Llanowar Elves", "Elvish Mystic",
+          "Forest", "Wellwisher", "Verdant Sun's Avatar" },
+        { "Forest", "Forest", "Forest" });
+    CHECK(SelM(s) == std::vector<int>{ 5, 6, 0, 1, 7, 4, 2, 3 });
+    CHECK(Sel(s)  == std::vector<int>{ 5, 6, 0, 7, 1, 4, 2, 3 });   // =0: the previous projection
+    CHECK(SelArm(s, 1) == SelM(s));                                   // the model is the default
+}
+
+// S5's board. Census 3 Forests + Priest + Llanowar = 5; extra 1 on turn 1 (Priest taps for 2), 8 from
+// turn 2 (Archdruid + Mystic: M2 13). Turn 1 has 6 mana + 1 drawn Forest: Bogbeast 1.00, Ageless 0.84,
+// Avatar (7) 0.80; turn 2: Craterhoof 0.75 x 0.92 = 0.69, Wave (8+ within 2 turns: effective) 0.75 x 0.88 =
+// 0.66. Keep Bogbeast, Ageless (hard), Avatar (soft); Wave then Craterhoof surplus. Target 7 -> Archdruid
+// (M2 10), Mystic surplus. Ladder: Archdruid, Bogbeast, Ageless, Avatar.
+TEST_CASE("Selesnya discard M4: CastFactor x value -- a turn sooner beats the USER's tie order")
+{
+    const GameState s = MakeSel(
+        { "Genesis Wave", "Forest", "Elvish Archdruid", "Elvish Mystic", "Blossoming Bogbeast",
+          "Verdant Sun's Avatar", "Craterhoof Behemoth", "Ageless Entity" },
+        { "Forest", "Forest", "Forest", "Priest of Titania", "Llanowar Elves" });
+    CHECK(SelM(s) == std::vector<int>{ 1, 0, 6, 3, 5, 7, 4, 2 });
+    CHECK(Sel(s)  == std::vector<int>{ 1, 5, 0, 3, 6, 7, 4, 2 });   // =0 (S5)
+}
+
+// USER 2026-10-10 under the model: one Forest in play, no land in hand, no Elf -> mana by turn t is 1 + t.
+// Bogbeast and Ageless (5) are castable on turn 4 (0.75^3 = 0.42 x 1.00 / 0.84); Paragon (no W anywhere),
+// Avatar (7) and Craterhoof (8) are STRANDED and follow, cheapest first -- Paragon (6) takes the soft 3rd,
+// and of the surplus the dearest (Craterhoof) sheds first (by value alone the Avatar would). The Wave is
+// not effective. Wellwisher is the surplus lifegain. Ladder: Bogbeast, Ageless, Feed, Paragon.
+TEST_CASE("Selesnya discard M5: stranded payoffs keep the quota cheapest first")
+{
+    const GameState s = MakeSel(
+        { "Craterhoof Behemoth", "Verdant Sun's Avatar", "Feed the Clan", "Wellwisher", "Nykthos Paragon",
+          "Genesis Wave", "Blossoming Bogbeast", "Ageless Entity" },
+        { "Forest" });
+    CHECK(SelM(s) == std::vector<int>{ 3, 5, 0, 1, 4, 2, 7, 6 });
+    CHECK(Gen(s).front() == 0);
 }
