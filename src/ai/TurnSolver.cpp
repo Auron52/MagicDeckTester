@@ -35711,6 +35711,30 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
     }
 
+    // ---- The attack-only plan competes (MTG_SOLVE_ATTACK_ONLY_WIN, default ON; =0 -> not scored) ----
+    // The walk below skips the empty selection (`if (sel.empty()) continue;`), so without the opt-in
+    // cut above `best` starts as the do-nothing plan with wins_this_turn = false WHATEVER the board's
+    // attack is. On a board that is already lethal where every castable plan taps an attacker -- so
+    // none of them projects a win once the attack-tap discount is honest -- the walk then took the
+    // best-eval cast, and the cast's taps lost the lethal. Snow d0 gi1384 (seed 1551385) T5: after
+    // Coldsteel Heart + the Scrying Sheets look the re-solve's only castable was the Frost Augur look,
+    // projected 10 against 11 (it taps Augur, and the Druid that pays its {S}); the attack-only line was
+    // 11 and was never scored. Seeded through the same consider(), with NO early return, and with its
+    // mask then set past every real subset so that any winning cast plan still replaces it, ties
+    // included: whenever a cast plan wins, the choice is exactly the walk's as before; only turns where
+    // nothing else wins now attack instead of casting into a lost lethal. Not a greedy pick: it scores
+    // one more plan with the projection every plan gets.
+    {
+        static const bool s_aow_env = EnvOn("MTG_SOLVE_ATTACK_ONLY_WIN", true);   // DEFAULT ON; =0 off
+        if (is_pre_combat && !best.wins_this_turn && pending_atk >= state.Opponent().life
+            && heurarm::Flag(heurarm::SOLVE_ATTACK_ONLY_WIN, s_aow_env))
+        {
+            std::vector<int> empty_sel;
+            consider(empty_sel);
+            if (best.wins_this_turn && best_sel.empty()) { best_mask = std::numeric_limits<int>::max(); }
+        }
+    }
+
     // The default enumeration replaces the 2^m action powerset with the PRODUCT of per-hand-card
     // choices {skip, cast, deploy-via-Vial} (same-charge Vial deploys collapse to one
     // representative, bounded by an aggregate per-charge capacity) crossed with the 2^independent
