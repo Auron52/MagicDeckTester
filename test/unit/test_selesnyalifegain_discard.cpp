@@ -378,6 +378,36 @@ TEST_CASE("Selesnya discard S13: a held Bogbeast is a lifegain payoff for Feed t
 // 0.92 = 0.69 > Ageless 0.75 x 0.84 = 0.63 > Avatar 0.75 x 0.80 = 0.60. Target 8 -> all three Elves.
 // Ladder: Priest, Craterhoof, Llanowar, Ageless, Feed, Mystic, Avatar.
 // (Netting the two payoffs in play left ONE soft slot: [7, 1, 5, 3, 0, 4, 2, 6].)
+// MTG_SELESNYA_ELF_WINDOW (default OFF, a proposed amendment): the regression game that lost a turn
+// (selesnya_regression_d0_s2002 gi175, turn-2 cleanup). Board Selesnya Sanctuary; no Elf castable next
+// turn but the Priests; one Priest already meets the mana target (5), so the USER's order as built
+// sheds the Alchemist (4) as a surplus Elf FIRST. Under the amendment it is castable within the window
+// (4 <= M2), so it is kept above the soft payoff, which sheds immediately before it.
+TEST_CASE("Selesnya discard S14: the Elf-window amendment keeps a 2-turn-castable Elf above the soft payoff")
+{
+    auto win = [](const GameState& st, int lever)
+    {
+        heurarm::t_arm[heurarm::SELESNYA_ELF_WINDOW] = static_cast<std::int8_t>(lever);
+        std::vector<int> v = SelArm(st, 1);
+        heurarm::t_arm[heurarm::SELESNYA_ELF_WINDOW] = -1;
+        return v;
+    };
+    const GameState s = MakeSel({ "Accomplished Alchemist", "Blossoming Bogbeast", "Priest of Titania",
+                                  "Priest of Titania", "Ageless Entity", "Ageless Entity", "Blossoming Sands",
+                                  "Wirewood Lodge" },
+                                { "Selesnya Sanctuary" });
+    const std::vector<int> off = win(s, 0);
+    CHECK(off.front() == 0);              // the Alchemist, as in the real game
+    CHECK(SelArm(s, 1) == off);           // default OFF
+    const std::vector<int> on = win(s, 1);
+    const auto at = std::find(on.begin(), on.end(), 0);
+    REQUIRE(at != on.end());
+    REQUIRE(at != on.begin());
+    const int before = *(at - 1);         // the soft payoff: Bogbeast or an Ageless Entity
+    CHECK((before == 1 || before == 4 || before == 5));
+    CheckPermutation(s, on);
+}
+
 TEST_CASE("Selesnya discard M1: payoffs in play do not fill the hand's payoff slots")
 {
     const GameState s = MakeSel(

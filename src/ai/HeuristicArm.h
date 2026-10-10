@@ -390,6 +390,9 @@ enum Slot : int
     GIANTS_TUTOR_WIDTH,       // MTG_GIANTS_TUTOR_WIDTH       Giants: TutorSearchWidth 7 -- the deck holds 7 distinct Giant names for Giant Harbinger against the base width 6, so one name was unreachable per game (coverage, recorded in analysis-Pirates.md). Default ON; =0 -> the base 6
     GOBLIN_TUTOR_VIAL_EXACT,  // MTG_GOBLIN_TUTOR_VIAL_EXACT  Goblins: the searched-tutor ranking credits an Aether Vial put only at mana value == charge (the card's rule; charge never falls), not <= charge. Default ON; =0 -> the old <= estimate
     AURA_RESTRICTED_NEW_CREATURE,// MTG_AURA_RESTRICTED_NEW_CREATURE a restricted Aura (Daybreak Coronet / Lion Umbra) is offered onto a creature cast the SAME turn, enabled by a plain Aura cast on it first (docs/design/auras-same-turn-restricted-aura-gap.md). Default ON; =0 -> never enumerated
+    EDF_OUTLET_PIPS,          // MTG_EDF_OUTLET_PIPS       EDF discard: a flicker source in hand / library whose {W} pips exceed our white sources (board + kept lands + land Auras) ranks below one we can cast -- a proposed amendment of the USER's "Displacer if 2+ colourless, else Emiel" (with one {C} source it shed both Displacers for an Emiel the deck could not cast). Default OFF (the USER's rule as built) until the USER rules
+    SELESNYA_ELF_WINDOW,      // MTG_SELESNYA_ELF_WINDOW   SelesnyaLifegain discard: an Elf castable within two turns (mana value <= the projected M2) is kept ABOVE the soft payoff(s) instead of shed as surplus past the mana target (an agent reading: the dearest kept payoff's cost, floor 5) -- a proposed amendment (it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9). Default OFF until the USER rules
+    GIANTS_ROCK_LIBRARY_LAND, // MTG_GIANTS_ROCK_LIBRARY_LAND Giants discard: a mana rock is "dead" only when no land is in play, in hand OR left in the library (a proposed amendment of the USER's "a rock with no land anywhere is blank" -- it shed Sol Ring on landless turn-2 hands with a Mountain on the next draw). Default OFF (the USER's rule as built) until the USER rules
     COUNT
 };
 
@@ -741,6 +744,9 @@ inline const char* Name(int slot)
         "MTG_GIANTS_TUTOR_WIDTH",
         "MTG_GOBLIN_TUTOR_VIAL_EXACT",
         "MTG_AURA_RESTRICTED_NEW_CREATURE",
+        "MTG_EDF_OUTLET_PIPS",
+        "MTG_SELESNYA_ELF_WINDOW",
+        "MTG_GIANTS_ROCK_LIBRARY_LAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

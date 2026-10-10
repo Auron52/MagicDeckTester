@@ -23919,7 +23919,15 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     auto is_cls = [&](int i, Cls k) { return cls[static_cast<std::size_t>(i)] == k; };
 
     // ---- 3. mana: the pick list, and the dead rocks -----------------------------------------------
-    const bool rocks_live = board_lands > 0 || hand_land;
+    // MTG_GIANTS_ROCK_LIBRARY_LAND (default OFF, a proposed amendment for the USER): "no land anywhere"
+    // also counts the library (counts only), so a rock is dead only when no land can ever arrive.
+    static const bool s_rock_lib = EnvOn("MTG_GIANTS_ROCK_LIBRARY_LAND");
+    bool library_land = false;
+    if (heurarm::Flag(heurarm::GIANTS_ROCK_LIBRARY_LAND, s_rock_lib))
+    {
+        for (const Card& lc : ap.library) { if (CleanupDiscardIsLand(lc)) { library_land = true; break; } }
+    }
+    const bool rocks_live = board_lands > 0 || hand_land || library_land;
     auto rock_tier = [&](int i)   // 0 = burst (Sol Ring), 1 = plain, 2 = enters tapped (Fire Diamond)
     {
         const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
@@ -35177,6 +35185,20 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     for (int k = reg_lands; k < keep_lands; ++k) { take(lands[at(k)]); }   // W lands kept past the 3
     if (!lg_sole) { take(kept_lg); }
     for (std::size_t k = 2; k < elf_keep; ++k) { take_elf(k); }
+    // MTG_SELESNYA_ELF_WINDOW (default OFF, a proposed amendment for the USER): every other Elf
+    // castable within the two-turn window (mana value <= M2 with the kept Elves) is kept ABOVE the soft
+    // payoff(s), in the USER's Elf order, instead of shed as surplus past the mana target.
+    static const bool s_elf_window = EnvOn("MTG_SELESNYA_ELF_WINDOW");
+    if (heurarm::Flag(heurarm::SELESNYA_ELF_WINDOW, s_elf_window))
+    {
+        const int m2 = project_m2(elf_keep);
+        std::vector<int> window;
+        for (std::size_t k = elf_keep; k < castable.size(); ++k) { window.push_back(castable[k]); }
+        for (int i : uncastable) { if (defs[at(i)]->card.m_mana_cost.ManaValue() <= m2) { window.push_back(i); } }
+        std::stable_sort(window.begin(), window.end(), [&](int a, int b)
+        { return dork_rank(defs[at(a)]->params) < dork_rank(defs[at(b)]->params); });
+        for (int i : window) { take(i); }
+    }
     for (std::size_t k = hard_n; k < kept_pay_n; ++k) { take_pay(k); }   // the soft one(s)
 
     // ---- 9. emit the shed order ----------------------------------------------------------------------
@@ -35215,8 +35237,8 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         if (ma != mb) { return ma > mb; }
         return dork_rank(defs[at(a)]->params) > dork_rank(defs[at(b)]->params);
     });
-    for (int i : uncastable) { put(i); }
-    for (std::size_t k = castable.size(); k > elf_keep; --k) { put(castable[k - 1]); }
+    for (int i : uncastable) { if (!kept[at(i)]) { put(i); } }   // kept only under MTG_SELESNYA_ELF_WINDOW
+    for (std::size_t k = castable.size(); k > elf_keep; --k) { if (!kept[at(castable[k - 1])]) { put(castable[k - 1]); } }
     for (auto it = ladder.rbegin(); it != ladder.rend(); ++it) { put(*it); }
     for (int i = 0; i < n; ++i) { put(i); }   // defensive: every non-staged card has a class
 
@@ -37251,6 +37273,7 @@ std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
 
     // ---- 1. board census ----------------------------------------------------------------------
     int board_lands = 0, board_mana = 0, board_reducer_amt = 0;
+    int board_w = 0;           // white SOURCES on the board (lands, land Auras) -- MTG_EDF_OUTLET_PIPS
     unsigned board_bits = 0;   // colours our board can make (lands, and the Auras on them)
     bool board_host = false, board_outlet = false, board_untapper = false, board_reducer = false;
     bool board_gorge = false;
@@ -37264,12 +37287,15 @@ std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
         {
             ++board_lands;
             board_mana += PermanentManaYield(s, p, *d);
-            board_bits |= bits_of(EffectiveProducesFor(s, me, *d, &p));
+            const unsigned lb = bits_of(EffectiveProducesFor(s, me, *d, &p));
+            board_bits |= lb;
+            if (lb & kW) { ++board_w; }
             if (!LandHasShroud(p, s)) { board_host = true; }
             if (comboroute::IsGorge(d)) { board_gorge = true; }
             continue;
         }
         board_bits |= aura_bits(d);
+        if (aura_bits(d) & kW) { ++board_w; }
         if (comboroute::IsOutlet(d))   { board_outlet = true;   board_outlets.push_back(d); }
         if (comboroute::IsUntapper(d)) { board_untapper = true; board_untappers.push_back(d); }
         if (comboroute::IsReducer(d))
@@ -37482,8 +37508,23 @@ std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
     for (int i : land2)  { if (lbits[static_cast<std::size_t>(i)] & kC) { ++c_sources; } }
     for (int i : land34) { if (lbits[static_cast<std::size_t>(i)] & kC) { ++c_sources; } }
     const bool want_c_outlet = c_sources >= 2;   // "Displacer if 2+ colourless sources, else Emiel"
-    auto outlet_key = [&](const CardDefinition* d) -> int   // lower = more suitable
+    auto outlet_key_base = [&](const CardDefinition* d) -> int   // lower = more suitable
     { return ((d->params.blink_cost->colorless > 0) == want_c_outlet) ? 0 : 1; };
+    // MTG_EDF_OUTLET_PIPS (default OFF, a proposed amendment for the USER): an outlet still to be CAST
+    // (hand / library) pays 2 per {W} pip our white sources -- board, the kept lands, a land win con --
+    // cannot cover, so an outlet closer to castable outranks the {C}-count preference (with no white
+    // at all, Displacer is one source short and Emiel two). A resolved outlet keeps the base key.
+    static const bool s_outlet_pips = EnvOn("MTG_EDF_OUTLET_PIPS");
+    const bool outlet_pips = heurarm::Flag(heurarm::EDF_OUTLET_PIPS, s_outlet_pips);
+    int w_sources = board_w;
+    if (outlet_pips)
+    {
+        if (win_is_land && (lbits[static_cast<std::size_t>(win_slot)] & kW)) { ++w_sources; }
+        for (int i : land2)  { if (lbits[static_cast<std::size_t>(i)] & kW) { ++w_sources; } }
+        for (int i : land34) { if (lbits[static_cast<std::size_t>(i)] & kW) { ++w_sources; } }
+    }
+    auto outlet_key = [&](const CardDefinition* d) -> int
+    { return outlet_key_base(d) + (outlet_pips ? 2 * std::max(0, d->card.m_mana_cost.white - w_sources) : 0); };
     int refund_cache[kFlickerMaxUntaps + 1];
     for (int& r : refund_cache) { r = -1; }
     auto untap_key = [&](const CardDefinition* d) -> int    // lower = more suitable (R2)
@@ -37664,8 +37705,8 @@ std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
     for (auto it = auras_over.rbegin(); it != auras_over.rend(); ++it) { put(*it); }
     // (8) spare flicker sources / untappers, less suitable first (R9).
     {
-        int best_o = 2, best_u = 1 << 20;
-        for (const CardDefinition* d : board_outlets)   { best_o = std::min(best_o, outlet_key(d)); }
+        int best_o = 1 << 20, best_u = 1 << 20;   // above every key (byte-identical: base keys are 0 / 1)
+        for (const CardDefinition* d : board_outlets)   { best_o = std::min(best_o, outlet_key_base(d)); }
         for (const CardDefinition* d : board_untappers) { best_u = std::min(best_u, untap_key(d)); }
         std::vector<int> so, su;   // spares
         for (int i = 0; i < n; ++i)
