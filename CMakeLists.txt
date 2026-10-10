@@ -359,6 +359,7 @@ add_executable(mtg-test
     test/unit/test_dragonstorm_discard.cpp
     test/unit/test_dragonstorm_ritual_order.cpp
     test/unit/test_dragonstorm_user_order.cpp
+    test/unit/test_dragonstorm_followups.cpp
     test/unit/test_breaching_dragonstorm_discard.cpp
     test/unit/test_angels_discard.cpp
     test/unit/test_critterlifegain_discard.cpp

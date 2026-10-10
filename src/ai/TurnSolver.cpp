@@ -31775,6 +31775,73 @@ static bool CreditFixedColorSac(ManaPool& eff, const Action& a)
     }
 }
 
+// MTG_RITUAL_FLOAT_COLOR_EXACT (DEFAULT ON; =0 -> the wild credit, byte-identical). Both subset
+// evaluators credit a ritual's float to the pool as WILD -- mana that pays ANY pip -- although a
+// coloured ritual (ritual_float_color: Irencrag Feat and the Dragonstorm rituals {R}, Seething Song in
+// Unpredictable Cyclone) can only ever float its own colour, exactly what CreditCastOutput, the
+// executor and the exact order walk already credit. So a subset could "pay" an off-colour pip with
+// ritual red: Irencrag -> Karrthus {4}{B}{R}{G} on a board whose only non-red source is one Unclaimed
+// Territory (dragonstorm d0 s7000051 T5 -- Irencrag cast, Karrthus unpaid, seven red wasted), Irencrag
+// -> Kolaghan (d3 s7100151 T5). Reaches every deck holding a coloured-float ritual: Dragonstorm,
+// Hinata2 (Irencrag Feat) and Unpredictable Cyclone (Seething Song). Reality Spasm (no fixed colour)
+// and every chosen-colour float stay wild.
+static bool RitualFloatColorExactOn()
+{
+    static const bool on = EnvOn("MTG_RITUAL_FLOAT_COLOR_EXACT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::RITUAL_FLOAT_COLOR_EXACT, on);
+}
+
+// Does this candidate float a FIXED colour (the cast, not a choose-a-colour float)? Index W,U,B,R,G,C
+// of that colour, or -1.
+static int RitualFloatColorIndex(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.ritual_float <= 0 || a.def == nullptr) { return -1; }
+    if (!a.chosen_float_color.str().empty()) { return -1; }
+    const std::string& c = a.def->params.ritual_float_color;
+    if (c.empty()) { return -1; }
+    switch (c[0])
+    {
+        case 'W': return 0; case 'U': return 1; case 'B': return 2;
+        case 'R': return 3; case 'G': return 4; case 'C': return 5;
+        default:  return -1;
+    }
+}
+
+// Move the subset's FIXED-colour ritual credit out of `ec.wild` / `ecn.wild` into its own colour --
+// at most what the credit actually put into wild (eff.wild above the board's own), so a sequenced
+// correction that already handed some back is respected. Returns true when anything moved. Only ever
+// narrows what the credited pool can pay, so a CanPay against it can only reject.
+static bool ColourExactRitualCredit(const ManaPool& pool, const ManaPool& pool_nc,
+                                    const std::vector<Action>& cands, const std::vector<int>& sel,
+                                    ManaPool& ec, ManaPool& ecn)
+{
+    int amt[6] = { 0, 0, 0, 0, 0, 0 }, gy[6] = { 0, 0, 0, 0, 0, 0 };
+    bool any = false;
+    for (int j : sel)
+    {
+        const int k = RitualFloatColorIndex(cands[j]);
+        if (k < 0) { continue; }
+        amt[k] += cands[j].ritual_float;
+        if (cands[j].def->params.ritual_float_gy_self_bonus) { ++gy[k]; }
+        any = true;
+    }
+    if (!any) { return false; }
+    auto move = [&](const ManaPool& base, ManaPool& p)
+    {
+        int avail = std::max(0, p.wild - base.wild);
+        int* dst[6] = { &p.white, &p.blue, &p.black, &p.red, &p.green, &p.colorless };
+        for (int k = 0; k < 6 && avail > 0; ++k)
+        {
+            const int m = std::min(avail, amt[k] + gy[k] * (gy[k] - 1) / 2);
+            if (m <= 0) { continue; }
+            p.wild -= m; *dst[k] += m; avail -= m;
+        }
+    };
+    move(pool, ec);
+    move(pool_nc, ecn);
+    return true;
+}
+
 static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>& cands,
                                  const std::vector<int>& sel, int exclude = -1,
                                  const GameState* st_disc = nullptr)
@@ -34460,6 +34527,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // the pool's CanPay. False for every non-ritual deck -> byte-identical.
     bool any_ritual = false;
     for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
+    // MTG_RITUAL_FLOAT_COLOR_EXACT: does any candidate float a FIXED colour? (one scan; false -> the
+    // colour-exact credit below never runs)
+    bool any_colour_ritual = false;
+    if (any_ritual && RitualFloatColorExactOn())
+    { for (const Action& ra : cands) { if (RitualFloatColorIndex(ra) >= 0) { any_colour_ritual = true; break; } } }
     // Storm-hold rule (see SubsetWastesAccelerant): is a storm payoff (Dragonstorm/Apex) already in
     // hand? Scans the FULL hand (not just castable cands -- the case that matters is a storm in hand but
     // not yet castable). Gated on the flag so it is a zero-cost no-op (storm_in_hand=false) by default.
@@ -35332,6 +35404,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             apply_seq();
             mana_ok = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
         }
+        // MTG_RITUAL_FLOAT_COLOR_EXACT: the credited pool with each FIXED-colour ritual float in its own
+        // colour (see ColourExactRitualCredit) -- re-asked here, and handed to the colour-count gates
+        // below. Equal to eff when no such ritual is selected (or the lever is off). Lockstep twin in
+        // EnumeratePlans.
+        ManaPool eff_cg = eff, eff_nc_cg = eff_nc;
+        if (mana_ok && any_colour_ritual
+            && ColourExactRitualCredit(pool, pool_noncreature, cands, sel, eff_cg, eff_nc_cg)
+            && !(eff_cg.CanPay(combined) && eff_nc_cg.CanPay(noncreature_combined)))
+        { mc_store_reject(); return; }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         if (!mana_ok && any_filter && enumstats::Enabled())
         {
@@ -35419,10 +35500,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
         if (!mc_hit && mana_ok
             && ((colour_feas.usable
-                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff),
+                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff_cg),
                                          /*noncreature_only=*/false, &colour_demand))
              || (colour_feas_nc.usable
-                 && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
+                 && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc_cg),
                                             /*noncreature_only=*/true, &colour_demand))))
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
@@ -35442,10 +35523,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             const bool board_ok =
                 SubsetPayable(have_b, cands, sel, &colour_demand)
                 && !(colour_feas_board.usable
-                     && !colour_feas_board.Payable(cands, sel, PoolCredit(pool, eff),
+                     && !colour_feas_board.Payable(cands, sel, PoolCredit(pool, eff_cg),
                                                    /*noncreature_only=*/false, &colour_demand))
                 && !(colour_feas_nc_board.usable
-                     && !colour_feas_nc_board.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
+                     && !colour_feas_nc_board.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc_cg),
                                                       /*noncreature_only=*/true, &colour_demand));
             if (!board_ok)
             {
@@ -46470,6 +46551,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // search also enumerates the ritual->payoff combo. False for non-ritual decks -> byte-identical.
     bool any_ritual = false;
     for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
+    // MTG_RITUAL_FLOAT_COLOR_EXACT: does any candidate float a FIXED colour? (one scan; false -> the
+    // colour-exact credit below never runs)
+    bool any_colour_ritual = false;
+    if (any_ritual && RitualFloatColorExactOn())
+    { for (const Action& ra : cands) { if (RitualFloatColorIndex(ra) >= 0) { any_colour_ritual = true; break; } } }
     // Dragonstorm go-off lethal model present? (mirrors Solve) Gates the storm go-off short-circuit below.
     const bool has_extra_lethal = ResolveProvider(state).HasExtraLethalModel();
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
@@ -48121,14 +48207,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (!exec_feas_rescues()) { return; }
             _ct.label = "early-gate";
         }
+        // MTG_RITUAL_FLOAT_COLOR_EXACT -- twin of Solve::consider's (see there): the fixed-colour
+        // ritual float re-asked in its own colour, and the pool handed to the colour-count gate.
+        ManaPool eff_cg = eff, eff_nc_cg = eff_nc;
+        if (mana_ok && any_colour_ritual && exec_feas != 1
+            && ColourExactRitualCredit(pool, pool_noncreature, cands, sel, eff_cg, eff_nc_cg)
+            && !(eff_cg.CanPay(combined) && eff_nc_cg.CanPay(noncreature_combined))
+            && !exec_feas_rescues())
+        {
+            _ct.label = "ritual-colour";
+            return;
+        }
         // ... and the COUNT it does not model (see the twin in Solve::consider). Flat-pool path
         // only: the filter fallback and the cost reframe both judge by other means.
         if (mana_ok && !sel_col_reducer && exec_feas != 1
             && ((colour_feas.usable
-                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff),
+                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff_cg),
                                          /*noncreature_only=*/false, &colour_demand))
              || (colour_feas_nc.usable
-                 && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
+                 && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc_cg),
                                             /*noncreature_only=*/true, &colour_demand)))
             && !exec_feas_rescues())
         {
