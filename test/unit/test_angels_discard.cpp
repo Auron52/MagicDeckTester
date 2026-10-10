@@ -310,6 +310,29 @@ TEST_CASE("Angels discard T10: a protected Sol Ring in hand adds its mana to the
     CHECK(GenAngels(one).front() == 7);   // generic sheds Serra (MV 4)
 }
 
+TEST_CASE("Angels discard T12: a protected Giada in hand counts as mana in the distance model, from the turn after she is cast")
+{
+    // Board 2 Plains, no hand land, empty library. Giada {1}{W} is surely cast next turn and taps for
+    // Angel mana from the turn after (USER: "she counts toward our mana total"). Angels: Lyra ArchDawn
+    // {2}{W} (value 0.85), Youthful Valkyrie {1}{W} (0.6141), Serra {2}{W}{W} (0.4437).
+    //   * Lyra: 2 mana next turn, 3 the turn after with Giada -> 0.75 x 0.85 = 0.6375 > Youthful's
+    //     0.6141 (castable now). Without the credit Lyra is stranded at 2 mana and falls below it.
+    //   * Serra is a planeswalker: Giada's mana never pays her, so she stays stranded (3 < 4).
+    // Order Lyra, Youthful, Serra; shed UA, Swords, Greaves, Bishop, then the Angels backwards, Giada last.
+    const GameState s = MakeAngels({ kGiada, kLyraDawn, kYV, kUA, kStP, kGreaves, kBishop, kSerra },
+                                   { "Plains", "Plains" });
+    const std::vector<int> o = Ang(s, 1, 1);
+    CHECK(o == std::vector<int>{ 3, 4, 5, 6, 7, 2, 1, 0 });
+    CheckPermutationAngels(s, o);
+    CHECK(Ang(s, 1, 0) == o);           // value alone agrees: Lyra is the better card
+    // One Plains: Giada is never surely cast (1 mana, no land to come), so she adds nothing; Lyra and
+    // Youthful are both stranded -> value order, Lyra first. (Crediting her from next turn regardless
+    // would make Youthful castable on the 2nd turn, 0.4606, and put it above the stranded Lyra.)
+    const GameState one = MakeAngels({ kGiada, kLyraDawn, kYV, kUA, kStP, kGreaves, kBishop, kSerra },
+                                     { "Plains" });
+    CHECK(Ang(one, 1, 1) == std::vector<int>{ 3, 4, 5, 6, 7, 2, 1, 0 });
+}
+
 TEST_CASE("Angels discard T11: the distance model never moves a card across a USER tier")
 {
     // Board 2 Plains, no hand land, empty library. Serra (4) and Thune (5) are never castable (EV
