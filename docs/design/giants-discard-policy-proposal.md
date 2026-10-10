@@ -90,10 +90,12 @@ As built:
 - MANA PICK LIST: a land first while no land is in play, then Sol Ring (`produces_amount >= 2`), the
   other lands, a plain rock, Fire Diamond (`enters_tapped`) last. A rock with no land on the battlefield
   or in hand is a blank.
-- GIANTS by EV = P(play) x 7 x 0.85^position, position from the USER's order (Titan 0, Flinger 1,
-  Behemoth 2, Tectonic 3, Sovereign 4, Goliath 5, Harbinger 6); P = {1, .70, .35, .10, .03, .02} by mana
-  short of reach; cost = MV minus the SUM of the in-play Daredevils' discount, floored at the coloured
-  pips, times (1 + copies already ahead in hand or in play).
+- GIANTS by EV = castability x 7 x 0.85^position, position from the USER's order (Titan 0, Flinger 1,
+  Behemoth 2, Tectonic 3, Sovereign 4, Goliath 5, Harbinger 6); cost = MV minus the SUM of the in-play
+  Daredevils' discount, floored at the coloured pips, times (1 + copies already ahead IN HAND -- a copy
+  in play adds nothing, review fix 6da20608). Castability is the shared distance model since 2026-10-10
+  (see "Implementation notes (2026-10-10)" below); `MTG_DISCARD_DIST_MODEL=0` restores the 2026-10-09
+  table, P = {1, .70, .35, .10, .03, .02} by mana short of reach (board + hand mana, all at once).
 - SHED: Pyroclasm > dead rock (Fire Diamond first) > dead legend copy > mana past the 7th (Fire
   Diamond, Mountains, Sol Ring) > spare Greaves > 3rd/4th Bolt > spare Daredevils > spare Giants (lowest
   EV first) > unrecognised > the ladder backwards. Every non-staged card named once.
@@ -121,7 +123,6 @@ Ages the committed keep table (`Giants.keepmodel.exhaustive.profile.json.gz`) an
 (`Giants.value.json`): both were fitted under the max-MV ranking. Not measured here (no game runs in
 this step); per the design, measure non-inferiority with the sidecar in place.
 
-
 #### USER rulings (2026-10-10) on the implementation readings
 
 Cross-deck (verbatim):
@@ -134,6 +135,32 @@ Cross-deck (verbatim):
   engine, combo-piece and duplicate-legend rules keep the board rules their design states.
 - *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
   model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
+
+#### Implementation notes (2026-10-10)
+
+- The Giant quota ignoring Giants in play is CONFIRMED by the USER's ruling above ("Creature quotas are
+  less worried about the board than land quotas"); kept as built.
+- DISTANCE MODEL (USER: "For Distance to castable I think it makes sense to have a smarter model if we
+  can."): the Giants' castability is `discard_dist::CastFactorFor` (docs/design/discard-distance-model.md)
+  behind `MTG_DISCARD_DIST_MODEL` (heurarm `DISCARD_DIST_MODEL`, default ON; `=0` reproduces the
+  2026-10-09 table exactly). Inputs: `BuildCensus` once per call (board mana / colours, library land
+  counts); the KEPT lands as one land drop per turn -- the ladder's mana takes are exactly the first
+  `min(|pick list|, mana_soft)` entries of the pick list, since its MANA slots fill independently of the
+  other buckets; the kept Sol Ring / Fire Diamond as `extra` mana from the turn they can be cast; `mana`
+  = the cost after the Daredevil discount, cumulative for a duplicate in hand. EV = factor x the value
+  above. Tests D1-D4 (hand-derived, each differing from the table): kept lands arrive one per turn, the
+  rocks' timing, the library's land density, the discounted cumulative cost.
+- Agent readings in the model inputs: a kept rock's cast turn is computed deterministically from the
+  board and the kept lands only (no draws; the conservative side), lands down one per turn untapped
+  first, rocks in pick order each spending its cost; an untapped rock nets `produce - cost` its cast
+  turn (Sol Ring +1) and `produce` after, a tapped one adds `produce` from the next turn (Fire Diamond).
+  The rocks add mana only, not colour (the helper's `extra` carries none -- inert here: every Giant's
+  pips are red and every land is a Mountain). A duplicate's colour pips are the printed ones (the
+  cumulative rule raises its mana only). With the soft 7th met by the board, no hand land is "kept",
+  so surplus hand lands do not shorten any Giant's distance.
+- The "Colour beats the land count" ruling is inert on this list (mono-red, every land a Mountain) and
+  is not separately implemented.
+
 
 ---
 
