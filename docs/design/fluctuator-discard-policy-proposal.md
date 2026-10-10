@@ -71,7 +71,8 @@ SHED: 2nd Fluctuator / spare Tutor (Fluctuator first) -> Forsake the Worldly -> 
 (tight) -> Hollow One (no reachable enabler, < 5 mana) -> lands past the count (no-colour tapped ->
 covered tapped -> untapped -> missing-colour -> Capital City) -> spare Hollow One -> spare Unearth ->
 spare Stinger -> protected tail.
-Housekeeping: Capital City note says "38 of 42 lands enter tapped" -- it is 34.
+Housekeeping: Capital City note says "38 of 42 lands enter tapped" -- it is 34. (Fixed 2026-10-10 in
+cards.json, src/ai/LandPlay.cpp and analysis-Fluctuator.md.)
 
 
 #### Agent defaults across the 2026-10-09 review (all decks; surfaced, USER may overturn)
