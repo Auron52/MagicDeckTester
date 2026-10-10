@@ -7900,7 +7900,9 @@ static bool PendingFilterInHand(const GameState& state)
 // so a subset can discount the ones it must spend. Sorted by attack power ASCENDING: that is the
 // order a competent payment spends them (cover the cost losing as little combat damage as possible),
 // so the discount stays the smallest honest one rather than a worst case.
-struct AttackingManaSource { int power; int yield; };
+// `number` = the source's card number, so a re-projection (MTG_ATTACK_TAP_REPROJECT) can tap the very
+// sources the discount spent.
+struct AttackingManaSource { int power; int yield; int number = 0; };
 
 // MTG_ATTACK_DOMAIN_DORK_YIELD -- a DOMAIN dork's yield is the pool's, not the card's static amount.
 // PermanentManaYield returns ManaProducedPerTap = 1 for Faeburrow Elder / Bloom Tender, but the pool
@@ -7975,7 +7977,7 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         int y = PermanentManaYield(state, p, *def);
         if (def->params.domain_mana && AttackDomainDorkYieldEnabled())
         { y = static_cast<int>(DomainColors(state, active).size()) + LandAuraBonus(state, p); }
-        out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def) });
+        out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def), p.card.m_number });
     }
     std::sort(out.begin(), out.end(),
               [](const AttackingManaSource& a, const AttackingManaSource& b)
@@ -7992,15 +7994,20 @@ static bool AttackTapDiscountEnabled()
     static const bool v = !EnvOn("MTG_NO_ATK_TAP_DISCOUNT");
     return v;
 }
-static int AttackTapDiscount(const std::vector<AttackingManaSource>& srcs, int need)
+// `spent` receives the bitmask of the sources the discount spent (indices into the sorted `srcs`, a
+// prefix) -- what a re-projection taps (MTG_ATTACK_TAP_REPROJECT). Past 64 sources (never seen) only
+// the part of the prefix that fits the mask is recorded.
+static int AttackTapDiscount(const std::vector<AttackingManaSource>& srcs, int need, std::uint64_t* spent)
 {
+    *spent = 0;
     if (need <= 0 || srcs.empty() || !AttackTapDiscountEnabled()) { return 0; }
     int covered = 0, lost = 0;
-    for (const AttackingManaSource& s : srcs)
+    for (int i = 0; i < static_cast<int>(srcs.size()); ++i)
     {
         if (covered >= need) { break; }
-        covered += s.yield;
-        lost    += s.power;
+        covered += srcs[static_cast<std::size_t>(i)].yield;
+        lost    += srcs[static_cast<std::size_t>(i)].power;
+        if (i < 64) { *spent |= std::uint64_t{1} << i; }
     }
     return lost;
 }
@@ -8260,6 +8267,41 @@ static bool AttackTapAstrolabeCreditEnabled()
     return heurarm::Flag(heurarm::ATTACK_TAP_ASTROLABE_CREDIT, env_on);
 }
 
+// 4. MTG_ATTACK_TAP_REPROJECT -- the MANA half above subtracted only each spent source's base power
+//    (AttackingManaSource::power). A tapped dork also loses its share of every TEAM pump the attack
+//    credits per attacker -- Blossoming Bogbeast's +X, battle cry, exalted turning on when one attacker
+//    is left -- so the discount under-took and the projection kept a phantom. Now the board is
+//    re-projected with the spent sources TAPPED (PendingAttackDamage, the same function the pre-plan
+//    attack came from), memoised by which sources are spent -- a prefix of the power-sorted list,
+//    so at most #sources + 1 re-projections per enumeration.
+// 5. MTG_ATTACK_TEAM_PUMP_ETB / MTG_ATTACK_PLAN_LIFEGAIN -- the plan's own casts change the attack and
+//    nothing projected it: a hard-cast Craterhoof pumps every attacker +X (it was credited only its
+//    printed 5 through haste_attack_power), and the plan's life gain feeds the per-life pumps (Bogbeast
+//    reads life gained this turn; Nykthos Paragon / Ageless Entity put counters per gain). Both run in
+//    one WALK of the plan's casts on a copy of the re-projected board (ProjectPlanWalk), in the order the
+//    apply worlds cast them, through the engine's own helpers -- ApplyCastLifegain, GainLife (which fires
+//    the very watchers combat will read), the Craterhoof recipient loop -- and the board is read with
+//    the same PendingAttackDamage. A walk always taps the spent mana sources (it IS a re-projection;
+//    otherwise the pump it adds would be credited to the dorks the payment taps).
+static bool AttackTapReprojectEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_TAP_REPROJECT", true);   // DEFAULT ON; =0 base power
+    return heurarm::Flag(heurarm::ATTACK_TAP_REPROJECT, env_on);
+}
+static bool AttackTeamPumpEtbEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_TEAM_PUMP_ETB", true);   // DEFAULT ON; =0 printed power
+    return heurarm::Flag(heurarm::ATTACK_TEAM_PUMP_ETB, env_on);
+}
+static bool AttackPlanLifegainEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_PLAN_LIFEGAIN", true);   // DEFAULT ON; =0 pre-plan gain
+    return heurarm::Flag(heurarm::ATTACK_PLAN_LIFEGAIN, env_on);
+}
+
+// Per-candidate walk flags (AttackTapCtx::cand_walk).
+enum : unsigned char { kWalkPump = 1, kWalkLife = 2 };
+
 struct AttackTapCtx
 {
     bool pre_combat  = false;
@@ -8276,6 +8318,9 @@ struct AttackTapCtx
         std::vector<AttackingManaSource> srcs;
     };
     std::vector<Entry> memo;
+    // Stage 2 (see points 4 and 5 above). cand_walk empty = no candidate starts a walk.
+    std::vector<unsigned char> cand_walk;
+    std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>, int> memo2;   // (mask, spent, walk) -> attack
 };
 
 static int SumYield(const std::vector<AttackingManaSource>& srcs)
@@ -8283,6 +8328,80 @@ static int SumYield(const std::vector<AttackingManaSource>& srcs)
     int y = 0;
     for (const AttackingManaSource& s : srcs) { y += s.yield; }
     return y;
+}
+
+// A card that turns a life-gain EVENT into attack: a team pump read off life gained this turn
+// (Bogbeast) or a "whenever you gain life" counter watcher (Nykthos Paragon, Ageless Entity, Ajani's
+// Pridemate, Archangel of Thune, Heliod's targeted counter).
+static bool LifegainAttackWatcher(const CardParams& p)
+{
+    return p.attack_team_pump_per_life_gained
+        || p.lifegain_each_own_creature_counters > 0 || p.lifegain_each_own_creature_counters_that_many
+        || p.lifegain_self_counters > 0 || p.lifegain_self_counters_that_many
+        || p.lifegain_target_own_counter;
+}
+// "Whenever a creature [you control] enters, you gain ..." (Verdant Sun's Avatar, Soul Warden).
+static bool EnterLifegainWatcher(const CardParams& p)
+{
+    return p.own_creature_enters_lifegain > 0 || p.own_creature_enters_lifegain_toughness
+        || p.any_creature_enters_lifegain > 0;
+}
+
+// The life-gain half of FireCreatureEnterWatchers for the body just put at `ei` (the projection's
+// walk). Same three clauses, same filters (enters_watch_subtypes, creature_enters_min_power, the
+// self-inclusive tail), the same live P/T reads; everything that is not a life gain is left out.
+static void ProjectEnterLifegain(GameState& t, int ei)
+{
+    const int ctrl = t.battlefield[static_cast<std::size_t>(ei)].controller_index;
+    auto sub_ok = [&](const CardParams& wp) -> bool
+    {
+        if (wp.enters_watch_subtypes.empty()) { return true; }
+        for (const std::string& want : wp.enters_watch_subtypes)
+        {
+            for (const std::string& cs : t.battlefield[static_cast<std::size_t>(ei)].card.m_subtypes)
+            { if (cs == want) { return true; } }
+        }
+        return false;
+    };
+    auto power_now = [&]() -> int
+    {
+        const Permanent& e = t.battlefield[static_cast<std::size_t>(ei)];
+        return e.EffectivePower() + ComputeLordBonus(e.card, t, e.controller_index, e.AnimatedAllTypes(), &e).first;
+    };
+    auto tough_now = [&]() -> int
+    {
+        const Permanent& e = t.battlefield[static_cast<std::size_t>(ei)];
+        return e.EffectiveToughness()
+             + ComputeLordBonus(e.card, t, e.controller_index, e.AnimatedAllTypes(), &e).second;
+    };
+    const int n = static_cast<int>(t.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        if (i == ei) { continue; }   // "another creature"
+        const Permanent& w = t.battlefield[static_cast<std::size_t>(i)];
+        if (w.def_absent) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd == nullptr || !wd->enter_watcher) { continue; }
+        const CardParams& wp = wd->params;
+        const int who = w.controller_index;
+        if (wp.any_creature_enters_lifegain > 0 && sub_ok(wp)) { GainLife(t, who, wp.any_creature_enters_lifegain); }
+        if ((wp.own_creature_enters_lifegain > 0 || wp.own_creature_enters_lifegain_toughness)
+            && who == ctrl
+            && (wp.creature_enters_min_power <= 0 || power_now() >= wp.creature_enters_min_power)
+            && sub_ok(wp))
+        {
+            GainLife(t, who, wp.own_creature_enters_lifegain_toughness ? tough_now() : wp.own_creature_enters_lifegain);
+        }
+    }
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(t.battlefield[static_cast<std::size_t>(ei)].card);
+    if (ed != nullptr && ed->params.creature_enters_includes_self
+        && (ed->params.own_creature_enters_lifegain > 0 || ed->params.own_creature_enters_lifegain_toughness)
+        && (ed->params.creature_enters_min_power <= 0 || power_now() >= ed->params.creature_enters_min_power)
+        && sub_ok(ed->params))
+    {
+        GainLife(t, ctrl, ed->params.own_creature_enters_lifegain_toughness ? tough_now()
+                                                                           : ed->params.own_creature_enters_lifegain);
+    }
 }
 
 // The plan's CASTS in the order the apply worlds realise them, as a projection reads it: the
@@ -8310,6 +8429,96 @@ static void PlanCastOrder(const GameState& state, const std::vector<Action>& can
     }
 }
 
+// The attack after the plan's casts and life gains, on `t` -- the board with the plan's taps already
+// applied. Each cast body ENTERS (summoning-sick) in cast order so it counts where the engine counts it
+// (Craterhoof's X, Wellwisher's Elves, Blighted Steppe's creatures, a cast Paragon catching later gains,
+// an enter-lifegain watcher), and is removed again before the board is read: a cast body's own attack
+// is haste_cast_atk's, so the only part of it added here is what the walk GAVE a hasty one (the +X of a
+// Craterhoof cast at or after it, the counters of a later gain). Then the plan's lifegain activations,
+// in plan order, which is where the trailing pass applies them -- after every cast.
+static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vector<Action>& cands,
+                           const std::vector<int>& sel, bool pump, bool life)
+{
+    RevealLogPause _rlp;   // a projection: no play events, no human choosers
+    const int active = t.active_player_index;
+    std::vector<int> order;
+    PlanCastOrder(state, cands, sel, order);
+    constexpr int kWalkNumberBase = 1 << 29;   // synthetic numbers for the bodies the walk enters
+    std::vector<std::pair<int, int>> entered;  // (number, this-turn attack weight: 0 sick, 1, 2 DS)
+    for (int j : order)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (life) { ApplyCastLifegain(t, active, *d); }   // instants / sorceries only (inside)
+        if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
+        const bool body = d->card.IsCreature()
+                       || (life && (LifegainAttackWatcher(d->params) || EnterLifegainWatcher(d->params)));
+        if (!body) { continue; }
+        Permanent p;
+        p.card              = d->card;
+        p.card.m_number     = kWalkNumberBase + j;
+        p.controller_index  = active;
+        p.owner_index       = active;
+        p.entered_this_turn = true;
+        t.battlefield.push_back(p);
+        const int ei = static_cast<int>(t.battlefield.size()) - 1;
+        const int weight = a.haste_attack_power > 0
+                         ? (d->card.HasKeyword(Keyword::DoubleStrike) ? 2 : 1) : 0;
+        entered.push_back({ p.card.m_number, weight });
+        if (life && d->card.IsCreature()) { ProjectEnterLifegain(t, ei); }
+        if (pump && d->params.etb_team_pump_per_creature)
+        {
+            // Craterhoof's resolution, verbatim: X counted after it entered, every own creature.
+            const int x = CountOwnCreatures(t, active);
+            for (Permanent& q : t.battlefield)
+            {
+                if (q.controller_index == active && (q.card.IsCreature() || q.is_animated))
+                { q.temp_power_bonus += x; q.temp_tough_bonus += x; }
+            }
+        }
+    }
+    if (life)
+    {
+        for (int j : sel)
+        {
+            const Action& a = cands[static_cast<std::size_t>(j)];
+            if (a.kind != Action::Kind::ActivatePermAbility) { continue; }
+            if (a.ability_mode != Action::AbilityMode::TapLifegain
+                && a.ability_mode != Action::AbilityMode::SacLifePerCreature) { continue; }
+            const Permanent* src = nullptr;
+            for (const Permanent& q : t.battlefield)
+            { if (q.controller_index == active && q.card.m_number == a.sac_source_id) { src = &q; break; } }
+            const CardDefinition* sd = src ? CardDatabase::Instance().LookupCached(src->card) : nullptr;
+            if (sd == nullptr) { continue; }
+            if (a.ability_mode == Action::AbilityMode::TapLifegain)
+            { GainLife(t, active, TapLifegainAmount(t, active, *sd)); }
+            else
+            {
+                const int per = sd->params.sac_lifegain_per_creature;
+                const int n   = CountOwnCreatures(t, active);
+                if (per > 0 && n > 0) { GainLife(t, active, per * n); }
+            }
+        }
+    }
+    int extra = 0;
+    for (const auto& [num, w] : entered)
+    {
+        if (w == 0) { continue; }
+        for (const Permanent& q : t.battlefield)
+        {
+            if (q.controller_index != active || q.card.m_number != num) { continue; }
+            extra += std::max(0, q.temp_power_bonus + PlusCountersOn(q) - MinusCountersOn(q)) * w;
+            break;
+        }
+    }
+    t.battlefield.erase(std::remove_if(t.battlefield.begin(), t.battlefield.end(),
+                                       [&](const Permanent& q)
+                                       { return q.controller_index == active && q.card.m_number >= kWalkNumberBase; }),
+                        t.battlefield.end());
+    return PendingAttackDamage(t) + extra;
+}
+
 static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pending_atk,
                               const std::vector<AttackingManaSource>& srcs,
                               const std::vector<Action>& cands, AttackTapCtx& ctx)
@@ -8318,48 +8527,112 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
     ctx.pending_atk = pending_atk;
     ctx.srcs        = &srcs;
     ctx.src_yield   = SumYield(srcs);
-    if (!is_pre_combat || pending_atk <= 0 || !AttackTapAbilityDiscountEnabled()) { return; }
+    if (!is_pre_combat) { return; }
     const int active = state.active_player_index;
+    auto own_perm = [&](int number) -> const Permanent*
+    {
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == active && p.card.m_number == number) { return &p; } }
+        return nullptr;
+    };
+    // Only a creature PendingAttackDamage counted can be lost from it -- the same two tests
+    // CollectAttackingManaSources applies.
+    auto attacker = [&](const Permanent* p) -> bool
+    {
+        return p != nullptr && !p->tapped && p->card.IsCreature()
+            && CanAttackFull(*p, state.battlefield, active)
+            && ResolveProvider(state).AttackWith(state, *p);
+    };
+    auto set_bit = [&](int j, int number)
+    {
+        int bit = -1;
+        for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+        { if (ctx.bit_number[b] == number) { bit = b; break; } }
+        if (bit < 0)
+        {
+            if (ctx.bit_number.size() >= 64) { return; }    // unreachable; dropping one only under-discounts
+            bit = static_cast<int>(ctx.bit_number.size());
+            ctx.bit_number.push_back(number);
+        }
+        if (ctx.cand_bit.empty()) { ctx.cand_bit.assign(cands.size(), -1); }
+        ctx.cand_bit[static_cast<std::size_t>(j)] = static_cast<signed char>(bit);
+    };
+    if (pending_atk > 0 && AttackTapAbilityDiscountEnabled())
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
+            if (!PermAbilityTaps(a.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
+            if (!attacker(own_perm(a.sac_source_id))) { continue; }
+            set_bit(j, a.sac_source_id);
+        }
+    }
+    // Stage-2 walk flags.
+    const bool pump = AttackTeamPumpEtbEnabled();
+    bool life = AttackPlanLifegainEnabled();
+    bool enter_lg = false;
+    if (life)
+    {
+        bool consumer = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (LifegainAttackWatcher(d->params)) { consumer = true; }
+            if (EnterLifegainWatcher(d->params))  { enter_lg = true; }
+        }
+        for (const Action& a : cands)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr) { continue; }
+            // A watcher CAST this turn is sick, so only a team-wide one turns gains into attack.
+            if (d->params.lifegain_each_own_creature_counters > 0
+                || d->params.lifegain_each_own_creature_counters_that_many
+                || d->params.lifegain_target_own_counter) { consumer = true; }
+            if (EnterLifegainWatcher(d->params)) { enter_lg = true; }
+        }
+        life = consumer;
+    }
+    if (!pump && !life) { return; }
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
     {
         const Action& a = cands[j];
-        if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
-        if (!PermAbilityTaps(a.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
-        const Permanent* src = nullptr;
-        for (const Permanent& p : state.battlefield)
+        unsigned char f = 0;
+        if (a.kind == Action::Kind::CastFromHand)
         {
-            if (p.controller_index == active && p.card.m_number == a.sac_source_id) { src = &p; break; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr) { continue; }
+            if (pump && d->params.etb_team_pump_per_creature && d->card.IsCreature()) { f |= kWalkPump; }
+            if (life && d->params.cast_lifegain > 0 && !d->params.solo_target_trick
+                && (d->card.IsInstant() || d->card.IsSorcery())) { f |= kWalkLife; }
+            if (life && enter_lg && d->card.IsCreature()) { f |= kWalkLife; }
         }
-        // Only a creature PendingAttackDamage counted can be lost from it -- the same two tests
-        // CollectAttackingManaSources applies.
-        if (src == nullptr || src->tapped || !src->card.IsCreature()) { continue; }
-        if (!CanAttackFull(*src, state.battlefield, active)) { continue; }
-        if (!ResolveProvider(state).AttackWith(state, *src)) { continue; }
-        int bit = -1;
-        for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
-        { if (ctx.bit_number[b] == a.sac_source_id) { bit = b; break; } }
-        if (bit < 0)
-        {
-            if (ctx.bit_number.size() >= 64) { continue; }    // unreachable; dropping one only under-discounts
-            bit = static_cast<int>(ctx.bit_number.size());
-            ctx.bit_number.push_back(a.sac_source_id);
-        }
-        if (ctx.cand_bit.empty()) { ctx.cand_bit.assign(cands.size(), -1); }
-        ctx.cand_bit[j] = static_cast<signed char>(bit);
+        else if (life && a.kind == Action::Kind::ActivatePermAbility
+                 && (a.ability_mode == Action::AbilityMode::TapLifegain
+                     || a.ability_mode == Action::AbilityMode::SacLifePerCreature))
+        { f |= kWalkLife; }
+        if (f == 0) { continue; }
+        if (ctx.cand_walk.empty()) { ctx.cand_walk.assign(cands.size(), 0); }
+        ctx.cand_walk[static_cast<std::size_t>(j)] = f;
     }
 }
 
-// The attack damage the subset loses to its own taps. `cost_mv` is the subset's combined mana value,
-// `supply` the pool it was judged payable from (the credited `eff` when credited), and
+// The attack the subset changes by its own taps and casts, as a LOSS (projected = pending - loss + the
+// casts' own haste power; a pump makes the loss negative). `cost_mv` is the subset's combined mana
+// value and `supply` the pool it was judged payable from (the credited `eff` when credited), and
 // `legacy_nc_total` the pool_noncreature total the legacy need was computed against.
-static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::vector<int>& sel,
-                         int cost_mv, const ManaPool& supply, int legacy_nc_total)
+static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::vector<Action>& cands,
+                         const std::vector<int>& sel, int cost_mv, const ManaPool& supply,
+                         int legacy_nc_total)
 {
     const bool need_exact = AttackTapNeedExactEnabled();
     if (need_exact && !ctx.pre_combat) { return 0; }          // no attack left to lose
     // MTG_ATTACK_TAP_ASTROLABE_CREDIT: a phantom conversion unit is not supply (see the lever).
-    const int supply_total = supply.Total()
-        - (AttackTapAstrolabeCreditEnabled() ? std::min(supply.wild_phantom, supply.wild) : 0);
+    const bool astro = AttackTapAstrolabeCreditEnabled();
+    const int supply_total = supply.Total() - (astro ? std::min(supply.wild_phantom, supply.wild) : 0);
     std::uint64_t mask = 0;
     if (!ctx.cand_bit.empty())
     {
@@ -8369,38 +8642,101 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
             if (b >= 0) { mask |= std::uint64_t{1} << b; }
         }
     }
-    if (mask == 0)
+    // Stage 1: the board with the plan's ability / tap-on-entry taps applied (the pre-plan board when
+    // there are none) -- its attack and its attacking mana sources.
+    const std::vector<AttackingManaSource>* s1 = ctx.srcs;
+    int pend1 = ctx.pending_atk, y1 = ctx.src_yield;
+    if (mask != 0)
     {
-        const int need = need_exact ? cost_mv - (supply_total - ctx.src_yield)
-                                    : cost_mv - legacy_nc_total;
-        return AttackTapDiscount(*ctx.srcs, need);
-    }
-    const AttackTapCtx::Entry* e = nullptr;
-    for (const AttackTapCtx::Entry& m : ctx.memo) { if (m.mask == mask) { e = &m; break; } }
-    if (e == nullptr)
-    {
-        GameState t = state;
-        for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+        const AttackTapCtx::Entry* e = nullptr;
+        for (const AttackTapCtx::Entry& m : ctx.memo) { if (m.mask == mask) { e = &m; break; } }
+        if (e == nullptr)
         {
-            if (!(mask & (std::uint64_t{1} << b))) { continue; }
+            GameState t = state;
+            for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+            {
+                if (!(mask & (std::uint64_t{1} << b))) { continue; }
+                for (Permanent& p : t.battlefield)
+                {
+                    if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
+                    { p.tapped = true; break; }
+                }
+            }
+            AttackTapCtx::Entry ne;
+            ne.mask    = mask;
+            ne.pending = PendingAttackDamage(t);
+            ne.srcs    = CollectAttackingManaSources(t);
+            ne.yield   = SumYield(ne.srcs);
+            ctx.memo.push_back(std::move(ne));
+            e = &ctx.memo.back();
+        }
+        // The activated creatures are tapped on `t`, so they are out of its mana-source list too: a
+        // dork spent on its own ability pays nothing, and its share of `need` falls on the others.
+        s1 = &e->srcs; pend1 = e->pending; y1 = e->yield;
+    }
+    const int need = need_exact ? cost_mv - (supply_total - y1) : cost_mv - legacy_nc_total;
+    std::uint64_t spent = 0;
+    const int lost_base = AttackTapDiscount(*s1, need, &spent);
+    // Stage 2: which re-projection terms THIS subset needs.
+    bool walk_pump = false, walk_life = false;
+    if (!ctx.cand_walk.empty())
+    {
+        for (int j : sel)
+        {
+            const unsigned char f = ctx.cand_walk[static_cast<std::size_t>(j)];
+            if (f & kWalkPump) { walk_pump = true; }
+            if (f & kWalkLife) { walk_life = true; }
+        }
+    }
+    const bool walk   = walk_pump || walk_life;
+    const bool reproj = spent != 0 && (walk || AttackTapReprojectEnabled());
+    if (!reproj && !walk) { return (ctx.pending_atk - pend1) + lost_base; }
+    // Memo key: the stage-1 taps, the spent sources, and the subset's walk-relevant members (casts and
+    // lifegain activations -- everything the walk reads). Unkeyable past 64 candidates: computed fresh.
+    const bool keyable = cands.size() <= 64;
+    std::uint64_t walk_key = 0;
+    if (walk && keyable)
+    {
+        for (int j : sel)
+        {
+            if (cands[static_cast<std::size_t>(j)].kind == Action::Kind::CastFromHand
+                || ctx.cand_walk[static_cast<std::size_t>(j)] != 0)
+            { walk_key |= std::uint64_t{1} << j; }
+        }
+    }
+    const auto key = std::make_tuple(mask, reproj ? spent : std::uint64_t{0}, walk_key);
+    if (keyable)
+    {
+        const auto it = ctx.memo2.find(key);
+        if (it != ctx.memo2.end()) { return (ctx.pending_atk - it->second) + (reproj ? 0 : lost_base); }
+    }
+    GameState t = state;
+    for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+    {
+        if (!(mask & (std::uint64_t{1} << b))) { continue; }
+        for (Permanent& p : t.battlefield)
+        {
+            if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
+            { p.tapped = true; break; }
+        }
+    }
+    if (reproj)
+    {
+        for (int i = 0; i < static_cast<int>(s1->size()) && i < 64; ++i)
+        {
+            if (!(spent & (std::uint64_t{1} << i))) { continue; }
             for (Permanent& p : t.battlefield)
             {
-                if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
+                if (p.controller_index == t.active_player_index
+                    && p.card.m_number == (*s1)[static_cast<std::size_t>(i)].number)
                 { p.tapped = true; break; }
             }
         }
-        AttackTapCtx::Entry ne;
-        ne.mask    = mask;
-        ne.pending = PendingAttackDamage(t);
-        ne.srcs    = CollectAttackingManaSources(t);
-        ne.yield   = SumYield(ne.srcs);
-        ctx.memo.push_back(std::move(ne));
-        e = &ctx.memo.back();
     }
-    // The activated creatures are tapped on `t`, so they are out of its mana-source list too: a dork
-    // spent on its own ability pays nothing, and its share of `need` falls on the other attackers.
-    const int need = need_exact ? cost_mv - (supply_total - e->yield) : cost_mv - legacy_nc_total;
-    return (ctx.pending_atk - e->pending) + AttackTapDiscount(e->srcs, need);
+    const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life)
+                           : PendingAttackDamage(t);
+    if (keyable) { ctx.memo2.emplace(key, pend2); }
+    return (ctx.pending_atk - pend2) + (reproj ? 0 : lost_base);
 }
 
 // ---- MTG_ATTACK_CANNONS_TRIGGER: Mana Cannons' cast damage in the this-turn projection ----------
@@ -34632,8 +34968,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // sources, i.e. its cost beyond what the non-creature pool covers; zero whenever the lands
         // alone pay, so a deck that never taps creatures for mana is byte-identical.
         // AttackTapLoss: the exact need (MTG_ATTACK_TAP_NEED_EXACT) and the subset's own non-mana
-        // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line.
-        const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, sel, combined.ManaValue(),
+        // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line. It also
+        // carries this round's re-projection terms -- see the numbered points that follow
+        // AttackTapNeedExactEnabled. Lockstep twin in EnumeratePlans.
+        const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, cands, sel, combined.ManaValue(),
                                                (credited ? eff : pool), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
@@ -47009,8 +47347,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // sources, i.e. its cost beyond what the non-creature pool covers; zero whenever the lands
         // alone pay, so a deck that never taps creatures for mana is byte-identical.
         // AttackTapLoss: the exact need (MTG_ATTACK_TAP_NEED_EXACT) and the subset's own non-mana
-        // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line. Twin of Solve.
-        const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, sel, combined.ManaValue(),
+        // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line. Twin of Solve
+        // (re-projection terms included).
+        const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, cands, sel, combined.ManaValue(),
                                                (credited ? eff : pool), pool_noncreature.Total());
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
