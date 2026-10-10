@@ -372,6 +372,9 @@ enum Slot : int
     EDF_OUTLET_PIPS,          // MTG_EDF_OUTLET_PIPS       EDF discard: a flicker source in hand / library pays 2 per {W} pip our white sources (board lands and their land Auras, the kept hand lands) cannot cover, so the outlet closer to castable outranks "Displacer if 2+ colourless, else Emiel" (as first built, one {C} source shed both Displacers for an Emiel the deck could not cast). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     SELESNYA_ELF_WINDOW,      // MTG_SELESNYA_ELF_WINDOW   SelesnyaLifegain discard: an Elf castable within two turns (mana value <= the projected M2) is kept ABOVE the soft payoff(s) instead of shed as surplus past the mana target (an agent reading: the dearest kept payoff's cost, floor 5) (as first built it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     GIANTS_ROCK_LIBRARY_LAND, // MTG_GIANTS_ROCK_LIBRARY_LAND Giants discard: a mana rock is "dead" only when no land is in play, in hand OR left in the library (a proposed amendment of the USER's "a rock with no land anywhere is blank" -- it shed Sol Ring on landless turn-2 hands with a Mountain on the next draw). Default OFF (the USER's rule as built) until the USER rules
+    DRAGONSTORM_ORDER_OPAQUE, // MTG_DRAGONSTORM_ORDER_OPAQUE Dragonstorm opts into OrderOpaqueCastsByRank: an ORDER-OPAQUE set (Apex of Power is a re-solve breakpoint card) is cast in CastOrderRank order -- rituals 15, Ruby Medallion 16, Irencrag 18, payoff 20 -- instead of raw plan (= hand) order, which cast Apex before the rituals that fund it (docs/design/executor-ritual-payable-order.md). Default ON; =0 -> raw plan order
+    EXEC_FAILED_CAST_NO_RESOLVE, // MTG_EXEC_FAILED_CAST_NO_RESOLVE the executor's UNCOMMITTED draw-engine branch (the d0 runner / no committed line) no longer runs the post-cast breakpoint re-solve for a cast it could not pay -- the committed branch and ApplyPlanDirect's apply_one already skip it (same doc). Default ON; =0 -> re-solve after a no-op cast as before
+    PAYABLE_ORDER_RITUALS,    // MTG_PAYABLE_ORDER_RITUALS  MTG_PAYABLE_ORDER's domain admits an apply-site order holding a PRODUCING cast the projection walk credits (a mana ritual, a same-turn rock, a spendable Treasure mint), not only an ETB-Treasure maker / reveal-or-pay cast: a producer's position changes payability (same doc). Default ON; =0 -> the maker / reveal domain only
     COUNT
 };
 
@@ -705,6 +708,9 @@ inline const char* Name(int slot)
         "MTG_EDF_OUTLET_PIPS",
         "MTG_SELESNYA_ELF_WINDOW",
         "MTG_GIANTS_ROCK_LIBRARY_LAND",
+        "MTG_DRAGONSTORM_ORDER_OPAQUE",
+        "MTG_EXEC_FAILED_CAST_NO_RESOLVE",
+        "MTG_PAYABLE_ORDER_RITUALS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
