@@ -7901,8 +7901,8 @@ static bool PendingFilterInHand(const GameState& state)
 // order a competent payment spends them (cover the cost losing as little combat damage as possible),
 // so the discount stays the smallest honest one rather than a worst case.
 // `number` = the source's card number, so a re-projection (MTG_ATTACK_TAP_REPROJECT) can tap the very
-// sources the discount spent.
-struct AttackingManaSource { int power; int yield; int number = 0; };
+// sources the discount spent; `nc_ok` = its mana can pay a NONCREATURE spell (MTG_ATTACK_TAP_CREATURE_ONLY).
+struct AttackingManaSource { int power; int yield; int number = 0; bool nc_ok = true; };
 
 // MTG_ATTACK_DOMAIN_DORK_YIELD -- a DOMAIN dork's yield is the pool's, not the card's static amount.
 // PermanentManaYield returns ManaProducedPerTap = 1 for Faeburrow Elder / Bloom Tender, but the pool
@@ -7977,7 +7977,8 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         int y = PermanentManaYield(state, p, *def);
         if (def->params.domain_mana && AttackDomainDorkYieldEnabled())
         { y = static_cast<int>(DomainColors(state, active).size()) + LandAuraBonus(state, p); }
-        out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def), p.card.m_number });
+        out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def), p.card.m_number,
+                        !def->params.creature_mana_only });
     }
     std::sort(out.begin(), out.end(),
               [](const AttackingManaSource& a, const AttackingManaSource& b)
@@ -7994,17 +7995,37 @@ static bool AttackTapDiscountEnabled()
     static const bool v = !EnvOn("MTG_NO_ATK_TAP_DISCOUNT");
     return v;
 }
-// `spent` receives the bitmask of the sources the discount spent (indices into the sorted `srcs`, a
-// prefix) -- what a re-projection taps (MTG_ATTACK_TAP_REPROJECT). Past 64 sources (never seen) only
-// the part of the prefix that fits the mask is recorded.
-static int AttackTapDiscount(const std::vector<AttackingManaSource>& srcs, int need, std::uint64_t* spent)
+// The split cover (MTG_ATTACK_TAP_CREATURE_ONLY): `need_nc` -- the noncreature share's need -- can be
+// covered only by sources whose mana pays a noncreature spell (nc_ok), so those are spent first,
+// least-powerful first, until it is met; then `need` is topped up from whatever is left, in the same
+// order. With need_nc <= 0 this is AttackTapDiscount's own prefix walk exactly. `spent` receives the
+// bitmask of the sources spent (indices into the sorted `srcs`) -- what a re-projection taps
+// (MTG_ATTACK_TAP_REPROJECT). Past 64 sources (never seen) the split is skipped and only the prefix
+// that fits the mask is recorded.
+static int AttackTapDiscountSplit(const std::vector<AttackingManaSource>& srcs, int need, int need_nc,
+                                  std::uint64_t* spent)
 {
     *spent = 0;
-    if (need <= 0 || srcs.empty() || !AttackTapDiscountEnabled()) { return 0; }
-    int covered = 0, lost = 0;
-    for (int i = 0; i < static_cast<int>(srcs.size()); ++i)
+    if ((need <= 0 && need_nc <= 0) || srcs.empty() || !AttackTapDiscountEnabled()) { return 0; }
+    const int n = static_cast<int>(srcs.size());
+    if (n > 64) { need = std::max(need, need_nc); need_nc = 0; }
+    int covered = 0, covered_nc = 0, lost = 0;
+    if (need_nc > 0)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (covered_nc >= need_nc) { break; }
+            if (!srcs[static_cast<std::size_t>(i)].nc_ok) { continue; }
+            covered_nc += srcs[static_cast<std::size_t>(i)].yield;
+            covered    += srcs[static_cast<std::size_t>(i)].yield;
+            lost       += srcs[static_cast<std::size_t>(i)].power;
+            *spent |= std::uint64_t{1} << i;
+        }
+    }
+    for (int i = 0; i < n; ++i)
     {
         if (covered >= need) { break; }
+        if (i < 64 && (*spent & (std::uint64_t{1} << i))) { continue; }
         covered += srcs[static_cast<std::size_t>(i)].yield;
         lost    += srcs[static_cast<std::size_t>(i)].power;
         if (i < 64) { *spent |= std::uint64_t{1} << i; }
@@ -8272,8 +8293,8 @@ static bool AttackTapAstrolabeCreditEnabled()
 //    credits per attacker -- Blossoming Bogbeast's +X, battle cry, exalted turning on when one attacker
 //    is left -- so the discount under-took and the projection kept a phantom. Now the board is
 //    re-projected with the spent sources TAPPED (PendingAttackDamage, the same function the pre-plan
-//    attack came from), memoised by which sources are spent -- a prefix of the power-sorted list,
-//    so at most #sources + 1 re-projections per enumeration.
+//    attack came from), memoised by which sources are spent -- a prefix of the power-sorted list
+//    except under the split cover below, so about #sources + 1 re-projections per enumeration.
 // 5. MTG_ATTACK_TEAM_PUMP_ETB / MTG_ATTACK_PLAN_LIFEGAIN -- the plan's own casts change the attack and
 //    nothing projected it: a hard-cast Craterhoof pumps every attacker +X (it was credited only its
 //    printed 5 through haste_attack_power), and the plan's life gain feeds the per-life pumps (Bogbeast
@@ -8283,6 +8304,12 @@ static bool AttackTapAstrolabeCreditEnabled()
 //    the very watchers combat will read), the Craterhoof recipient loop -- and the board is read with
 //    the same PendingAttackDamage. A walk always taps the spent mana sources (it IS a re-projection;
 //    otherwise the pump it adds would be credited to the dorks the payment taps).
+// 6. MTG_ATTACK_AURA_HOST_TAP -- an Aura that taps its host as it enters (Colossification) cast onto a
+//    would-be attacker takes that attacker out exactly like a {T} ability: it rides the same bits.
+// 7. MTG_ATTACK_TAP_CREATURE_ONLY -- creature-only mana (Somberwald Sage) sits in `supply` but cannot pay
+//    the plan's NONCREATURE share, so an attacking dork has to: the noncreature share gets its own need
+//    (its cost beyond the noncreature-spendable non-attacker supply), covered first by the attacking
+//    sources whose mana a noncreature spell can spend (AttackTapDiscountSplit).
 static bool AttackTapReprojectEnabled()
 {
     static const bool env_on = EnvOn("MTG_ATTACK_TAP_REPROJECT", true);   // DEFAULT ON; =0 base power
@@ -8298,6 +8325,16 @@ static bool AttackPlanLifegainEnabled()
     static const bool env_on = EnvOn("MTG_ATTACK_PLAN_LIFEGAIN", true);   // DEFAULT ON; =0 pre-plan gain
     return heurarm::Flag(heurarm::ATTACK_PLAN_LIFEGAIN, env_on);
 }
+static bool AttackAuraHostTapEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_AURA_HOST_TAP", true);   // DEFAULT ON; =0 host counted
+    return heurarm::Flag(heurarm::ATTACK_AURA_HOST_TAP, env_on);
+}
+static bool AttackTapCreatureOnlyEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_TAP_CREATURE_ONLY", true);   // DEFAULT ON; =0 all-spells need
+    return heurarm::Flag(heurarm::ATTACK_TAP_CREATURE_ONLY, env_on);
+}
 
 // Per-candidate walk flags (AttackTapCtx::cand_walk).
 enum : unsigned char { kWalkPump = 1, kWalkLife = 2 };
@@ -8308,7 +8345,8 @@ struct AttackTapCtx
     int  pending_atk = 0;
     const std::vector<AttackingManaSource>* srcs = nullptr;   // the pre-plan board's (atk_mana_srcs)
     int  src_yield   = 0;                                     // their summed per-tap yield
-    // Per candidate: the bit of the attacking creature its {T} ability taps, or -1.
+    // Per candidate: the bit of the attacking creature its {T} ability (or its tap-on-entry Aura)
+    // takes out of the attack, or -1.
     std::vector<signed char> cand_bit;
     std::vector<int>         bit_number;                      // bit -> that creature's card number
     struct Entry
@@ -8568,6 +8606,18 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             set_bit(j, a.sac_source_id);
         }
     }
+    if (pending_atk > 0 && AttackAuraHostTapEnabled())
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr || !d->params.is_aura || !d->params.aura_etb_tap_host) { continue; }
+            if (!attacker(own_perm(a.enchant_target))) { continue; }
+            set_bit(j, a.enchant_target);
+        }
+    }
     // Stage-2 walk flags.
     const bool pump = AttackTeamPumpEtbEnabled();
     bool life = AttackPlanLifegainEnabled();
@@ -8622,11 +8672,12 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
 
 // The attack the subset changes by its own taps and casts, as a LOSS (projected = pending - loss + the
 // casts' own haste power; a pump makes the loss negative). `cost_mv` is the subset's combined mana
-// value and `supply` the pool it was judged payable from (the credited `eff` when credited), and
+// value and `supply` the pool it was judged payable from (the credited `eff` when credited);
+// `nc_cost_mv` / `nc_supply` the same for its noncreature share (MTG_ATTACK_TAP_CREATURE_ONLY), and
 // `legacy_nc_total` the pool_noncreature total the legacy need was computed against.
 static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::vector<Action>& cands,
                          const std::vector<int>& sel, int cost_mv, const ManaPool& supply,
-                         int legacy_nc_total)
+                         int legacy_nc_total, int nc_cost_mv, const ManaPool& nc_supply)
 {
     const bool need_exact = AttackTapNeedExactEnabled();
     if (need_exact && !ctx.pre_combat) { return 0; }          // no attack left to lose
@@ -8675,8 +8726,20 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
         s1 = &e->srcs; pend1 = e->pending; y1 = e->yield;
     }
     const int need = need_exact ? cost_mv - (supply_total - y1) : cost_mv - legacy_nc_total;
+    // MTG_ATTACK_TAP_CREATURE_ONLY: the noncreature share is paid from noncreature-spendable supply
+    // only (pool_noncreature drops creature_mana_only sources), so its need is the noncreature cost
+    // beyond the non-attacker part of THAT pool, covered by attacking sources whose mana it can spend.
+    int need_nc = 0;
+    if (need_exact && nc_cost_mv > 0 && AttackTapCreatureOnlyEnabled())
+    {
+        int y_nc = 0;
+        for (const AttackingManaSource& sx : *s1) { if (sx.nc_ok) { y_nc += sx.yield; } }
+        const int nc_total = nc_supply.Total()
+            - (astro ? std::min(nc_supply.wild_phantom, nc_supply.wild) : 0);
+        need_nc = nc_cost_mv - (nc_total - y_nc);
+    }
     std::uint64_t spent = 0;
-    const int lost_base = AttackTapDiscount(*s1, need, &spent);
+    const int lost_base = AttackTapDiscountSplit(*s1, need, need_nc, &spent);
     // Stage 2: which re-projection terms THIS subset needs.
     bool walk_pump = false, walk_life = false;
     if (!ctx.cand_walk.empty())
@@ -34972,7 +35035,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // carries this round's re-projection terms -- see the numbered points that follow
         // AttackTapNeedExactEnabled. Lockstep twin in EnumeratePlans.
         const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, cands, sel, combined.ManaValue(),
-                                               (credited ? eff : pool), pool_noncreature.Total());
+                                               (credited ? eff : pool), pool_noncreature.Total(),
+                                               noncreature_combined.ManaValue(),
+                                               (credited ? eff_nc : pool_noncreature));
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
@@ -47350,7 +47415,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // {T} activations (MTG_ATTACK_TAP_ABILITY_DISCOUNT); both off == the legacy line. Twin of Solve
         // (re-projection terms included).
         const int atk_tap_lost = AttackTapLoss(state, atk_tap_ctx, cands, sel, combined.ManaValue(),
-                                               (credited ? eff : pool), pool_noncreature.Total());
+                                               (credited ? eff : pool), pool_noncreature.Total(),
+                                               noncreature_combined.ManaValue(),
+                                               (credited ? eff_nc : pool_noncreature));
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER) -- twin of Solve's.

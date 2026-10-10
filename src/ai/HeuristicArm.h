@@ -420,6 +420,8 @@ enum Slot : int
     ATTACK_PLAN_LIFEGAIN,     // MTG_ATTACK_PLAN_LIFEGAIN    the plan's own life gain (Wellwisher {T}, Feed the Clan, Blighted Steppe, Verdant Sun's Avatar's enter trigger) feeds the per-life attack pumps in the projection -- Bogbeast's X, Nykthos Paragon's / Ageless Entity's counters -- through GainLife on a projection copy (SelesnyaLifegain d0). Default ON; =0 -> the pre-plan life gained only
     BRUNA_LETHAL_SHORTCIRCUIT,// MTG_BRUNA_LETHAL_SHORTCIRCUIT Bruna opts into UseLethalShortCircuit: when the board's attack already kills, the attack-only plan is taken without enumerating casts (an Aura that taps its host, or a dork tapped for a cast, can no longer be picked over a sure lethal). Default ON; =0 -> no short-circuit
     LAND_BOUNCE_GUARD,        // MTG_LAND_BOUNCE_GUARD       the greedy land drop refuses a Karoo bounce land when every other land we control is itself a bounce land -- it would return a Karoo and gain nothing, while a real land waits in hand (Bruna gi1933: Azorius Chancery replayed every turn over Remote Farm). Default ON; =0 -> any other land suffices
+    ATTACK_AURA_HOST_TAP,     // MTG_ATTACK_AURA_HOST_TAP    an Aura cast that TAPS its host on entry (Colossification, aura_etb_tap_host) onto a would-be attacker takes that host out of the projected attack, like a {T} ability (Bruna). Default ON; =0 -> the host still counted
+    ATTACK_TAP_CREATURE_ONLY, // MTG_ATTACK_TAP_CREATURE_ONLY the attack-tap exact need also covers the NONCREATURE share of the cost from noncreature-spendable supply only: creature-only mana (Somberwald Sage) cannot pay an Aura, so an attacking dork has to (Bruna). Default ON; =0 -> the all-spells need only
     COUNT
 };
 
@@ -801,6 +803,8 @@ inline const char* Name(int slot)
         "MTG_ATTACK_PLAN_LIFEGAIN",
         "MTG_BRUNA_LETHAL_SHORTCIRCUIT",
         "MTG_LAND_BOUNCE_GUARD",
+        "MTG_ATTACK_AURA_HOST_TAP",
+        "MTG_ATTACK_TAP_CREATURE_ONLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
