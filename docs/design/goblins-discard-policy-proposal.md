@@ -88,15 +88,20 @@ played earlier than a lord."
 `GoblinsProvider::CleanupDiscardCandidates` (src/ai/DecisionProviders.cpp, after `PayEchoToKeep`;
 `IsSubtypeCostReducer` is forward-declared there), behind `MTG_GOBLIN_BUCKET_DISCARD` (heurarm
 `GOBLIN_BUCKET_DISCARD`, default ON; `=0` is exactly `GenericProvider`'s max-MV ranking). Tests:
-`test/unit/test_goblins_discard.cpp`, 17 cases.
+`test/unit/test_goblins_discard.cpp`, 23 cases (the USER's 2026-10-10 rulings and the tutor Vial fix
+included).
 
-As implemented. KEEP ladder `L C L E M C L C M C..` (land / creature / engine / multiplier); land
-slots = max(0, 3 - lands in play), Mountain > Cavern > Three Tree City; engine slot 1 unless a Lackey
-/ Warchief / Skirk is in play, Lackey > Warchief > Skirk > (turn-1 Vial); multiplier slots = cap(crowd)
-- multipliers in play, Chieftain > Hordemaster = Piledriver (Piledriver first through T2) > King,
-Chieftain with King when a Goblin haste granter is in play; creatures by EV, value order Muxus >
-Siege-Gang > Krenko > Pashalik > Mogg > Matron > Twinshot > Chainwhirler > Bolt > surplus engines >
-Stingscourger; a no-route Muxus is SURPLUS (no ladder slot). SHED = dead colourless land > 2nd+ hand
+As implemented (updated 2026-10-10). KEEP ladder `L C L E M C L C M C..` (land / creature / engine /
+multiplier); land slots = max(0, 3 - lands in play), Mountain > Cavern > Three Tree City, plus the
+only red source for a kept Bolt / Twinshot channel past the quota (kept right behind that spell);
+engine position = one slot (empty if a Lackey / Warchief / Skirk is in play; Lackey > Warchief > Skirk
+> turn-1 Vial) plus EVERY hand Lackey unless late with nothing expensive; multiplier slots =
+cap(crowd), not netted against lords in play, Chieftain > Hordemaster = Piledriver (Piledriver first
+through T2) > King, Chieftain with King when a Goblin haste granter is in play; creatures by EV =
+castability x value, castability from the shared `discard_dist` model (`MTG_DISCARD_DIST_MODEL`,
+default ON; `=0` = Minotaur's table exactly), value order Muxus > Siege-Gang > Krenko > Pashalik >
+Mogg > Matron > Twinshot > Chainwhirler > Bolt > surplus engines > Stingscourger; a no-route Muxus is
+SURPLUS (no ladder slot). SHED = dead colourless land > 2nd+ hand
 Muxus and other duplicate legends > surplus lands (worst first, so colourless first) > surplus Vials >
 lords over the cap (King first) > a no-route Muxus > the ladder backwards. Not prefix-stable, so
 `CleanupDiscardShedStable()` is false while the rule is on (a multi-card cleanup re-ranks per shed).
@@ -115,8 +120,8 @@ Agent readings (each also in the code comment; the USER may overturn any):
 2. **Sources are lands**: Vial / Skirk fill no land slot; an empty engine slot does not fall back to
    a 4th land (the proposal's "fungible upward" rule is not restated in the SETTLED block).
 3. **Engine slot, net of board**: a Lackey / Warchief / Skirk in play fills it; a Vial in play does
-   not (else a ticking Vial would demote a hand Lackey). Consequence to note: a Skirk in play makes a
-   hand Lackey a surplus engine.
+   not. (Superseded for the Lackey by the USER 2026-10-10: a slot filled in play makes a hand
+   Warchief / Skirk surplus, never a hand Lackey -- see below.)
 4. **Surplus engines** sit just above Stingscourger (Lackey > Warchief > Skirk), so "then
    Stingscourger" stays the first non-Muxus creature shed.
 5. **crowd** = Goblin creatures in play (tokens included) + min(3, non-multiplier Goblin creatures in
@@ -126,9 +131,10 @@ Agent readings (each also in the code comment; the USER may overturn any):
 6. **Krenko's gate** reads the board (the proposal's G = 0, "behind a 2-drop on an empty board"):
    with no Goblin in play Krenko drops just below Mogg War Marshal. A hand-inclusive crowd is never 0
    while a 2-drop body is in hand, so it would gate nothing.
-7. **EV** is MinotaurProvider's adopted model verbatim: P = 1 / .70 / .35 / .10 / .03 by sources
+7. **EV** was MinotaurProvider's adopted model verbatim: P = 1 / .70 / .35 / .10 / .03 by sources
    short (reach = lands in play + kept hand lands + Skirk fodder), value = 6 x 0.85^position, a
-   duplicate pays cumulative mana (copies earlier in HAND only).
+   duplicate pays cumulative mana (copies earlier in HAND only). Since 2026-10-10 that table is the
+   `MTG_DISCARD_DIST_MODEL=0` arm; the default is the shared model (below).
 8. **Lackey in hand** is an eraser too, one turn late (distance <= 1) when a red source can cast it;
    otherwise a routed Muxus sinks on mana distance and the route means nothing. Puts go to the
    highest-value card (the proposal's wording). A staged (impulse-exiled) Lackey counts as a route.
@@ -136,6 +142,34 @@ Agent readings (each also in the code comment; the USER may overturn any):
    ("cheating it in").
 10. **Vial put** at the Vial's current charge (mv == charge), tapped or not; one per Vial.
 11. The turn-1 Vial is the last engine candidate; haste redundancy reads only a granter in play.
+
+USER rulings implemented (2026-10-10):
+- **Hand Lackey** (*"only really surplus in the later game where you have nothing expensive in
+  hand"*): every hand Lackey is kept at the engine position whatever is in play or kept, and is a
+  surplus creature-pool body only when late with nothing expensive. Agent readings: **late = turn >=
+  5**; **expensive = a Goblin creature in hand (staged included, Lackeys excluded) whose cost after
+  the resolved Warchiefs exceeds NEXT turn's mana** = lands in play + 1 if a live land is in hand +
+  Skirk's fodder (one a Lackey put actually saves mana on); **two hand Lackeys are both kept** (the
+  ruling names no count).
+- **Lord cap** (*"Creature quotas are less worried about the board"*): cap(crowd) is filled from the
+  hand without subtracting lords in play; the crowd still counts Goblins in play. No other creature
+  quota here netted the board (the creature pool is uncapped; the engine slot, the mana quota, the
+  duplicate-legend and Vial rules keep their board rules).
+- **Distance** (*"a smarter model"*): `discard_dist` with `BuildCensus` once per call; the kept hand
+  lands (and a colour land below) as `LandDrop`s; the cost after the Warchief reduction, cumulative
+  for duplicates, as `mana`. Agent readings: Skirk's fodder is added to the census as red mana in
+  play; Bolt and Twinshot's channel read a census and kept lands with Cavern's colour removed; a put
+  next turn (a Lackey in play, a Vial at charge) is castability 1; a hand Lackey's put makes the card
+  certain from our 2nd turn on; Twinshot takes the turn-by-turn better of cast and channel.
+- **Colour beats the land count** (*"Colour beats the land count is correct."*): with no red source
+  for a NON-creature spell in play or kept (Cavern pays creatures only; Three Tree City is
+  colourless), the best hand Mountain past "3 flat" is kept for a kept Bolt / Twinshot channel, right
+  behind the first such spell in the ladder. Agent reading: Skirk's fodder in play counts as that red
+  source.
+- **Searched tutor (a separate hook, `GoblinsProvider::TutorCandidates`)**: a Vial put is credited
+  only at mana value == charge (`mv - charge` upkeeps for a card at or above it; none below), and the
+  this-turn burn closer's "enters" test likewise -- `MTG_GOBLIN_TUTOR_VIAL_EXACT` (heurarm
+  `GOBLIN_TUTOR_VIAL_EXACT`, default ON; `=0` = the old `<=` estimate).
 
 goblins2hg: the ranking has no face-damage term, so nothing needs `OpponentHeads()`.
 Not changed (out of scope, reported): `cards.json` Muxus `oracle_text` / bracket note (see the
