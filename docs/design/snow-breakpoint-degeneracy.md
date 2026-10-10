@@ -569,6 +569,11 @@ games, because a per-cell delta equal to `1/games` is ONE game.
 
 ### `MTG_SNOW_LOOK_COLOR` — RECOMMENDED for adoption (not flipped; see why below)
 
+**FLIPPED DEFAULT ON 2026-10-10.** The tree-state reason below no longer holds, and the lever is a sound
+necessary-condition prune, so the USER's collapse-wasted-search rule (CLAUDE.md) puts it on by default.
+`MTG_SNOW_LOOK_COLOR=0` restores the MV-only gate. Snow's budgeted digests move (freed work is respent),
+so the flip is measured in the 10-10 pooled A/B and rebaselined with that round's GT.
+
 **Zero cells worse in 1,440 games.** Net −1.00 turns is exactly the metric's quantum (one game), so
 call the quality **NULL-to-slightly-better**, and the load-bearing fact is the 0/12 worse. Cheaper in
 both regimes: −0.58% CPU budgeted, and **−1.78% units / −1.84% CPU unbudgeted with a BYTE-IDENTICAL
