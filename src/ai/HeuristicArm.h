@@ -397,6 +397,7 @@ enum Slot : int
     COLOR_EXACT_SCALED,       // MTG_COLOR_EXACT_SCALED    the colour-exact subset gate (BuildColorFeasibility) no longer stands DOWN on a board holding an untapped scaled mana dork (Priest of Titania / Elvish Archdruid / Accomplished Alchemist) or a live Wirewood Lodge burst: those sources are credited UNBOUNDED supply in their own colours and the rest stays exact -- so a Karoo's {G}{W}, booked as two wild in the flat pool, can no longer read as {W}{W} (SelesnyaLifegain gi344: five turns of an unpayable Nykthos Paragon plan). Sound: it can only reject a subset the board provably cannot pay. Default ON; =0 -> the whole-test stand-down
     ATTACK_TAP_NEED_EXACT,    // MTG_ATTACK_TAP_NEED_EXACT the attack-tap discount's mana `need` is the cost beyond every source that is NOT an attacking creature mana source (it used pool_noncreature, which keeps every mana dork, so the discount was dead whenever dorks finished the payment); 0 post-combat. Default ON; =0 -> the legacy need
     ATTACK_TAP_ABILITY_DISCOUNT,// MTG_ATTACK_TAP_ABILITY_DISCOUNT a creature the plan taps for a NON-mana {T} ability (Wellwisher's lifegain) is not an attacker: the this-turn attack projection re-projects the board with those creatures tapped. Default ON; =0 -> not discounted
+    ROLLOUT_LAND_ACT_COLOR,   // MTG_ROLLOUT_LAND_ACT_COLOR   the rollout's greedy land drop plays a land supplying a colour (W/U/B/R/G/{C}) that a permanent in play needs for an activated ability and nothing on the board makes (EDF gi 63: Essence Depleter's {C} drain stranded while the playout played Conservatory over Mariposa). Default ON; =0 -> the legacy multi-colour-first drop, byte-identical
     COUNT
 };
 
@@ -755,6 +756,7 @@ inline const char* Name(int slot)
         "MTG_COLOR_EXACT_SCALED",
         "MTG_ATTACK_TAP_NEED_EXACT",
         "MTG_ATTACK_TAP_ABILITY_DISCOUNT",
+        "MTG_ROLLOUT_LAND_ACT_COLOR",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -89,3 +89,16 @@ resources), measured on the suite.
 In the EDF gi 63 playout the greedy land drop played an enters-tapped Conservatory on turns 7 and 8 and
 never Mariposa Military Base while Essence Depleter (which needs {C}) was in play. A rollout-policy issue
 (greedy beyond the horizon is permitted; its quality is still ours to fix).
+
+**Fix built, pending the pooled A/B (2026-10-10, branch `fix-playout-land-colour`).**
+`MTG_ROLLOUT_LAND_ACT_COLOR` (default ON; `=0` byte-identical): the rollout's greedy drop
+(`SimulateLandPlay`, `TurnSolver.cpp`) first asks `ActivationColorLandIndex` (`LandPlay.cpp`) for a land
+supplying a colour (W/U/B/R/G/{C}) that a permanent in play needs for an activated ability and that
+nothing on the board makes; a legacy pick that already supplies it is kept. Shared rollout policy, not
+the EDF provider: the rollout drop has no provider hook and the rule is deck-agnostic. Measured at
+c77cffb5 + the fix: gi 63's turn-3 Fertile Ground + Cloud playouts went from 10 stranded-{C}
+Conservatory drops to 0 (12 Mariposa), but the game's win turn is 6 in both arms (the root's tail
+verdicts are unchanged); 100 EDF d3/b10 games (seed 600001) are play-identical (same digest, 430 turns
+both arms; only search units moved), and `=0` matches the pre-change binary exactly. Not covered: a
+{C} sink cast THIS turn (the drop precedes the cast that brings it), the executor's own greedy drop
+(`GreedyLandChoiceIndex`) and the enumeration tiebreak that names it.

@@ -113,3 +113,19 @@ int GreedyLandChoiceIndex(const GameState& state);
 // playable top it returns exactly GreedyLandChoiceIndex's pick, so every other deck is unchanged.
 struct GreedyLandPick { int hand_index = -1; bool from_top = false; };
 GreedyLandPick GreedyLandChoice(const GameState& state);
+
+// THE ACTIVATION-COLOUR NEED (MTG_ROLLOUT_LAND_ACT_COLOR -- the rollout's land drop; see the call
+// site in TurnSolver's SimulateLandPlay). Bit i (i = Color: W U B R G C) is set when a permanent the
+// active player controls has a battlefield activated ability whose EFFECTIVE cost carries a hard
+// pip of that colour, and no permanent the player controls can produce it (BoardCanProduceColor:
+// lands, rocks, dorks, and land Auras -- whose "any colour" is never {C}). Hybrid and Phyrexian
+// pips are not hard needs and are excluded. 0 = no unmet need.
+int UnmetActivationColorMask(const GameState& state);
+
+// The hand index of the land that supplies an unmet activation colour, or -1 when there is no
+// unmet need or no land in hand supplies one. If `preferred` (a hand index another ranker already
+// chose) supplies one, it is returned unchanged; otherwise the pick is the first such land in the
+// rollout's legacy two-pass order (multi-colour first, then any, hand order), under the same skips
+// (Apex-exiled, Karoo with no other land). Because that order is the legacy order restricted to the
+// supplying lands, a legacy pick that already supplies the need is exactly what this returns.
+int ActivationColorLandIndex(const GameState& state, int preferred = -1);

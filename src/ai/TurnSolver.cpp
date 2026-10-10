@@ -45205,6 +45205,39 @@ static bool RolloutLandRankerEnabled()
     return heurarm::Flag(heurarm::ROLLOUT_LAND_RANKER, on);
 }
 
+// THE ROLLOUT'S DROP SUPPLIES A COLOUR AN ACTIVATION IN PLAY IS MISSING (MTG_ROLLOUT_LAND_ACT_COLOR,
+// DEFAULT ON; =0 restores the legacy drop, byte-identical).
+//
+// The defect (docs/design/discard-round-play-defects-2026-10-10.md section 6): EldraziDisplacerFlicker
+// seed 217164 gi 63 at d3/b10, the playout of the turn-3 line "Fertile Ground + Cloud of Faeries". With
+// Essence Depleter in play -- its {1}{C} drain is the deck's kill -- and no land making {C}, the
+// two-pass below played an enters-tapped Conservatory on turns 7 and 8 because it is multi-colour,
+// and never the Mariposa Military Base in hand. The drain never fired, the line scored no win, and
+// the root ranked its candidates on that estimate. Colour beats the multi-colour count here exactly
+// as the USER ruled it beats the land count for discards (2026-10-10: "Colour beats the land count is
+// correct."): CR 107.4c -- only colourless mana pays a {C} pip, so a second G/W source buys that
+// ability nothing at all.
+//
+// WHY THE SHARED ROLLOUT POLICY, NOT A PROVIDER. Nothing about it is EDF's: "an ability on the board
+// needs a colour no source makes, and this land makes it" is manabase sequencing that holds for any
+// list (Shivan Gorge's {R}, Blighted Steppe's {W}), the same argument that put the idle-mana rule in
+// the shared ranker rather than a provider. The rollout drop has no provider hook to route it
+// through, and the playout beyond the horizon is a PERMITTED greedy (CLAUDE.md, NO GREEDY PICK
+// INSIDE THE SEARCH WINDOW) -- this improves the quality of an existing greedy, it adds none.
+//
+// EXACT AND NARROW. It fires only when the need is UNMET on the board (UnmetActivationColorMask) and
+// a land in hand meets it; it changes the pick only when the legacy pick does NOT meet it (the
+// replacement is the legacy order restricted to the supplying lands, so a legacy pick that already
+// supplies the colour is returned unchanged). With no such permanent in play -- most decks never
+// hold one whose pip their own lands do not make -- the drop is byte-identical. Not done here, and deliberately: the
+// executor's own greedy drop (GreedyLandChoiceIndex) and the enumeration's tiebreak that names it;
+// those decide real drops and plan ORDER, a larger radius with its own measurement.
+static bool RolloutLandActColorEnabled()
+{
+    static const bool on = EnvOn("MTG_ROLLOUT_LAND_ACT_COLOR", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::ROLLOUT_LAND_ACT_COLOR, on);
+}
+
 // Greedy land play: one land drop per turn, preferring multi-color lands over
 // colorless-only lands (e.g. Mutavault) so colored spells stay castable.
 // Two-pass: multi-color first, then any land. Used as the fallback when a plan did
@@ -45257,6 +45290,25 @@ static std::string SimulateLandPlay(GameState& state)
         PlayLandByName(state, tname, "", true, "", -1, /*from_top=*/true);
         return tname;
     };
+    // An activation in play needs a colour nothing on the board makes (see RolloutLandActColorEnabled).
+    // Under the legacy two-pass the pick is taken here; under the shared ranker the ranker's own pick
+    // is offered first and kept whenever it already supplies the colour.
+    const bool act_color = RolloutLandActColorEnabled();
+    if (act_color && !RolloutLandRankerEnabled())
+    {
+        const int ci = ActivationColorLandIndex(state);
+        if (ci >= 0)
+        {
+            const std::string name = ap.hand[ci].m_name;
+            const CardDefinition* pdef =
+                LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[ci]));
+            const int pass = (pdef && pdef->params.produces.size() > 1) ? 0 : 1;
+            PlayLandByName(state, name);
+            landdrop::Record(name, pass, alternatives);
+            return name;
+        }
+    }
+
     if (RolloutLandRankerEnabled())
     {
         const GreedyLandPick gp = GreedyLandChoice(state);   // == GreedyLandChoiceIndex with no top
@@ -45268,7 +45320,14 @@ static std::string SimulateLandPlay(GameState& state)
             landdrop::Record(tname, pass, alternatives);
             return tname;
         }
-        const int idx = gp.hand_index;
+        // A hand pick takes the activation-colour override (MTG_ROLLOUT_LAND_ACT_COLOR); a top pick
+        // above plays as the ranker chose it.
+        int idx = gp.hand_index;
+        if (act_color)
+        {
+            const int ci = ActivationColorLandIndex(state, idx);
+            if (ci >= 0) { idx = ci; }
+        }
         if (idx < 0) { landdrop::Record(std::string(), 0, alternatives); return std::string(); }
         const std::string name = ap.hand[idx].m_name;
         const CardDefinition* pdef =

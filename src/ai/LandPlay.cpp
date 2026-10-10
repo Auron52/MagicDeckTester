@@ -474,3 +474,110 @@ GreedyLandPick GreedyLandChoice(const GameState& state)
     return GreedyLandRank(state, &top,
                           ResolveProvider(state).TopLandSourceFirstOnTie(state, state.active_player_index));
 }
+
+// ---- THE ACTIVATION-COLOUR NEED (MTG_ROLLOUT_LAND_ACT_COLOR) -------------------------------------
+//
+// WHICH COSTS. Every battlefield activated ability whose cost the engine models as a ManaCost: the
+// PermAbilityMode table CollectActivationKeys enumerates, plus the blink / pump / pod / sac-outlet /
+// animate / equip-all / put-from-hand / graveyard-grow / reveal-top / untap / tap-token / aura-swap
+// costs. There is no generic "activation cost" probe (LandPlay's own FirstDropManaWouldSitIdle note
+// says so), so this is a list -- but a list in the SAFE direction: a cost it misses yields no need,
+// so the rule does not fire and the drop is the legacy one. A miss can never manufacture a fire,
+// which is the opposite of the idle-mana rule's exposure and why a list is acceptable here.
+//
+// HARD PIPS ONLY. Hybrid and Phyrexian pips are baked into the flat colour ints (Card.h), but
+// neither is a hard requirement -- {G/W} pays with either colour, {G/P} with 2 life -- so both are
+// subtracted back out. Twobrid and snow pips already live in `generic`.
+int UnmetActivationColorMask(const GameState& state)
+{
+    const int active = state.active_player_index;
+    int need = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        const std::optional<ManaCost>* costs[] = {
+            // The PermAbilityMode sinks (CollectActivationKeys' table, same order).
+            &q.tap_damage_cost, &q.tap_investigate_cost, &q.tap_draw_cost, &q.sac_draw_cost,
+            &q.drain_cost, &q.exile_opponent_top_cost, &q.ice_counter_cost, &q.lifelink_grant_cost,
+            &q.pay_token_cost, &q.ping_all_cost, &q.life_gated_put_creatures_cost,
+            &q.sac_lifegain_per_creature_cost, &q.tap_lifegain_cost, &q.activated_dig_cost,
+            // The other battlefield activations.
+            &q.blink_cost, &q.team_pump_cost, &q.pod_activation_cost, &q.sac_creature_cost,
+            &q.firebreathing_cost, &q.animate_cost, &q.tap_token_cost, &q.attach_all_equipment_cost,
+            &q.tap_put_from_hand_cost, &q.gy_exile_grow_cost, &q.activated_reveal_top_cost,
+            &q.untap_creature_cost,
+            // Arcanum Wings' swap is an activation only while the Aura is attached.
+            p.aura_attached_to != 0 ? &q.aura_swap_cost : nullptr,
+        };
+        for (const std::optional<ManaCost>* c : costs)
+        {
+            if (c == nullptr || !c->has_value()) { continue; }
+            const ManaCost m = EffectiveActivationCost(state, active, p.card, c->value());
+            int pip[6] = { m.white, m.blue, m.black, m.red, m.green, m.colorless };
+            for (int h = 0; h < m.hybrid_count && h < 4; ++h)
+            {
+                const int first = (m.hybrid_pair[h] >> 4) & 0x0F;
+                if (first >= 0 && first < 6) { --pip[first]; }
+            }
+            for (int h = 0; h < m.phyrexian_count && h < 2; ++h)
+            {
+                const int col = m.phyrexian_color[h];
+                if (col >= 0 && col < 6) { --pip[col]; }
+            }
+            for (int i = 0; i < 6; ++i) { if (pip[i] > 0) { need |= (1 << i); } }
+        }
+    }
+    if (need == 0) { return 0; }
+    for (int i = 0; i < 6; ++i)
+    {
+        if ((need & (1 << i)) && BoardCanProduceColor(state, active, static_cast<Color>(i)))
+        { need &= ~(1 << i); }
+    }
+    return need;
+}
+
+int ActivationColorLandIndex(const GameState& state, int preferred)
+{
+    const int need = UnmetActivationColorMask(state);
+    if (need == 0) { return -1; }
+    const Player& ap = state.ActivePlayer();
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(ap.hand.size());
+
+    // The colours a hand card makes as a land (its land face; a hand Aether Hub keeps its coloured
+    // modes because it brings its own energy -- EffectiveProduces' in_hand rule).
+    const auto supplies = [&](int i) -> bool {
+        if (i < 0 || i >= n) { return false; }
+        const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[i]));
+        if (def == nullptr) { return false; }
+        for (Color c : EffectiveProduces(state, active, *def, /*in_hand=*/true))
+        { if (need & (1 << static_cast<int>(c))) { return true; } }
+        return false;
+    };
+    if (preferred >= 0 && preferred < n && !ap.hand[static_cast<std::size_t>(preferred)].m_impulse_no_land
+        && supplies(preferred))
+    { return preferred; }
+
+    bool has_other_land = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.IsLand()) { has_other_land = true; break; }
+    }
+    // The rollout's legacy two-pass order (SimulateLandPlay), restricted to the supplying lands.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_impulse_no_land) { continue; }
+            const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[i]));
+            if (def == nullptr) { continue; }
+            if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (pass == 0 && def->params.produces.size() <= 1) { continue; }
+            if (supplies(i)) { return i; }
+        }
+    }
+    return -1;
+}
