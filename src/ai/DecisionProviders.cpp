@@ -34115,7 +34115,8 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 // KEEP LADDER (most kept first; read backwards it is the tail of the shed order):
 //   kept lands > kept accelerator > [Season tier, if castable] > core 1-drop > Sporecrown > Sporesower
 //   > Beastmaster > [Season tier, if NOT castable] > beyond the core (one of each name first, then the
-//   duplicates, Essence Warden last)
+//   duplicates, Essence Warden last) -- each spell followed by the land that alone gives it a colour
+//   (USER 2026-10-10, "Colour beats the land count is correct.": kept even past the mana quota)
 // SHED ORDER: dead (a Karoo with no other land to return -- the Karoo rule, "dead Simic Growth Chamber
 // first"; a legend already on our battlefield or a 2nd hand copy) > surplus mana (lands, then
 // accelerators) > surplus enablers (Beastmaster, then Season) > the ladder backwards. Every non-staged
@@ -34333,13 +34334,77 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
     ladder.reserve(at(n));
     auto take = [&](int i) { if (i >= 0 && !kept[at(i)]) { kept[at(i)] = 1; ladder.push_back(i); } };
     for (int k = 0; k < keep_lands; ++k) { take(lands[at(k)]); }
-    take(kept_accel);
-    auto take_tier = [&]() { take(kept_season); take(kept_devour); take(kept_fade); };
+
+    // COLOUR BEATS THE LAND COUNT (USER 2026-10-10, cross-deck: "Colour beats the land count is
+    // correct."): a land that gives a KEPT spell a colour nothing on the board or already kept provides
+    // is kept even past the mana quota -- the Creature Giving / Melira Pod / EldraziFlicker shape. The
+    // best such land in the land keep order joins the ladder right BEHIND the spell, so it gives way
+    // just before that spell does. Inert on the shipped all-green 60 (every spell is green and every
+    // land makes G); on candidate B it is the black for Slimefoot / Deathspore Thallid. A colour source
+    // counts only for the spells it can pay for: Secluded Courtyard's colours (colored_creature_only)
+    // pay creature spells alone. Sources = the board (lands, mana creatures, rocks, a land Aura's extra)
+    // + the kept lands; a hand mana creature is a threat here, not a source (agent reading). The tier's
+    // castability above is decided on the quota mana only -- a colour land lives and dies with its spell.
+    auto colour_bits = [](const CardDefinition* d, bool creature_spell) -> unsigned
+    {
+        if (d == nullptr || (d->params.colored_creature_only && !creature_spell)) { return 0u; }
+        unsigned b = 0;
+        auto add = [&](const std::vector<Color>& v)
+        { for (Color c : v) { if (c != Color::Colorless) { b |= 1u << static_cast<int>(c); } } };
+        add(d->params.produces);
+        add(d->params.mdfc_back_produces);
+        if (d->params.is_land_aura) { add(d->params.land_aura_produces); }
+        return b;
+    };
+    // Kept colour sources, separately for creature and non-creature spells (the Courtyard split).
+    int src_any[5] = { 0, 0, 0, 0, 0 }, src_crt[5] = { 0, 0, 0, 0, 0 };
+    auto credit = [&](const CardDefinition* d)
+    {
+        const unsigned ba = colour_bits(d, false), bc = colour_bits(d, true);
+        for (int c = 0; c < 5; ++c)
+        {
+            if ((ba >> c) & 1u) { ++src_any[c]; }
+            if ((bc >> c) & 1u) { ++src_crt[c]; }
+        }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (p.card.IsLand() || d->params.mana_rock || d->params.is_land_aura
+            || (p.card.IsCreature() && !d->params.produces.empty()))
+        { credit(d); }
+    }
+    for (int k = 0; k < keep_lands; ++k) { credit(defs[at(lands[at(k)])]); }
+    auto take_spell = [&](int i)
+    {
+        if (i < 0 || kept[at(i)]) { return; }
+        take(i);
+        const CardDefinition* sd = defs[at(i)];
+        if (sd == nullptr) { return; }
+        const bool crt = sd->card.IsCreature();
+        const ManaCost& mc = sd->card.m_mana_cost;
+        const int pips[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        for (int c = 0; c < 5; ++c)
+        {
+            if (pips[c] <= 0 || (crt ? src_crt[c] : src_any[c]) > 0) { continue; }
+            for (int li : lands)
+            {
+                if (kept[at(li)] || ((colour_bits(defs[at(li)], crt) >> c) & 1u) == 0) { continue; }
+                take(li);
+                credit(defs[at(li)]);
+                break;
+            }
+        }
+    };
+    take_spell(kept_accel);
+    auto take_tier = [&]() { take_spell(kept_season); take_spell(kept_devour); take_spell(kept_fade); };
     if (tier_castable) { take_tier(); }
-    take(core_one);
-    take(core_lord);
-    take(core_sower);
-    take(kept_beast);
+    take_spell(core_one);
+    take_spell(core_lord);
+    take_spell(core_sower);
+    take_spell(kept_beast);
     if (!tier_castable) { take_tier(); }
 
     // Beyond the core: the unkept threats plus the partner copies the tier did not take.
@@ -34369,9 +34434,9 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
         for (int j : ladder) { if (ap.hand[at(j)].m_name == ap.hand[at(i)].m_name) { return true; } }
         return false;
     };
-    for (int i : beyond) { if (beyond_rank(i) < kWardenRank && !name_kept(i)) { take(i); } }   // one of each name
-    for (int i : beyond) { if (beyond_rank(i) < kWardenRank) { take(i); } }                     // the duplicates
-    for (int i : beyond) { take(i); }                                                           // Essence Warden last
+    for (int i : beyond) { if (beyond_rank(i) < kWardenRank && !name_kept(i)) { take_spell(i); } }   // one of each name
+    for (int i : beyond) { if (beyond_rank(i) < kWardenRank) { take_spell(i); } }                     // the duplicates
+    for (int i : beyond) { take_spell(i); }                                                           // Essence Warden last
 
     // ---- 7. emit the shed order -------------------------------------------------------------------
     std::vector<int> shed;
