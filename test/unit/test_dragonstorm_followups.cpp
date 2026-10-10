@@ -204,3 +204,30 @@ TEST_CASE("Breakpoint leftovers: the interrupted list's casts join the continuat
     ArmFu off(heurarm::DRAGONSTORM_BP_LEFTOVERS, false);
     CHECK_FALSE(DsProvFu().MergesBreakpointLeftovers(DefFu("Apex of Power")));
 }
+
+TEST_CASE("Rituals-for-payoff guard: an Apex line keeps its rituals, a restrictor still has to earn its place (MTG_RITUAL_GUARD_APEX)")
+{
+    // Eight Mountains, hand Rite of Flame, Seething Song, Apex of Power (+ Irencrag Feat): Rite + Seething +
+    // Apex costs 14 against 8 + 7 floated -- one to spare, so the guard called Rite "surplus" and rejected
+    // the chain, and the accel-prefix collapse never offers the Rite-less {Seething, Apex}: no Apex line was
+    // left at all (s7600011 T6). Apex's value is its exile, paid by the mana after it, so the rituals stay.
+    // Irencrag is a cast restrictor and still has to be needed: {.., Irencrag, Apex} stays refused.
+    const GameState s = BoardFu(std::vector<std::string>(8, "Mountain"),
+                                { "Rite of Flame", "Seething Song", "Apex of Power", "Irencrag Feat" }, 6);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::RITUAL_GUARD_APEX, on);
+        const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+            TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+        bool apex = false, iren = false;
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() == "Apex of Power") { apex = true; }
+            if (a.card_name.str() == "Irencrag Feat") { iren = true; }
+        }
+        CHECK(apex == on);
+        CHECK_FALSE(iren);
+    }
+}
