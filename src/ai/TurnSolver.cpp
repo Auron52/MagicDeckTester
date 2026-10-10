@@ -3027,6 +3027,39 @@ static inline int GreedyChargeWeight(const GameState& state)
 // the nondeterminism SearchBudget exists to remove. Per-frame residual loses at most W-1 visits.
 static thread_local int g_greedy_charge_w   = 1;
 static thread_local int g_greedy_charge_acc = 0;
+// LIVENESS POLL FOR THE GREEDY SUBSET WALK (2026-10-10). This walk is the one region that consults
+// NO budget -- "The budget was not exceeded. It was never consulted"
+// (docs/design/slow-rollout-tail-and-the-uncharged-greedy-walk.md) -- so the per-GAME meter's
+// abandon flag, which every other site honours through SearchBudget::Overrun, was being SET and then
+// ignored here. That is not a pricing question, it is a TERMINATION one, and the two are separable:
+// nothing below changes what anything costs or what is findable at any budget.
+//
+// WHAT IT COST. kitty v3's value-leaf phase C stalled on ONE game (V8_s10010 gi=370) that ran 4.07 h
+// against a 3.5 h hard cap and kept going, holding 31 of 32 cores idle for over an hour at 99%
+// complete. V8's mean is 14.5 s/game, so that game reached ~970x its own cell. The wall deadline had
+// fired correctly and set the flag; this walk never looked at it. Worse, the cell-condemnation
+// fallback that would otherwise have moved on deliberately STANDS DOWN whenever a wall cap is armed
+// ("It exists ONLY because a unit ceiling does not bound time; that premise is false here"), so
+// arming the cap removed the only mechanism that could still have rescued the run. The batch monitor
+// said so 23 times: "bounded by the WALL-CLOCK backstop, so the cell is NOT condemned."
+//
+// WHY A STRIDE AND NOT A PER-VISIT TEST. Billing the budget test on every visit was measured
+// (2026-10-01, wsweep3) to cost KittyEquipment 8-14% core-ms for ZERO play change, which is exactly
+// why the charge path hoists its test into the charge. One thread_local bool read is far cheaper than
+// that ~15-instruction four-thread_local sequence, but this lambda runs up to 20 M times in a single
+// decision, so it gets a stride too: the common visit is an increment and a compare. 1024 visits is
+// ~1-2 ms at the measured 1-2 us/visit -- six orders of magnitude finer than a bound denominated in
+// hours, and the same trick kClockStride already uses for the clock itself.
+//
+// WHY IT IS PROVABLY INERT, so it needs no flag and no rebaseline. gamework::t_abandoned starts
+// false in Begin() and is set ONLY by a unit ceiling (t_limit > 0) or an armed CheckDeadline. Normal
+// play, the viewer and every GT tier arm NEITHER, so Abandoned() is always false there and
+// `walk_exhausted` is never set by this path. And where it IS true the game is already void --
+// RunGame returns kAbandoned and reduce_job drops it -- so no REPORTED result can depend on where in
+// the walk we noticed. That is also why this residual is not guard-scoped the way
+// g_greedy_charge_acc must be: carrying it between games cannot move a result that does not exist.
+constexpr int kWalkAbandonStride = 1024;
+static thread_local int g_walk_abandon_acc = 0;
 struct GreedyChargeGuard
 {
     SearchBudget* prev;
@@ -32199,6 +32232,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // spent. g_greedy_charge_budget is null unless the flag is on AND a budgeted rollout host
         // is on the stack -> zero-cost null check by default.
         if (walk_exhausted) { return; }
+        // Observe the per-GAME abandon flag HERE -- see kWalkAbandonStride above the function. This
+        // walk honours no budget, so without this it never learns the game has been voided by its
+        // unit ceiling or its wall deadline. Strided, and inert unless one of those is armed.
+        if (++g_walk_abandon_acc >= kWalkAbandonStride)
+        {
+            g_walk_abandon_acc = 0;
+            if (gamework::Abandoned()) { walk_exhausted = true; return; }
+        }
         if (g_greedy_charge_budget != nullptr)
         {
             // W = visits per charged unit (MTG_SOLVE_CHARGE_W, default 1 -> the `<= 1` arm, which is

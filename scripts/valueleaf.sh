@@ -337,6 +337,48 @@ TRUST_SEEDS="620000 621000 622000 623000 624000 625000 626000 627000"
 # and deliberately so: the tolerance's ONLY job is now to gate this test.
 TRUST_TOL=0.002
 ROW_K=3
+# PHASE A PER-GAME WALL BACKSTOP (user, 2026-10-09: "just to be safe we should do a similar
+# condemnation approach to phase C in A" / "It doesn't win us much to grind a couple of games for that
+# many hours" / "just a wall-cap is okay. However, we need to let it be relatively soft. Maybe 3-4
+# hours?"). Phase A was the ONLY phase with no tail bound, and on kitty v3 that cost a whole box: two
+# games held 30 of 32 cores for SIX HOURS after the last row was written, one reaching 9.9 h.
+#
+# 4 h, the SOFT end of the range asked for, chosen on a property of the measured distribution rather
+# than taste: over that run's 346 slow games the worst that actually COMPLETED ran 14,387 s = 3.996 h,
+# so a 4 h cap would have cut NOTHING that finished -- only the two games that never finished at all.
+# It still recovers the wall, which is the point rather than the core-hours: the last row was written
+# at 15:21 and the pinned games started ~11:22, so a 4 h cap ends phase A around 15:25 instead of
+# 21:16 -- ~5.8 h, nearly all of it with 30 of 32 cores idle. The cap curve, for re-deciding later:
+#     cap    games cut   core-h recovered        (2500 games queued)
+#     30 min    19           37.0
+#      1 h      10           29.2
+#      2 h       3           20.1
+#      4 h       0          ~12                  <- ADOPTED
+# NO PREDICTIVE STAGE: the user asked for "just a wall-cap", and stage 1 would make it less soft.
+#
+# THIS ONLY WORKS BECAUSE OF THE WALK LIVENESS POLL (TurnSolver.cpp, kWalkAbandonStride, 2026-10-10).
+# A wall deadline is observed only where something polls gamework::Abandoned(); the greedy subset walk
+# polled nothing, which is how phase C ran a game 4.07 h past a 3.5 h cap. Without that poll this cap
+# would silently fail on exactly the games it is here for. Do not raise/trust it independently of it.
+#
+# SOFTER THAN PHASE C ON PURPOSE. There a wall-cut game is excluded from every cell alike and phase
+# C.5 must PROVE it changed no verdict; here the only consequence is fewer training rows, and rows are
+# ADDITIVE -- a later run at a higher cap adds them back, and `finish` already establishes that fewer
+# rows is acceptable. A cut game keeps every row it already banked; only its LATE turns are lost.
+# HONEST CAVEAT: a wall cut is not deterministic, so which rows exist becomes mildly machine-dependent
+# for the few games that reach the cap. The unit ceiling WOULD be deterministic but is measured
+# incapable of reaching this pathology (the worst completed game sustained 186 units/s against a
+# healthy ~4,800), so there is no deterministic option on offer.
+# USER-OWNED NUMBERS. 0 forces a stage off (EnvInt treats -1 as unset, 0 as off).
+ROWS_PREDICT_SEC=${ROWS_PREDICT_SEC:-0}
+ROWS_WALL_SEC=${ROWS_WALL_SEC:-14400}
+# Fail out when a LOT of games are super slow (user: "if there are a lot of games condemned we should
+# probably fail out" / "if Phase A has a lot of super slow games it is a real signal that we need
+# optimizations"). % of queued games running past HALF the cap. 0 disables. Baseline for scale, kitty
+# v3: 3 games >= 2 h (0.12%), 10 >= 1 h (0.40%), 19 >= 30 min (0.76%) -- so 2% is ~17x the worst deck
+# measured. Same response phase C.5 prescribes: a pile of condemnations is an ENGINE-OPTIMISATION
+# signal "that a bigger ceiling would only hide", never a cap to loosen.
+ROWS_SLOW_FAIL_PCT=${ROWS_SLOW_FAIL_PCT:-2}
 # PER-POSITION LABEL CEILING for phase A -- NOT SET. Left at the engine default deliberately.
 #
 # USER, 2026-09-20: *"I don't want you fiddling with the general settings here. Optimizations are
@@ -788,13 +830,41 @@ phase_rows() {
     # no cache cap bounds, and per-game footprint is fine solo (a 98 s game peaks 64 MB). Peak
     # transient scales with concurrent monster games, so fewer workers is the safe lever on a small
     # box until the enumeration transient itself is bounded engine-side.
+    log "  per-game wall backstop: hard cap ${ROWS_WALL_SEC}s$( [ "$ROWS_PREDICT_SEC" -gt 0 ] && echo ", predictive cut ${ROWS_PREDICT_SEC}s" || echo " (no predictive stage -- user ruling)" )"
+    # The env prefix MUST stay contiguous with the binary. 0ec772c9 put a log line between a prefix
+    # and its generator, so the prefix applied to `[` and the run executed with no ceiling at all.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
+    MTG_MAX_GAME_PREDICT_SEC="$ROWS_PREDICT_SEC" MTG_MAX_GAME_WALL_SEC="$ROWS_WALL_SEC" \
         "$(harness_bin)" --batch "$ALL_ROWS.manifest.json" --threads "${MTG_VLQ_ROWS_THREADS:-0}" \
         > "$VLQ/rows.batch.log" 2>&1 \
         || { local rc=$?
              log "PHASE A: batch FAILED (exit $rc -- 137=SIGKILL, think OOM). Rows on disk are"
              log "  banked and safe; NOT marking A_rows. Re-run to queue only the missing games."
              return 1; }
+    # SLOW-GAME AUDIT -- gates the marker, same discipline as the batch exit status above.
+    # Counting games at/over HALF the cap rather than only at it: a game cut AT the cap may not report
+    # its own line, and "this deck generates 2-hour label games" is the optimisation signal regardless
+    # of where the cap happens to sit. NOT inferred from `queued - sum(played=)`: that reads a 500-game
+    # shortfall when the true count is 0, because a job stopped mid-chunk never prints a played= line
+    # at all -- conflating the two holes BatchRunner.h warns "mean opposite things".
+    local _half=$(( ROWS_WALL_SEC / 2 )) _queued _slow _pct
+    _queued=$(python3 -c "import json,sys; print(sum(j['games'] for j in json.load(open(sys.argv[1]))['jobs']))" \
+              "$ALL_ROWS.manifest.json" 2>/dev/null || echo 0)
+    _slow=$(grep -ho "SLOW-GAME [0-9]*ms" "$VLQ/rows.batch.log" 2>/dev/null \
+            | sed -E 's/[^0-9]*([0-9]+)ms/\1/' | awk -v t="$((_half*1000))" '$1>=t' | wc -l)
+    log "PHASE A: $_slow/$_queued games ran >= ${_half}s (half the ${ROWS_WALL_SEC}s cap)"
+    if [ "${ROWS_SLOW_FAIL_PCT:-0}" -gt 0 ] && [ "$_queued" -gt 0 ]; then
+        _pct=$(( _slow * 100 / _queued ))
+        if [ "$_pct" -ge "$ROWS_SLOW_FAIL_PCT" ]; then
+            log "PHASE A: FAILING OUT -- ${_pct}% of games are super slow (>= ${_half}s), at or over the"
+            log "  ${ROWS_SLOW_FAIL_PCT}% bar. This is an ENGINE-OPTIMISATION signal, not a cap to loosen:"
+            log "  a bigger cap would only hide it, and a leaf fitted to a truncated row set is fitted to"
+            log "  games we cannot afford to play. Rows on disk are banked and safe; NOT marking A_rows."
+            log "  Optimise, then re-run (rows are additive) -- or accept them deliberately with:"
+            log "    bash scripts/valueleaf.sh finish <deck-dir>"
+            return 1
+        fi
+    fi
     log "PHASE A done: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0) rows total"
     mark A_rows
 }
