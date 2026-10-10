@@ -303,3 +303,35 @@ TEST_CASE("Payable order, every deck: the exact walk keeps a cast cap and a late
         else    { CHECK(OrderNamesFu(acts2, order2) == std::vector<std::string>{ "Gamble", "Sol Ring" }); }
     }
 }
+
+TEST_CASE("Payable order: a live Hinata discount keeps the order as given (MTG_PAYABLE_ORDER_DYNAMIC_DECLINE)")
+{
+    // Hinata, Dawn-Crowned in play, Island + Mountain, two opponent permanents: Magma Opus ({6}{U}{R}, up to
+    // six targets among permanents and players) is stamped at {U}{R}. Given "Magma Opus, Rite of Flame" the
+    // Rite's {R} is unpaid; "Rite, Opus" would pay. That walk prices the Opus at a board the line changes,
+    // so -- as LadderProjectable already does -- the order is kept. Lever off: walked and permuted.
+    GameState s = BoardFu({ "Island", "Mountain" }, { "Magma Opus", "Rite of Flame" });
+    s.m_provider = &GenProvFu();
+    PutFu(s, "Hinata, Dawn-Crowned", 400);
+    for (int k = 0; k < 2; ++k)
+    {
+        Permanent p;
+        p.card             = DefFu("Mountain").card;
+        p.card.m_number    = 500 + k;
+        p.controller_index = 1;
+        p.owner_index      = 1;
+        s.battlefield.push_back(p);
+    }
+    const std::vector<Action> acts = { CastFu(s, "Magma Opus"), CastFu(s, "Rite of Flame") };
+    REQUIRE(HinataGenericDiscount(DefFu("Magma Opus"), s, 0) == 6);
+    REQUIRE(acts[0].cost.ManaValue() == 2);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAYABLE_ORDER_DYNAMIC_DECLINE, on);
+        std::vector<int> order = { 0, 1 };
+        ApplyPayableCastOrder(s, acts, order);
+        if (on) { CHECK(OrderNamesFu(acts, order) == std::vector<std::string>{ "Magma Opus", "Rite of Flame" }); }
+        else    { CHECK(OrderNamesFu(acts, order) == std::vector<std::string>{ "Rite of Flame", "Magma Opus" }); }
+    }
+}
