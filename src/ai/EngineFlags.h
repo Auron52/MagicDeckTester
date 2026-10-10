@@ -126,6 +126,20 @@ inline bool FoldXnameOn()
     return heurarm::Flag(heurarm::FOLD_XNAME, env_on);
 }
 
+// MTG_DRAGONSTORM_IRENCRAG_CLOSER (DEFAULT ON; =0 disables) -- USER order rule 7: Irencrag Feat is cast
+// second-to-last, and after it only the CLOSER (Dragonstorm or a hard-cast Dragon -- the test
+// DragonstormProvider::CastUnderCastCap applies to the offers after it). A restrictor that nothing can
+// follow floats seven red no spell spends (the float empties before combat, so not even a pump). Two
+// sites, one reader: the provider's subset test (OrderedSubsetRealisable -- a subset with the restrictor,
+// no closer and no Apex whose exile could bring one) and the shared post-Apex merge
+// (MergeBreakpointLeftovers -- a LEFTOVER restrictor with no closer after it and no Apex before it is not
+// cast; it stays in hand). Executor and rollout both go through the merge -> lockstep.
+inline bool DragonstormIrencragCloserOn()
+{
+    static const bool env_on = EnvOn("MTG_DRAGONSTORM_IRENCRAG_CLOSER", true);
+    return heurarm::Flag(heurarm::DRAGONSTORM_IRENCRAG_CLOSER, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

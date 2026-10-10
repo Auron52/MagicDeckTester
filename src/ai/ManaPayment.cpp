@@ -3024,12 +3024,42 @@ bool MergeBreakpointLeftovers(const GameState& state, std::vector<Action>& cont,
         uord = alone;
         for (int j = static_cast<int>(cont.size()); j < static_cast<int>(u.size()); ++j) { uord.push_back(j); }
     }
+    // USER rule 7 (MTG_DRAGONSTORM_IRENCRAG_CLOSER): a LEFTOVER cast restrictor (Irencrag Feat) that no
+    // closer follows and no Apex precedes is not cast -- the exile brought nothing for its one remaining
+    // cast, and it stays in hand for a turn that has one (dragonstorm d0 s7000035 T5: the pre-Apex plan's
+    // Irencrag was cast alone after an empty continuation, seven red for nothing). With an Apex before it, a
+    // nested breakpoint takes it up again with that exile known.
+    int dropped = 0;
+    if (DragonstormIrencragCloserOn())
+    {
+        auto def_of = [&](int i) -> const CardDefinition*
+        { return u[static_cast<std::size_t>(i)].def ? u[static_cast<std::size_t>(i)].def
+                                                     : CardDatabase::Instance().Lookup(u[static_cast<std::size_t>(i)].card_name); };
+        for (int k = static_cast<int>(uord.size()) - 1; k >= 0; --k)
+        {
+            const int i = uord[static_cast<std::size_t>(k)];
+            if (i < static_cast<int>(cont.size()) || u[static_cast<std::size_t>(i)].max_casts_after < 0) { continue; }
+            bool follows = false, apex_before = false;
+            for (int q = k + 1; q < static_cast<int>(uord.size()) && !follows; ++q)
+            {
+                const CardDefinition* d = def_of(uord[static_cast<std::size_t>(q)]);
+                if (d != nullptr && (d->params.tutor_to_battlefield || d->card.IsCreature())) { follows = true; }
+            }
+            for (int q = 0; q < k && !apex_before; ++q)
+            {
+                const CardDefinition* d = def_of(uord[static_cast<std::size_t>(q)]);
+                if (d != nullptr && d->params.impulse_exile > 0) { apex_before = true; }
+            }
+            if (!follows && !apex_before) { uord.erase(uord.begin() + k); ++dropped; }
+        }
+    }
     // The casts, in that order, into the cast slots (the continuation's slots, then the appended ones --
-    // ascending), non-cast actions where they were.
+    // ascending), non-cast actions where they were. A dropped leftover gives back the LAST appended slot.
     std::vector<int> slots = cslots;
     for (int j = static_cast<int>(cont.size()); j < static_cast<int>(u.size()); ++j) { slots.push_back(j); }
     std::vector<Action> out = u;
     for (std::size_t k = 0; k < uord.size(); ++k) { out[static_cast<std::size_t>(slots[k])] = u[static_cast<std::size_t>(uord[k])]; }
+    out.resize(u.size() - static_cast<std::size_t>(dropped));
     cont = std::move(out);
     cont_searched = true;
     return true;
