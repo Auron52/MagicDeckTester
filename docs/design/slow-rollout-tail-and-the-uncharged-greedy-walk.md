@@ -1146,3 +1146,108 @@ held-out quality A/B. That is a user ruling, not an agent's.
 `MTG_KEEP_ROLLOUT_WALL_SEC` does not bound them — a 33 s discovery rollout is visible in the policy
 test's own log. That is the same unbackstopped phase this document flagged in 2026-09-24 and it is
 still open.
+
+## 2026-10-10 (late) — THE BOTTLENECK RELOCATED, and the four dials that size it
+
+The run launched at committed defaults was killed by the user at 6.25 h with the honest projection
+at **1.5–4 days**. What that run bought is the phase accounting no previous run had, and it moves the
+target: **this generation's cost is not the per-rollout tail, it is the adaptive bottoming refine.**
+
+### The phase timeline, measured
+
+| phase | work | measured |
+|---|---|---|
+| 1. size-7 floor | 213,492 rollouts (106,746 cell-sides x r_floor 2) | **5.0 h** @ 11.9/s |
+| 2. sub-table floor | 128,844 rollouts | **1.8 h** @ ~20/s |
+| 3. adaptive bottoming waves | wave 1 = 50,136 tasks x 16 = **802,176 rollouts**; wave count unmeasured | **~20–28 h for wave 1 ALONE** |
+| 4. size-7 refine | <= 106,746 x (r_max - 2), freeze-pruned | **never reached by any run** |
+
+`roll7` stopping at exactly 213,492 is what identifies phase 1 as COMPLETE rather than stalled, and
+`frozen=0/106746` is not a stall either -- freezing only happens in the refine phase, which waits on
+`sub_converged`. `subwave=0x50063` decodes as zero waves COMPLETED with a last-wave size of 50,063:
+the producer thread was parked inside the dispatch loop of its first wave, which is also why
+`roll7` read `0/s`. The generator's own projection formula (`total_cells * 40 / floor_rate`) gives
+**~160 h for `complete`, ~80 h for `fast`** on 171,168 cell-sides at 11.9 rollouts/s.
+
+**So the per-rollout axis is on the critical path for the first 5 hours of a multi-day job.** The
+nine-arm tail A/B above is still correct and still worth its 0.915x; it is simply not where the job
+lives. Record this as the sharper form of this document's standing conclusion: *measure which PHASE
+dominates before optimising the thing you can see.*
+
+### The four dials, with the measurement behind each
+
+`MTG_KEEP_FLIP_EPS` was priced without a second multi-hour run, by resuming the killed run's own
+journal to its first wave (`MTG_FOLD_SEARCH_ODO=0` reproduced the pre-adoption digest
+`3a5a92ae6f6e725c` exactly, 171,168 cell-sides reloaded) and reading the dry-run sweep:
+
+| flip_eps | wave-1 tasks | vs default |
+|---|---|---|
+| **0.02 (default)** | **50,136** | 1.00x |
+| 0.05 | 40,807 | 0.81x |
+| 0.10 | 31,858 | **0.64x** |
+| 0.20 | 22,752 | **0.45x** |
+
+It governs BOTH halves -- the wave marking and, through `freeze_hit`, the size-7 refine. It only ever
+affects NEAR-TIES: a cell is marked only when its decision is already statistically close, so by
+construction the two options it is choosing between differ little in value.
+
+`MTG_KEEP_ROLLOUTS` (cap R) is the lever on phase 4, whose ceiling is `(r_max - 2)` per cell-side.
+**A wave's batch is `min(16, r_max - c)`, so cap R only shrinks the WAVES once it drops below 18** --
+16 is the first value that moves both phases. R is in the journal's resume identity, so it cannot be
+changed later without discarding the floor.
+
+`MTG_KEEP_CUTOFF_P` / `_R` is a mass-weighted cell prune that **already existed, defaulted OFF, and
+had never been used**. Computed exactly over this deck's 53,373 size-7 compositions, the hand mass is
+extremely skewed:
+
+| cells | share of cells | share of HANDS |
+|---|---|---|
+| 1,348 | 2.5% | 50% |
+| 10,513 | 19.7% | 90% |
+| 28,539 | 53.5% | 99% |
+
+so a threshold of `P = 1.326e-06` drops **46.5% of the cells for 1% of the hands**.
+
+`MTG_KEEP_SLOWEST_FIRST` (new, default ON, result-neutral) orders each wave's dispatch by the
+generator's OWN measured per-cell cost. Every wave ends in a hard barrier
+(`sub_wave_pending == 0` gates the next), so a wave's makespan is set by when its most expensive task
+STARTS. Deliberately NOT applied to the size-7 floor: that phase is a barrier-free continuous queue
+and is already well packed -- measured, it went 80% -> 100% in 13% of its elapsed time.
+
+### Cost is PREDICTABLE from the hand on this deck, and one card explains it
+
+Bucket enrichment in the 2,717 size-7 slow rollouts of the d2/b3 run, against each bucket's base rate
+of appearing in a 7-card hand:
+
+| bucket | in slow | base | enrichment |
+|---|---|---|---|
+| Skateboard | 45.1% | 11.7% | **3.86x** |
+| Deconstruction Hammer | 40.0% | 11.7% | 3.43x |
+| Dragonfire Blade | 37.3% | 11.7% | 3.20x |
+| Shadowspear | 53.4% | 22.1% | 2.41x |
+| Sram, Senior Edificer | 77.4% | 39.9% | 1.94x |
+| Accorder's Shield (16 cards) | 32.4% | 90.1% | 0.36x |
+| Ancient Den (12 lands) | 26.6% | 80.9% | 0.33x |
+| **Puresteel Paladin** | **0.1%** | **39.9%** | **0.00x** |
+
+**Puresteel Paladin grants metalcraft equip {0}, and a hand holding it is essentially never slow.**
+With free equip the route's orderings collapse; without it the DFS must pay for each link, and the
+expensive hands are the ones holding several DISTINCT one-of Equipment and no free-equip enabler.
+That is the same *shape* as Fungus's token-doubler-plus-sac-outlet (a combinatorial quantity another
+permanent inflates), reached by a different mechanism, and it is what makes a static cost predictor
+feasible on this deck should one ever be wanted.
+
+### Still open, and the right mechanism for next time
+
+**`MTG_KEEP_PRUNE_SET` is the "don't re-run the multi-day deck from scratch" lever** and this round
+could not use it: it is emitted by `RunKeepMerge` from a RAW sidecar, and a killed run leaves only a
+journal (the final raw is written at the end; a fail-out now deliberately skips it). Its consume path
+gates on bucket_fp/deck_fp but **deliberately NOT on play_digest or commit**, precisely so a re-run on
+a new commit can skip last run's confident mulligans. Making a prune set derivable from a JOURNAL --
+or checkpointing a raw mid-run -- would have saved this round's 6 h outright, and is the single
+highest-value piece of plumbing this deck still wants.
+
+Also unbuilt: `MTG_KEEP_SUB_CUTOFF_R`'s "decision-preserving" sub-table freeze exists only on the
+prune-set EMIT path, not live, so it cannot help the dominant phase today. And `perf` does not work
+in this container (`failed to write perf data: Bad address`), so the unit census remains the only
+attribution instrument available here -- worth knowing before planning a profiling session.
