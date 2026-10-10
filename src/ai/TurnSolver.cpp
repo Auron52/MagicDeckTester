@@ -17208,13 +17208,14 @@ bool TurnSolver::PostEntryBreakpointClassOn()
 }
 
 // MTG_SNOW_LOOK_COLOR -- tighten breakpoint site 8's playability gate from MANA VALUE to a real
-// COLOUR test. Default OFF until measured; `=1` arms it.
+// COLOUR test. DEFAULT ON since 2026-10-10 (a sound necessary-condition prune: 0 worse cells in 1,440
+// held-out games, byte-identical unbudgeted -- the USER's collapse-wasted-search rule); `=0` disarms it.
 static bool SnowLookColorGateOn()
 {
     // Routed through heurarm so BOTH arms fit ONE pooled batch: a bare `static const bool` is read
     // once per process and forces the per-arm wave the batching rule forbids (the BpAbilityDeltaOn
     // precedent).
-    static const bool env = EnvOn("MTG_SNOW_LOOK_COLOR");
+    static const bool env = EnvOn("MTG_SNOW_LOOK_COLOR", true);   // DEFAULT ON
     return heurarm::Flag(heurarm::SNOW_LOOK_COLOR, env);
 }
 
