@@ -427,6 +427,69 @@ TEST_CASE("F5.1 Bruna lethal short-circuit: on by default, =0 restores the gener
     CHECK_FALSE(bruna.UseLethalShortCircuit());
 }
 
+// ---- F5.2: creature-only mana cannot pay the noncreature share (MTG_ATTACK_TAP_CREATURE_ONLY) ----
+// Somberwald Sage's three are creature-only. Lightning Greaves ({2}) can only be paid by the two
+// attacking Avacyn's Pilgrims, so both stay home: 4 -> 2. The all-spells need was met by tapping the
+// 0-power Sage first (least power), whose mana cannot pay a noncreature spell -- so it charged nothing.
+namespace
+{
+GameState SageBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Lightning Greaves" });
+    Put(s, "Somberwald Sage", 90);
+    Put(s, "Avacyn's Pilgrim", 91);
+    Put(s, "Avacyn's Pilgrim", 92);
+    Put(s, "Venerable Knight", 93);
+    return s;
+}
+}
+
+TEST_CASE("F5.2 creature-only mana: an Aura-class cost taps the dorks that can pay it")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 4: Knight 2 + two Pilgrims (the Sage swings for 0).
+    CHECK(Threshold([](int l) { return SageBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Lightning Greaves" }); }) == 2);
+}
+
+TEST_CASE("F5.2 creature-only mana: MTG_ATTACK_TAP_CREATURE_ONLY=0 restores the all-spells need")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_TAP_CREATURE_ONLY, 0 } });
+    CHECK(Threshold([](int l) { return SageBoard(l, 1); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Lightning Greaves" }); }) == 4);
+}
+
+// ---- F5.3: an Aura that taps its host on entry takes the host out (MTG_ATTACK_AURA_HOST_TAP) -----
+namespace
+{
+GameState ColossBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Colossification" });
+    Put(s, "Venerable Knight", 100);
+    for (int k = 0; k < 7; ++k) { Put(s, "Forest", 110 + k); }
+    return s;
+}
+}
+
+TEST_CASE("F5.3 aura host tap: Colossification on the only attacker leaves nothing to swing")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Pre-plan attack 2: the Knight.
+    CHECK(Threshold([](int l) { return ColossBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Colossification" }); }) == 0);
+}
+
+TEST_CASE("F5.3 aura host tap: MTG_ATTACK_AURA_HOST_TAP=0 keeps the tapped host's attack")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_AURA_HOST_TAP, 0 } });
+    CHECK(Threshold([](int l) { return ColossBoard(l, 1); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Colossification" }); }) == 2);
+}
+
 // ---- F5.4: no Karoo-for-Karoo land drop (MTG_LAND_BOUNCE_GUARD) ----------------------------------
 namespace
 {
