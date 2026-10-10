@@ -6496,7 +6496,7 @@ static int SameTurnHinataCredit(const GameState& state, const std::vector<Action
         if (a.def->params.hinata_cost_reducer) { continue; }
         if (a.free_cast || a.alt_cost || a.cost.generic <= 0) { continue; }
         const int d = HinataGenericDiscountAssumed(*a.def, state, a.chosen_x,
-                          IsCrackleCountSpell(a.def->params) ? a.crackle_targets : -1);
+                          IsCrackleCountSpell(*a.def) ? a.crackle_targets : -1);
         if (d > 0) { credit += std::min(d, static_cast<int>(a.cost.generic)); }
     }
     return credit;
@@ -7545,7 +7545,7 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                 ec.generic += a.chosen_x * pips;
                 ec.generic  = std::max(0, ec.generic
                                 - HinataGenericDiscount(def, cp, a.chosen_x,
-                                      IsCrackleCountSpell(def.params) ? a.crackle_targets : -1));
+                                      IsCrackleCountSpell(def) ? a.crackle_targets : -1));
             }
             // Convoke (Chord of Calling): the committed action's taps reduce this cast's cost
             // (shared ApplyConvokeReduction, identical to the enumeration's emission) and the
@@ -22092,7 +22092,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // The declared-count model is live with Hinata (the discount derives from it) and, in
             // 2HG, ALWAYS for Crackle -- without her the discount is simply 0 (HinataGenericDiscount
             // gates on her), but the second head still needs a declared count >= 1 to be hit.
-            const bool crackle_branch = IsCrackleCountSpell(def.params)
+            const bool crackle_branch = IsCrackleCountSpell(def)
                                       && (HinataInPlay(state) || gamesetup::OpponentHeads() >= 2);
             const int  active_ci      = state.active_player_index;
             const int  opp_life       = state.players[1 - active_ci].life;
@@ -39096,7 +39096,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // costed it the same way -> lockstep. Non-Crackle X spells pass -1 (auto formula).
             ec.generic = std::max(0, ec.generic
                            - HinataGenericDiscount(def, state, chosen_x,
-                                 IsCrackleCountSpell(def.params) ? crackle_targets : -1));
+                                 IsCrackleCountSpell(def) ? crackle_targets : -1));
         }
         // Convoke (Chord of Calling): the plan's taps reduce this cast's cost -- the SAME shared
         // reduction the enumeration emitted, so a committed convoke cast pays here exactly what
@@ -39664,7 +39664,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // which take 5X and die (SBA). This is the faithful model that makes the derived
                 // discount honest (the auto-max free-discount path is gone). Lockstep with
                 // EffectHandler::ResolveDirectDamage. No g_play_target_chooser detour for Crackle.
-                if (IsCrackleCountSpell(def.params))
+                if (IsCrackleCountSpell(def))
                 {
                     if (dmg > 0)
                     {
@@ -69253,7 +69253,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 // opponent face (each is {1} off via Hinata and takes 5X). Emit for every count >= 0
                 // (the viewer enumerates 0..cap) so the GUI shows a per-count picker; -1 is the
                 // autonomous legacy sentinel and carries no sub. Mirrors the Soulfire own-count sub.
-                if (adef && IsCrackleCountSpell(adef->params) && a.crackle_targets >= 0)
+                if (adef && IsCrackleCountSpell(*adef) && a.crackle_targets >= 0)
                 {
                     addSub(a.card_name + " +" + std::to_string(a.crackle_targets) + " tgt",
                            a.card_name + " extra targets", "+" + std::to_string(a.crackle_targets),

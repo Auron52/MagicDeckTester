@@ -10394,7 +10394,7 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
 {
     std::vector<int> generic = GenericProvider::XCandidates(s, def, max_affordable);
     static const bool enabled = !EnvOn("MTG_NO_HINATA_HOLD_CRACKLE");
-    if (!enabled || generic.empty() || !IsCrackleCountSpell(def.params)) { return generic; }
+    if (!enabled || generic.empty() || !IsCrackleCountSpell(def)) { return generic; }
     // HUMAN play (the viewer): never hide a castable Crackle -- the hold-as-a-combo-piece prior is
     // an AUTONOMOUS search heuristic, not a restriction on the player. Offer the full affordable X
     // range so the human can choose to fire a chip Crackle if they want.
@@ -10405,11 +10405,15 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
 
     // A SECOND copy in hand -> spending one chip Crackle is free (the other stays for the combo).
+    // A Reality Spasm is NOT a copy: it is the combo's OTHER piece, and its mana is already in
+    // max_affordable (HinataRitualNetBonus), so a combo-turn kill passes the lethal gate below. Until
+    // MTG_CRACKLE_COUNT_EXACT the predicate read RS as a Crackle, and an RS in hand turned this hold
+    // off exactly when the combo was assembled (docs/design/reality-spasm-crackle-classification.md).
     int copies = 0;
     for (const Card& h : s.players[active].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
-        if (d && IsCrackleCountSpell(d->params)) { ++copies; }
+        if (d && IsCrackleCountSpell(*d)) { ++copies; }
     }
     if (copies >= 2) { return generic; }
 

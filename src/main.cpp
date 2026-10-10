@@ -5047,7 +5047,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // (opponent face, opponent creatures, own non-Hinata, self-if-safe, Hinata last). The count
             // is bounded [min, max]: min = the committed plan's paid discount (heuristic.size()), max =
             // max_targets (= min(X, #legal)). No separate count dialog -- the count IS the selection.
-            const bool crackle = IsCrackleCountSpell(def.params);
+            const bool crackle = IsCrackleCountSpell(def);
             // Zada/Mirrorwing solo-target trick (viewer feedback 2026-08-12 #2/#3): the legal set is
             // EVERY own creature (the rules-legal board, like Invigorate's own-pump) -- the searched
             // variant target arrives only as the preselected heuristic default. Strive (Twinflame)
