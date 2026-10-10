@@ -431,6 +431,54 @@ TEST_CASE("Selesnya discard S14: the Elf-window amendment keeps a 2-turn-castabl
     CheckPermutation(s, on);
 }
 
+// THE ALCHEMIST PACKAGE (USER 2026-10-10, MTG_SELESNYA_ALCHEMIST_BURST default ON): "Accomplished
+// Alchemist is more acceleration than payoff. However, it is a good keep with lifegain burst + something
+// expensive like Genesis Wave." No lifegain PAYOFF is held (Wave and Craterhoof gain nothing), so as first
+// built Feed the Clan is "lifegain with no payoff" and sheds early, and the Alchemist is the LAST Elf.
+// With the package Feed fills LIFEGAIN 1, and the Alchemist is the FIRST Elf.
+//   (a) Board 3 Forests + a Llanowar: M1 = 4, the Alchemist is castable next turn -> it is the first Elf
+//       kept (take_elf(0)), shed after every other Elf.
+//   (b) Board 3 Forests: M1 = 3 (the hand Forest is surplus), so the Alchemist (4) is not castable next
+//       turn; it is kept through the two-turn Elf window either way, and the package changes only Feed.
+TEST_CASE("Selesnya discard S15: the Alchemist package -- Alchemist + lifegain burst + an expensive spell")
+{
+    auto pkg = [](const GameState& st, int lever)
+    {
+        heurarm::t_arm[heurarm::SELESNYA_ALCHEMIST_BURST] = static_cast<std::int8_t>(lever);
+        std::vector<int> v = SelM(st);
+        heurarm::t_arm[heurarm::SELESNYA_ALCHEMIST_BURST] = -1;
+        return v;
+    };
+    auto pos = [](const std::vector<int>& o, int idx)
+    { return static_cast<int>(std::find(o.begin(), o.end(), idx) - o.begin()); };
+    // 0 Alchemist, 1 Feed, 2 Wave, 3 Llanowar, 4 Mystic, 5 Craterhoof, 6 Forest, 7 Archdruid
+    const std::vector<std::string> hand = {
+        "Accomplished Alchemist", "Feed the Clan", "Genesis Wave", "Llanowar Elves", "Elvish Mystic",
+        "Craterhoof Behemoth", "Forest", "Elvish Archdruid" };
+    {
+        const GameState s = MakeSel(hand, { "Forest", "Forest", "Forest", "Llanowar Elves" });
+        const std::vector<int> off = pkg(s, 0), on = pkg(s, 1);
+        CheckPermutation(s, on);
+        CHECK(SelM(s) == on);                                               // default ON
+        for (int elf : { 3, 4, 7 }) { CHECK(pos(off, 0) < pos(off, elf)); } // as built: the last Elf
+        for (int elf : { 3, 4, 7 }) { CHECK(pos(on, 0) > pos(on, elf)); }   // package: the first Elf
+        CHECK(pos(on, 1) > pos(off, 1));                                    // Feed kept
+    }
+    {
+        const GameState s = MakeSel(hand, { "Forest", "Forest", "Forest" });
+        const std::vector<int> off = pkg(s, 0), on = pkg(s, 1);
+        CheckPermutation(s, on);
+        CHECK(pos(on, 1) > pos(off, 1));                                    // Feed kept
+        CHECK((pos(on, 0) < pos(on, 4)) == (pos(off, 0) < pos(off, 4)));    // the Alchemist's place unchanged
+    }
+    // No expensive spell: no package, the order as built.
+    const GameState cheap = MakeSel(
+        { "Accomplished Alchemist", "Feed the Clan", "Priest of Titania", "Llanowar Elves", "Elvish Mystic",
+          "Blossoming Bogbeast", "Forest", "Elvish Archdruid" },
+        { "Forest", "Forest", "Forest" });
+    CHECK(pkg(cheap, 1) == pkg(cheap, 0));
+}
+
 TEST_CASE("Selesnya discard M1: payoffs in play do not fill the hand's payoff slots")
 {
     const GameState s = MakeSel(
