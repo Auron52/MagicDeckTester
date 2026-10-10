@@ -4120,6 +4120,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         const std::string cast_name = it->m_name.str();
         const int         cast_num  = it->m_number;
+        const bool        cast_staged = it->m_is_staged;   // MTG_USER_ORDER_TRACE only
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
                           bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke,
@@ -4129,6 +4130,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         last_cast_paid = cast_num <= 0
             || std::none_of(ap.hand.begin(), ap.hand.end(),
                             [&](const Card& c) { return c.m_number == cast_num; });
+        // MTG_USER_ORDER_TRACE (diagnostic, default off): every REAL cast, in the order it happened.
+        if (UserOrderTraceOn() && !m_in_rollout)
+        {
+            std::fprintf(stderr, "[uo-cast] gs=%llu t=%d m=%d d=%d card=%s num=%d staged=%d splice=%d paid=%d pool=%d\n",
+                         static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                         is_pre_combat_main ? 1 : 2, m_lookahead_depth, cast_name.c_str(), cast_num,
+                         cast_staged ? 1 : 0, splice_count, last_cast_paid ? 1 : 0, available.Total());
+        }
         if (s_exec_tap_trace)
         {
             std::string line = "[exec-tap] T" + std::to_string(state.turn_number) + " " + cast_name + " tapped:";
@@ -4547,6 +4556,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             rec_unlock.emplace(state, rec_unlock_acts);
             rec_unlock_ord = ord;
         };
+        if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
+        {
+            std::vector<int> ro;
+            for (int i = 0; i < static_cast<int>(recs.size()); ++i)
+            { if (recs[i].kind == Action::Kind::CastFromHand && !recs[i].sacrifice_land) { ro.push_back(i); } }
+            TraceUserCastOrder(state, recs, ro, "replay", is_pre_combat_main);
+        }
         for (const Action& a : recs)
         {
             if (a.cont_pins)
@@ -4936,6 +4952,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     std::stable_sort(rest.begin(), rest.end(), [&](int x, int y)
                     { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                    ApplyDeckCastArrangement(state, extra.actions, rest);   // lockstep: ApplyPlanDirect
                     ApplyCastOrderRangeLadder(state, extra.actions, rest);
                     ApplyEnablerWipeRecheck(state, extra.actions, rest);
                 }
@@ -4947,8 +4964,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 std::stable_sort(cont_order.begin(), cont_order.end(), [&](int x, int y)
                 { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                ApplyDeckCastArrangement(state, extra.actions, cont_order);   // lockstep: ApplyPlanDirect
                 ApplyPayableCastOrder(state, extra.actions, cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER
             }
+        }
+        if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
+        {
+            TraceUserCastOrder(state, extra.actions, cont_order,
+                               extra.searched_order ? "cont-searched" : (bp_searched_here ? "cont-bp" : "cont"),
+                               is_pre_combat_main);
         }
         for (int ci : cont_order)
         {
@@ -5333,6 +5357,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         std::stable_sort(pod_cont_order.begin(), pod_cont_order.end(),
                             [&](int x, int y)
                             { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                        ApplyDeckCastArrangement(state, extra.actions, pod_cont_order);   // lockstep: apply_plan_actions
                         ApplyPayableCastOrder(state, extra.actions, pod_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
                     }
                     for (int ci : pod_cont_order)
@@ -6119,6 +6144,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the executor would re-bucket enabler-first and diverge from the committed ordering.
     if (plan.searched_order)
     {
+        if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
+        {
+            std::vector<int> so;
+            for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+            {
+                const Action& a = plan.actions[i];
+                if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { so.push_back(i); }
+            }
+            TraceUserCastOrder(state, plan.actions, so, "searched", is_pre_combat_main);
+        }
         for (const Action& a : plan.actions)
         {
             if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
@@ -6269,12 +6304,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
         { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+        ApplyDeckCastArrangement(state, plan.actions, ord);   // the deck's set-level order (lockstep: ApplyPlanDirect)
         ApplyCastOrderRangeLadder(state, plan.actions, ord);
         ApplyEnablerWipeRecheck(state, plan.actions, ord);
     }
     // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
     // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's opaque branch (lockstep).
     ApplyPayableCastOrder(state, plan.actions, ord);
+    if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
+    { TraceUserCastOrder(state, plan.actions, ord, "opaque", is_pre_combat_main); }
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
@@ -6355,6 +6393,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+    ApplyDeckCastArrangement(state, plan.actions, order);   // the deck's set-level order (lockstep: ApplyPlanDirect)
     // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end and walk them
     // back only as far as paying for the line requires. Inert with the lever off / no ranged spell
     // in the set. Mirrored in ApplyPlanDirect (lockstep).
@@ -6363,6 +6402,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
     // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's clean branch (lockstep).
     ApplyPayableCastOrder(state, plan.actions, order);
+    if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
+    { TraceUserCastOrder(state, plan.actions, order, "clean", is_pre_combat_main); }
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
@@ -6582,6 +6623,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
                     [&](int x, int y)
                     { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                ApplyDeckCastArrangement(state, extra.actions, pe_cont_order);   // lockstep: apply_plan_actions
                 ApplyPayableCastOrder(state, extra.actions, pe_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
             }
             auto pe_cast = [&](const Action& ca)
