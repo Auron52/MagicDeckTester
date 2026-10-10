@@ -284,6 +284,10 @@ private:
     // the pre-combat land block holds the drop for a hand-land tutor, consumed (and cleared) by
     // the post-cast play in the same TakeTurn -- never carried across turns.
     bool                     m_tutor_deferred_drop = false;
+    // Breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine (counted past
+    // its depth / call caps). Read only by the unit seam (MTG_EXEC_FAILED_CAST_NO_RESOLVE's test: an
+    // unpaid draw-engine cast must open none); never read by play.
+    long long                m_bp_resolves         = 0;
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // rollout engine (no committed plan)
