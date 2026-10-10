@@ -2243,6 +2243,32 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         { work_idx[HAND - H][i] = static_cast<int>(work.size()); work.push_back({ H, i }); }
     }
 
+    // ---- MEASURED per-cell cost, for SLOWEST-FIRST wave dispatch -----------------------------------
+    // Microseconds accumulated per (size, cell, side) by run_batch, inside the acc_mtx commit it
+    // already holds. READ ONLY to ORDER a wave's dispatch; never folded into a label, a count, a
+    // freeze test, the journal or the sidecar. That is what makes it free: the comment on the
+    // continuous pool states the design invariant plainly -- a rollout's seed is a pure function of
+    // (seed_base, r, w, pd), "so this is byte-identical regardless of scheduling timing". Dispatch
+    // ORDER cannot move a number.
+    //
+    // WHY ORDER MATTERS HERE AND NOWHERE ELSE. The size-7 floor is a continuous queue with no
+    // barrier, and it is already well packed -- measured on the 2026-10-10 run, it went 80% -> 100%
+    // in 13% of its elapsed time, so there is nothing to win. The adaptive bottoming waves are the
+    // opposite: `sub_refine_step` computes the next wave only once `sub_wave_pending == 0`, so EVERY
+    // wave ends in a hard barrier, and that phase is the dominant cost of a large generation (one
+    // wave measured at 50,063 tasks ~= 801,000 rollouts, 17-24 h). A heavy-tailed batch dispatched in
+    // cell-index order can leave a 20-minute rollout starting last, stranding 31 of 32 cores against
+    // the barrier; longest-first is the classic fix and it costs one sort per wave.
+    //
+    // THE ESTIMATE IS THE GENERATOR'S OWN MEASUREMENT, which is why no cost model or hint file is
+    // needed: every sub-cell gets r_floor rollouts in the sub FLOOR, which completes before the first
+    // wave is computed, so by the time ordering matters every cell already has a measured cost. Cells
+    // with no measurement sort last at 0, which is the right default -- an unmeasured cell is one the
+    // run has never had to pay for.
+    std::vector<std::vector<long long>> cell_us(tables.size());
+    for (int H = HAND; H >= min_size; --H)
+    { cell_us[HAND - H].assign(TB(H).comps.size() * 2, 0); }
+
     const std::map<std::string, int>& bof = bucket_of;   // const ref -> concurrent-safe find()
 
     // ---- Cross-run PRUNE-SET carry (MTG_KEEP_PRUNE_SET): see LoadPruneCarry above ----------------
@@ -2581,6 +2607,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const std::vector<int>& comp = tables[HAND - H].comps[idx];
         double sum = 0.0, sumsq = 0.0;
         long long kept = 0;                          // rollouts that produced a label (abandoned ones do not)
+        long long batch_us = 0;                      // measured cost of this batch, for wave ORDERING only
         std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
         std::set<int>     cell_touched;              // union over this task's rollouts
         if (trace_on) { hit.assign(touch_names.size(), 0); }
@@ -2631,8 +2658,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
             }
             else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
-            capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
+            const double roll_ms = std::chrono::duration<double, std::milli>(
+                                       std::chrono::steady_clock::now() - t_roll).count();
+            batch_us += static_cast<long long>(roll_ms * 1000.0);   // wave ORDERING only; never a result
+            capture_slow(H, comp, pd, r, rs, roll_ms);   // always-on (cheap-gated)
             // LEFT OUT, per the user's ruling: a truncated game's win-turn is not a label. Skipping the
             // accumulate AND the count (below, via `kept`) is what makes this one fewer sample rather
             // than a contaminated one -- see the ruling block above capture_slow.
@@ -2654,6 +2683,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // it here would divide a short sum by a full n and pull every such cell's mean win-turn
             // DOWN -- i.e. make the deck look faster exactly on the hands that are hardest to play.
             t.cnt[idx][pd]   += kept;
+            // MEASURED per-cell cost, for SLOWEST-FIRST wave dispatch (see cell_us). Folded inside the
+            // lock that is already held, so it adds no contention and cannot race.
+            cell_us[HAND - H][static_cast<std::size_t>(idx) * 2 + pd] += batch_us;
             js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
         }
         // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
@@ -4226,6 +4258,24 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if (out == nullptr) { continue; }          // dry run: count only, mutate nothing
             out->push_back({ work_idx[H_idx][arg], pd, c, c + add });
             refined_rollouts += add;
+        }
+        // SLOWEST FIRST. Every wave ends in a hard barrier (sub_wave_pending == 0 gates the next one),
+        // so the wave's makespan is set by when its most expensive task STARTS. Dispatching in
+        // cell-index order can put a 20-minute rollout last and hold 31 of 32 cores idle against the
+        // barrier; longest-processing-time-first is the standard remedy. Ordering is provably
+        // result-neutral (the seed is a pure function of (seed_base, r, w, pd)), so this is a pure
+        // wall-clock change -- no label moves, no digest moves, no quality question to settle.
+        if (out != nullptr && EnvOn("MTG_KEEP_SLOWEST_FIRST", true))
+        {
+            std::stable_sort(out->begin(), out->end(), [&](const Task& a, const Task& b) {
+                const auto cost = [&](const Task& t) -> long long {
+                    const int H = work[t.w].H, ix = work[t.w].idx;
+                    const std::size_t k = static_cast<std::size_t>(ix) * 2 + static_cast<std::size_t>(t.pd);
+                    const std::vector<long long>& v = cell_us[HAND - H];
+                    return k < v.size() ? v[k] : 0;
+                };
+                return cost(a) > cost(b);
+            });
         }
         return marked;
     };
