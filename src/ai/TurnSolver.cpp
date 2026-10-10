@@ -35765,9 +35765,23 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (s_ritual_payoff_guard && any_ritual && !wins)
         {
             bool wants_excess = false;   // storm wincon in the plan -> extra rituals buy dragons, keep all
+            // MTG_RITUAL_GUARD_APEX: an IMPULSE-EXILE spell (Apex of Power) is no fixed-cost payoff either.
+            // Its value is the exile -- seven cards castable this turn, paid for by whatever mana is left
+            // after it -- so every ritual cast before it is mana carried into the exile (and one more
+            // storm for an exiled Dragonstorm). Calling one "surplus" deleted every Apex line on a board
+            // with a mana to spare: the accel-prefix collapse never offers the subset without the CHEAPEST
+            // ritual, so rejecting the full chain left nothing (dragonstorm d0 s7600011 T6).
+            // NOT a cast RESTRICTOR (Irencrag Feat): it is never "before Apex" (that is the trap) -- after
+            // Apex it funds only the one closer it allows, so it keeps the surplus test. Exempting it too
+            // admitted {Seething, Medallion, Irencrag, Apex}, which the GENERIC rank (Irencrag 18 < Apex 20)
+            // realises as the Irencrag -> Apex trap (s7600011 with MTG_DRAGONSTORM_USER_ORDER=0: T6 -> unwon).
+            static const bool s_guard_apex = EnvOn("MTG_RITUAL_GUARD_APEX", true);   // DEFAULT ON; =0 disables
+            const bool guard_apex = heurarm::Flag(heurarm::RITUAL_GUARD_APEX, s_guard_apex);
+            bool apex_keeps = false;   // every NON-restricting ritual is kept for the exile
             for (int j : sel)
             {
                 if (cands[j].def && cands[j].def->params.tutor_to_battlefield) { wants_excess = true; break; }
+                if (guard_apex && cands[j].def && cands[j].def->params.impulse_exile > 0) { apex_keeps = true; }
             }
             if (!wants_excess)
             {
@@ -35800,6 +35814,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     for (int r : sel)
                     {
                         if (cands[r].ritual_float <= 0) { continue; }
+                        if (apex_keeps && cands[r].max_casts_after < 0) { continue; }   // kept for the exile
                         const bool r_gy   = cands[r].def && cands[r].def->params.ritual_float_gy_self_bonus;
                         const int  gy_r   = gy - (r_gy ? 1 : 0);
                         const int  cred_r = seq_bit
