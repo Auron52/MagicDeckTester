@@ -145,6 +145,25 @@ harness_analyze_bin() {
     return 1
 }
 
+# harness_install_bin <src> <dest>: copy a binary to <dest> for later EXECUTION (a run snapshot, a
+# baseline). In the devcontainer the checkout is a 9p host mount, and executing binaries off it was part
+# of the 2026-10-10 mount loss (SIGBUS, then EIO for every container). There, the bytes go on the ext4
+# build volume (build/offmount/<dest>) and <dest> becomes an absolute symlink to them, so every reader of
+# <dest> works unchanged. Elsewhere it is a plain copy. Copy-then-rename, so a binary still running from
+# an earlier snapshot keeps its inode (no ETXTBSY).
+harness_install_bin() {
+    local src=$1 dest=$2 vol
+    mkdir -p "$(dirname "$dest")"
+    if [ "$(stat -f -c %T "$(dirname "$dest")" 2>/dev/null)" = v9fs ] && [ -d build/ ] \
+       && [ "$(stat -f -c %T build/ 2>/dev/null)" != v9fs ]; then
+        vol="$(cd build/ && pwd -P)/offmount/$dest"
+        mkdir -p "$(dirname "$vol")"
+        cp -f "$src" "$vol.tmp.$$" && mv -f "$vol.tmp.$$" "$vol" && ln -sfn "$vol" "$dest"
+    else
+        cp -f "$src" "$dest"
+    fi
+}
+
 # ---- deck path resolution ------------------------------------------------------------------
 # Decks live in per-deck FOLDERS: decks/<name>/<name>.txt (or .cod) plus the generated profile
 # and sibling models (docs/design/per-deck-folder-layout.md). Scripts that hard-coded the old flat

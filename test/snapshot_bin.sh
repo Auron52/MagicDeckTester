@@ -13,6 +13,8 @@
 #   - every result is traceable to an exact (hash, dirty) version via the .meta.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
+# shellcheck source=lib/harness.sh
+. test/lib/harness.sh
 
 label=${1:?usage: test/snapshot_bin.sh <label>}
 BIN=./build/Release/mtg.exe
@@ -21,7 +23,7 @@ BIN=./build/Release/mtg.exe
 
 OUT=logs/snapshots
 mkdir -p "$OUT"
-cp -f "$BIN" "$OUT/$label"
+harness_install_bin "$BIN" "$OUT/$label"   # in the devcontainer: bytes on the build volume, never run off 9p
 
 hash=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 state=$(git diff --quiet HEAD 2>/dev/null && echo clean || echo dirty)
