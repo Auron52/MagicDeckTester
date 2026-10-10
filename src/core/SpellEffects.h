@@ -25129,15 +25129,36 @@ inline bool HinataCastableFromHand(const GameState& state)
     return false;
 }
 
-// True for Crackle with Power specifically: a scale_x Hinata-discount spell that DEALS damage to
-// its targets (x_damage_multiplier > 0). This is the spell that uses the declared-count model
-// (crackle_targets -> derived discount + faithful 5X damage). It deliberately EXCLUDES Reality
-// Spasm, which is also discount_targets_scale_x but UNTAPS permanents (no damage) and keeps the
-// auto-max discount -- so gating the count model on this predicate leaves Reality Spasm's cost
-// (and every other spell) byte-identical.
-inline bool IsCrackleCountSpell(const CardParams& p)
+// MTG_CRACKLE_COUNT_EXACT (heurarm CRACKLE_COUNT_EXACT). DEFAULT ON; =0 -> the legacy predicate
+// below, byte-identical to ccacda4e. See docs/design/reality-spasm-crackle-classification.md.
+inline bool CrackleCountExactOn()
 {
-    return p.discount_targets_scale_x && p.x_damage_multiplier > 0;
+    static const bool on = EnvOn("MTG_CRACKLE_COUNT_EXACT", true);
+    return heurarm::Flag(heurarm::CRACKLE_COUNT_EXACT, on);
+}
+
+// True for Crackle with Power specifically: a scale_x Hinata-discount spell that DEALS damage to
+// its targets. This is the spell that uses the declared-count model (crackle_targets -> derived
+// discount + faithful 5X damage). It EXCLUDES Reality Spasm, which is also discount_targets_scale_x
+// but untaps permanents (no damage, exactly X targets) and keeps the auto-max discount.
+//
+// THE TEST IS THE TEMPLATE, not x_damage_multiplier. The legacy test (`x_damage_multiplier > 0`)
+// never excluded anything: CardDatabase defaults the multiplier to 1 for every card, so Reality
+// Spasm ({untap_x_mana_sources, discount_targets_scale_x, discount_targets_permanents}) WAS
+// classified as a Crackle. The one site where that moved play is HinataProvider::XCandidates'
+// copy count -- an RS in hand read as a "second Crackle", which switched off the hold-a-lone-
+// Crackle rule exactly when the combo's other piece was in hand. DirectDamage is the template the
+// whole count model lives in -- the declared-count enumeration (TurnSolver's {X} DirectDamage
+// branch) and both resolvers (EffectHandler::ResolveDirectDamage, the rollout's DirectDamage
+// branch) are gated on it -- so this predicate cannot disagree with the machinery it gates. The
+// alternatives were each weaker: `!untap_x_mana_sources` names one mode of one card (RS's tap mode
+// would re-open the hole), and a "multiplier was SET" bit would wrongly drop a plain "X damage to
+// each of up to X targets" spell that leaves the multiplier at its default 1.
+inline bool IsCrackleCountSpell(const CardDefinition& def)
+{
+    if (!def.params.discount_targets_scale_x) { return false; }
+    if (CrackleCountExactOn()) { return def.tmpl == CardTemplate::DirectDamage; }
+    return def.params.x_damage_multiplier > 0;   // legacy: true for EVERY scale_x spell (default 1)
 }
 
 // Crackle target sentinels (distinct from a >= 0 battlefield index): the shared face sentinels.

@@ -743,7 +743,7 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     // killed creature leaves the target pool for later spells. The opponent FACE damage was applied
     // by the target loop above (Targeting::Any sets only the opp-face target); this adds the extras.
     // Lockstep with ApplyPlanDirect (the rollout resolves the identical set from crackle_targets).
-    if (IsCrackleCountSpell(def.params))
+    if (IsCrackleCountSpell(def))
     {
         CrackleHitExtraTargets(state, entry.controller_index, damage, entry.crackle_targets.value_or(-1));
     }

@@ -7536,7 +7536,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     m_pending_devour_count = -1;
     // Crackle with Power: carry the declared extra-target count so ResolveDirectDamage's derived
     // discount + faithful 5X damage match the rollout's (lockstep). Scale_x spells only.
-    if (IsCrackleCountSpell(def->params)) { entry.crackle_targets = crackle_targets; }
+    if (IsCrackleCountSpell(*def)) { entry.crackle_targets = crackle_targets; }
     // Scaled divided-damage spell (Magma Opus): carry the committed opponent-face damage on the same
     // field so ResolveDirectDamage deals exactly that to the opponent. Set only when a scaled variant
     // was chosen (crackle_targets >= 0); a normal Magma cast leaves it unset -> full damage (byte-
@@ -7708,7 +7708,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // Crackle: derive the discount from the declared count (lockstep with enumeration + rollout).
         effective.generic = std::max(0, effective.generic
                               - HinataGenericDiscount(*def, state, chosen_x,
-                                    IsCrackleCountSpell(def->params) ? crackle_targets : -1));
+                                    IsCrackleCountSpell(*def) ? crackle_targets : -1));
         // X is now resolved into the generic cost: drop the {X} symbol so ToString()
         // prints the actual mana paid (e.g. "{4}{R}{R}") and not a stray "{X}" on top.
         effective.has_x  = false;
