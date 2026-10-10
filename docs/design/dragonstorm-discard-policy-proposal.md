@@ -145,6 +145,8 @@ Deck-specific (verbatim):
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
 
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** `MTG_DSTORM_BUCKET_DISCARD` shipped as **`MTG_DRAGONSTORM_BUCKET_DISCARD`** (heurarm slot `DRAGONSTORM_BUCKET_DISCARD`, `src/ai/HeuristicArm.h`); the old name is read nowhere, so setting it is a silent no-op.
+
 
 Authored per `docs/design/discard-bucket-authoring-brief.md` for the 2026-09-23 per-deck sweep.
 Deliverable is this document; integration into `DragonstormProvider::CleanupDiscardCandidates` is

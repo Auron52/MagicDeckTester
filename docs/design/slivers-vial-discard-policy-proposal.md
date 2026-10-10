@@ -161,6 +161,8 @@ Cross-deck (verbatim):
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
 
+> **Flag names, verified against `src/` 2026-10-10 (housekeeping note; the proposal below is left as written):** `MTG_VIAL_BUCKET_DISCARD` shipped as **`MTG_SLIVERS_BUCKET_DISCARD`** (heurarm slot `SLIVERS_BUCKET_DISCARD`, `src/ai/HeuristicArm.h`); the old name is read nowhere, so setting it is a silent no-op.
+
 
 Authored from `docs/design/discard-bucket-authoring-brief.md`. **Proposal only — no `.cpp`/`.h` was
 touched.** Target: `VialProvider::CleanupDiscardCandidates`, behind a default-on
@@ -748,6 +750,8 @@ inert, the Courtyard should rank above the other duals in the S1 surplus order.
 Sliver"* as the `scales_per_matching` example, but Predatory Sliver's `cards.json` params are flat
 `power_bonus:1, tough_bonus:1` with **no** `scales_per_matching` — which matches its real oracle text
 ("Sliver creatures you control get +1/+1"). The behaviour is right; the comment's example is stale.
+(Fixed 2026-10-10 -- in `SpellEffects.h`, and the same example in `CardDatabase.h` and
+`TurnSolver.cpp`.)
 My classification follows the data, not the comment.
 
 **D9 — Out of scope but adjacent, and worth a look while someone is here.** The mulligan profile has
