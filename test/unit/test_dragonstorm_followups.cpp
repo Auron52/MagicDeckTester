@@ -250,3 +250,56 @@ TEST_CASE("Rituals-for-payoff guard: an Apex line keeps its rituals, a restricto
         CHECK_FALSE(iren);
     }
 }
+
+namespace
+{
+const GenericProvider& GenProvFu()
+{
+    static const GenericProvider p;
+    return p;
+}
+
+std::vector<std::string> OrderNamesFu(const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    std::vector<std::string> v;
+    for (int i : order) { v.push_back(acts[static_cast<std::size_t>(i)].card_name.str()); }
+    return v;
+}
+}   // namespace
+
+TEST_CASE("Payable order, every deck: the exact walk keeps a cast cap and a later cast's colour (MTG_PAYABLE_ORDER_EXACT)")
+{
+    // (a) hinata d0 gi1427's shape, on a provider that does NOT opt into ExactOrderWalk. Four Mountains,
+    // given "Lathliss, Irencrag Feat, Pyretic Ritual" (Lathliss unpayable first). The plain walk ignores
+    // Irencrag's "only one more spell" and takes the nearest order it can pay, "Irencrag, Pyretic,
+    // Lathliss" -- whose Lathliss is the SECOND spell after Irencrag. The exact walk takes "Pyretic,
+    // Irencrag, Lathliss": 4 -> 5 -> 8 red, Lathliss the one permitted cast.
+    GameState s = BoardFu(std::vector<std::string>(4, "Mountain"),
+                          { "Lathliss, Dragon Queen", "Irencrag Feat", "Pyretic Ritual" });
+    s.m_provider = &GenProvFu();
+    const std::vector<Action> acts = { CastFu(s, "Lathliss, Dragon Queen"), CastFu(s, "Irencrag Feat"),
+                                       CastFu(s, "Pyretic Ritual") };
+    // (b) gi1680's shape: Island + City of Brass, "Sol Ring, Gamble". It pays as given (the Island pays
+    // Sol Ring's {1}, the City Gamble's {R}); the plain walk spent the City's wild unit on the {1}, read
+    // the order as unpayable and swapped Gamble in front of the Sol Ring.
+    GameState s2 = BoardFu({ "Island", "City of Brass" }, { "Sol Ring", "Gamble" });
+    s2.m_provider = &GenProvFu();
+    Action ring = CastFu(s2, "Sol Ring");
+    ring.rock_mana.colorless = 2;   // the same-turn rock credit the enumeration stamps
+    const std::vector<Action> acts2 = { ring, CastFu(s2, "Gamble") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAYABLE_ORDER_EXACT, on);
+        std::vector<int> order = { 0, 1, 2 };
+        ApplyPayableCastOrder(s, acts, order);
+        if (on)
+        { CHECK(OrderNamesFu(acts, order) == std::vector<std::string>{ "Pyretic Ritual", "Irencrag Feat", "Lathliss, Dragon Queen" }); }
+        else
+        { CHECK(OrderNamesFu(acts, order) == std::vector<std::string>{ "Irencrag Feat", "Pyretic Ritual", "Lathliss, Dragon Queen" }); }
+        std::vector<int> order2 = { 0, 1 };
+        ApplyPayableCastOrder(s2, acts2, order2);
+        if (on) { CHECK(OrderNamesFu(acts2, order2) == std::vector<std::string>{ "Sol Ring", "Gamble" }); }
+        else    { CHECK(OrderNamesFu(acts2, order2) == std::vector<std::string>{ "Gamble", "Sol Ring" }); }
+    }
+}
