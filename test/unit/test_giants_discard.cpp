@@ -11,6 +11,13 @@
 // Goliath 5, Harbinger 6) times P(play) = {1, .70, .35, .10, .03, .02} by mana deficit. The derivation
 // is written next to each case. Every case also asserts the GENERIC fallback's index 0 (the control
 // arm), and the hatch case proves MTG_GIANTS_BUCKET_DISCARD=0 restores exactly the generic ranking.
+//
+// G1-G17 are the 2026-10-09 boards, derived for that table and pinned to MTG_DISCARD_DIST_MODEL=0 (which
+// must reproduce it exactly). D1-D4 replace the table with the shared distance model (discard_dist, the
+// default since the USER's 2026-10-10 ruling): castability = sum over our next 4 turns of the newly
+// castable probability x 0.75^(turn - 1), + 0.02 x 0.75^4 for the stranded mass, from the board's mana,
+// the KEPT lands (one drop per turn), the kept rocks' mana from the turn they can be cast, and lands drawn
+// at the library's density. Each D case asserts both arms; each differs from the table.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -49,14 +56,16 @@ Card Ph(const std::string& name, int number)
     return c;
 }
 
-GameState MakeGiants(const std::vector<std::string>& hand, const std::vector<std::string>& board)
+GameState MakeGiants(const std::vector<std::string>& hand, const std::vector<std::string>& board,
+                     const std::vector<std::string>& library = {})
 {
     EnsureCardsGd();
     GameState s;
     s.active_player_index = 0;
     s.turn_number         = 4;
     int num = 1;
-    for (const std::string& n : hand) { s.players[0].hand.push_back(Ph(n, num++)); }
+    for (const std::string& n : hand)    { s.players[0].hand.push_back(Ph(n, num++)); }
+    for (const std::string& n : library) { s.players[0].library.push_back(Ph(n, num++)); }
     for (const std::string& n : board)
     {
         Permanent p;
@@ -71,14 +80,19 @@ GameState MakeGiants(const std::vector<std::string>& hand, const std::vector<std
     return s;
 }
 
-std::vector<int> GiArm(const GameState& s, int arm)
+// `dist` pins MTG_DISCARD_DIST_MODEL: the G cases were derived for the 2026-10-09 table (dist 0); the D
+// cases for the shared distance model (dist 1, the default).
+std::vector<int> GiArm(const GameState& s, int arm, int dist = 0)
 {
     heurarm::t_arm[heurarm::GIANTS_BUCKET_DISCARD] = arm;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]    = dist;
     std::vector<int> v = GiantsProvider().CleanupDiscardCandidates(s, nullptr);
     heurarm::t_arm[heurarm::GIANTS_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::DISCARD_DIST_MODEL]    = -1;
     return v;
 }
-std::vector<int> Gi(const GameState& s)  { return GiArm(s, 1); }
+std::vector<int> Gi(const GameState& s)  { return GiArm(s, 1, 0); }
+std::vector<int> GiD(const GameState& s) { return GiArm(s, 1, 1); }
 std::vector<int> Gen(const GameState& s) { return GenericProvider().CleanupDiscardCandidates(s, nullptr); }
 
 // Every hand index exactly once (staged ones last, via tier C of the shared ranking).
@@ -107,6 +121,14 @@ const char* kBo  = "Lightning Bolt";
 const char* kPy  = "Pyroclasm";
 
 std::vector<std::string> Mountains(int k) { return std::vector<std::string>(static_cast<std::size_t>(k), kM); }
+
+// A library of `n` cards: `lands` Mountains, the rest Lightning Bolts (counts are all the model reads).
+std::vector<std::string> Lib(int n, int lands)
+{
+    std::vector<std::string> lib = Mountains(lands);
+    for (int k = lands; k < n; ++k) { lib.push_back(kBo); }
+    return lib;
+}
 
 }   // namespace
 
@@ -323,6 +345,72 @@ TEST_CASE("Giants discard G17: every hand index is named exactly once on every b
         {
             const GameState s = MakeGiants(h, b);
             CheckPermutation(s, Gi(s));
+            const GameState t = MakeGiants(h, b, Lib(24, 21));
+            CheckPermutation(t, GiD(t));
         }
     }
+}
+
+// ---- the shared distance model (MTG_DISCARD_DIST_MODEL, default ON) ------------------------------------
+// Libraries are `Lib(n, lands)`: `lands` Mountains then Lightning Bolts. With no land in the library a
+// drawn land never comes, so only the board, the kept lands and the kept rocks count -- which isolates
+// each input. Castability for "first castable on our t-th next turn" (no draws involved) is
+// 0.75^(t-1): 1, .75, .5625, .421875; never castable = 0.02 x 0.75^4 = 0.0063281.
+
+// D1. Board 3 Mountains, hand M0 M1 M2 Ti3 Fl4 Tec5 Har6 Gol7, no land in the library. need 3 -> all three
+// Mountains kept, played one per turn: mana 4 / 5 / 6 / 6. Tectonic (4) T1 -> 1 x 4.30 = 4.30; Flinger
+// (5) T2 -> .75 x 5.95 = 4.46; Titan (6) T3 -> .5625 x 7 = 3.94; Harbinger (5) T2 -> .75 x 2.64 = 1.98;
+// Goliath (7) never -> 0.02. Kept Giants Fl, Tec, Ti (ladder slots 2/5/9); Goliath, then Harbinger spare.
+// The table counted all three Mountains at once (reach 6): Titan, Flinger, Tectonic all P 1 -- Titan
+// first in the keep order, so Tectonic, not Titan, was the last Giant kept.
+TEST_CASE("Giants discard D1: the kept lands arrive one per turn -- Titan three turns out ranks below Flinger and Tectonic")
+{
+    const GameState s = MakeGiants({ kM, kM, kM, kTi, kFl, kTec, kHar, kGol }, Mountains(3), Lib(20, 0));
+    CHECK(GiD(s) == std::vector<int>{ 7, 6, 3, 2, 5, 1, 4, 0 });
+    CHECK(Gi(s)  == std::vector<int>{ 7, 6, 5, 2, 4, 1, 3, 0 });   // the table (=0)
+}
+
+// D2. Board 3 Mountains, hand Sol0 FD1 M2 Ti3 Fl4 Tec5 Gol6 Har7, no land in the library. need 3 -> keep
+// Sol Ring, the Mountain and Fire Diamond. Next turn the board's 3 + the Mountain = 4 mana: Sol Ring
+// ({1}, untapped, 2) is cast and nets +1; Fire Diamond ({2}, tapped) is cast too and adds 1 from the turn
+// after. Extra = 1 / 3 / 3 / 3, so mana = 5 / 7 / 7 / 7. Flinger (5) and Tectonic (4) T1; Titan and
+// Goliath (7) T2: Fl 5.95 > Ti 5.25 > Tec 4.30 > Har 2.64 > Gol .75 x 3.11 = 2.33. The table (reach 7,
+// all at once) had Titan first and Goliath (3.11) above Harbinger -- so it shed the Harbinger first.
+// (Without the rocks' mana, Titan / Flinger / Goliath would never be castable at all.)
+TEST_CASE("Giants discard D2: kept Sol Ring / Fire Diamond add mana from the turn they can be cast")
+{
+    const GameState s = MakeGiants({ kSol, kFD, kM, kTi, kFl, kTec, kGol, kHar }, Mountains(3), Lib(20, 0));
+    CHECK(GiD(s) == std::vector<int>{ 6, 7, 5, 1, 3, 2, 4, 0 });
+    CHECK(Gi(s)  == std::vector<int>{ 7, 6, 5, 1, 4, 2, 3, 0 });   // the table (=0)
+}
+
+// D3. Board 6 Mountains, no mana in hand: Har0 Gol1 Ti2 Fl3 Bo4 Bo5 Gr6 Sov7. Every Giant but Goliath (7)
+// is castable now. Goliath needs ONE drawn land; with 15 lands in a 20-card library P(by T1..T4) =
+// 1 - C(5,t)/C(20,t) = .75, .947368, .991228, .998968, so castability = .75 + .197368 x .75 + .043860 x
+// .5625 + .007740 x .421875 + .001032 x .006328 = .925969 and EV = 3.1059 x .925969 = 2.876 > Harbinger
+// 2.640: the Harbinger is the first spare. With no land in the library Goliath is stranded and sheds
+// first -- as under the table, which priced it 1 short at 0.70 (2.174).
+TEST_CASE("Giants discard D3: the library's land density decides how far one land short really is")
+{
+    const std::vector<std::string> hand = { kHar, kGol, kTi, kFl, kBo, kBo, kGr, kSov };
+    const GameState rich = MakeGiants(hand, Mountains(6), Lib(20, 15));
+    CHECK(GiD(rich) == std::vector<int>{ 0, 1, 5, 4, 7, 6, 3, 2 });
+    CHECK(Gi(rich)  == std::vector<int>{ 1, 0, 5, 4, 7, 6, 3, 2 });   // the table (=0)
+    const GameState dry = MakeGiants(hand, Mountains(6), Lib(20, 0));
+    CHECK(GiD(dry)  == std::vector<int>{ 1, 0, 5, 4, 7, 6, 3, 2 });
+}
+
+// D4. Board 3 Mountains + a Daredevil, hand Ti0 Ti1 Fl2 Har3 Gol4 M5 M6 Bo7, no land in the library.
+// Target 4 -> need 1, soft 2: both Mountains kept, mana 4 / 5 / 5 / 5. The model is given the cost AFTER
+// the Daredevil ({2} off) and CUMULATIVE for the 2nd Titan in hand: Titan 4 (T1, 7), Flinger 3 (T1,
+// 5.95), Harbinger 3 (T1, 2.64), Goliath 5 (T2, .75 x 3.11 = 2.33), 2nd Titan 8 (never, .044). Kept Ti,
+// Fl, Har; spares: the 2nd Titan, then Goliath. The table (reach 5) had Goliath castable (3.11) over
+// Harbinger and so kept it.
+TEST_CASE("Giants discard D4: the model prices the Daredevil-discounted, cumulative cost")
+{
+    std::vector<std::string> board = Mountains(3);
+    board.push_back(kDd);
+    const GameState s = MakeGiants({ kTi, kTi, kFl, kHar, kGol, kM, kM, kBo }, board, Lib(20, 0));
+    CHECK(GiD(s) == std::vector<int>{ 1, 4, 6, 7, 3, 2, 0, 5 });
+    CHECK(Gi(s)  == std::vector<int>{ 1, 3, 6, 7, 4, 2, 0, 5 });   // the table (=0)
 }

@@ -23344,14 +23344,20 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
 //            so it can only hurt us (two in one turn kill our own 1/3 Daredevil). First shed. This
 //            verdict rests on the OPPONENT MODEL, not the card: a blocking opponent must revisit it.
 //
-// DISTANCE TO CASTABLE orders the Giants -- EV = P(play) x value, the shape MinotaurProvider adopted
-// and the design names. value = 7 x 0.85^(position in the USER's order); P comes from how much mana
-// the card is still short of `reach` (board mana + hand lands + live hand rocks), with Minotaur's HARD
-// decay {1, .70, .35, .10, .03} and .02 beyond. A Daredevil IN PLAY takes {2} off every Giant, and the
-// discount STACKS per Daredevil (SUM, exactly as ManaPayment applies it) and is FLOORED at the coloured
-// pips (it reduces generic only, CR 601.2f): two Daredevils price Tectonic Giant at {R}{R} = 2, never 0.
-// A second copy must be paid for on top of the first (cumulative mana, counting copies in play), so a
-// spare Titan sinks on its own without a spare-copy rule.
+// DISTANCE TO CASTABLE orders the Giants -- EV = castability x value, value = 7 x 0.85^(position in
+// the USER's order). The castability is the shared model (discard_dist, docs/design/discard-distance-
+// model.md; USER 2026-10-10: "For Distance to castable I think it makes sense to have a smarter model if
+// we can."): P(castable by each of our next 4 turns) from the board's mana, the mana cards this ladder
+// KEEPS -- the lands as one land drop per turn, Sol Ring / Fire Diamond as extra mana from the turn the
+// board and kept lands can pay for them (an untapped rock nets produce - cost that turn, a tapped one
+// nothing until the next) -- and the library's land density, discounted 0.75 per turn of delay.
+// MTG_DISCARD_DIST_MODEL=0 restores the previous proxy exactly: Minotaur's HARD table {1, .70, .35, .10,
+// .03, .02} by mana short of `reach` (board mana + hand lands + live hand rocks, all at once).
+// Either way the cost is after the Daredevils IN PLAY: {2} off every Giant, STACKING per Daredevil (SUM,
+// exactly as ManaPayment applies it) and FLOORED at the coloured pips (it reduces generic only, CR
+// 601.2f): two Daredevils price Tectonic Giant at {R}{R} = 2, never 0. A second copy IN HAND must be
+// paid for on top of the first (cumulative mana), so a spare Titan sinks on its own; a copy already in
+// play is paid for and adds nothing.
 //
 // THE KEEP LADDER (interleaved, one card per slot; read BACKWARDS it is the tail of the shed order):
 //    1 MANA  2 GIANT  3 DAREDEVIL  4 MANA  5 GIANT  6 MANA  7 GREAVES  8 DAREDEVIL2  9 GIANT3 (soft)
@@ -23500,9 +23506,78 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
         for (int t = 2; t >= 0; --t)
         { for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == t) { dead_rocks.push_back(i); } } }
     }
-    // Reach for the distance term: every mana source on the board, plus every land and live rock held.
+    // The mana quotas (net of board). The ladder's MANA slots take the pick list in order while the hard
+    // need is unmet and MANA7 one past it -- independently of every other bucket -- so the mana cards it
+    // KEEPS are exactly the first min(|pick list|, mana_soft) entries; the distance model reads those.
+    const int mana_target = board_reducers > 0 ? 4 : 6;
+    const int mana_need   = std::max(0, mana_target - board_sources);       // hard, net of board
+    const int mana_soft   = std::max(0, mana_target + 1 - board_sources);   // + the soft 7th
+    // MTG_DISCARD_DIST_MODEL=0: reach for the table -- every mana source on the board, plus every land
+    // and live rock held, all counted at once.
     int reach = board_mana;
     for (int i : mana_pick) { reach += mana_of(def_of(ap.hand[static_cast<std::size_t>(i)])); }
+
+    // ---- 3b. the shared distance model's inputs (discard_dist) ------------------------------------
+    static const bool s_dist_env = EnvOn("MTG_DISCARD_DIST_MODEL", true);   // DEFAULT ON; =0 -> the table
+    const bool dist_model = heurarm::Flag(heurarm::DISCARD_DIST_MODEL, s_dist_env);
+    constexpr int kH = discard_dist::kHorizon;
+    discard_dist::Census census;
+    std::vector<discard_dist::LandDrop> kept_drops;   // the KEPT lands, one land drop per turn
+    std::array<int, kH> rock_extra{};                  // mana the KEPT rocks add by our t-th next turn
+    if (dist_model)
+    {
+        census = discard_dist::BuildCensus(s, me);
+        const std::size_t kept_n = std::min(mana_pick.size(), static_cast<std::size_t>(mana_soft));
+        std::vector<int> kept_rocks;                   // pick order: Sol Ring first, Fire Diamond last
+        for (std::size_t k = 0; k < kept_n; ++k)
+        {
+            const int i = mana_pick[k];
+            if (is_cls(i, C_LAND)) { kept_drops.push_back(discard_dist::LandDropOf(def_of(ap.hand[static_cast<std::size_t>(i)]))); }
+            else                   { kept_rocks.push_back(i); }
+        }
+        if (!kept_rocks.empty())
+        {
+            // When can a kept rock be cast? Deterministically, off the board and the kept lands only (no
+            // draws -- the conservative side): the lands go down one per turn, untapped first, and a
+            // tapped one adds nothing the turn it lands. Rocks are cast in pick order on the first turn
+            // the mana allows, each spending its cost; an untapped rock nets produce - cost that turn
+            // (Sol Ring: +1), a tapped one nothing until the next turn (Fire Diamond: +1 from then on).
+            // Agent reading: the rocks add MANA only, no colour (the helper's `extra` carries none).
+            std::vector<discard_dist::LandDrop> by_turn = kept_drops;
+            std::stable_sort(by_turn.begin(), by_turn.end(),
+                             [](const discard_dist::LandDrop& a, const discard_dist::LandDrop& b)
+                             { if (a.tapped != b.tapped) { return !a.tapped; } return a.mana > b.mana; });
+            std::array<int, kH> avail{};
+            for (int t = 1; t <= kH; ++t)
+            {
+                int m = census.board_mana;
+                for (int k = 0; k < t && k < static_cast<int>(by_turn.size()); ++k)
+                {
+                    const discard_dist::LandDrop& ld = by_turn[static_cast<std::size_t>(k)];
+                    if (k + 1 == t && ld.tapped) { continue; }
+                    m += ld.mana;
+                }
+                avail[static_cast<std::size_t>(t - 1)] = m;
+            }
+            for (int i : kept_rocks)
+            {
+                const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
+                const int  cost   = d->card.m_mana_cost.ManaValue();
+                const int  prod   = mana_of(d);
+                const bool tapped = d->params.enters_tapped;
+                for (int t = 1; t <= kH; ++t)
+                {
+                    const std::size_t ti = static_cast<std::size_t>(t - 1);
+                    if (avail[ti] < cost) { continue; }
+                    avail[ti] += (tapped ? 0 : prod) - cost;
+                    if (!tapped) { rock_extra[ti] += std::max(0, prod - cost); }
+                    for (std::size_t u = ti + 1; u < static_cast<std::size_t>(kH); ++u)
+                    { avail[u] += prod; rock_extra[u] += prod; }
+                    break;
+                }
+            }
+        }
+    }
 
     // ---- 4. the Giants, by discounted value -------------------------------------------------------
     // Behemoth's own param names the subtype it counts; nothing here hardcodes "Giant".
@@ -23575,10 +23650,13 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
         // Copies AHEAD IN HAND only (proposal P3 "copies_ahead"): a copy already in play is paid for,
         // so it adds nothing to this copy's distance (review finding 2026-10-09 -- charging it priced
         // a hand Inferno Titan beside a resolved one at 12 mana and shed the deck's best Giant first).
-        const int pos = value_pos(d->params);
+        const int pos  = value_pos(d->params);
+        const int cost = eff * (1 + copies);
+        const double cast = dist_model
+            ? discard_dist::CastFactorFor(census, *d, kept_drops, cost, &rock_extra)
+            : p_play(cost - reach);
         vpos[static_cast<std::size_t>(i)] = pos;
-        ev[static_cast<std::size_t>(i)]   = p_play(eff * (1 + copies) - reach)
-                                            * kVal[static_cast<std::size_t>(pos + 1)];
+        ev[static_cast<std::size_t>(i)]   = cast * kVal[static_cast<std::size_t>(pos + 1)];
         giants.push_back(i);
     }
     std::stable_sort(giants.begin(), giants.end(), [&](int a, int b)
@@ -23594,9 +23672,6 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
         L_MANA, L_GIANT, L_RED, L_MANA, L_GIANT, L_MANA, L_HASTE, L_RED, L_GIANT, L_MANA, L_BOLT,
         L_MANA, L_MANA, L_MANA7, L_BOLT
     };
-    const int mana_target = board_reducers > 0 ? 4 : 6;
-    const int mana_need   = std::max(0, mana_target - board_sources);       // hard, net of board
-    const int mana_soft   = std::max(0, mana_target + 1 - board_sources);   // + the soft 7th
     int red_need   = std::max(0, 2 - board_reducers);
     int haste_need = board_haste > 0 ? 0 : 1;
     std::vector<char> keep(un, 0);
