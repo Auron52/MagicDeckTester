@@ -410,6 +410,7 @@ enum Slot : int
     RITUAL_GUARD_APEX,        // MTG_RITUAL_GUARD_APEX the d0/rollout rituals-for-payoff guard keeps every ritual in a plan holding an impulse-exile spell (Apex of Power), as it already does for a storm tutor: Apex's value is its exile, funded by the mana left after it, so no ritual before it is surplus (with the accel-prefix collapse, calling the cheapest one surplus deleted every Apex line: s7600011). Default ON; =0 -> Apex judged as a fixed-cost payoff
     EXACT_WALK_CCO,           // MTG_EXACT_WALK_CCO the exact order walk (ExactOrderFirstUnpayable) treats a colored_creature_only source's units (Unclaimed Territory, Cavern of Souls) as {C} for a noncreature cast instead of wild, so it no longer reads a noncreature spell's coloured pip (Rite of Flame's {R}) as payable off the Territory. 0 of 400 paired Dragonstorm games moved. Default ON; =0 -> wild
     PAYABLE_ORDER_EXACT,      // MTG_PAYABLE_ORDER_EXACT MTG_PAYABLE_ORDER's apply site judges a PRODUCER-domain order (ritual float / same-turn rock, no maker or reveal cast) with the exact order walk for EVERY deck, not only a provider opting in via ExactOrderWalk(): the plain walk ignores a cast cap (Irencrag Feat -> "only one more spell", hinata d0 gi1427 T6) and pays a generic pip off an any-colour land a later cast needed (Sol Ring's {1} vs Gamble's {R}, hinata d0 gi1680 T7), so it permuted payable orders away. Default ON; =0 -> plain walk outside Dragonstorm
+    PAYABLE_ORDER_DYNAMIC_DECLINE, // MTG_PAYABLE_ORDER_DYNAMIC_DECLINE MTG_PAYABLE_ORDER keeps an order holding a cast with a live DYNAMIC per-target discount (Hinata, Dawn-Crowned; Soulfire) as given -- its stamped cost is only right at the position the enumeration gave it -- the rule LadderProjectable already applies. Both sites. Default ON; =0 -> walked like any other order
     COUNT
 };
 
@@ -781,6 +782,7 @@ inline const char* Name(int slot)
         "MTG_RITUAL_GUARD_APEX",
         "MTG_EXACT_WALK_CCO",
         "MTG_PAYABLE_ORDER_EXACT",
+        "MTG_PAYABLE_ORDER_DYNAMIC_DECLINE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
