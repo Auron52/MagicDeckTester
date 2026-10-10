@@ -403,6 +403,7 @@ enum Slot : int
     PAYABLE_ORDER_RITUALS,    // MTG_PAYABLE_ORDER_RITUALS  MTG_PAYABLE_ORDER's domain admits an apply-site order holding a PRODUCING cast the projection walk credits (a mana ritual, a same-turn rock, a spendable Treasure mint), not only an ETB-Treasure maker / reveal-or-pay cast: a producer's position changes payability (same doc). Default ON; =0 -> the maker / reveal domain only
     SOLVE_VERIFIED_WIN,       // MTG_SOLVE_VERIFIED_WIN      Solve (d0 + rollout leaves): a trial-VERIFIED COMBO OFF route win outranks a merely PROJECTED win, and short-circuits the walk (EDF gi 671; docs/design/discard-round-play-defects-2026-10-10.md s3). Default ON; =0 -> the old (projected win, value, mask) order
     EDF_GORGE_RED_SIZING,     // MTG_EDF_GORGE_RED_SIZING    FlickerGoOffCount: the Gorge's life/damage count returns early only when every loop iteration renews a red source; one-shot red makes it a floor under the other routes' sizing (EDF gi 671). Autonomous play only. Default ON; =0 -> the unconditional early return
+    SOLVE_PENDING_AURA_EXACT, // MTG_SOLVE_PENDING_AURA_EXACT Solve: an in-hand land Aura's colour credit applies only to a subset that casts a land Aura (and that subset must pass the real payer); stops a phantom {W} Displacer freezing the d0 runner (EDF gi 1261; defects doc s4). Default ON; =0 -> the widened gates
     COUNT
 };
 
@@ -767,6 +768,7 @@ inline const char* Name(int slot)
         "MTG_PAYABLE_ORDER_RITUALS",
         "MTG_SOLVE_VERIFIED_WIN",
         "MTG_EDF_GORGE_RED_SIZING",
+        "MTG_SOLVE_PENDING_AURA_EXACT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

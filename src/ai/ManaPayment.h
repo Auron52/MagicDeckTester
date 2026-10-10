@@ -400,8 +400,10 @@ void BuildColorDemandIndex(const std::vector<Action>& cands, ColorDemandIndex& o
 // reused for every subset; only the per-subset credit varies. `noncreature` builds the counterpart
 // of BuildNonCreaturePool -- creature-only sources dropped -- because the flat pool runs that same
 // narrower test (eff_nc.CanPay) and carries the same colour-blind phantom inside it.
+// `pending_auras` = false drops the in-hand land-Aura credit (PendingLandAuraColorMask) -- the
+// BOARD-ONLY gate Solve applies to a subset that casts no land Aura (MTG_SOLVE_PENDING_AURA_EXACT).
 ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature = false,
-                                       const Permanent* skip = nullptr);
+                                       const Permanent* skip = nullptr, bool pending_auras = true);
 
 // The same-turn mana a subset credited on top of the board pool, i.e. `eff` minus `base` per colour
 // (clamped at zero). The enumerators only ever ADD to their credited pool -- the sequenced-ritual

@@ -219,3 +219,25 @@ TEST_CASE("EDF d0: a renewed red source keeps the Gorge's own count (MTG_EDF_GOR
     REQUIRE(!v.empty());
     CHECK(*std::max_element(v.begin(), v.end()) == 10);
 }
+
+// ---- 3. MTG_SOLVE_PENDING_AURA_EXACT -----------------------------------------------------------------
+// The gi 1261 board: Aether Hub with no energy ({C} only), Mariposa Military Base ({C}), Kitchen ({G} or
+// {U}). Nothing makes {W}. The Fertile Ground in HAND widened both colour gates to every colour, and the
+// flat pool counts the Kitchen dual as `wild`, so {Eldrazi Displacer} alone (eval 300) read as payable
+// and won the ranking; the executor could not pay {W} and the turn was empty. The real line is Fertile
+// Ground (on the Hub) then Cloud of Faeries off the Aura's extra mana.
+TEST_CASE("EDF d0: an in-hand land Aura does not make an uncast {W} payable (MTG_SOLVE_PENDING_AURA_EXACT)")
+{
+    EdfBoard b = MakeBoard(
+        { "Eldrazi Displacer", "Eldrazi Displacer", "Fertile Ground", "Fertile Ground", "Cloud of Faeries" },
+        { { "Aether Hub" }, { "Mariposa Military Base" }, { "Kitchen" } },
+        Filler(20), /*opp_life=*/20, /*energy=*/0);
+
+    const TurnSolver::Plan off = SolveArm(b.s, heurarm::SOLVE_PENDING_AURA_EXACT, 0);
+    const TurnSolver::Plan on  = SolveArm(b.s, heurarm::SOLVE_PENDING_AURA_EXACT, 1);
+
+    CHECK_MESSAGE(Casts(off, "Eldrazi Displacer"), "precondition: the widened gates admit the phantom {W}");
+    CHECK_FALSE(Casts(on, "Eldrazi Displacer"));
+    CHECK(Casts(on, "Fertile Ground"));
+    CHECK(Casts(on, "Cloud of Faeries"));
+}

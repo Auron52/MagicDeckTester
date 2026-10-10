@@ -6162,7 +6162,7 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     return p;
 }
 
-static void ComputeAvailableColors(const GameState& state, bool have[5])
+static void ComputeAvailableColors(const GameState& state, bool have[5], bool pending_auras = true)
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
     int active = state.active_player_index;
@@ -6309,6 +6309,9 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
     // A land AURA still in HAND supplies its colours once the plan casts it -- the same state-only
     // blindness the domain widen above repairs, for the one source a plan can INSTALL mid-turn. Zero
     // mask for every deck holding none, so this is inert outside EDF. See PendingLandAuraColorMask.
+    // `pending_auras` = false is the BOARD-ONLY form (MTG_SOLVE_PENDING_AURA_EXACT in Solve): what
+    // the colours are for a subset that casts no land Aura, where this widening cannot apply.
+    if (!pending_auras) { return; }
     if (const int pm = PendingLandAuraColorMask(state))
     {
         for (int i = 0; i < 5; ++i) { if (pm & (1 << i)) { have[i] = true; } }
@@ -34695,6 +34698,52 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     ColorDemandIndex colour_demand;
     BuildColorDemandIndex(cands, colour_demand);
 
+    // THE IN-HAND LAND AURA'S COLOUR CREDIT, MADE EXACT FOR THE GREEDY PICK
+    // (MTG_SOLVE_PENDING_AURA_EXACT, DEFAULT ON; =0 restores the widened gates byte-identically).
+    //
+    // Both colour gates above are WIDENED by every land Aura still in hand (PendingLandAuraColorMask):
+    // a Fertile Ground in hand makes every colour "available" to every subset, whether or not the
+    // subset casts it. Their own justification is that they are pre-filters -- "an over-admitted
+    // subset is priced by the real payer and dropped at apply time". That holds for EnumeratePlans,
+    // whose plans a rollout replays. It does NOT hold here: Solve's pick IS the plan the d0 runner
+    // (and every rollout leaf) executes, so an over-admitted subset is not dropped, it is PLAYED --
+    // and the executor then cannot pay it and casts nothing. (The Medallion credit is kept out of
+    // Solve for exactly this reason; see the NOTE above `any_splice`.)
+    //
+    // EDF gi 1261 (seed 218462, d0) froze from turn 4 to turn 8: board Aether Hub (no energy) +
+    // Mariposa ({C}) + Kitchen ({G}/{U}), hand two Eldrazi Displacers ({2}{W}) beside Fertile Ground
+    // and Cloud of Faeries. The flat pool counts the Kitchen dual as `wild`, the presence gate and the
+    // colour-exact gate both credited {W} off the Fertile Ground in HAND, so {Displacer} alone (eval
+    // 300) was "payable" and outranked every real line (Fertile Ground + Cloud, also 300, loses the
+    // mask tie). The executor could not pay {W}, so the turn was empty -- every turn, since the hand
+    // that produced it never changed.
+    //
+    // Fix: the widening applies only to a subset that CASTS a land Aura. A subset that fails the
+    // BOARD-ONLY gates is rejected outright when it casts no Aura (nothing it does can install the
+    // colour), and otherwise must pass the real payment (SubsetPayableWithFilters -- the executor's own
+    // TapForCostDirect on a copy, which installs the Aura before the casts it funds). Built only when a
+    // land Aura is pending, so every deck without one (all but EDF) is byte-identical.
+    static const bool s_aura_exact_env = EnvOn("MTG_SOLVE_PENDING_AURA_EXACT", true);
+    const bool aura_exact = heurarm::Flag(heurarm::SOLVE_PENDING_AURA_EXACT, s_aura_exact_env)
+                         && PendingLandAuraColorMask(state) != 0;
+    bool have_colors_board[5] = { false, false, false, false, false };
+    ColorFeasibility colour_feas_board, colour_feas_nc_board;
+    std::vector<unsigned char> cand_land_aura;
+    if (aura_exact)
+    {
+        ComputeAvailableColors(state, have_colors_board, /*pending_auras=*/false);
+        colour_feas_board    = BuildColorFeasibility(state, /*noncreature=*/false, nullptr, /*pending_auras=*/false);
+        colour_feas_nc_board = BuildColorFeasibility(state, /*noncreature=*/true,  nullptr, /*pending_auras=*/false);
+        cand_land_aura.assign(cands.size(), 0);
+        for (std::size_t j = 0; j < cands.size(); ++j)
+        {
+            const Action& la = cands[j];
+            if (la.kind == Action::Kind::CastFromHand && la.def && la.def->params.is_land_aura
+                && la.def->params.land_aura_extra_mana > 0)
+            { cand_land_aura[j] = 1; }
+        }
+    }
+
     // Learned mid-game evaluator (per-deck, MTG_EVAL_MODEL-gated): when attached it RANKS non-lethal
     // plans by predicted win-turn in place of the EvalCard sum. nullptr in every default run
     // (no sidecar OR flag off) -> rank_value == total_eval below -> byte-identical. learned-d0-policy.md.
@@ -35356,6 +35405,31 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
             mc_store_reject();
             return;
+        }
+        // MTG_SOLVE_PENDING_AURA_EXACT (see aura_exact): re-ask the two gates WITHOUT the in-hand Aura
+        // credit. Flat path only, like the gates themselves -- a rescued subset was already judged by
+        // the real payer. The cache key (the group-part mask) covers every hand cast, so a cached
+        // verdict already carries this answer.
+        if (aura_exact && !mc_hit && mana_ok)
+        {
+            bool have_rock_b[5];
+            const bool* have_b = WidenHaveWithSubsetRocks(have_colors_board, have_rock_b, cands, sel,
+                                                          /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
+                                                          /*any_rock_cand=*/any_rock);
+            const bool board_ok =
+                SubsetPayable(have_b, cands, sel, &colour_demand)
+                && !(colour_feas_board.usable
+                     && !colour_feas_board.Payable(cands, sel, PoolCredit(pool, eff),
+                                                   /*noncreature_only=*/false, &colour_demand))
+                && !(colour_feas_nc_board.usable
+                     && !colour_feas_nc_board.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
+                                                      /*noncreature_only=*/true, &colour_demand));
+            if (!board_ok)
+            {
+                bool casts_aura = false;
+                for (int j : sel) { if (cand_land_aura[static_cast<std::size_t>(j)]) { casts_aura = true; break; } }
+                if (!casts_aura || !SubsetPayableWithFilters(state, cands, sel)) { mc_store_reject(); return; }
+            }
         }
         if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
         if (enumstats::Enabled()) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
