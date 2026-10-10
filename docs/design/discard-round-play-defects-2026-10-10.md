@@ -18,6 +18,20 @@ The solver judges the Paragon payable and the executor cannot pay it. Unconfirme
 Sanctuary's `produces ["G","W"]`, `produces_amount 2` read as two flexible G/W mana where the executor
 pays one colour. Owed: trace the solver's affordability verdict against the executor's payment.
 
+**ROOT-CAUSED AND FIXED (branch fix-selesnya-d0, lever `MTG_COLOR_EXACT_SCALED`, default ON; pooled
+A/B owed).** The guess was half right. Board T4-T8: Sanctuary, Branchloft Pathway (G face), Llanowar
+Elves, Wellwisher, an untapped Elvish Archdruid -- ONE white source. Solver side: the flat pool books
+the Karoo's fixed {G}{W} as two WILD (`AddSourceToPool`, `SpellEffects.h` ~26127), so `{g5, wild2}`
+passes `pool.CanPay({4}{W}{W})`; `SubsetPayable` is a presence test (a {W} source exists); and the one
+gate that prices a Karoo exactly, `BuildColorFeasibility`, returned `usable = false` for the WHOLE board
+because an untapped scaled mana dork (the Archdruid) was on it (`ManaPayment.cpp` 3553 at c77cffb5).
+Payment side (correct, per the card): `TapSourceIntoFloat` (`ManaPayment.cpp` ~560) and the
+backtracker's `bundle_src` (`SpellEffects.cpp` 3931) add exactly one {G} and one {W}; the flow oracle
+(`SpellEffects.cpp` 2440) proves it infeasible, so nothing is tapped or cast. Fix: the gate no longer
+stands down for a scaled dork or a live Wirewood Lodge burst; it credits them an unbounded count in
+their own colours (their yield is unbounded within a plan, their colours are not) and stays exact for
+everything else. `MTG_COLOR_EXACT_PROBE=2` over 100 d0 games: 24 rejects, 0 false rejects.
+
 ## 2. SelesnyaLifegain, depth 0: a non-mana {T} ability is not discounted from the attack
 
 Same game, policy arm, turn 8: the plan "Genesis Wave X=4" was projected lethal (6 damage - 4 for the
@@ -27,6 +41,20 @@ so nothing could attack. `consider()` subtracts only creatures tapped FOR MANA (
 same plan is not. SelesnyaLifegain does not opt into the board-lethal short-circuit
 (`DecisionProvider.h` ~1574). Inferred from the arithmetic, not traced. Fix sketch: count {T} non-mana
 activations in the attack-tap loss.
+
+**FIXED (branch fix-selesnya-d0; pooled A/B owed), and the arithmetic above was wrong in one place:**
+the mana discount did not subtract 4 -- it subtracted nothing. Its `need` was `cost -
+pool_noncreature.Total()`, and `BuildNonCreaturePool` is the pool for NONCREATURE SPELLS (it keeps every
+mana dork), so need = 7 - 7 = 0 and the projection read the full 6. That discount has been dead on every
+board whose dorks finish the payment since it was added (92c7ce07). Two levers, both default ON, both
+in `AttackTapLoss` (`TurnSolver.cpp`, used by Solve's and EnumeratePlans' `consider`):
+`MTG_ATTACK_TAP_NEED_EXACT` (need = cost beyond every source that is not an attacking creature mana
+source; 0 post-combat) and `MTG_ATTACK_TAP_ABILITY_DISCOUNT` (re-project the board with the plan's
+{T}-activated attackers tapped). Either alone still reads the T8 plan as lethal.
+
+Repro game (gi 344): policy OFF 8 -> 6, policy ON unwon -> 6 (each fix alone: 7 / 7; all levers =0
+reproduces the old games byte-identically). 100 d0 games (seed 600001, paired): -8 turns, 7 better /
+0 worse.
 
 ## 3. EldraziDisplacerFlicker, depth 0: an unverified projected win outranks the verified combo route
 
