@@ -52,7 +52,11 @@ one card and may play one land.
   stated approximation.)
 * **Castability factor** = sum over `t` of (`P_by(t)` - `P_by(t-1)`) x `gamma^(t-1)`, `gamma = 0.75` per
   turn of delay; a card not castable within `H` turns keeps a floor of `0.02 x gamma^H` so the stranded
-  still order by value. The deck combines it with its own value: **EV = factor x value**.
+  still order by value. The deck combines it with its own value: **EV = factor x value**. Where the
+  deck's value is an authored ORDER (Angels, CritterLifegain, Giants), value = 0.85^position, so one
+  place in the order is worth about half a turn of delay. USER 2026-10-10: *"That is an empirical value.
+  I don't know the answer myself ... testing it also won't give us an easy value because discards are
+  so rare. I guess we can stick with it if you think the number seems reasonable."* -- kept.
 * **Duplicates**: the k-th copy in hand pays for the copies ahead of it in hand (Minotaur's cumulative
   rule); a copy already in play is paid for and adds nothing.
 
