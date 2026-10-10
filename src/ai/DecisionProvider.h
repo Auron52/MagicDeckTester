@@ -2371,6 +2371,17 @@ public:
     // (unpruned) plan set; MTG_UNPRUNED / MTG_UNPRUNE=saclandhold reopens it for burn too.
     virtual bool HoldsSacLandBurnUntilLethal() const { return false; }
 
+    // HoldCastUnlessLethal -- a cast the deck HOLDS unless the plan that casts it wins THIS turn. Asked
+    // once per candidate by BOTH subset walks (Solve's consider and EnumeratePlans', lockstep); a subset
+    // holding a flagged cast whose projection is not lethal -- the walks' own `wins`: every cast's
+    // direct damage + this turn's attack, on a subset that already passed payability -- is dropped,
+    // exactly the HoldSacLandBurn shape. This is how a "keep it for the combo" rule asks "does casting
+    // it now win?" with the engine's own damage and payability machinery rather than a private
+    // estimate (Hinata's lone Crackle, MTG_HINATA_HOLD_LETHAL_BURN: a Magma Opus or Soulfire co-cast
+    // can make the turn lethal). Base false -> every deck is byte-identical.
+    virtual bool HoldCastUnlessLethal(const GameState& /*s*/, const CardDefinition& /*def*/) const
+    { return false; }
+
 
     // ScaledCastVariants -- SCALED-CAST variants: for a spell whose cost depends on how much output it
     // commits, the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
