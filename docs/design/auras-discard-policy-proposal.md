@@ -154,10 +154,10 @@ with 2 Plains in a 10-card library and none in play: 0.479; {W}{W}: 0.075; {W}{W
 within reach, and a castable 1/1 beating a {W} 2/1 for the creature slot. Every board checks both arms,
 `=0` included, and prefix stability under each.
 
-Open for the USER (not applied): the cross-deck ruling *"Creature quotas are less worried about the board
-than land quotas"* would make the Auras creature slot fill from the hand even with a creature in play.
-The SETTLED design says "1 creature (counting board)", and this round's brief did not ask for the
-change, so the slot still counts the board.
+RESOLVED (USER 2026-10-10): the Auras creature slot keeps COUNTING THE BOARD -- the deck-specific
+exception to the cross-deck "creature quotas from the hand" ruling. USER: *"For Auras the creature slot
+should count the board only because you need space for Auras and they matter more."* A creature in play
+fills the slot, so a hand creature is spare and the room goes to Auras. As built; no code change.
 
 ---
 

@@ -601,13 +601,12 @@ TEST_CASE("EDF discard W6: with a draw source already in PLAY, the hand's draw l
     CHECK(Gen(s).front() == 2);   // generic: Drake
 }
 
-TEST_CASE("EDF discard W7: a castable finisher in hand holds the slot -- the draw land is then a spare land (agent reading)")
+TEST_CASE("EDF discard W7: a castable finisher in hand holds the slot -- the draw land is then a spare land")
 {
-    // Agent reading of "our ONLY win-con/draw source": the size-1 WIN CON bucket, which a finisher
-    // and a draw land fill alike ("win con (this includes any draw source)"). With a castable
-    // Dimensional Infiltrator AND a Mariposa in hand, the Infiltrator holds the slot (distance 0,
-    // finisher first on the tie) and the Mariposa is a spare: a land, past the 4th here. If the USER
-    // means "the only DRAW source" instead, this board is the one that flips (Mariposa kept).
+    // "Our ONLY win-con/draw source" = the size-1 WIN CON bucket, which a finisher and a draw land fill
+    // alike -- CONFIRMED by the USER 2026-10-10: "the win-con and draw source take the same slot". With
+    // a castable Dimensional Infiltrator AND a Mariposa in hand, the Infiltrator holds the slot
+    // (distance 0, finisher first on the tie) and the Mariposa is a spare: a land, past the 4th here.
     // SHED: Mariposa, Brushland (past the 4th, worst first) | Wish | Fertile, WG | Infiltrator | Drake |
     // Displacer.
     const GameState s = MakeEdf(

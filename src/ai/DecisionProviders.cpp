@@ -34784,8 +34784,18 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     { return d != nullptr && (makes_g(d->params.produces) || makes_g(d->params.mdfc_back_produces)); };
     auto is_karoo = [](const CardDefinition* d) { return d != nullptr && d->params.etb_bounce_land; };
     auto is_dork  = [](const CardDefinition& d) { return d.card.IsCreature() && !d.params.produces.empty(); };
-    auto dork_rank = [](const CardParams& p) -> int   // Priest > Archdruid > Llanowar = Mystic > Alchemist
+    // THE ALCHEMIST PACKAGE (USER 2026-10-10: "Accomplished Alchemist is more acceleration than payoff.
+    // However, it is a good keep with lifegain burst + something expensive like Genesis Wave."; lever
+    // MTG_SELESNYA_ALCHEMIST_BURST, default ON). Set after the partition: the hand holds the Alchemist,
+    // a lifegain burst (a LIFEGAIN card -- Feed the Clan, Wellwisher) and an expensive payoff (Genesis
+    // Wave, or a payoff costing 6+). Then the burst fills LIFEGAIN 1 even with no lifegain payoff, and
+    // the Alchemist ranks FIRST among the Elves: the first Elf kept when it is castable next turn; when
+    // it is not, the two-turn Elf window keeps it above the soft payoff like any Elf (agent readings of
+    // "burst" and "expensive").
+    bool alch_pkg = false;
+    auto dork_rank = [&alch_pkg](const CardParams& p) -> int   // Priest > Archdruid > Llanowar = Mystic > Alchemist
     {
+        if (alch_pkg && p.mana_per_life_gained) { return -1; }
         if (!p.mana_per_creature_subtype.empty()) { return p.mana_per_creature_count_all ? 0 : 1; }
         return p.mana_per_life_gained ? 3 : 2;
     };
@@ -34919,6 +34929,20 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         else if (is_dork(*d))            { dorks.push_back(i); }
         else if (is_lifegain_card(*d))   { lifegain.push_back(i); }
         else                             { other.push_back(i); }
+    }
+    {
+        static const bool s_alch = EnvOn("MTG_SELESNYA_ALCHEMIST_BURST", true);   // DEFAULT ON; =0 -> as first built
+        if (heurarm::Flag(heurarm::SELESNYA_ALCHEMIST_BURST, s_alch) && !lifegain.empty())
+        {
+            bool alch = false, expensive = false;
+            for (int i : dorks)   { if (defs[at(i)]->params.mana_per_life_gained) { alch = true; } }
+            for (int i : payoffs)
+            {
+                const CardDefinition& d = *defs[at(i)];
+                if (pay_kind(d) == P_WAVE || d.card.m_mana_cost.ManaValue() >= 6) { expensive = true; }
+            }
+            alch_pkg = alch && expensive;
+        }
     }
     std::stable_sort(dead.begin(), dead.end(), [&](int a, int b)   // the dead Sanctuary first
     {
@@ -35149,7 +35173,7 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         return ra < rb;
     });
     // A Wellwisher in play fills no LIFEGAIN slot (USER 2026-10-10: creature quotas are filled from the hand).
-    const int lg_quota = (board_lg_payoff || holding_lg_payoff) ? 1 : 0;
+    const int lg_quota = (board_lg_payoff || holding_lg_payoff || alch_pkg) ? 1 : 0;   // + the Alchemist package
     const int kept_lg  = (lg_quota > 0 && !lifegain.empty()) ? lifegain.front() : -1;
     // The kept lifegain card is the ONLY source enabling a kept Paragon / Ageless: ladder it right
     // after the first such payoff, so the pair gives way together.

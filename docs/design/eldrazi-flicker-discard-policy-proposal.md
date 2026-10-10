@@ -124,8 +124,12 @@ untapper and the flicker source). Pinned by seven new boards in the test file (2
 - W4: an Infiltrator with no opponent library is not live, so the Mariposa stays the only win con;
 - W5: Shivan Gorge with red (a Fertile Ground in play) as the only win con, past the 4th land;
 - W6: a draw source already IN PLAY fills the slot, so the hand's draw land is a spare land (R8);
-- W7 (agent reading of "only"): a castable finisher in hand holds the size-1 slot and a draw land
-  beside it is a spare land. If the USER meant "the only DRAW source", this is the board that flips.
+- W7: a castable finisher in hand holds the size-1 slot and a draw land beside it is a spare land.
+  CONFIRMED (USER 2026-10-10): *"For EDF the win-con and draw source take the same slot. The reason is
+  because you can draw into another living wish. If you have neither, though, you are stuck. So
+  typically you would allocate a living wish in hand to a missing slot which means that you may not have
+  it available for the win-con slot. This is fine and expected."* (As built: a Wish fills the first
+  missing slot in ladder order, flicker -> untapper -> win con, R7.)
 
 
 #### USER rulings (2026-10-10) on the implementation readings

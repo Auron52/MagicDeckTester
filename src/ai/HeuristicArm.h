@@ -392,6 +392,7 @@ enum Slot : int
     AURA_RESTRICTED_NEW_CREATURE,// MTG_AURA_RESTRICTED_NEW_CREATURE a restricted Aura (Daybreak Coronet / Lion Umbra) is offered onto a creature cast the SAME turn, enabled by a plain Aura cast on it first (docs/design/auras-same-turn-restricted-aura-gap.md). Default ON; =0 -> never enumerated
     EDF_OUTLET_PIPS,          // MTG_EDF_OUTLET_PIPS       EDF discard: a flicker source in hand / library pays 2 per {W} pip our white sources (board lands and their land Auras, the kept hand lands) cannot cover, so the outlet closer to castable outranks "Displacer if 2+ colourless, else Emiel" (as first built, one {C} source shed both Displacers for an Emiel the deck could not cast). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     SELESNYA_ELF_WINDOW,      // MTG_SELESNYA_ELF_WINDOW   SelesnyaLifegain discard: an Elf castable within two turns (mana value <= the projected M2) is kept ABOVE the soft payoff(s) instead of shed as surplus past the mana target (an agent reading: the dearest kept payoff's cost, floor 5) (as first built it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
+    SELESNYA_ALCHEMIST_BURST, // MTG_SELESNYA_ALCHEMIST_BURST SelesnyaLifegain discard, USER 2026-10-10: "Accomplished Alchemist is more acceleration than payoff. However, it is a good keep with lifegain burst + something expensive like Genesis Wave." With the Alchemist, a LIFEGAIN card and Genesis Wave / a 6+ payoff in hand, the Alchemist is the first Elf and the burst fills LIFEGAIN 1. Default ON; =0 -> as first built
     GIANTS_ROCK_LIBRARY_LAND, // MTG_GIANTS_ROCK_LIBRARY_LAND Giants discard: a mana rock is "dead" only when no land is in play, in hand OR left in the library (a proposed amendment of the USER's "a rock with no land anywhere is blank" -- it shed Sol Ring on landless turn-2 hands with a Mountain on the next draw). Default OFF (the USER's rule as built) until the USER rules
     COUNT
 };
@@ -746,6 +747,7 @@ inline const char* Name(int slot)
         "MTG_AURA_RESTRICTED_NEW_CREATURE",
         "MTG_EDF_OUTLET_PIPS",
         "MTG_SELESNYA_ELF_WINDOW",
+        "MTG_SELESNYA_ALCHEMIST_BURST",
         "MTG_GIANTS_ROCK_LIBRARY_LAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
