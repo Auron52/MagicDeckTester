@@ -380,3 +380,55 @@ TEST_CASE("Fungus discard F11: a staged card is never named by the policy and so
     CHECK(std::find(o.begin(), o.end() - 1, 2) == o.end() - 1);
     CHECK(o == std::vector<int>{ 8, 7, 3, 4, 5, 6, 1, 0, 2 });
 }
+
+// ---- USER 2026-10-10, cross-deck: "Colour beats the land count is correct." --------------------------
+// A land that gives a KEPT spell a colour nothing on the board or already kept provides is kept even past
+// the mana quota, right behind that spell in the ladder (so it gives way just before the spell).
+
+// Candidate B: 5 Forests in play -> need 0, so by the quota every hand land is surplus. But Slimefoot
+// ({1}{B}{G}) is kept (beyond the core) and nothing makes black: the Peat Bog is kept right behind it, and
+// Deathspore ({1}{B}) then needs nothing more. Ladder: Mycoloth (tier), Mycon, Sporecrown, Slimefoot,
+// Peat Bog, Thallid, Deathspore, Tukatongue. Backwards: Tukatongue, Deathspore, Thallid, Peat Bog,
+// Slimefoot, Sporecrown, Mycon, Mycoloth. (The quota alone shed the Peat Bog FIRST.)
+TEST_CASE("Fungus discard F14: a black land for Slimefoot is kept past the mana quota (candidate B)")
+{
+    const GameState s = MakeFungus(
+        { "Peat Bog", kSlimefoot, "Sporecrown Thallid", "Thallid", "Mycoloth", "Utopia Mycon",
+          "Deathspore Thallid", "Tukatongue Thallid" },
+        { "Forest", "Forest", "Forest", "Forest", "Forest" });
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 7, 6, 3, 0, 1, 2, 5, 4 });
+    CHECK(Gen(s).front() == 4);   // generic sheds Mycoloth
+    CheckPrefixStable(s);
+}
+
+// The BEST such land in the land keep order: Secluded Courtyard (untapped; its colours pay creature
+// spells, and Slimefoot is one) comes before the Peat Bog (enters tapped), so the Courtyard is kept
+// behind Slimefoot and the Peat Bog and the Forest stay surplus. Ladder: Mycoloth, Mycon, Sporecrown,
+// Slimefoot, Courtyard, Thallid. (The quota alone shed all three lands first: [0, 7, 2, ...].)
+TEST_CASE("Fungus discard F15: the best colour land is kept -- Secluded Courtyard pays a creature's black")
+{
+    const GameState s = MakeFungus(
+        { "Peat Bog", kSlimefoot, "Secluded Courtyard", "Sporecrown Thallid", "Mycoloth", "Utopia Mycon",
+          "Thallid", "Forest" },
+        { "Forest", "Forest", "Forest", "Forest", "Forest" });
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 0, 7, 6, 2, 1, 3, 5, 4 });
+    CHECK(Gen(s).front() == 4);
+    CheckPrefixStable(s);
+}
+
+// The shipped all-green 60: every spell is green and green is on the board, so the rule keeps nothing
+// extra -- the surplus Chamber and Forests shed exactly as the quota says (Chamber first: the land keep
+// order puts the Karoo last). Ladder: Season, Mycoloth, Thallid (no Mycon), Sporecrown, Warden.
+TEST_CASE("Fungus discard F16: the colour rule is inert on the shipped all-green list")
+{
+    const GameState s = MakeFungus(
+        { "Forest", "Simic Growth Chamber", "Forest", "Sporecrown Thallid", "Thallid", "Mycoloth",
+          "Doubling Season", "Essence Warden" },
+        { "Forest", "Forest", "Forest", "Forest", "Forest" });
+    const std::vector<int> o = Fu(s);
+    CHECK(o == std::vector<int>{ 1, 2, 0, 7, 3, 4, 5, 6 });
+    CHECK(Gen(s).front() == 5);   // generic sheds Mycoloth
+    CheckPrefixStable(s);
+}
