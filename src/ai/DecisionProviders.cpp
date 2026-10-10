@@ -5677,6 +5677,21 @@ std::string AurasProvider::SelectDigSource(const GameState& s, const ManaPool& p
 //   (g) Ties inside a shed class go by hand order, earliest first.
 //   (h) Kor Spiritdancer's +2/+2 per Aura on it is not part of an Aura's value: it is the same for
 //       every Aura in the hand (proposal 9). Toughness and lifelink are 0 by the design (section 3).
+// USER 2026-10-10: "In auras we should keep Light-Paws as it is the superior engine." -- (a) confirmed.
+//
+// DISTANCE TO CASTABLE (USER 2026-10-10: "For Distance to castable I think it makes sense to have a
+// smarter model if we can."): the shared discard_dist model (docs/design/discard-distance-model.md),
+// behind MTG_DISCARD_DIST_MODEL (default ON; =0 reproduces the order above exactly). Inside the USER's
+// tiers -- never across them -- it weighs:
+//   * a useful Aura by EV = rate x CastFactor (a Daybreak Coronet's {W}{W} with one white source in
+//     reach is far from castable, a {G} Aura with Forests out is not);
+//   * the creature slot and the spare plain creatures by EV = power x CastFactor inside a tier
+//     (Light-Paws > Kor > plain bodies stays fixed), ties to the nearer card, then the cheaper.
+// The factor reads BuildCensus once and the HARD lands as the kept land drops (agent reading (i):
+// the soft 4th land and the lands beyond it shed before every card the factor orders, so counting them
+// would make the order depend on cards already gone -- not prefix-stable). Each drop carries the
+// land's state-dependent tapped-ness (a fastland past its count) and a Pathway's back colour
+// (reading (e)), which LandDropOf's params alone do not see.
 //
 // PREFIX-STABLE (CleanupDiscardShedStable's default): no card's class depends on a card that sheds
 // before it -- which is why a stranded Aura counts neither as an enabler nor as the dead Mask's
@@ -5759,6 +5774,7 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
         int      mv = 0, marg = 0;   // marg: an Aura's live power if cast now (see section 3)
         char     cls = K_STAGED, sub = A_USEFUL, land_rank = 0, land_slot = L_BEYOND;
         unsigned bits = 0;           // a hand land's W/G cover
+        double   fac = 1.0;          // discard_dist CastFactor (section 5b); unread when the model is off
     };
     std::vector<Info> info(static_cast<std::size_t>(n));
     bool creature_in_hand = false, scaler_in_hand = false;
@@ -5921,8 +5937,55 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     for (int k = 0; k < hl; ++k)
     { info[land_keep[k]].land_slot = k < hard_n ? L_HARD : k < hard_n + soft_n ? L_SOFT : L_BEYOND; }
 
+    // ---- 5b. distance to castable: the shared discard_dist model (MTG_DISCARD_DIST_MODEL) -------------
+    // CastFactor in [0, 1] for every card the model orders: the useful Auras and the creatures. Off, every
+    // factor stays out of the comparators below and the order is the rate / power order exactly.
+    static const bool s_dist = EnvOn("MTG_DISCARD_DIST_MODEL", true);   // DEFAULT ON; =0 -> the proxies
+    const bool dist_on = heurarm::Flag(heurarm::DISCARD_DIST_MODEL, s_dist);
+    auto modelled = [&](int i)
+    {
+        const char c = info[i].cls;
+        return (c == K_AURA && info[i].sub == A_USEFUL) || c == K_TUTOR || c == K_DRAWER || c == K_PLAIN;
+    };
+    bool any_modelled = false;
+    for (int i = 0; i < n && !any_modelled; ++i) { any_modelled = modelled(i); }
+    if (dist_on && any_modelled)
+    {
+        const discard_dist::Census census = discard_dist::BuildCensus(s, me);
+        std::vector<discard_dist::LandDrop> kept;   // the HARD lands -- agent reading (i)
+        kept.reserve(static_cast<std::size_t>(hard_n));
+        for (int k = 0; k < hard_n; ++k)
+        {
+            const Info& f = info[land_keep[k]];
+            discard_dist::LandDrop ld = discard_dist::LandDropOf(f.d);
+            ld.tapped = f.land_rank == 0;   // LandWouldEnterTapped: a fastland past its count
+            if (f.d != nullptr)
+            {
+                for (Color c : f.d->params.mdfc_back_produces)   // reading (e): either face
+                { if (c != Color::Colorless) { ld.colours |= 1u << static_cast<int>(c); } }
+            }
+            kept.push_back(ld);
+        }
+        for (int i = 0; i < n; ++i)
+        { if (modelled(i)) { info[i].fac = discard_dist::CastFactorFor(census, *info[i].d, kept); } }
+    }
+
     // ---- 6. creatures: the creature slot (net of board), Light-Paws, the leftovers --------------------
     auto power_of = [&](int i) { return info[i].d->card.m_power.value_or(0); };
+    // Inside a tier, with the model: EV = power x CastFactor, ties to the nearer card, then the cheaper.
+    // Without it: higher power, then the cheaper (the proposal's 7.2).
+    auto creature_cmp = [&](int a, int b) -> int   // +1: a is kept before b (same tier); 0: a key tie
+    {
+        if (dist_on)
+        {
+            const double ea = power_of(a) * info[a].fac, eb = power_of(b) * info[b].fac;
+            if (ea != eb) { return ea > eb ? 1 : -1; }
+            if (info[a].fac != info[b].fac) { return info[a].fac > info[b].fac ? 1 : -1; }
+        }
+        else if (power_of(a) != power_of(b)) { return power_of(a) > power_of(b) ? 1 : -1; }
+        if (info[a].mv != info[b].mv) { return info[a].mv < info[b].mv ? 1 : -1; }
+        return 0;
+    };
     int slot = -1;   // the hand creature filling the creature slot: Light-Paws > Kor > a plain body
     if (board_creatures == 0)
     {
@@ -5933,8 +5996,7 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
             if (c != K_TUTOR && c != K_DRAWER && c != K_PLAIN) { continue; }
             if (slot < 0) { slot = i; continue; }
             if (tier(i) != tier(slot)) { if (tier(i) < tier(slot)) { slot = i; } continue; }
-            if (power_of(i) != power_of(slot)) { if (power_of(i) > power_of(slot)) { slot = i; } continue; }
-            if (info[i].mv < info[slot].mv) { slot = i; }
+            if (creature_cmp(i, slot) > 0) { slot = i; }   // a key tie keeps the earlier card
         }
     }
     int paws = -1;   // "Light-Paws if none in play" -- agent reading (a)
@@ -5969,8 +6031,8 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     emit([&](int i) { return info[i].cls == K_PLAIN && i != slot; },                      // spare plain bodies
          [&](int a, int b)
          {
-             if (power_of(a) != power_of(b)) { return power_of(a) < power_of(b); }
-             return info[a].mv != info[b].mv ? info[a].mv > info[b].mv : a < b;
+             const int c = creature_cmp(a, b);                                            // worst first
+             return c != 0 ? c < 0 : a < b;
          });
     emit([&](int i) { return aura_sub(i, A_STRANDED); }, mv_desc);                        // stranded layer
     emit([&](int i) { return (info[i].cls == K_DRAWER || info[i].cls == K_TUTOR) && i != slot && i != paws; },
@@ -5979,9 +6041,18 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     emit([&](int i) { return aura_sub(i, A_USEFUL); },                                    // useful, worst first
          [&](int a, int b)
          {
-             const long ra = static_cast<long>(info[a].marg) * std::max(1, info[b].mv);
-             const long rb = static_cast<long>(info[b].marg) * std::max(1, info[a].mv);
-             if (ra != rb) { return ra < rb; }
+             if (dist_on)   // EV = rate x CastFactor (an exact rate tie stays exact in double)
+             {
+                 const double ea = static_cast<double>(info[a].marg) / std::max(1, info[a].mv) * info[a].fac;
+                 const double eb = static_cast<double>(info[b].marg) / std::max(1, info[b].mv) * info[b].fac;
+                 if (ea != eb) { return ea < eb; }
+             }
+             else
+             {
+                 const long ra = static_cast<long>(info[a].marg) * std::max(1, info[b].mv);
+                 const long rb = static_cast<long>(info[b].marg) * std::max(1, info[a].mv);
+                 if (ra != rb) { return ra < rb; }
+             }
              const bool sa = is_scaler(info[a].d), sb = is_scaler(info[b].d);
              if (sa != sb) { return !sa; }                                                // reading (d)
              if (info[a].mv != info[b].mv)

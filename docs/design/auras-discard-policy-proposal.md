@@ -129,6 +129,36 @@ Deck-specific (verbatim):
 - Auras: *"In auras we should keep Light-Paws as it is the superior engine."* -- a hand Light-Paws stays
   protected with a Kor in play (the implemented reading (a) is confirmed).
 
+#### Implementation notes (2026-10-10): the distance model
+
+The shared `discard_dist` model (docs/design/discard-distance-model.md) now orders cards within the
+USER's tiers. It is behind `MTG_DISCARD_DIST_MODEL` (heurarm `DISCARD_DIST_MODEL`, default ON); `=0`
+reproduces the 10-09 order exactly. It never moves a card across a tier: the dup / blank / dead / stranded
+classes, the land quotas, and Light-Paws > Kor > plain body are all unchanged. Two places use it:
+
+- **Useful Auras:** EV = rate x CastFactor, so colour pips count. A Daybreak Coronet's {W}{W} with no white
+  source in play, kept or likely to be drawn is far from castable; a {G} Aura with Forests out is not.
+  When EVs tie, the old tie-breaks apply (scaler, then MV, then hand order).
+- **The creature slot and the spare plain bodies:** within a tier, EV = power x CastFactor. Ties go to the
+  nearer card, then the cheaper. Kor's 0 power makes its EV 0, so between Kors the factor decides.
+
+Agent reading (i): the land drops the factor counts as kept are the HARD lands only. The soft 4th land and
+the lands beyond it shed before every card the factor orders, so counting them would make the order
+depend on cards that are already gone, and it would no longer be prefix-stable. Each kept drop also
+carries what `LandDropOf`'s params alone miss: whether it enters tapped given the current board (a
+fastland past its count), and a Pathway's back colour (reading (e)).
+
+Tests (`test/unit/test_auras_discard.cpp`, 25 cases): boards 21-23 hand-derive the factors (one {W} pip
+with 2 Plains in a 10-card library and none in play: 0.479; {W}{W}: 0.075; {W}{W} with a kept Plains:
+0.429). They show Coronet dropping to the first useful Aura to shed, a kept Plains bringing it back
+within reach, and a castable 1/1 beating a {W} 2/1 for the creature slot. Every board checks both arms,
+`=0` included, and prefix stability under each.
+
+Open for the USER (not applied): the cross-deck ruling *"Creature quotas are less worried about the board
+than land quotas"* would make the Auras creature slot fill from the hand even with a creature in play.
+The SETTLED design says "1 creature (counting board)", and this round's brief did not ask for the
+change, so the slot still counts the board.
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
