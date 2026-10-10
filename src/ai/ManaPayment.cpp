@@ -2845,6 +2845,15 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
         // USER ruled out ("never before Apex"): Apex is the one permitted cast, so its ten mana and its
         // seven exiled cards are unusable. Not a payment failure, but not a realisable line either.
         if (casts_left > 0 && d != nullptr && d->params.impulse_exile > 0) { return pos; }
+        // SPLICE: the k copies a spliced cast reveals must still be IN HAND (a revealed copy stays
+        // there; one already cast has left). Copies counted as SubsetHasIllegalSplice counts them.
+        if (a.splice_count > 0 && d != nullptr && d->params.splice_onto_arcane)
+        {
+            int copies = 0;
+            for (const Card& c : hand) { if (c.m_name == a.card_name) { ++copies; } }
+            const int prior = static_cast<int>(std::count(cast_names.begin(), cast_names.end(), a.card_name));
+            if (copies - 1 - prior < a.splice_count) { return pos; }
+        }
         if (!a.alt_cost)
         {
             ManaCost cost = a.cost;
@@ -2942,6 +2951,19 @@ void TraceUserCastOrder(const GameState& state, const std::vector<Action>& acts,
                  static_cast<unsigned long long>(state.game_seed), state.turn_number, pre_combat ? 1 : 2,
                  route, AvailableManaPool(state).Total(), order.size(), fail, pfail, mpos, mearl,
                  seq.c_str());
+    // MTG_USER_ORDER_TRACE=2: also the hand (staged copies starred), the pool and the cast cap.
+    static const int s_level = EnvInt("MTG_USER_ORDER_TRACE", 0);
+    if (s_level >= 2)
+    {
+        std::string hand;
+        for (const Card& c : state.ActivePlayer().hand)
+        { if (!hand.empty()) { hand += "|"; } hand += c.m_name.str(); if (c.m_is_staged) { hand += "*"; } }
+        const ManaPool p = AvailableManaPool(state);
+        std::fprintf(stderr, "[uo-state] gs=%llu t=%d cap=%d pool{w%d u%d b%d r%d g%d c%d *%d} hand=%s\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                     state.casts_remaining_this_turn, p.white, p.blue, p.black, p.red, p.green, p.colorless,
+                     p.wild, hand.c_str());
+    }
 }
 
 bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& acts)

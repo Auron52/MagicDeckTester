@@ -1211,9 +1211,10 @@ public:
     // (USER: Irencrag second-to-last, only before Dragonstorm; Irencrag -> Dragon a kept low-value
     // line; never Irencrag -> Apex; the Medallion never after Irencrag). With the cap spent, nothing.
     bool CastUnderCastCap(const GameState&, const CardDefinition&) const override;
-    // A subset whose Apex can only be paid after Irencrag (the trap) is not a line in the USER's order.
-    bool RestrictorSubsetRealisable(const GameState&, const std::vector<Action>& cands,
-                                    const std::vector<int>& sel) const override;
+    // A subset whose Apex can only be paid after Irencrag (the trap), or whose splice only by revealing
+    // a copy already cast, is not a line in the USER's order.
+    bool OrderedSubsetRealisable(const GameState&, const std::vector<Action>& cands,
+                                 const std::vector<int>& sel) const override;
     // The lever (heurarm slot DRAGONSTORM_USER_ORDER).
     static bool UserOrderOn();
     //
