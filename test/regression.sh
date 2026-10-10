@@ -215,7 +215,7 @@ if [ "$ACCEPT" = 1 ]; then
   # NEW-line-only view until the first local --accept re-creates it.
   if [ -f "$LOGDIR/mtg.run" ]; then
     mkdir -p logs/snapshots
-    cp -f "$LOGDIR/mtg.run" "logs/snapshots/${MODE}-baseline"
+    harness_install_bin "$LOGDIR/mtg.run" "logs/snapshots/${MODE}-baseline"
     [ -f "$LOGDIR/mtg.run.meta" ] && cp -f "$LOGDIR/mtg.run.meta" "logs/snapshots/${MODE}-baseline.meta"
     [ -f "$LOGDIR/mtg.run.diff" ] && cp -f "$LOGDIR/mtg.run.diff" "logs/snapshots/${MODE}-baseline.diff"
     echo "Saved baseline binary -> logs/snapshots/${MODE}-baseline (for next run's per-game diff)."
@@ -258,7 +258,7 @@ fi
 # executable for write) or silently swapping the binary mid-run. The snapshot is
 # what every batch invocation below uses; the source binary is free to be rebuilt.
 BIN_SNAPSHOT="$LOGDIR/mtg.run"
-cp -f "$BIN" "$BIN_SNAPSHOT"
+harness_install_bin "$BIN" "$BIN_SNAPSHOT"   # in the devcontainer: bytes on the build volume, never run off 9p
 # Provenance stamp: record the exact version this run (and any --accept'd GT) came from.
 # When the tree is dirty, save the working diff so a re-baseline from uncommitted changes
 # stays reconstructable as git_hash + mtg.run.diff (see test/snapshot_bin.sh).

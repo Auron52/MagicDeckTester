@@ -537,19 +537,30 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     disruptive"*.
   * **The remedy is a SPLIT, not a move.** The user rejected moving the repo off the host drive:
     *"not just switching this problem for another. If we do everything off Windows then we can easily
-    lose it"* (the `/tmp` references loss is the precedent). So:
-    - **On the host drive (the checkout, worktrees under `.claude/worktrees/`):** source, `.git`,
-      uncommitted edits, references, docs, deck artifacts, generation journals, and the final results
-      and summaries of every run.
-    - **On the build volume (`/workspaces/MagicDeckTester/build/`):** compile output, every binary
-      that is EXECUTED, and in-flight batch scratch (per-game logs, manifests, `.out` files while a
-      run is going). Copy the summaries back to the host drive when the run finishes. Losing the
-      volume costs a rebuild; losing 9p then pauses commits but no longer kills runs.
+    lose it"* (the `/tmp` references loss is the precedent). The user's statement of the split:
+    *"long runs and source where we need persistence stay on the Windows mount whereas easily
+    reproducible things like binaries and per-game logs go in the container."* So:
+    - **On the host drive (the checkout, worktrees under `.claude/worktrees/`) -- anything that must
+      persist:** source, `.git`, uncommitted edits, references, docs, deck artifacts, and the
+      persistent state of LONG runs (generation journals and their backups, resumable queues and
+      checkpoints, frozen inputs), plus the final results and summaries of every run.
+    - **On the build volume (`/workspaces/MagicDeckTester/build/`) -- anything easily reproduced:**
+      compile output, every binary that is EXECUTED, and per-game logs and other in-flight batch
+      scratch (manifests, `.out`/`.err` while a run is going). Copy the summaries back to the host
+      drive when the run finishes. Losing the volume costs a rebuild and a re-run of the scratch;
+      losing 9p pauses commits but no longer kills runs.
+    - **When unsure, ask "can I regenerate this from the source in the checkout?"** Yes means the
+      volume; no means the host drive. A journal is days of compute (see the GENERATION JOURNAL
+      rule): it is never "scratch".
   * **It is gated for builds.** `./build.sh` in a linked worktree on 9p turns `build/` into a symlink
     onto `<primary>/build/wt/<worktree>` before anything compiles (an old 9p `build/` is renamed to
     `build.9p-old`, never deleted; `.git/info/exclude` hides both). Do not replace that symlink.
+    The regression harness's run snapshot (`test/logs/<mode>/mtg.run`), its accept baselines and
+    `test/snapshot_bin.sh` go through `harness_install_bin` (`test/lib/harness.sh`): on 9p the bytes
+    land in `build/offmount/<path>` and the old path becomes a symlink, so every reader is unchanged.
   * **Not gated, so it is on you:** never copy a binary into `logs/` (or anywhere on 9p) and run it
-    there; point batch output at `build/scratch/<who>/`; keep concurrent worktree builds to two.
+    there -- use `harness_install_bin` or run it from `build/`; point per-game logs and batch scratch
+    at `build/scratch/<who>/`; keep concurrent worktree builds to two.
 
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
