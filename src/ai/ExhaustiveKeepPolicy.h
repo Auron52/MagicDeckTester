@@ -1,5 +1,8 @@
 #pragma once
 #include <algorithm>
+#include <iostream>
+#include <mutex>
+#include <set>
 #include <map>
 #include <memory>
 #include <string>
@@ -20,6 +23,25 @@
 // resident maps were the memory ceiling on a 10 GB box. Decide/DecideBottom consult whichever backing
 // is present and return identical answers for identical tables -- the table's clear-bit rows are
 // exactly the maps' missing/empty rows (test/unit/test_keep_table.cpp checks every key both ways).
+// A hand card the deck's keep table has no bucket for sends the keep decision to the static path and
+// the bottoming to the clairvoyant trial games (a whole game per candidate) -- silently, until
+// 2026-10-10, when Snow's table turned out to predate the decklist naming its MDFC as Jorn, God of
+// Winter: every Jorn hand paid the trial games, 79-91% of the units of Snow's slowest suite games.
+// Loud now, once per card name per process. The remedy is regenerating the table on the current list,
+// or (the user's call) a mulligan.keep_table_alias entry in the deck's play profile.
+inline void WarnUnbucketedOnce(const std::string& name)
+{
+    if (name.empty()) { return; }
+    static std::mutex mu;
+    static std::set<std::string> seen;
+    std::lock_guard<std::mutex> lk(mu);
+    if (!seen.insert(name).second) { return; }
+    std::cerr << "[keeptable] WARNING: hand card \"" << name << "\" has NO BUCKET in the deck's keep table "
+                 "-- the table predates the decklist. Keep falls back to the static path and bottoming to the "
+                 "clairvoyant trial games for every hand holding it. Regenerate the table, or add a "
+                 "mulligan.keep_table_alias entry to the play profile.\n";
+}
+
 struct ExhaustiveKeepPolicy
 {
     std::vector<std::vector<std::string>>         buckets;   // bucket index -> member card names
@@ -92,6 +114,15 @@ struct ExhaustiveKeepPolicy
             comp[it->second]++;
         }
         return true;
+    }
+
+    // The first hand card with NO bucket ("" when every card is bucketed). Non-empty means the table
+    // cannot speak for this hand at all -- not "this composition is untabled" but "the table predates
+    // the decklist", which is what WarnUnbucketedOnce reports at the two fall-through sites.
+    std::string FirstUnbucketed(const std::vector<std::string>& hand) const
+    {
+        for (const std::string& n : hand) { if (name_to_bucket.find(n) == name_to_bucket.end()) { return n; } }
+        return std::string();
     }
 
     // Keep decision for a hand given by card name. Read-only (thread-safe after Index()); sets

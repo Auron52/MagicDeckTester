@@ -74,7 +74,14 @@
     "min_lands": 1,
     "min_playable": 0,
     "required_pieces": [],
-    "stop_at": 4
+    "stop_at": 4,
+    "keep_table_alias": [
+      {
+        "name": "Jorn, God of Winter",
+        "as": "Kaldring, the Rimestaff",
+        "why": "USER 2026-10-10: 'Let's point Jorn at Kaldring for the time being' -- regenerating Snow's keep table is too expensive now. The table (generated 2026-09-25 at 880cb9b1) buckets this MDFC as its back face Kaldring; the list has played it as Jorn since 2026-10-03 (9dc0a9b2), so every Jorn hand missed the table and fell back to the clairvoyant trial-game bottomer (79-91% of the units of Snow's slowest overnight games). LOSSY: the bucket's numbers were learned when the card played as Kaldring. Remove when the table is regenerated on the current list."
+      }
+    ]
   },
   "version": 1
 }

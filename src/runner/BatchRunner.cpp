@@ -328,7 +328,7 @@ private:
             auto cached = CachedExhaustiveKeep(exh_profile);
             if (!cached || cached->empty())
             { throw std::runtime_error("manifest job \"exhaustive_profile\": no keep table in " + exh_profile); }
-            prof->exhaustive_keep = std::move(cached);
+            prof->exhaustive_keep = WithKeepTableAlias(std::move(cached), prof->keep_table_alias);
         }
         // Forced bottoming: play follows the table's own flag when MTG_EXHAUSTIVE_BOTTOM is unset
         // (AIEngine), so a copy with the flag set is exactly the env override, per job. The copy is cheap

@@ -183,6 +183,19 @@ struct MulliganProfile
     // MTG_BOTTOM_EVAL_UNITS overrides when explicitly set.
     int bottom_eval_units     = -1;
 
+    // KEEP-TABLE NAME ALIASES (mulligan.keep_table_alias = [{name, as, why}], per deck, explicit,
+    // TEMPORARY). A hand card named `name` is looked up in the exhaustive keep/bottom table as `as` --
+    // only when the table has no bucket for `name` and has one for `as` (WithKeepTableAlias). It exists
+    // for a table generated before the decklist changed how it names a card: Snow's 2026-09-25 table
+    // buckets the MDFC as Kaldring, the Rimestaff, but the list has played it as its front face Jorn,
+    // God of Winter since 2026-10-03, so every hand holding Jorn missed the table and fell through to
+    // the clairvoyant trial-game bottomer (79-91% of the units of Snow's slowest suite games). LOSSY:
+    // the table's numbers for that bucket were learned for the other card's play. USER 2026-10-10:
+    // "Let's point Jorn at Kaldring for the time being" (regenerating the table is too expensive now).
+    // Remove the entry when the table is regenerated on the current list. A missing `why` is an error.
+    struct KeepTableAlias { std::string name, as, why; };
+    std::vector<KeepTableAlias> keep_table_alias;
+
     // Per-deck SEARCH-LEAF fidelity (top-level `search_leaf_depth` key): the lookahead depth of
     // the horizon rollout that scores every leaf of the commit-the-line search (FSLineWin ->
     // SimulateToEnd). Unset (-1) => the engine default (1 = a 1-ply lookahead at every rollout

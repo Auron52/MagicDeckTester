@@ -895,6 +895,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count, bool 
         bool present = false;
         bool keep = m_profile.exhaustive_keep->Decide(names, mulligan_count, on_the_play, present);
         if (present) { return keep; }
+        WarnUnbucketedOnce(m_profile.exhaustive_keep->FirstUnbucketed(names));
     }
 
     // Analyzer-generated keep model: when present it OWNS the keep/mulligan decision at EVERY level
@@ -1629,6 +1630,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             }
             return;
         }
+        WarnUnbucketedOnce(m_profile.exhaustive_keep->FirstUnbucketed(names));
     }
 
     // BOTTOMING-EVAL SETTINGS OVERRIDE (MTG_BOTTOM_EVAL_DEPTH / MTG_BOTTOM_EVAL_BUDGET, ints,

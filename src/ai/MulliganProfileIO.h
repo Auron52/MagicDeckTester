@@ -332,6 +332,12 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     if (profile.bottom_eval_budget_ms >= 0) { m["bottom_eval_budget_ms"] = profile.bottom_eval_budget_ms; }
     if (profile.bottom_eval_topk      >  0) { m["bottom_eval_topk"]      = profile.bottom_eval_topk; }
     if (profile.bottom_eval_units     >  0) { m["bottom_eval_units"]     = profile.bottom_eval_units; }
+    if (!profile.keep_table_alias.empty())
+    {
+        json al = json::array();
+        for (const auto& a : profile.keep_table_alias) { al.push_back({ {"name", a.name}, {"as", a.as}, {"why", a.why} }); }
+        m["keep_table_alias"] = al;
+    }
 
     json pieces = json::array();
     for (const std::string& s : profile.required_pieces) { pieces.push_back(s); }
@@ -575,6 +581,27 @@ inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const E
     if (m.contains("bottom_eval_budget_ms")) { profile.bottom_eval_budget_ms = m["bottom_eval_budget_ms"].get<int>(); }
     if (m.contains("bottom_eval_topk"))      { profile.bottom_eval_topk      = m["bottom_eval_topk"].get<int>(); }
     if (m.contains("bottom_eval_units"))     { profile.bottom_eval_units     = m["bottom_eval_units"].get<int>(); }
+    // Keep-table name aliases (see MulliganProfile::keep_table_alias). `why` is mandatory: an alias is a
+    // lossy, temporary stand-in for a regeneration, and an unexplained one is how it outlives its reason.
+    // An entry without one is SKIPPED, loudly -- not thrown: LoadDeckProfile swallows a parse exception
+    // into a DEFAULT profile, which would silently drop the deck's whole profile over one missing note.
+    if (m.contains("keep_table_alias"))
+    {
+        for (const auto& a : m["keep_table_alias"])
+        {
+            MulliganProfile::KeepTableAlias k;
+            k.name = a.at("name").get<std::string>();
+            k.as   = a.at("as").get<std::string>();
+            k.why  = a.contains("why") ? a["why"].get<std::string>() : std::string();
+            if (k.why.empty())
+            {
+                std::cerr << "[profile] WARNING: mulligan.keep_table_alias entry \"" << k.name << "\" -> \"" << k.as
+                          << "\" has no \"why\" -- IGNORED.\n";
+                continue;
+            }
+            profile.keep_table_alias.push_back(std::move(k));
+        }
+    }
 
     if (m.contains("required_pieces"))
     {
@@ -965,6 +992,45 @@ inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const st
     return result;
 }
 
+// Apply a deck's mulligan.keep_table_alias to its keep table: a hand card `name` resolves to the bucket of
+// `as`, but ONLY when the table has no bucket for `name` (a table that already knows the card is left
+// alone, so a regenerated table makes the entry inert rather than wrong) and has one for `as`. Returns
+// the shared table untouched when nothing applies; otherwise ONE aliased copy per (table, alias set),
+// memoized -- the copy shares the on-disk table (`disk`), so it costs a small name map.
+inline std::shared_ptr<const ExhaustiveKeepPolicy> WithKeepTableAlias(
+    std::shared_ptr<const ExhaustiveKeepPolicy> ek, const std::vector<MulliganProfile::KeepTableAlias>& aliases)
+{
+    if (!ek || aliases.empty()) { return ek; }
+    std::vector<std::pair<std::string, int>> add;
+    std::string sig;
+    for (const auto& a : aliases)
+    {
+        if (ek->name_to_bucket.count(a.name)) { continue; }
+        auto it = ek->name_to_bucket.find(a.as);
+        if (it == ek->name_to_bucket.end())
+        {
+            std::cerr << "[keeptable] WARNING: keep_table_alias \"" << a.name << "\" -> \"" << a.as
+                      << "\" is INERT: the table has no bucket for \"" << a.as << "\" either.\n";
+            continue;
+        }
+        add.emplace_back(a.name, it->second);
+        sig += a.name + '\x1f' + a.as + '\x1e';
+    }
+    if (add.empty()) { return ek; }
+    static std::mutex mu;
+    static std::map<std::pair<const ExhaustiveKeepPolicy*, std::string>, std::shared_ptr<const ExhaustiveKeepPolicy>> memo;
+    std::lock_guard<std::mutex> lk(mu);
+    auto key = std::make_pair(ek.get(), sig);
+    auto hit = memo.find(key);
+    if (hit != memo.end()) { return hit->second; }
+    auto copy = std::make_shared<ExhaustiveKeepPolicy>(*ek);
+    for (const auto& p : add) { copy->name_to_bucket[p.first] = p.second; }
+    std::shared_ptr<const ExhaustiveKeepPolicy> out = std::move(copy);
+    memo.emplace(key, out);
+    // The source handle stays alive in the CachedExhaustiveKeep cache, so the raw-pointer key is stable.
+    return out;
+}
+
 inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
 {
     if (profile.HasExhaustiveKeep()) { return; }
@@ -981,7 +1047,7 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
         const std::string v = ov;
         if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
         auto cached = CachedExhaustiveKeep(v);
-        if (cached && !cached->empty()) { profile.exhaustive_keep = std::move(cached); }
+        if (cached && !cached->empty()) { profile.exhaustive_keep = WithKeepTableAlias(std::move(cached), profile.keep_table_alias); }
         return;
     }
 
@@ -1033,7 +1099,7 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
     }
     if (resolved.empty()) { return; }
     auto cached = CachedExhaustiveKeep(resolved);
-    if (cached && !cached->empty()) { profile.exhaustive_keep = std::move(cached); }
+    if (cached && !cached->empty()) { profile.exhaustive_keep = WithKeepTableAlias(std::move(cached), profile.keep_table_alias); }
 }
 
 // --- Learned mid-game eval sidecar (decks/<name>.eval.json) ------------------------------------

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d3be795d  date 2026-10-10
+# Regression ground truth -- commit 0c79268f  date 2026-10-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -32,6 +32,9 @@
 # accepted-with-regressions (overnight, 2026-10-10): bruna (width collapses fbd63d2f, every row better: d3 net -35, d5 -14, d0 -247): 6 slower d3 games -- s4004 gi208, s6006 gi452/gi631 recover at d<old> b100; s4004 gi585 + s7007 gi755 do not recover at d8 b0 but neither does the old binary (old faster win was budget luck); s5005 gi759 T6->T7 is a pre-existing executor/search payment gap the inert-equip fold exposed (docs/design/bruna-wings-recast-payment-divergence.md)
 # accepted-with-regressions (overnight, 2026-10-10): bruna (Wings-recast payment fix 5b4f963f; FULL overnight tier run on src 5c5cd74c, 413 cases, every non-Bruna case and the Bruna d0 rows byte-identical): searched 0 slower / 5 faster (net -5) / 58 play-changed at the same score; d0 unchanged. SUPERSEDES the 2026-10-10 width-collapse note's non-recovering items s5005 gi759 (now T7->T6) and s4004 gi585 (now T5->T4); s7007 gi755 stands as noted there. All 63 changed games replayed under both binaries (old reproduces GT, new reproduces this run): 54 first diverge at a Greaves equip the executor now carries out, 4 at an Aura (Arcanum Wings / Almost Perfect) landing on its planned host after the shroud release, 1 at a bottom chosen by rollouts that run the changed executor paths, the rest are the 5 faster games. Known cosmetic quirk: the release equip is still LOGGED at its plan position, after the Aura it enabled.
 # accepted-with-regressions (overnight, 2026-10-10): bruna RESIZED to the ENTRY set (USER 2026-10-10; regression-testing skill, 'Sizing a deck's overnight rows'): d3 4x1000 b20 -> 4x400 b10, d5 4x500 b40 -> 4x300 b20 (Hinata's shape), d0 unchanged, until Bruna's keep table is adopted. Same binary (src 5c5cd74c) as the previous Bruna overnight accept: the 32 slower / 1 faster / 129 play-changed searched games are the first 400/300 games of each seed re-played at HALF the budget, so each slower game's faster line is the previous accept's own measurement at the old budget -- a key re-definition, not a play change. 1.45 worker-h for Bruna's 12 overnight cases alone (makespan 3m46s), vs 6.56 worker-h (28.6% of the tier) at the old shape inside the full tier.
+# accepted-with-regressions (smoke, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
+# accepted-with-regressions (regression, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
+# accepted-with-regressions (overnight, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -155,9 +158,9 @@ bruna2hg_smoke_d3_s1001=5.4400/6da23fed9a801f75
 bruna_smoke_d0_s1001=6.2260/6016b1f0c37640e6
 bruna_smoke_d3_s1001=4.8400/0d14d9861947a98b
 bruna_smoke_d5_s1001=4.9200/0e59f6d09695f402
-snow_smoke_d0_s1001=6.2250/4b5e8f6a53ee5955
-snow_smoke_d3_s1001=5.8600/4e5006b213eba677
-snow_smoke_d5_s1001=5.7800/2e8f6008d83f1320
+snow_smoke_d0_s1001=6.1870/eb782e126ed3bbd5
+snow_smoke_d3_s1001=5.8500/5fbd8bf4f8a35ce0
+snow_smoke_d5_s1001=5.8200/ba86825e581f63c7
 
 # --- regression ---
 fungus_regression_d0_s2002=5.6900/7f90c5ec3fa0dd16
@@ -326,11 +329,11 @@ bruna_regression_d3_s2002=5.1333/9e0057cbeffb9702
 bruna_regression_d3_s3003=5.0600/4c36df88e4afb9fd
 bruna_regression_d5_s2002=5.0533/367b7fc25174ca63
 bruna_regression_d5_s3003=5.0933/ecd7450f7bb533c3
-snow_regression_d0_s2002=6.2290/b7e3e2bf40d6e69f
-snow_regression_d3_s2002=5.6500/a3334acbcf0f61ad
-snow_regression_d3_s3003=5.7667/9bcf429fa60da63d
-snow_regression_d5_s2002=5.6667/0296afd77c55dd9d
-snow_regression_d5_s3003=5.8667/ace405b571978ed0
+snow_regression_d0_s2002=6.2100/dbf5760abd0ba849
+snow_regression_d3_s2002=5.7000/03a4ec55a3355262
+snow_regression_d3_s3003=5.7167/86711cf2cc70097c
+snow_regression_d5_s2002=5.6667/3ae9a0f7f187b5f7
+snow_regression_d5_s3003=5.7667/f4ff4ebbbc644fc1
 
 # --- overnight ---
 fungus_overnight_d0_s4004=5.6445/1d8f7891cc7454b7
@@ -737,12 +740,12 @@ fluctuator_overnight_d5_s4004=3.5400/3fe27d7826bdb0a5
 fluctuator_overnight_d5_s5005=3.5480/22194e860d23a7b6
 fluctuator_overnight_d5_s6006=3.5600/880f3f09f6aea59a
 fluctuator_overnight_d5_s7007=3.6360/2f27e1e2d5c14fb6
-snow_overnight_d0_s4004=6.2050/209f9da9968c56dc
-snow_overnight_d3_s4004=5.6333/ab442f36a10f3bcd
-snow_overnight_d3_s5005=5.6400/90dd7ea1ed033d0f
-snow_overnight_d3_s6006=5.6067/fd694a859fe0c4b8
-snow_overnight_d3_s7007=5.7133/88df28bba2c84726
-snow_overnight_d5_s4004=5.6400/2d6cf6fa54bb23d2
-snow_overnight_d5_s5005=5.6300/023d95d8e696a823
-snow_overnight_d5_s6006=5.6500/b92e72338c0d783e
-snow_overnight_d5_s7007=5.7200/0a36e8bea6a5ead5
+snow_overnight_d0_s4004=6.1480/53bd05e611ff68c4
+snow_overnight_d3_s4004=5.7200/e66e5beb6d65f152
+snow_overnight_d3_s5005=5.6533/e5108841cf5c7e46
+snow_overnight_d3_s6006=5.6733/521812e601a81415
+snow_overnight_d3_s7007=5.7133/ce520ceca98e1ff0
+snow_overnight_d5_s4004=5.7400/4831b1fa1398e40a
+snow_overnight_d5_s5005=5.6200/82879c7551d30292
+snow_overnight_d5_s6006=5.7500/ab63ce916b60e452
+snow_overnight_d5_s7007=5.6900/f705d10ca21d0806

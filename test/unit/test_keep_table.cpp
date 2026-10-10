@@ -308,3 +308,58 @@ TEST_CASE("keep table: the loader builds the table from a JSON sidecar and it ma
     EnvPut("MTG_KEEP_TABLE_DIR", "", true);
     Cleanup(dir);
 }
+
+TEST_CASE("keep table: a keep_table_alias resolves a renamed card to its old bucket, and only when the table lacks it")
+{
+    // Snow 2026-10-10: the table buckets the MDFC as Kaldring, the list names it Jorn. Without the alias a
+    // Jorn hand is unbucketed (Composition fails -> clairvoyant trial-game bottoming); with it the hand
+    // resolves to Kaldring's bucket.
+    auto base = std::make_shared<ExhaustiveKeepPolicy>();
+    base->buckets = { {"Snow-Covered Island"}, {"Kaldring, the Rimestaff"}, {"Skred"} };
+    base->Index();
+    std::shared_ptr<const ExhaustiveKeepPolicy> ek = base;
+    const std::vector<std::string> hand{ "Snow-Covered Island", "Jorn, God of Winter", "Skred" };
+    std::vector<int> comp;
+    CHECK_FALSE(ek->Composition(hand, comp));
+    CHECK(ek->FirstUnbucketed(hand) == "Jorn, God of Winter");
+
+    using A = MulliganProfile::KeepTableAlias;
+    auto aliased = WithKeepTableAlias(ek, { A{ "Jorn, God of Winter", "Kaldring, the Rimestaff", "test" } });
+    REQUIRE(aliased != ek);                                   // a copy; the shared table is untouched
+    CHECK_FALSE(ek->Composition(hand, comp));
+    REQUIRE(aliased->Composition(hand, comp));
+    CHECK(comp == std::vector<int>{ 1, 1, 1 });
+    CHECK(aliased->FirstUnbucketed(hand).empty());
+    // Memoized: the same table + alias set returns the same copy.
+    CHECK(WithKeepTableAlias(ek, { A{ "Jorn, God of Winter", "Kaldring, the Rimestaff", "test" } }) == aliased);
+
+    // Inert when the table already knows the name (a regenerated table), and when `as` is unknown.
+    CHECK(WithKeepTableAlias(ek, { A{ "Skred", "Snow-Covered Island", "test" } }) == ek);
+    CHECK(WithKeepTableAlias(ek, { A{ "Jorn, God of Winter", "Not A Card", "test" } }) == ek);
+    CHECK(WithKeepTableAlias(ek, {}) == ek);
+}
+
+TEST_CASE("keep table: a keep_table_alias parses from the profile JSON, and an entry without a why is dropped")
+{
+    const auto dir = std::filesystem::temp_directory_path() / "mtg_keep_alias_test";
+    std::filesystem::create_directories(dir);
+    const auto p = dir / "X.profile.json";
+    {
+        std::ofstream f(p);
+        f << R"({"mulligan":{"min_lands":2,"keep_table_alias":[{"name":"Jorn, God of Winter","as":"Kaldring, the Rimestaff","why":"because"}]}})";
+    }
+    MulliganProfile prof = LoadDeckProfile(p);
+    REQUIRE(prof.keep_table_alias.size() == 1);
+    CHECK(prof.keep_table_alias[0].name == "Jorn, God of Winter");
+    CHECK(prof.keep_table_alias[0].as == "Kaldring, the Rimestaff");
+    CHECK(prof.keep_table_alias[0].why == "because");
+    {
+        std::ofstream f(p);
+        f << R"({"mulligan":{"min_lands":2,"keep_table_alias":[{"name":"Jorn, God of Winter","as":"Kaldring, the Rimestaff"}]}})";
+    }
+    // Missing why: the ENTRY is dropped (loudly), the rest of the profile survives.
+    MulliganProfile bad = LoadDeckProfile(p);
+    CHECK(bad.keep_table_alias.empty());
+    CHECK(bad.min_lands == 2);
+    std::filesystem::remove_all(dir);
+}
