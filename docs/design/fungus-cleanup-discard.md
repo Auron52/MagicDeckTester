@@ -230,9 +230,19 @@ implemented; exactly what changed in `FungusProvider::CleanupDiscardCandidates`:
 * **Unchanged** (the design's own board rules): Doubling Season and Beastmaster stay "at most 1"
   counting the board (a copy in play makes every hand copy surplus); the MANA bucket still counts the
   board (need = 5 - board_mana); a legend already in play still makes the hand copy dead.
-* Not implemented here: the "colour beats the land count" cross-deck ruling -- the coordinator's
-  2026-10-10 brief for this deck did not list it; it is inert on the shipped 60 (mono-green; the
-  Chamber's U pays nothing) and would matter only on candidate B (black for Slimefoot / Deathspore).
+* **"Colour beats the land count is correct."** (cross-deck) -- implemented in a follow-up commit, inside
+  `MTG_FUNGUS_BUCKET_DISCARD` (no new flag): a land that gives a KEPT spell a colour nothing on the board
+  or already kept provides is kept even past the mana quota (the Creature Giving / Melira Pod /
+  EldraziFlicker shape). Every spell the ladder keeps (the accelerator, the Season tier, the core,
+  Beastmaster, beyond-core threats) pulls in the best such land in the land keep order, placed right
+  BEHIND it, so the land gives way just before its spell. Sources = the board (lands, mana creatures,
+  rocks, a land Aura's extra) + the kept lands; Secluded Courtyard's colours (`colored_creature_only`)
+  pay creature spells only. Agent readings: a hand mana creature (Undercellar Myconid) is a threat here,
+  not a source; the Season tier's castability stays on the quota mana (a colour land lives and dies with
+  its spell). Inert on the shipped all-green 60 (every spell green, every land makes G; the Chamber's U
+  pays nothing); on candidate B it keeps the black for Slimefoot / Deathspore Thallid. Tests F14
+  (Peat Bog kept for Slimefoot; fails on the previous code), F15 (Courtyard preferred over Peat Bog;
+  fails on the previous code), F16 (the shipped list: inert).
 * The shared distance model is not used: the deck's only distance notion is the Season tier's exact
   5-mana threshold over the kept hand (listed as unchanged in docs/design/discard-distance-model.md).
 * Tests: `test/unit/test_fungus_discard.cpp` 17 cases -- F6 re-derived, F12 (Sporesower + Mycoloth in
