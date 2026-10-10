@@ -237,6 +237,34 @@ TEST_CASE("F6 Astrolabe credit: MTG_ATTACK_TAP_ASTROLABE_CREDIT=0 restores the r
     CHECK((g.wins_this_turn && Casts(g, "Coldsteel Heart")));
 }
 
+// ---- The attack-only plan competes in Solve (MTG_SOLVE_ATTACK_ONLY_WIN) --------------------------
+// Solve's walk skips the empty selection, so a lethal board whose every castable plan taps an
+// attacker used to cast the best-eval spell and lose the lethal. The Faeburrow board at 6: the board
+// swings for 10, Greaves (which taps Faeburrow) for 5.
+TEST_CASE("Solve attack-only win: a lethal board attacks instead of casting into a lost lethal")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    const TurnSolver::Plan g = GreedySolve(FaeBoard(6, 2));
+    CHECK(g.wins_this_turn);
+    CHECK_FALSE(Casts(g, "Lightning Greaves"));
+    // Where a cast plan wins too, it is still the one taken (the seed loses every tie).
+    const TurnSolver::Plan g5 = GreedySolve(FaeBoard(5, 2));
+    CHECK((g5.wins_this_turn && Casts(g5, "Lightning Greaves")));
+    // Not lethal at all: nothing to seed.
+    const TurnSolver::Plan g11 = GreedySolve(FaeBoard(11, 2));
+    CHECK_FALSE(g11.wins_this_turn);
+}
+
+TEST_CASE("Solve attack-only win: MTG_SOLVE_ATTACK_ONLY_WIN=0 restores the unscored empty plan")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::SOLVE_ATTACK_ONLY_WIN, 0 } });
+    const TurnSolver::Plan g = GreedySolve(FaeBoard(6, 3));
+    CHECK_FALSE(g.wins_this_turn);
+    CHECK(Casts(g, "Lightning Greaves"));
+}
+
 // ---- F2: Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER) ---------------------------------
 // No attackers at all, so any projected damage is the trigger's. Oko is two colours ({1}{G}{U}).
 namespace
