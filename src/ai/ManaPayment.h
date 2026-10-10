@@ -71,6 +71,14 @@ void ApplyColoredPipReduction(ManaCost& cost, const ManaCost& reduction);
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
 bool OrderingOpaque(const std::string& name);
 
+// The deck's SET-level arrangement of a comparator-sorted cast order (DecisionProvider::
+// ArrangeCastOrder; a no-op for every provider that does not override it). Called right after the
+// CastOrderLess sort at every site that realises or projects a cast order -- the executor
+// (AIEngine::TakeTurn main plan + breakpoint continuation), the rollout apply (ApplyPlanDirect),
+// the enumeration's sequential-payability walk and the canonical-order report -- so they agree.
+void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>& actions,
+                              std::vector<int>& order);
+
 // The same comparator with the two SORT KEYS supplied by the caller. CastOrderLess is this
 // function with the keys read from the provider; the ladder below passes an EFFECTIVE key instead,
 // so a spell walked down its range sorts at its new position without a second comparator to keep
@@ -249,6 +257,33 @@ void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& ac
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& actions,
                              std::vector<int>& order, const std::vector<InternedName>& hand_exits,
                              int extra_wild);
+
+// ---- The EXACT order walk (docs/design/dragonstorm-user-cast-order.md) ------------------------
+// FirstUnpayablePos's walk plus the four SAME-TURN terms a ritual-combo turn's order turns on, every
+// one POSITIONAL (it depends on what was cast before it in this order, which a stamped Action::cost /
+// ritual_float cannot carry):
+//   * a colour cost reducer (reduces_spell_color: Ruby Medallion) cast EARLIER discounts each later
+//     spell of its colour by 1 generic (floored at 0) -- the stamped cost only knows the reducers
+//     already on the battlefield;
+//   * a graveyard-escalating ritual (ritual_float_gy_self_bonus: Rite of Flame) floats +1 per
+//     same-name copy cast EARLIER (stamped at the plan-start graveyard);
+//   * an impulse-exile spell cast FROM HAND (Apex of Power) floats impulse_float_amount (the executor
+//     casts an expiring STAGED copy first, and a cast off the exile floats nothing);
+//   * a max_casts_after cast (Irencrag Feat) allows only that many casts after it, on top of any
+//     restriction already live this turn (casts_remaining_this_turn).
+// Returns the first ORDER POSITION that cannot be paid / cast, -1 when every cast pays. Same
+// aggregate-pool colour semantics as FirstUnpayablePos (AvailableManaPool, which holds the float).
+int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& actions,
+                             const std::vector<int>& order);
+
+// MTG_USER_ORDER_TRACE (DIAGNOSTIC ONLY, default OFF, a cached static -> zero cost off): the audit
+// instrument for the USER's Dragonstorm cast order. Prints one [uo-order] line per executor cast-order
+// decision -- the order, whether it pays under the exact walk (and under FirstUnpayablePos), the first
+// Ruby Medallion's position and the EARLIEST slot at which it keeps the whole order payable -- keyed
+// by the game seed. AIEngine prints the matching [uo-cast] line per real cast. Read-only.
+bool UserOrderTraceOn();
+void TraceUserCastOrder(const GameState& state, const std::vector<Action>& actions,
+                        const std::vector<int>& order, const char* route, bool pre_combat);
 
 // MTG_ORDER_RECHECK. Shared with the ENUMERATION guard (SubsetHasUnbackedAltPayload), which may
 // only admit a replacement-enabler subset when this ordering pass is there to alternate it.

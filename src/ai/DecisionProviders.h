@@ -1176,10 +1176,46 @@ public:
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
 
-    // CastOrderRank: NOT overridden. "Cast mana rituals (15) / the Ruby Medallion reducer (16) / an
-    // Irencrag-style cast-restrictor (18) before the rank-20 payoff, so their float is online to pay
-    // it" is now the GENERIC card-parameter tiering -- it was written out identically here and in
-    // HinataProvider, and any future ritual deck now inherits it from its card data.
+    // THE USER'S CAST ORDER (MTG_DRAGONSTORM_USER_ORDER, default ON; =0 -> the GENERIC card-parameter
+    // tiers -- rituals 15, Ruby Medallion 16, Irencrag 18, payoff 20, creatures 10 -- byte-identical).
+    // USER 2026-10-10: "We should do things in the order I said, once they become available, so after
+    // the breakpoint the cast order should follow my order." The order (docs/design/dragonstorm-search-
+    // pruning.md "Canonical go-off cast order", dragonstorm-cast-order-search.md, gi22-durdle-and-
+    // irencrag-apex.md, and the 2026-10-10 Medallion ruling):
+    //   Ruby Medallion -- as EARLY as it can be paid while the whole line still pays (USER: "It should
+    //     be cast as early as possible while still maintaining the line. It has to be cast later if
+    //     cost does not allow it to be earlier."), never after Irencrag;
+    //   Rite of Flame < Pyretic Ritual < Desperate Ritual (no splice) < Seething Song < Desperate
+    //     Ritual (spliced);
+    //   Apex of Power -- an ENABLER: after the rituals, BEFORE Irencrag (Irencrag -> Apex is the trap);
+    //   a hard-cast Dragon -- the fallback closer: after the enablers, before Irencrag when Dragonstorm
+    //     closes, the spell after Irencrag when it does not;
+    //   Irencrag Feat -- second-to-last, before the closer;  Dragonstorm -- last.
+    // The rank carries what a per-card scalar can; CastOrderActionRank moves a SPLICED Desperate after
+    // Seething; ArrangeCastOrder places the Medallion at its earliest payable slot, keeps the splice
+    // legal (a revealed copy must still be in hand) and puts Irencrag before a lone Dragon closer;
+    // ExactOrderWalk makes the payable-order fallback judge with the same exact walk.
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    int  CastOrderActionRank(const GameState&, const Action&, int rank) const override;
+    void ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
+    bool ExactOrderWalk() const override;
+    // The searched orderings follow the same order: the canonical arranged order (Medallion at its
+    // earliest payable slot) plus the USER's splice fallback (rule 5: "individual-before is the
+    // fallback. Needs search.") -- in place of the engine's generator (DragonstormCastOrderings in
+    // TurnSolver.cpp), which tried every Medallion slot earliest-first and kept a raw identity order,
+    // so an unpayable Medallion-first slot won any score tie.
+    bool CastOrderingCandidates(const GameState&, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
+    // After Irencrag resolves, only the CLOSER takes the one remaining slot -- Dragonstorm, or a Dragon
+    // (USER: Irencrag second-to-last, only before Dragonstorm; Irencrag -> Dragon a kept low-value
+    // line; never Irencrag -> Apex; the Medallion never after Irencrag). With the cap spent, nothing.
+    bool CastUnderCastCap(const GameState&, const CardDefinition&) const override;
+    // A subset whose Apex can only be paid after Irencrag (the trap) is not a line in the USER's order.
+    bool RestrictorSubsetRealisable(const GameState&, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel) const override;
+    // The lever (heurarm slot DRAGONSTORM_USER_ORDER).
+    static bool UserOrderOn();
     //
     // OrderOpaqueCastsByRank: that order also governs an ORDER-OPAQUE set (MTG_DRAGONSTORM_ORDER_OPAQUE,
     // default ON). Apex of Power is a re-solve breakpoint card, so without the opt-in a plan holding
