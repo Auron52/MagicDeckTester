@@ -393,7 +393,7 @@ enum Slot : int
     EDF_OUTLET_PIPS,          // MTG_EDF_OUTLET_PIPS       EDF discard: a flicker source in hand / library pays 2 per {W} pip our white sources (board lands and their land Auras, the kept hand lands) cannot cover, so the outlet closer to castable outranks "Displacer if 2+ colourless, else Emiel" (as first built, one {C} source shed both Displacers for an Emiel the deck could not cast). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     SELESNYA_ELF_WINDOW,      // MTG_SELESNYA_ELF_WINDOW   SelesnyaLifegain discard: an Elf castable within two turns (mana value <= the projected M2) is kept ABOVE the soft payoff(s) instead of shed as surplus past the mana target (an agent reading: the dearest kept payoff's cost, floor 5) (as first built it shed an Accomplished Alchemist whose mana took Genesis Wave from X=5 to X=9). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
     SELESNYA_ALCHEMIST_BURST, // MTG_SELESNYA_ALCHEMIST_BURST SelesnyaLifegain discard, USER 2026-10-10: "Accomplished Alchemist is more acceleration than payoff. However, it is a good keep with lifegain burst + something expensive like Genesis Wave." With the Alchemist, a LIFEGAIN card and Genesis Wave / a 6+ payoff in hand, the Alchemist is the first Elf and the burst fills LIFEGAIN 1. Default ON; =0 -> as first built
-    GIANTS_ROCK_LIBRARY_LAND, // MTG_GIANTS_ROCK_LIBRARY_LAND Giants discard: a mana rock is "dead" only when no land is in play, in hand OR left in the library (a proposed amendment of the USER's "a rock with no land anywhere is blank" -- it shed Sol Ring on landless turn-2 hands with a Mountain on the next draw). Default OFF (the USER's rule as built) until the USER rules
+    GIANTS_ROCK_AFTER_LANDS,  // MTG_GIANTS_ROCK_AFTER_LANDS Giants discard, USER 2026-10-10 (replacing "a rock with no land anywhere is blank", which shed Sol Ring on landless turn-2 hands with a Mountain on the next draw): "It makes no sense to treat it as dead because they are better than no mana source, but it does make sense to prioritize lands over rocks when we cannot cast the rocks." A rock is always a mana source; one not castable next turn ranks after every land. Default ON; =0 -> the dead-rock rule as first built
     COLOR_EXACT_SCALED,       // MTG_COLOR_EXACT_SCALED    the colour-exact subset gate (BuildColorFeasibility) no longer stands DOWN on a board holding an untapped scaled mana dork (Priest of Titania / Elvish Archdruid / Accomplished Alchemist) or a live Wirewood Lodge burst: those sources are credited UNBOUNDED supply in their own colours and the rest stays exact -- so a Karoo's {G}{W}, booked as two wild in the flat pool, can no longer read as {W}{W} (SelesnyaLifegain gi344: five turns of an unpayable Nykthos Paragon plan). Sound: it can only reject a subset the board provably cannot pay. Default ON; =0 -> the whole-test stand-down
     ATTACK_TAP_NEED_EXACT,    // MTG_ATTACK_TAP_NEED_EXACT the attack-tap discount's mana `need` is the cost beyond every source that is NOT an attacking creature mana source (it used pool_noncreature, which keeps every mana dork, so the discount was dead whenever dorks finished the payment); 0 post-combat. Default ON; =0 -> the legacy need
     ATTACK_TAP_ABILITY_DISCOUNT,// MTG_ATTACK_TAP_ABILITY_DISCOUNT a creature the plan taps for a NON-mana {T} ability (Wellwisher's lifegain) is not an attacker: the this-turn attack projection re-projects the board with those creatures tapped. Default ON; =0 -> not discounted
@@ -404,6 +404,7 @@ enum Slot : int
     SOLVE_VERIFIED_WIN,       // MTG_SOLVE_VERIFIED_WIN      Solve (d0 + rollout leaves): a trial-VERIFIED COMBO OFF route win outranks a merely PROJECTED win, and short-circuits the walk (EDF gi 671; docs/design/discard-round-play-defects-2026-10-10.md s3). Default ON; =0 -> the old (projected win, value, mask) order
     EDF_GORGE_RED_SIZING,     // MTG_EDF_GORGE_RED_SIZING    FlickerGoOffCount: the Gorge's life/damage count returns early only when every loop iteration renews a red source; one-shot red makes it a floor under the other routes' sizing (EDF gi 671). Autonomous play only. Default ON; =0 -> the unconditional early return
     SOLVE_PENDING_AURA_EXACT, // MTG_SOLVE_PENDING_AURA_EXACT Solve: an in-hand land Aura's colour credit applies only to a subset that casts a land Aura (and that subset must pass the real payer); stops a phantom {W} Displacer freezing the d0 runner (EDF gi 1261; defects doc s4). Default ON; =0 -> the widened gates
+    ANTILIFE_TUTOR_BRANCH,    // MTG_ANTILIFE_TUTOR_BRANCH Anti-Lifegain tutor: the PROOF arm for the provider's one-option enabler-then-payoff narrowing (USER 2026-10-10: "we should have a narrowing tutor for anti-lifegain") -- return the enabler AND the payoff, ranked, so the tutor axis scores both. Default OFF (the narrowing is the default); delete once the paired A/B settles the prune
     COUNT
 };
 
@@ -758,7 +759,7 @@ inline const char* Name(int slot)
         "MTG_EDF_OUTLET_PIPS",
         "MTG_SELESNYA_ELF_WINDOW",
         "MTG_SELESNYA_ALCHEMIST_BURST",
-        "MTG_GIANTS_ROCK_LIBRARY_LAND",
+        "MTG_GIANTS_ROCK_AFTER_LANDS",
         "MTG_COLOR_EXACT_SCALED",
         "MTG_ATTACK_TAP_NEED_EXACT",
         "MTG_ATTACK_TAP_ABILITY_DISCOUNT",
@@ -769,6 +770,7 @@ inline const char* Name(int slot)
         "MTG_SOLVE_VERIFIED_WIN",
         "MTG_EDF_GORGE_RED_SIZING",
         "MTG_SOLVE_PENDING_AURA_EXACT",
+        "MTG_ANTILIFE_TUTOR_BRANCH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

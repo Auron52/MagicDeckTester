@@ -1828,14 +1828,13 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Search your library for an enchantment card, reveal it, put it into your hand, then shuffle. [Tutor target: intended default is SEARCHED (pending); this deck uses the enabler_then_wincon heuristic override -- fetch Tainted Remedy first (the only fetchable enabler) while no Remedy/Plague Drone effect is active, else Aria of Flame.]",
+   "oracle_text": "Search your library for an enchantment card, reveal it, put it into your hand, then shuffle. [Tutor target: chosen by each deck's provider (TutorCandidates). Anti-Lifegain narrows it to ONE card (AntiLifegainProvider::TutorCandidates, USER 2026-10-10): the lifegain->loss enabler (Tainted Remedy) while no enabler is active or castable from hand, else the cast payoff (Aria of Flame); both are offered when the only enabler held is not yet affordable. A deck without its own narrowing searches every legal target.]",
    "template": "custom",
    "parameters": {
     "tutor_to_hand": true,
     "tutor_types": [
      "Enchantment"
-    ],
-    "tutor_heuristic": "enabler_then_wincon"
+    ]
    }
   },
   {
@@ -1846,15 +1845,14 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top. [Tutor target: SEARCHED by default (pending); this deck uses the enabler_then_wincon heuristic override (Tainted Remedy first, else Aria). Placed on top -> drawn next turn.]",
+   "oracle_text": "Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top. [Tutor target: chosen by each deck's provider (TutorCandidates). Anti-Lifegain narrows it to ONE card (AntiLifegainProvider::TutorCandidates, USER 2026-10-10): the lifegain->loss enabler (Tainted Remedy) while no enabler is active or castable from hand, else the cast payoff (Aria of Flame). Creature Giving and Fluctuator search every legal target (Creature Giving's Defense of the Heart, Fluctuator's Fluctuator). Placed on top -> drawn next turn.]",
    "template": "custom",
    "parameters": {
     "tutor_to_top": true,
     "tutor_types": [
      "Artifact",
      "Enchantment"
-    ],
-    "tutor_heuristic": "enabler_then_wincon"
+    ]
    }
   },
   {

@@ -1,7 +1,26 @@
-# Anti-Lifegain: the tutor target is a one-option pick inside the search window (DEFECT, deferred)
+# Anti-Lifegain: the tutor target is a one-option pick inside the search window
 
-Status: **recorded defect, deferred to its own session** (found 2026-10-05 during the Bruna
-onboarding; Anti-Lifegain's behaviour is deliberately NOT changed in the Bruna branch).
+Status (2026-10-10): **MOVED INTO THE PROVIDER; the prune's proof is owed.** USER: *"Let's delete the
+part that is useless. However, we should have a narrowing tutor for anti-lifegain."* So the narrowing
+stays -- it is the deck's tutor policy -- and the two things that made it a defect are fixed:
+
+* **Where it lives.** The body is now `AntiLifegainProvider::TutorCandidates`
+  (src/ai/DecisionProviders.cpp); the free `TutorCandidates` in src/core/SpellEffects.h is deleted
+  (its only caller was this provider). The dead `tutor_heuristic: "enabler_then_wincon"` card param
+  (parsed, never read by any code in the repo's history) is deleted from cards.json, CardParams, the
+  loader and audit_viewer_decisions.py, and both tutors' bracket notes now say what each deck does.
+* **The shuffle-order fallback.** With no enabler and no payoff in the zone the function took the first
+  legal card in library order; it now returns every legal target (the generic list). Unreachable on the
+  shipped list (its only tutorable cards are Tainted Remedy and Aria of Flame), so the deck's play is
+  unchanged.
+* **Not tested -> tested.** test/unit/test_antilife_tutor.cpp (A1-A7) pins every branch.
+* **The proof** (the USER's rule: a one-option provider prune is fine once tested; a counterexample means
+  fix the ranking): `MTG_ANTILIFE_TUTOR_BRANCH` (heurarm `ANTILIFE_TUTOR_BRANCH`, DEFAULT OFF) returns the
+  enabler AND the payoff, ranked, so the tutor axis (width 2) scores both. A paired pooled A/B of the
+  narrowing against that arm on Anti-Lifegain is owed; every game the narrowing loses gets root-caused.
+  Delete the lever once it settles.
+
+The original write-up (2026-10-05, found during the Bruna onboarding) follows.
 
 ## What it is
 

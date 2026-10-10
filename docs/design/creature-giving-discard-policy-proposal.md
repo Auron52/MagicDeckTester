@@ -29,6 +29,8 @@ true)`; `=0` restores `GenericProvider::CleanupDiscardCandidates` (max-MV). Quot
   surplus fuel -> Massacre Wurm -> 2nd Suture Priest -> extra Defense copies (they stack) -> keep tail.
 - Implementation: A/B three arms (generic / current DotH patch / buckets); fix the stale
   "spare-copy band" header comment; Enlightened Tutor's tutor_heuristic names Anti-Lifegain cards.
+  RESOLVED 2026-10-10 (USER: "Let's delete the part that is useless"): the dead param is deleted and
+  the note now says Creature Giving searches every legal target.
 
 
 #### Agent defaults across the 2026-10-09 review (all decks; surfaced, USER may overturn)

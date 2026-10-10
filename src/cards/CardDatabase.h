@@ -1213,9 +1213,9 @@ struct CardParams
     bool destroy_all_enchantments = false;
 
     // Tutor: search the library for a card whose card type is in tutor_types and move it to
-    // the hand (tutor_to_hand) or the top of the library (tutor_to_top). Deterministic target
-    // choice via TutorPick (SpellEffects.h). Idyllic Tutor (enchantment -> hand), Enlightened
-    // Tutor (artifact/enchantment -> top).
+    // the hand (tutor_to_hand) or the top of the library (tutor_to_top). The target is the deck
+    // provider's TutorCandidates (searched over the tutor axis; Anti-Lifegain narrows it). Idyllic
+    // Tutor (enchantment -> hand), Enlightened Tutor (artifact/enchantment -> top).
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
     // "You MAY search" -- opens a DECLINE arm on the searched tutor axis
@@ -1323,13 +1323,6 @@ struct CardParams
     // exile to any value leaf that splits on either size. Recording it as inert would be recording
     // an engine gap as a card fact, and would be wrong the day this deck's value leaf lands.
     bool                     exiles_self_on_resolve = false;
-    // Tutor target selection. The intended DEFAULT (empty) is a SEARCHED choice -- the
-    // search branches over fetch targets and keeps the best (a Tier-2 search-choice like
-    // dig-as-search-choice; pending, see follow-up). A non-empty value names a HEURISTIC
-    // override used instead of searching. "enabler_then_wincon" = TutorPick: fetch a combo
-    // enabler (lifegain_to_loss) while none is active, else the wincon engine (verse_damage),
-    // else the first match. (Until searched-tutor lands, the default also uses TutorPick.)
-    std::string              tutor_heuristic;
     // Gamble's downside: after the fetched card lands in hand, discard one uniformly-random card
     // (can be the tutored card). Deterministic seed (game_seed/turn/search_count), applied inside
     // PerformTutor so the rollout and executor stay lockstep. Off everywhere else.

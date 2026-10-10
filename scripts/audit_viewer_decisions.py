@@ -821,7 +821,7 @@ INERT_PARAMS = {
     "discount_max_targets": "targeting detail (rides `targeting`)",
     "discount_self_safe": "targeting-safety detail", "discount_targets_permanents": "targeting detail",
     "discount_targets_scale_x": "targeting/X detail", "etb_dig_requires_subtypes": "dig detail (rides etb_dig_count)",
-    "etb_dig_subtypes": "dig detail (rides etb_dig_count)", "tutor_heuristic": "tutor ranking detail (rides tutor)",
+    "etb_dig_subtypes": "dig detail (rides etb_dig_count)",
     "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",

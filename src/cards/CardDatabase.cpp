@@ -1074,7 +1074,6 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_energy                = params.value("etb_energy", 0);
     p.energy_per_colored_tap    = params.value("energy_per_colored_tap", 0);
     p.exiles_self_on_resolve    = params.value("exiles_self_on_resolve", false);
-    p.tutor_heuristic           = params.value("tutor_heuristic", std::string{});
     p.discard_random_after_tutor = params.value("discard_random_after_tutor", false);
     p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
     p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);

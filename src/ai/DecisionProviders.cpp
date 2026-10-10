@@ -4585,14 +4585,93 @@ bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
 
 // ---- AntiLifegainProvider ---------------------------------------------------
 
+// THE ANTI-LIFEGAIN TUTOR NARROWING (USER 2026-10-10: "we should have a narrowing tutor for
+// anti-lifegain"). Idyllic Tutor / Enlightened Tutor fetch ONE card: the lifegain->loss ENABLER
+// (lifegain_to_loss: Tainted Remedy) while no enabler is active or castable from hand, else the
+// cast-PAYOFF (verse_damage: Aria of Flame); each falls back to the other. When the only enabler
+// held is one we cannot pay for yet, both are offered and the search picks. With neither in the
+// search zone the whole legal list is offered.
+//
+// History: this body was the free function TutorCandidates in src/core/SpellEffects.h -- provider
+// logic in an engine file, its only caller this provider (docs/design/antilifegain-tutor-single-pick-
+// defect.md) -- and the card data carried a `tutor_heuristic: "enabler_then_wincon"` param that
+// nothing ever read. Moved here unchanged except the last fallback: with no enabler and no payoff
+// in the zone the old function took the FIRST legal card in library (= shuffle) order; it now
+// returns every legal target, so the search decides. Unreachable on the shipped list, whose only
+// tutorable cards are Tainted Remedy and Aria of Flame.
+//
+// MTG_ANTILIFE_TUTOR_BRANCH (heurarm ANTILIFE_TUTOR_BRANCH, DEFAULT OFF) is the PROOF arm for this
+// one-option prune (USER rule: a provider prune is fine once tested; a counterexample means fix the
+// ranking): it returns the enabler AND the payoff, ranked as above, so the tutor axis (width 2)
+// scores both. Delete it once the paired A/B has settled the prune.
+static bool AntilifeTutorBranch()
+{
+    static const bool on = EnvOn("MTG_ANTILIFE_TUTOR_BRANCH");   // DEFAULT OFF; the proof arm
+    return heurarm::Flag(heurarm::ANTILIFE_TUTOR_BRANCH, on);
+}
+
 std::vector<std::string>
 AntiLifegainProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
     // Human play (unpruned): offer EVERY legal target so the player picks the tutor's card
-    // freely, not the enabler-then-wincon heuristic's single choice. Mirrors HinataProvider;
+    // freely, not the enabler-then-payoff narrowing's single choice. Mirrors HinataProvider;
     // autonomous search is unchanged (DecisionUnpruned() is false there).
     if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
-    return ::TutorCandidates(s, controller, pp);
+    const Player& ap = s.players[controller];
+    // THE SEARCH ZONE: a wish looks outside the game, a Regrowth at the graveyard, every other tutor
+    // at the library (the generic list's rule).
+    const std::vector<Card>* wish_pool = pp.wish_from_sideboard  ? &ap.sideboard
+                                       : pp.tutor_from_graveyard ? &ap.graveyard : nullptr;
+
+    // The first enabler / payoff in the search zone.
+    std::string enabler_name, wincon_name;
+    for (const Card& lc : TutorZoneView(ap, wish_pool))
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+        const Card& card = def ? def->card : lc;
+        bool type_ok = false;
+        for (const std::string& t : pp.tutor_types) { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (!type_ok) { continue; }
+        if (!TutorNumericFilterOk(card, pp)) { continue; }   // MV / toughness conjunct
+        if (def && def->params.lifegain_to_loss && enabler_name.empty()) { enabler_name = lc.m_name; }
+        if (def && def->params.verse_damage      && wincon_name.empty())  { wincon_name  = lc.m_name; }
+    }
+    if (enabler_name.empty() && wincon_name.empty()) { return GenericProvider::TutorCandidates(s, controller, pp); }
+
+    // Do we already have an enabler we can get online soon?
+    bool ready_enabler = RemedyActive(s, controller);
+    bool unaffordable_enabler_in_hand = false;
+    if (!ready_enabler)
+    {
+        int sources = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { ++sources; }
+        }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->params.lifegain_to_loss) { continue; }
+            if (sources >= d->card.m_mana_cost.ManaValue()) { ready_enabler = true; break; }
+            unaffordable_enabler_in_hand = true;
+        }
+    }
+
+    // Ranked: the payoff first once an enabler is coming, the enabler first otherwise.
+    std::vector<std::string> ranked;
+    const std::string& first  = ready_enabler ? wincon_name : enabler_name;
+    const std::string& second = ready_enabler ? enabler_name : wincon_name;
+    if (!first.empty())  { ranked.push_back(first); }
+    if (!second.empty()) { ranked.push_back(second); }
+    if (AntilifeTutorBranch()) { return ranked; }
+    // UNSURE: the only enabler is a held-but-unaffordable one (Plague Drone) -> let the search pick
+    // between coming online cheaper now (enabler) and having the payoff ready (wincon).
+    if (!ready_enabler && unaffordable_enabler_in_hand && !enabler_name.empty() && !wincon_name.empty())
+    { return ranked; }
+    ranked.resize(1);
+    return ranked;
 }
 
 std::vector<std::string>
@@ -23770,8 +23849,11 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
 //            daredevil is correct if we need the space. If we have lands on board we might be able
 //            to aim for 7." -- so a SOFT 7th (5 with a Daredevil) "when there is room", which the
 //            USER placed "just before the 2nd Bolt" in the ladder. Pick order: a land FIRST while
-//            none is in play, then Sol Ring > lands > Fire Diamond. A rock with no land anywhere is
-//            a BLANK (nothing can pay for it) and never fills a mana slot.
+//            none is in play, then Sol Ring > lands > Fire Diamond. A rock we cannot cast next turn
+//            ranks after every land, but is never a blank -- USER 2026-10-10: "It makes no sense to
+//            treat it as dead because they are better than no mana source, but it does make sense to
+//            prioritize lands over rocks when we cannot cast the rocks." (MTG_GIANTS_ROCK_AFTER_LANDS;
+//            =0 restores the first build's "a rock with no land anywhere is a BLANK".)
 //   REDUCER  Stinkdrinker Daredevil: 2 while none is in play, 1 with one, 0 at two. A spare copy is
 //            NOT a threat -- it is a Goblin Rogue, so nothing in the deck counts, pumps or fetches it.
 //   GIANTS   2 + a soft 3rd. The USER's order, best first: Inferno Titan > Surtland Flinger >
@@ -23808,7 +23890,7 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
 //    1 MANA  2 GIANT  3 DAREDEVIL  4 MANA  5 GIANT  6 MANA  7 GREAVES  8 DAREDEVIL2  9 GIANT3 (soft)
 //   10 MANA 11 BOLT  12 MANA  13 MANA  14 MANA7 (the soft 7th source)  15 BOLT2 (soft)
 // A MANA slot fills only while the hard target (net of board) is unmet; MANA7 fills one source past it.
-// SHED ORDER: S0 Pyroclasm, then a dead rock, then a dead legend copy > S1 mana past the 7th (Fire
+// SHED ORDER: S0 Pyroclasm, then a dead rock (lever off only), then a dead legend copy > S1 mana past the 7th (Fire
 // Diamond, then Mountains, then Sol Ring: the pick list reversed) > S2 spare Greaves > S3 the 3rd/4th
 // Bolt > S4 spare Daredevils > S5 spare Giants, lowest discounted value first > S6 anything this policy
 // does not recognise > the ladder read backwards. Every non-staged hand card is named exactly once, so
@@ -23825,8 +23907,9 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
 //   * `reach` counts MANA (Sol Ring = 2); the quota counts SOURCES (the USER's "6 sources").
 //   * Only a Daredevil IN PLAY discounts ("per Daredevil in play"); a held one does not (proposal D5).
 //     The mana target's credit is one copy's worth: 4 with one or two Daredevils in play.
-//   * "No land anywhere" = no land on our battlefield and none in hand (literal). A rock in play with
-//     no land is unreachable against the goldfish.
+//   * "Cannot cast the rocks" (USER 2026-10-10) = the board's mana plus the best untapped land drop in
+//     hand is below the rock's mana value, i.e. not castable next turn. With the lever off, the first
+//     build's "no land anywhere" = no land on our battlefield and none in hand (literal).
 //   * The Giant quota is NOT netted against Giants in play: the design nets mana, Daredevil and
 //     Greaves only, and the Dragons / Minotaur threat floors it inherits are hand floors too.
 //   * S0's inner order (Pyroclasm before a dead rock: a dead rock goes live the moment a land is
@@ -23934,22 +24017,41 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     }
     auto is_cls = [&](int i, Cls k) { return cls[static_cast<std::size_t>(i)] == k; };
 
-    // ---- 3. mana: the pick list, and the dead rocks -----------------------------------------------
-    // MTG_GIANTS_ROCK_LIBRARY_LAND (default OFF, a proposed amendment for the USER): "no land anywhere"
-    // also counts the library (counts only), so a rock is dead only when no land can ever arrive.
-    static const bool s_rock_lib = EnvOn("MTG_GIANTS_ROCK_LIBRARY_LAND");
-    bool library_land = false;
-    if (heurarm::Flag(heurarm::GIANTS_ROCK_LIBRARY_LAND, s_rock_lib))
+    // ---- 3. mana: the pick list (and, with the lever off, the dead rocks) -------------------------
+    // USER 2026-10-10, replacing "a rock with no land anywhere is blank" (which shed Sol Ring from a
+    // landless turn-2 hand one draw before a Mountain arrived, giants regression gi 130): "It makes no
+    // sense to treat it as dead because they are better than no mana source, but it does make sense to
+    // prioritize lands over rocks when we cannot cast the rocks." MTG_GIANTS_ROCK_AFTER_LANDS (heurarm
+    // GIANTS_ROCK_AFTER_LANDS, default ON): a rock is always a mana source; one we cannot cast NEXT turn
+    // ranks after every land. Agent reading of "cannot cast": the board's mana plus the best untapped
+    // land drop in hand is below the rock's mana value (one land drop a turn; a tapped land adds nothing
+    // the turn it lands). On the shipped list this moves only the landless hand (no Mountain enters
+    // tapped, and Fire Diamond already ranks below the lands). =0 restores the dead-rock rule exactly.
+    static const bool s_rock_after = EnvOn("MTG_GIANTS_ROCK_AFTER_LANDS", true);   // DEFAULT ON
+    const bool rock_after_lands = heurarm::Flag(heurarm::GIANTS_ROCK_AFTER_LANDS, s_rock_after);
+    int next_drop = 0;   // the mana of the best untapped land drop in hand
+    for (int i = 0; rock_after_lands && i < n; ++i)
     {
-        for (const Card& lc : ap.library) { if (CleanupDiscardIsLand(lc)) { library_land = true; break; } }
+        if (!is_cls(i, C_LAND)) { continue; }
+        const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
+        if (d != nullptr && d->params.enters_tapped) { continue; }
+        next_drop = std::max(next_drop, mana_of(d));
     }
-    const bool rocks_live = board_lands > 0 || hand_land || library_land;
+    auto rock_soon = [&](int i)   // castable next turn
+    {
+        const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
+        return board_mana + next_drop >= d->card.m_mana_cost.ManaValue();
+    };
+    const bool rocks_live = rock_after_lands || board_lands > 0 || hand_land;
     auto rock_tier = [&](int i)   // 0 = burst (Sol Ring), 1 = plain, 2 = enters tapped (Fire Diamond)
     {
         const CardDefinition* d = def_of(ap.hand[static_cast<std::size_t>(i)]);
         if (d->params.produces_amount >= 2) { return 0; }
         return d->params.enters_tapped ? 2 : 1;
     };
+    // A rock in its usual place: every rock with the lever off (only reached while rocks_live), a rock
+    // castable next turn with it on.
+    auto rock_in_place = [&](int i) { return !rock_after_lands || rock_soon(i); };
     std::vector<int> mana_pick;   // keep order: a land first while none is in play, Sol Ring > lands > Fire Diamond
     std::vector<int> dead_rocks;  // shed order (the pick order reversed)
     mana_pick.reserve(un);
@@ -23958,12 +24060,17 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     {
         for (int i = 0; i < n; ++i) { if (is_cls(i, C_LAND)) { first_land = i; mana_pick.push_back(i); break; } }
     }
-    if (rocks_live) { for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == 0) { mana_pick.push_back(i); } } }
+    if (rocks_live)
+    { for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == 0 && rock_in_place(i)) { mana_pick.push_back(i); } } }
     for (int i = 0; i < n; ++i) { if (is_cls(i, C_LAND) && i != first_land) { mana_pick.push_back(i); } }
     for (int t = 1; t <= 2; ++t)
     {
         if (!rocks_live) { break; }
-        for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == t) { mana_pick.push_back(i); } }
+        for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == t && rock_in_place(i)) { mana_pick.push_back(i); } }
+    }
+    for (int t = 0; rock_after_lands && t <= 2; ++t)   // the rocks we cannot cast next turn: after every land
+    {
+        for (int i = 0; i < n; ++i) { if (is_cls(i, C_ROCK) && rock_tier(i) == t && !rock_soon(i)) { mana_pick.push_back(i); } }
     }
     if (!rocks_live)
     {

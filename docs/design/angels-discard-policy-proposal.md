@@ -140,6 +140,10 @@ Cross-deck (verbatim):
     Lightstall 0.72, Youthful 0.61, Resplendent 0.52, Serra 0.44, Thune 0.38, Dawnbringer 0.32 --
     MinotaurProvider's adopted EV2 spread (one place of value is worth less than one turn of delay,
     two places more).
+    KEPT, USER-accepted 2026-10-10 on the agent's recommendation. USER 2026-10-10 on the 0.85 scale: *"That is an empirical value. I don't know the answer myself so it is a bit difficult to know. Unfortunately, testing it also won't give us an easy value because discards are so rare. I guess we can stick with it if you think the number seems reasonable."* The agent's case: at 0.85 one
+    place in the order is worth about half a turn of delay (a card one place lower but a turn sooner
+    wins, two places lower loses), which is the right size for an order whose neighbours are close in
+    worth; it is the spread Minotaur measured and adopted; and it acts only inside the USER's tiers.
   * (i) ~~A protected Giada in hand is NOT credited as mana~~ -- WITHDRAWN 2026-10-10: it contradicted
     the USER's "she counts toward our mana total" (the USER asked why she was not counted). A protected
     Giada in hand is now credited to Angel spells: cast on the first turn the board + kept lands surely

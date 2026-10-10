@@ -4,7 +4,8 @@
 // Every expected order below was derived BY HAND from the design text -- the keep ladder
 //   MANA, GIANT, DAREDEVIL, MANA, GIANT, MANA, GREAVES, DAREDEVIL2, GIANT3, MANA, BOLT, MANA, MANA,
 //   MANA7 (soft), BOLT2 (soft)
-// and the shed order S0 Pyroclasm / dead rock > S1 mana past the 7th (Fire Diamond, Mountains, Sol Ring)
+// and the shed order S0 Pyroclasm / dead rock (MTG_GIANTS_ROCK_AFTER_LANDS=0 only; ON, a rock we cannot
+// cast next turn is a mana source after every land) > S1 mana past the 7th (Fire Diamond, Mountains, Sol Ring)
 // > S2 spare Greaves > S3 3rd/4th Bolt > S4 spare Daredevils > S5 spare Giants (lowest discounted value
 // first) > the ladder read backwards -- with the Giants valued 7 x 0.85^position in the USER's order
 // (Titan 0, Flinger 1, Behemoth 2 [-1 with 2+ Giants in play, 7 with none], Tectonic 3, Sovereign 4,
@@ -264,36 +265,62 @@ TEST_CASE("Giants discard G10: a land first while none is in play; Sol Ring > la
     CHECK(Gi(t) == std::vector<int>{ 6, 7, 1, 3, 2, 5, 4, 0 });
 }
 
-// No land in play and none in hand: both rocks are blanks (S0, after the Pyroclasm; Fire Diamond
-// first), and they fill no mana slot.
-TEST_CASE("Giants discard G11: a rock with no land anywhere is a blank")
+// MTG_GIANTS_ROCK_AFTER_LANDS pinned per case (default ON).
+std::vector<int> GiRock(const GameState& st, int lever)
 {
-    const GameState s = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {});
-    CHECK(Gi(s) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });
-    CHECK(Gen(s).front() == 2);
+    heurarm::t_arm[heurarm::GIANTS_ROCK_AFTER_LANDS] = static_cast<std::int8_t>(lever);
+    std::vector<int> v = Gi(st);
+    heurarm::t_arm[heurarm::GIANTS_ROCK_AFTER_LANDS] = -1;
+    return v;
 }
 
-// MTG_GIANTS_ROCK_LIBRARY_LAND (default OFF, a proposed amendment): with a land left in the library the
-// rocks are live mana -- Sol Ring is the first mana slot and Fire Diamond the second, and their 3 mana
-// now count toward reach (the table, dist 0): Flinger (5) is 2 short -> 0.35 x 7(0.85) = 2.08, Titan (6)
-// 3 short -> 0.10 x 7 = 0.70, Behemoth (6, no Giant in play: last) 3 short. The ladder reads Sol,
-// Flinger, Daredevil, Fire Diamond, Titan, Greaves, Behemoth and sheds Pyroclasm, then that ladder
-// backwards. With no land in the library, or the lever off, G11's order stands.
-TEST_CASE("Giants discard G11b: the rock-library amendment keeps a rock live while a land can still be drawn")
+// No land in play and none in hand (giants regression gi 130's shape). USER 2026-10-10: "It makes no
+// sense to treat it as dead because they are better than no mana source, but it does make sense to
+// prioritize lands over rocks when we cannot cast the rocks." Lever ON: both rocks are mana sources,
+// after every land (there is none): Sol Ring is the first mana slot and Fire Diamond the second, and
+// their 3 mana count toward reach (the table, dist 0): Flinger (5) is 2 short -> 0.35 x 7(0.85) = 2.08,
+// Titan (6) 3 short -> 0.10 x 7 = 0.70, Behemoth (6, no Giant in play: last) 3 short. The ladder reads
+// Sol, Flinger, Daredevil, Fire Diamond, Titan, Greaves, Behemoth and sheds Pyroclasm, then that ladder
+// backwards. Lever OFF (the first build): both rocks are blanks (S0, after the Pyroclasm; Fire Diamond
+// first) and fill no mana slot. A land left in the library changes neither arm.
+TEST_CASE("Giants discard G11: an uncastable rock is still a mana source (=0: the dead-rock blank)")
 {
-    auto amended = [](const GameState& st, int lever)
-    {
-        heurarm::t_arm[heurarm::GIANTS_ROCK_LIBRARY_LAND] = static_cast<std::int8_t>(lever);
-        std::vector<int> v = Gi(st);
-        heurarm::t_arm[heurarm::GIANTS_ROCK_LIBRARY_LAND] = -1;
-        return v;
-    };
-    const GameState lib = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {}, { "Mountain", kTi });
-    CHECK(amended(lib, 1) == std::vector<int>{ 7, 5, 6, 2, 1, 4, 3, 0 });
-    CHECK(amended(lib, 0) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // the USER's rule as built
-    CHECK(Gi(lib)         == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // default OFF
-    const GameState dry = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {}, { kTi, kFl });
-    CHECK(amended(dry, 1) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // no land can arrive
+    const GameState s = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {});
+    CHECK(GiRock(s, 1) == std::vector<int>{ 7, 5, 6, 2, 1, 4, 3, 0 });
+    CHECK(Gi(s)        == std::vector<int>{ 7, 5, 6, 2, 1, 4, 3, 0 });   // default ON
+    CHECK(GiRock(s, 0) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });   // the dead-rock rule as first built
+    CHECK(Gen(s).front() == 2);
+    const GameState lib = MakeGiants({ kSol, kFD, kTi, kFl, kDd, kBo, kGr, kPy }, {}, { kM, kTi });
+    CHECK(GiRock(lib, 1) == std::vector<int>{ 7, 5, 6, 2, 1, 4, 3, 0 });
+    CHECK(GiRock(lib, 0) == std::vector<int>{ 7, 1, 0, 5, 6, 3, 4, 2 });
+}
+
+// "Prioritize lands over rocks when we cannot cast the rocks." No land in play and two enters-tapped
+// lands in hand: next turn's land comes down tapped, so Sol Ring ({1}) cannot be cast next turn and
+// ranks after BOTH lands (pick list Sands1, Sands2, Sol0) -- read backwards, it is given up before the
+// second land. Lever OFF: a land in hand made the rock live in its usual place, Sol Ring > lands (pick
+// list Sands1, Sol0, Sands2), so the second land went first. Reach (dist 0) counts the same three mana
+// cards either way and all three sit in MANA slots (need 6), so the orders differ only in that swap.
+TEST_CASE("Giants discard G11b: a rock we cannot cast next turn ranks after every land")
+{
+    const char* kSands = "Blossoming Sands";   // enters tapped
+    const GameState s = MakeGiants({ kSol, kSands, kSands, kTi, kFl, kDd, kBo, kPy }, {});
+    auto pos = [](const std::vector<int>& v, int idx)
+    { return static_cast<int>(std::find(v.begin(), v.end(), idx) - v.begin()); };
+    const std::vector<int> on  = GiRock(s, 1);
+    const std::vector<int> off = GiRock(s, 0);
+    CheckPermutation(s, on);
+    CheckPermutation(s, off);
+    CHECK(on.front() == 7);
+    CHECK(off.front() == 7);
+    CHECK(pos(on, 0) < pos(on, 2));     // Sol Ring given up before the second land
+    CHECK(pos(off, 2) < pos(off, 0));   // =0: the second land before Sol Ring
+    std::vector<int> swapped = on;
+    for (int& v : swapped) { v = v == 0 ? 2 : (v == 2 ? 0 : v); }
+    CHECK(swapped == off);
+    // With an untapped land drop in hand the rock is castable next turn and keeps its usual place.
+    const GameState t = MakeGiants({ kSol, kM, kM, kTi, kFl, kDd, kBo, kPy }, {});
+    CHECK(GiRock(t, 1) == GiRock(t, 0));
 }
 
 // Board 5 Mountains + Greaves: haste quota 0, so the hand Greaves is spare (S2) -- after the Mountain
