@@ -1251,3 +1251,209 @@ Also unbuilt: `MTG_KEEP_SUB_CUTOFF_R`'s "decision-preserving" sub-table freeze e
 prune-set EMIT path, not live, so it cannot help the dominant phase today. And `perf` does not work
 in this container (`failed to write perf data: Bad address`), so the unit census remains the only
 attribution instrument available here -- worth knowing before planning a profiling session.
+
+# 2026-10-11 — LOSSLESS FIRST: the cost model was wrong, and what is actually available
+
+USER RULING, 2026-10-11: *"Let's stop with the lossy changes until we have exhausted the lossless
+options. We should be able to figure out a way to make this work without paying 60-80 hours. That is
+obviously unacceptable. How high is K? Are there branches we can cut via heuristics? What other
+optimizations are available. If we need to return to the lossy options I would rather test them out
+on fast decks first to determine what they actually cost."*
+
+This section is the answer, and it starts by retracting the measurement apparatus the previous
+section was built on.
+
+## THREE THINGS WERE WRONG WITH `ab_tail.sh`, and every ratio it produced inherits them
+
+1. **IT RAN AT THE WRONG DEPTH.** The arms ran in a `d1` sandbox
+   (`value_play.mull_gen_depth = 1`). The committed contract for this deck is **d2/b3**
+   (`decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.value.json`, written by the value
+   leaf's phase F). Every one of the nine arms was measured one depth below the job being sized.
+2. **IT PRICED A PLATEAU, NOT A TAIL.** Its 64 captured rollouts all sit in a **100.0–104.8 s**
+   band, mean 102.6 s. Against the full slow population (`n = 11,118`, `p50 = 67.7 s`,
+   `p90 = 294 s`, `p99 = 973 s`, `max = 3,405 s`) that band is about **p64**. So it measured
+   neither the median nor the tail. This is `memory:bench-n-decides-median-vs-tail` applied to the
+   instrument built to avoid exactly that error.
+3. **IT WAS LENGTH-BIASED BY CONSTRUCTION.** A list of logged-slow rollouts cannot estimate total
+   generation cost, because total cost is (mean over ALL rollouts) × (count). The slow list's mean
+   is a conditional mean and says nothing about the product.
+
+The replacement is **`logs/kitty_tail_diag/ab2.sh`**: `MTG_KEEP_REPLAY_SAMPLE=N` draws N size-7
+cell-sides *uniformly* over the size-7 work list and runs them through the gen's own `run_one` on
+one pooled queue. Uniform-over-cell-sides **is** the floor phase's own distribution (every cell-side
+gets `r_floor = 2`), so the sample mean is an unbiased estimator of per-rollout cost with the tail
+represented in proportion. The draw is a fixed xorshift from a constant, so every arm replays the
+identical rollouts — a **paired** comparison. It also has the prefix property: the first N draws of
+an N' > N run are the N-run's draws.
+
+`MTG_KEEP_BENCH=1` stays set and is load-bearing, not an optimisation: it makes the equivalence
+cache skip the `play_digest` compare so every arm resolves the SAME 15 buckets and a `w` index means
+the same cell on every arm. Checked against the source — it touches only that digest compare and the
+bench path (which the replay returns before), so **it does not change `run_one`'s cost**.
+
+**METRIC = sum ms, NOT units**, which inverts this repo's usual rule
+(`memory:units-not-ms-on-a-contended-box`). The levers under test are *prices*: raising
+`MTG_EQUIP_ROUTE_LATEMAIN_UNITS` raises units-per-link while lowering wall, so units and ms move in
+opposite directions by construction. One arm at a time on an otherwise idle box with a fixed thread
+count makes ms the honest axis. (A `suite_gate.py --cost` call — which MEASURES, spawning a
+regression run — overlapped the first baseline for ~2 min and took load to 43.6 on 32 cores; that
+baseline was discarded and the sweep restarted. A contaminated denominator biases every ratio
+optimistically.)
+
+## THE COST MODEL WAS OFF BECAUSE `roll7` DOES NOT COUNT EVERY ROLLOUT
+
+`gen_prog.roll7` is documented as "size-7 ROLLOUTS enqueued (1 per kind-0 task)" and reaches exactly
+213,492 = 106,746 cell-sides × `r_floor` 2. But the **kind −1 PRECOMPUTE** tasks run rollouts
+"deliberately outside every accumulator: no fold_mtx, no in_flight, **no roll7**, no journal", and
+the floor additionally speculates up to `cont_lookahead = 4` rollouts past `r0` per cell-side. So
+the floor executes **~6 rollouts per cell-side, not 2** — roughly 640k, not 213,492.
+
+Both corrections cancel for the floor's measured wall, so the phase timeline below is unaffected.
+What it does kill is any projection of the form "rollouts × cost-per-rollout" built on the counted
+number: that overstates cost-per-rollout by ~6–8x. The uniform sampler measures the *true*
+per-rollout cost, and **a lever's RATIO transfers to every phase regardless of the count**, which is
+why the ratio is the only thing taken from it.
+
+## THE MEASURED PHASE TIMELINE (d1 run, the one whose floor completed)
+
+Read off the monitor lines, which is a measurement rather than the generator's own `total_cells × 40
+/ floor_rate` formula:
+
+| phase | wall | rollouts (counted) | note |
+|---|---|---|---|
+| size-7 floor | 0 → 22,503 s (6.25 h) | 213,492 | `rollsub=0` throughout — all 32 threads on size-7 |
+| sub-table floor | → 30,004 s (+2.1 h) | 160,844 | 64,422 fused batches, ~36 rollouts/s |
+| **sub-refine wave 1** | 29,552 rollouts in 3,601 s | **801,008 needed** | ⇒ **27.1 h for wave 1 alone** |
+| size-7 refine | never reached | — | freeze-pruned |
+
+**Wave 1's 27 h is measured, not modelled**, and it is still the dominant phase. The apparent
+"sub-refine rollouts are 2.6–5x dearer than sub-floor rollouts" is explained without any pathology:
+the sub FLOOR covers all 64,422 sub-cells including the trivially cheap tiny hands
+(`size6=21500 size5=7653 size4=2340 size3=589 size2=114 size1=15`), while the wave's 50,063 marked
+cells concentrate in **size 6**, which costs nearly what size 7 does. The slow log's size mix agrees
+(`size7=7802 size6=2802 size5=289 size4=22 size3=2 size2=2`).
+
+**The box is NOT starved during the waves.** 32 workers × 16-rollout tasks at the observed
+per-rollout cost predicts the observed 7–14 rollouts/s, so there is no scheduling win hiding in the
+wave barrier. The one genuinely stranded window is the **serial marking pass between waves**
+(`compute_sub_wave_tasks` enumerates subcompositions for every size-7 hand at every mull level, on
+the producer thread — the code's own flip-sweep note says repeating it per wave "would stall feeding
+for its duration on every wave"). That pass is read-only over independent size-7 hands, so it is
+embarrassingly parallel and overlapping it is pure scheduling — the one piece of in-generator
+plumbing worth building.
+
+## THE TAIL'S MECHANISM: COST IS "GAMES THAT DO NOT WIN"
+
+The slow size-6 hands all have one shape:
+
+```
+Remote Farm x1; Shadowspear x1; Skateboard x1; Sram, Senior Edificer x3
+Remote Farm x2; Shadowspear x1; Sram, Senior Edificer x3
+Remote Farm x1; Shadowspear x2; Sigarda's Aid x1; Skateboard x1; Sram x1
+```
+
+Land-light, Sram-heavy, **no Puresteel Paladin**. These hands cannot go off, so they play all
+`max_turns = 8` turns and pay a full search at every decision, while a hand that goes off wins on
+turn 3 and costs almost nothing. That is the same fact the enrichment table already reported from
+the other end (Puresteel **0.00x**, Sram **1.94x**) — **cost is driven by turns played, and turns
+played is driven by failure to win.** Any cut that helps must either make a non-winning game cheaper
+per turn, or stop paying full price for a turn that cannot produce a win.
+
+## THE LOSSLESS INVENTORY, with status
+
+**`MTG_EQUIP_ROUTE_LATEMAIN_UNITS` — built, default-inert (1), NEVER MEASURED. The best candidate.**
+`equip_route` is the largest single unit site on this deck (**32.6%** of units on the old tail list,
+**26.3%** on the uniform d2 sample). This lever *prices* DFS links on frames after the turn's first
+main instead of *refusing* them. Its own comment establishes soundness **by construction, not by
+sample**: at an unlimited root `ChargeDecisionUnits` returns on `budget == nullptr` and the per-link
+cut test requires `budget != nullptr`, so the price is never read and the walk is byte-identical. It
+therefore satisfies "a budget may RE-PRICE work, it may not make a line UNFINDABLE" by construction,
+which its gate-shaped twin `MTG_EQUIP_ROUTE_TOPMAIN` does not. TOPMAIN measured **0.879x at b20,
+stacking to 0.714x**, and **−25 game-turns** (cheaper *and* better play). This is that saving with
+the completeness objection removed.
+
+**`MTG_METALCRAFT_EQUIP_HOIST` — measured −25.3% units on v1, default OFF. A USER decision.**
+It extends the auto-equip collapse across the same-turn metalcraft flip: the collapse's freeness
+test reads `EquipCostGenericNow` at *candidate* time, so on the go-off turn every equip is stamped
+at its PRINTED cost, the collapse declines, and the odometer powersets a take/skip family every
+member of which will cost {0} when paid. **Not a pure identity fold** — a hoisted equip rides every
+subset without contributing to the mana term — so it is reported, never adopted by me. It is worth
+measuring here because the v1 harm it was parked for came from **double strike** (Kor Duelist), it
+disarms itself via `FrameHasDoubleStrikeSource`, and **v3 has no double-strike source**.
+
+**The uncharged subset walk — `SolveChargeWeightOptIn`.** The census shows
+`bf_scored search_subsets = 1,033,256,261` while `units.greedy_walk` **does not appear at all**
+(sites with zero units are not printed). A billion scored subsets charging **zero** budget units is
+the literal subject of this document's title. `MTG_SOLVE_CHARGE` is a per-deck opt-in
+(`SnowProvider = 16`; Equipment has **not** opted in) and on Snow the uncharged walk let "63.6% of
+decisions run past their budget and 36.4% past 10x it". Charging it is not a precision cut — it
+makes the budget bound what it was calibrated on — and it is the sanctioned price shape (inert at
+unlimited budget). Earlier readings on the wrong harness: `sc16` 0.986x, `sc4` 0.903x but with 2
+labels moved and a 25% worse worst case. Re-measure on `ab2.sh`.
+
+**`WinlessDevelop` — LOSSLESS, deck-agnostic, and WALLED OFF from budgeted play.** The
+reachable-state closure collapses plans that reach the same end-of-turn state, keyed on the
+engine's own order-exact 128-bit `BuildDedupKey`: "two lines sharing this key have identical
+futures, so searching the second is a re-run of the first: **LOSSLESS up to a 128-bit collision**",
+and "the mechanism here is deck-agnostic ... **any archetype that can prove a turn winless gets
+this for free**". Two things stand between it and this deck:
+  * **`EquipmentProvider` has no `ProvenWinlessThisTurn`.** Only Snow, Fungus and
+    EldraziDisplacerFlicker implement the proof. For an equipment deck the proof is tractable and
+    auditable (bound this turn's maximum attack damage given attackers, mana and attachable
+    equipment) — but a false positive "silently converts a win into a loss", so it is a careful
+    build, not a quick one.
+  * **The scope latch is structural.** `WinlessDevelopActive` requires `UnbudgetedWorkScopeActive`,
+    raised only where `m_budget_ms <= 0` (`AIEngine.cpp:2203`), and the keep rollout runs at
+    budget 3. The gate is deliberate: skipping a rollout skips its `ConsumeAt` calls, so the
+    deterministic unit count moves and with it every budget-derived decision and the regression
+    fingerprint. "Budgeted play must therefore be UNREACHABLE, not 'measured unchanged'."
+    Opening it is a play-changing engine project with a GT rebaseline attached.
+
+**The bare winless certificate is NOT available, and that is correct.** `ProvenWinlessThisTurn`
+applied at a horizon edge returns `{max_turns+1, {}}` — no win and **no actions**. That is exact for
+an *earliest-win query* but a keep rollout must *develop* across turns to win at all, so a bare pass
+corrupts it in exactly the measured way: "Snow seed 8014/gi 6 wins on turn 5 with the certificate
+off and **turn 6 with it on**". Closed.
+
+## K = 15, AND IT IS ALREADY THE PRODUCT OF AN EQUIVALENCE FOLD
+
+K is **15**, giving `size7 = 53,373` compositions → 106,746 cell-sides, and 85,584 cells /
+**171,168 cell-sides** across sizes 1–7. Those 15 classes are not a guess: bucket discovery probed
+400 games at a 1% threshold and folded the deck's **19 distinct cards** down to 15, including all
+**16 shields into one bucket**:
+
+| bucket | n | members |
+|---|---|---|
+| 0 | 16 | Accorder's Shield, Cathar's Shield, Kite Shield, Spidersilk Net |
+| 1 | 12 | Ancient Den, Plains |
+| 3,4,8,9,10,14 | 4 each | Bone Saw; Colossus Hammer; Golem-Skin Gauntlets; Puresteel Paladin; Remote Farm; Sram |
+| 11 | 2 | Shadowspear |
+| 2,5,6,7,12,13 | 1 each | Adelbert Steiner; Deconstruction Hammer; Dragonfire Blade; Dwalin; Sigarda's Aid; Skateboard |
+
+So **there is no unmerged equivalence left to harvest.** The obvious card-level dominance a human
+notices first — Cathar's Shield ({0} cast, equip {1}, +0/+3) strictly dominating Kite Shield ({1}
+cast, equip {2}, +0/+3) — is already inside bucket 0 and already collapsed. Lowering K further means
+merging classes the prober found *not* equivalent, which is a coverage cut and a **user ruling**
+(`memory:bucket-ruling-is-user-only`); it is not a lossless lever.
+
+## A PROBLEM WITH THE ABANDON POLICY AS ARMED
+
+The user's 2026-10-10 ruling (leave the rollout out; fail out somewhere in 10–50) assumed
+abandonment is *exceptional*. At the wall this agent armed (`MTG_KEEP_ROLLOUT_WALL_SEC = 1200`) it
+is not: **0.63% of the slow population exceeds 1200 s — 70 rollouts in this sample alone.** With
+`MTG_KEEP_ABANDON_FAIL_AT` at 10 (code default) or even 50 (its cap), a full run would fail out
+almost immediately and throw away the floor. The ruling is sound; the wall was set too low for it.
+The wall is the agent's to set such that the user's count means what they intended, and
+`p99 = 973 s` / `max = 3,405 s` say that threshold is **well above 1200 s**.
+
+## TESTING THE LOSSY DIALS ON FAST DECKS, as the user asked
+
+The user's instruction — *"I would rather test them out on fast decks first to determine what they
+actually cost"* — is the right experiment and it is cheap, because what a lossy dial costs is a
+property of the **table**, not of wall clock. Twenty decks already ship a
+`keepmodel.exhaustive.profile.json`, so for a fast one (Melira, CritterLifegain, Pirates) a
+regeneration at `flip_eps` 0.10/0.20, or at a lowered cap R, can be diffed against the SHIPPED table
+label-by-label and value-by-value. That converts "flip_eps 0.10 accepts more risk of picking the
+wrong bottoming line" from a sentence into a measured count of **how many cells changed label and by
+how much value** — which is exactly what the user needs in order to rule on the dial for kitty, and
+it costs hours on a fast deck instead of days on this one.
