@@ -7435,6 +7435,35 @@ static void PutLandPutCreditOnScratch(GameState& cp, const Action& a)
     }
 }
 
+// THE SAME-TURN LAND UNTAP OF AN ETB-UNTAP CREATURE, CREDITED BY THE REAL PAYER
+// (MTG_SOLVE_UNTAP_CREDIT, DEFAULT ON; =0 restores the walk below byte-identically).
+//
+// "When this creature enters, untap up to N lands" (Cloud of Faeries, Peregrine Drake) refunds mana
+// the turn it is cast, so a line like {Cloud of Faeries {1}{U}, Training Grounds {U}} off ONE blue
+// source is legal: Cloud taps the blue land, its ETB untaps it, Training Grounds taps it again. The
+// executor plays exactly that (EDF gi 1408, seed 1651409, d0: the old arm cast both and went off on
+// turn 4). Nothing in Solve's flat gates or in this walk credited the untap, so once
+// MTG_SOLVE_PENDING_AURA_EXACT stopped an in-hand Fertile Ground from widening the colour gates the
+// subset read as two {U} pips off one {U} source and was rejected outright (new arm: turn 5).
+//
+// Under the lever this walk pays an untapper the way both apply worlds do: in the realised cast
+// order (CastOrderLess -- the EDF provider ranks the payload ahead of the reducer it funds), with
+// the same tap-ahead before the payment (EtbUntapTapAheadIntoFloat) and the ETB untap after it
+// (EtbUntapLands). Applied AFTER the creature's own payment, so the refund funds a later cast and
+// can never pay for the creature itself -- the unsoundness that removed the flat-pool credit. Keyed
+// on the card's etb_untap_lands parameter, never on a name; a subset holding no such cast walks
+// exactly as before, so every deck without an untapper is byte-identical.
+static bool SolveUntapCreditOn()
+{
+    static const bool s_env = EnvOn("MTG_SOLVE_UNTAP_CREDIT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::SOLVE_UNTAP_CREDIT, s_env);
+}
+static bool IsEtbUntapCast(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.def != nullptr
+        && a.def->params.etb_untap_lands > 0;
+}
+
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool tap_sources)
 {
@@ -7499,13 +7528,28 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
     // Empty (no reveal-cost cast in the subset) for every other deck.
     thread_local std::vector<int> rv_charged;
     SameSubsetRevealSurcharge(state, cands, sel, &rv_charged);
+    // MTG_SOLVE_UNTAP_CREDIT (see SolveUntapCreditOn): a subset holding an ETB-untap cast is walked in
+    // the realised cast order; every other subset keeps the selection order (byte-identical).
+    bool untap_walk = false;
+    if (SolveUntapCreditOn())
+    {
+        for (int j : sel) { if (IsEtbUntapCast(cands[j])) { untap_walk = true; break; } }
+    }
+    thread_local std::vector<int> untap_ord;
+    if (untap_walk)
+    {
+        untap_ord = sel;
+        std::stable_sort(untap_ord.begin(), untap_ord.end(), [&](int x, int y)
+        { return CastOrderLess(state, cands[x], cands[y]); });
+    }
+    const std::vector<int>& walk_ord = untap_walk ? untap_ord : sel;
     // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
     // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
     // join the board so their mana is online for later casts in the subset.
     for (int pass = 0; pass < 2; ++pass)
     {
         const bool want_rock = (pass == 0);
-        for (int j : sel)
+        for (int j : walk_ord)
         {
             const Action& a = cands[j];
             // Vial deploys cost no mana. A Vial-PUT ETB Treasure maker (Corsair Captain;
@@ -7575,6 +7619,14 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             if (!rv_charged.empty() && def
                 && std::find(rv_charged.begin(), rv_charged.end(), j) != rv_charged.end())
             { AddManaCost(bill, *def->params.reveal_or_pay_cost); }
+            // MTG_SOLVE_UNTAP_CREDIT: the executor's tap-ahead for an untapper (AIEngine's cast site,
+            // ApplyPlanDirect and SubsetPayableSequential make the same call), before its payment.
+            const bool untapper = untap_walk && IsEtbUntapCast(a);
+            if (untapper)
+            {
+                EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def->params.etb_untap_lands,
+                                          ColoredPipReserveMask(bill), &bill, &g_line_unpaid_cost);
+            }
             bool cost_ok = TapForCostDirect(cp, bill, for_creature);
             if (reserved_host > 0)
             {
@@ -7582,6 +7634,9 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 if (!cost_ok) { cost_ok = TapForCostDirect(cp, bill, for_creature); reserved_host = -1; }
             }
             if (!cost_ok) { return false; }
+            // ...and its resolution: the ETB untap, after the creature's own payment.
+            if (untapper)
+            { EtbUntapLands(cp, cp.active_player_index, def->params.etb_untap_lands, /*log_ledger=*/false); }
             if (is_etb_treasure)   // the maker's ETB Treasure (not the body) funds later casts
             {
                 CreateTreasureTokens(cp, cp.active_player_index, def->params.etb_creates_treasures,
@@ -35581,18 +35636,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     bool have_colors_board[5] = { false, false, false, false, false };
     ColorFeasibility colour_feas_board, colour_feas_nc_board;
     std::vector<unsigned char> cand_land_aura;
+    // MTG_SOLVE_UNTAP_CREDIT (see SolveUntapCreditOn): a subset that casts an ETB-untap creature is the
+    // second kind the board-only gates cannot price -- its untap re-opens a land mid-turn -- so a
+    // failing one goes to the real payer, which now credits the untap, instead of being rejected.
+    const bool untap_credit = aura_exact && SolveUntapCreditOn();
+    std::vector<unsigned char> cand_untapper;
     if (aura_exact)
     {
         ComputeAvailableColors(state, have_colors_board, /*pending_auras=*/false);
         colour_feas_board    = BuildColorFeasibility(state, /*noncreature=*/false, nullptr, /*pending_auras=*/false);
         colour_feas_nc_board = BuildColorFeasibility(state, /*noncreature=*/true,  nullptr, /*pending_auras=*/false);
         cand_land_aura.assign(cands.size(), 0);
+        if (untap_credit) { cand_untapper.assign(cands.size(), 0); }
         for (std::size_t j = 0; j < cands.size(); ++j)
         {
             const Action& la = cands[j];
             if (la.kind == Action::Kind::CastFromHand && la.def && la.def->params.is_land_aura
                 && la.def->params.land_aura_extra_mana > 0)
             { cand_land_aura[j] = 1; }
+            if (untap_credit && IsEtbUntapCast(la)) { cand_untapper[j] = 1; }
         }
     }
 
@@ -36287,9 +36349,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                                       /*noncreature_only=*/true, &colour_demand));
             if (!board_ok)
             {
-                bool casts_aura = false;
-                for (int j : sel) { if (cand_land_aura[static_cast<std::size_t>(j)]) { casts_aura = true; break; } }
-                if (!casts_aura || !SubsetPayableWithFilters(state, cands, sel)) { mc_store_reject(); return; }
+                bool to_payer = false;   // a land Aura, or (MTG_SOLVE_UNTAP_CREDIT) an untapper
+                for (int j : sel)
+                {
+                    const std::size_t uj = static_cast<std::size_t>(j);
+                    if (cand_land_aura[uj] || (untap_credit && cand_untapper[uj])) { to_payer = true; break; }
+                }
+                if (!to_payer || !SubsetPayableWithFilters(state, cands, sel)) { mc_store_reject(); return; }
             }
         }
         if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
