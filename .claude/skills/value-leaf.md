@@ -223,18 +223,26 @@ many times you pay that tail**, not how big each batch is. Three is the floor an
 it — the phase boundaries are real dependencies (the matrix measures the model; the A/B measures the
 table), and nothing inside a phase is allowed to add a barrier of its own.
 
-**Nothing is adopted.** Every artifact lands in `logs/eval/<stem>.value.STAGED.json`; live sidecars
-are never written. Phase E produces the numbers an adoption decision needs — you make the call.
+**A better leaf is adopted automatically, and the run NEVER stops for a decision** (USER 2026-10-11:
+*"We should adopt automatically if the leaf is better. Nothing prevents you from updating or asking the
+user as long as you do not stop."*; *"Is it better is primarily a performance metric, but we may need to
+wait for a user response if the quality is notably worse"*; *"that just means we do not adopt and
+continue with any other work that remains"*). Phase E.5 reads phase E's A/B (`vlq_ab_report.py
+--verdict`): the staged leaf is installed as the live `decks/<Deck>/<stem>.value.json` **in the run's
+checkout** iff it is **cheaper** (core-s ratio < 1) and its quality is **not notably worse** (not: delta >
+0.002 turns at paired t > +2). Otherwise it stays staged -- a dearer-but-better leaf is a TRADE for the
+user -- and the run carries on. Every such decision, and any default the C.5 risk gate takes instead of
+stopping, is appended to `<queue>/DECISIONS.txt`, which `status` and the COMPLETE line print until a
+human deletes it. **Read it and report it to the user**; it is how the run asks without waiting.
 
-**A deck's FIRST leaf stops at phase F, and that is the designed route, not a failure to work around.**
-`mullgen_finalize.py` refuses ("no <stem>.value.json -- the value leaf must exist first") because the
-mulligan-generation setting it measures must be measured UNDER the leaf the deck will ship -- and once a
-sidecar exists its `value_play` REPLACES the profile's generation keys wholesale (absent keys read 0 =
-inherit play), so a setting written to the profile beforehand would be silently dropped anyway. So, on a
-first model: read phase E, adopt the staged file as `decks/<Deck>/<stem>.value.json` if it is not worse,
-re-run `valueleaf.sh run decks/<Deck>` (finished phases skip; F measures with the leaf live and records
-K), then take GT for the deck's keys in all three tiers -- the leaf changes play, and a trust depth needs
-the overnight tier too. Soldiers 2026-10-08 is the worked example (`docs/design/analysis-soldiers.md`).
+Installing is adoption in that tree only: nothing is committed. Committing it -- with GT for the deck's
+smoke + regression keys re-accepted, since the leaf changes play (the overnight tier is left to the
+periodic run) -- is the next step. A first model that IS installed goes straight on to phase F, which
+measures the mulligan-generation setting under the live leaf and records K (it has to: once a sidecar
+exists its `value_play` REPLACES the profile's generation keys wholesale). One that is NOT installed is
+skipped by F without failing; if the user later adopts it, `cp` the staged file into place and re-run
+(finished phases skip, F fills in). Soldiers 2026-10-08 (`docs/design/analysis-soldiers.md`) is the
+hand-run precedent; Prevent Damage 2026-10-11 is the trade case (-0.036 t at 1.21x core-s).
 
 ## The three traps that cost real time
 

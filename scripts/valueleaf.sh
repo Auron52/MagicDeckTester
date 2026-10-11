@@ -26,8 +26,14 @@
 #     They are not passed from here any more -- doing so is how they came to be OFF for every other
 #     caller, which is why a 23-hour run at 3 of 20 cores produced no signal.
 #
-# NOTHING IS ADOPTED: artifacts land in logs/eval/<stem>.value.STAGED.json. Phase E produces the
-# numbers an adoption decision needs; the decision is yours.
+# A BETTER LEAF IS ADOPTED AUTOMATICALLY (USER 2026-10-11: "We should adopt automatically if the leaf
+# is better. Nothing prevents you from updating or asking the user as long as you do not stop.").
+# "Better" is primarily PERFORMANCE: cheaper, with quality not notably worse (vlq_ab_report.py
+# --verdict). Models are staged in logs/eval/<stem>.value.STAGED.json; phase E.5 installs one as the
+# live <stem>.value.json IN THIS CHECKOUT when phase E's A/B says so, and the run goes on to F. A leaf
+# that is not adopted (dearer, or notably worse) is left staged for the user and the run CONTINUES. Nothing is committed. Every decision taken without stopping -- adoptions, and any
+# question a gate would once have stopped on -- is appended to <queue>/DECISIONS.txt, which `status`
+# and the COMPLETE line print until a human deletes it.
 #
 # New deck and regeneration are the SAME command -- the script detects whether a live sidecar exists
 # and adapts (merge into a copy vs. use the fresh model directly; A/B against "no sidecar" vs. the
@@ -487,9 +493,10 @@ MATRIX_TXT=$VLQ/matrix.txt          # per-run: a single-deck run must not overwr
 # fleet default (logs/vlq/slow_games.log) and every single-deck run appended to the same shared file
 # -- the FiveColour run's 17 slow games landed there while its own queue dir showed none.
 SLOW_GAME_LOG=$VLQ/slow_games.log
-# Questions a phase put to a human WITHOUT stopping (never block on a question): the default it took
-# and what to do instead. Printed by `status` and at COMPLETE until a human deletes the file.
-SIGNOFF=$VLQ/SIGNOFF_OWED.txt
+# Decisions a phase took WITHOUT stopping (never block on a question): automatic adoptions, and the
+# default taken on any question put to a human (with what to do instead). Printed by `status` and at
+# COMPLETE until a human deletes the file.
+DECISIONS=$VLQ/DECISIONS.txt
 
 log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$VLQ/driver.log"; }
 done_p() { [ -e "$DONE/$1" ]; }
@@ -928,8 +935,8 @@ phase_matrix() {
 # which halted the whole pipeline until someone came back. That is the NEVER BLOCK ON A QUESTION rule
 # (CLAUDE.md) in script form: the sign-off is still owed, but it is COLLECTED, not waited for. So the
 # run takes the gate's default (the table AS MEASURED -- condemned cells stay reference-only, which the
-# phase-D derivation already honours via the `*` marker), records the question in $SIGNOFF, and goes
-# on. `status` and the COMPLETE line print $SIGNOFF until a human deletes it. Prevent Damage
+# phase-D derivation already honours via the `*` marker), records the question in $DECISIONS, and goes
+# on. `status` and the COMPLETE line print $DECISIONS until a human deletes it. Prevent Damage
 # 2026-10-11 sat stopped at this line over two noise-level pairs (|shift| << SE) that no amount of
 # ceiling could settle. A RERUN recommendation (rc 3) is recorded the same way, since nothing
 # auto-launches it either.
@@ -944,11 +951,11 @@ phase_riskgate() {
       3|4)
          local what="SIGN-OFF OWED"; [ "$rc" = 3 ] && what="RERUN RECOMMENDED (not auto-launched)"
          log "PHASE C.5: $what -- CONTINUING with the table as measured (the gate's default);"
-         log "  the question is recorded in $SIGNOFF and shown by \`status\` until a human clears it."
+         log "  the question is recorded in $DECISIONS and shown by \`status\` until a human clears it."
          { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE C.5 risk gate: $what"
            echo "    default TAKEN: the matrix table as measured (condemned cells reference-only)."
            echo "    to act on it instead: see the gate output below; clear this file once decided."
-           sed 's/^/    /' "$VLQ/riskgate.txt"; echo; } >> "$SIGNOFF" ;;
+           sed 's/^/    /' "$VLQ/riskgate.txt"; echo; } >> "$DECISIONS" ;;
       *) log "PHASE C.5: gate failed (rc=$rc)"; return 1 ;;
     esac
     mark C_riskgate
@@ -1080,7 +1087,7 @@ PY
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
         # TRUST ACCEPTANCE. The matrix nominated the candidate; these games decide it. --apply
         # promotes an accepted candidate into the STAGED model's value_trust_depth, which is not
-        # adoption -- the staged model only goes live when a human installs it, exactly as before.
+        # adoption by itself -- the staged model goes live only through phase E.5 below.
         if grep -qE "^trust(ON|OFF)_s" "$VLQ/m_$key.log"; then
             echo "=== $key: trust acceptance (ON vs OFF, held-out seeds) ===" | tee -a "$VLQ/driver.log"
             grep -E "^trust(ON|OFF)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_trust.log"
@@ -1089,6 +1096,55 @@ PY
         fi
     done
     mark "$E_MARK"
+}
+
+# ------------- PHASE E.5: ADOPT a better leaf, automatically, without stopping
+# USER 2026-10-11: "We should adopt automatically if the leaf is better. Nothing prevents you from
+# updating or asking the user as long as you do not stop." A deck's FIRST model used to end the run at
+# F (which needs the leaf live) until somebody came back to install it -- a stop by another name. Now,
+# per deck, phase E's A/B decides (vlq_ab_report.py --verdict). USER: "Is it better is primarily a
+# performance metric, but we may need to wait for a user response if the quality is notably worse" --
+# "that just means we do not adopt and continue with any other work that remains". So: ADOPT iff the
+# staged leaf is CHEAPER than live (core-s ratio < 1) and its quality is NOT NOTABLY WORSE (not: delta
+# > $TRUST_TOL turns at paired t > +2). Adopted -> installed as <dir>/<stem>.value.json in THIS
+# checkout and F runs on it; a replaced live model is kept as $VLQ/<stem>.value.PREV.json. Not adopted
+# (dearer -- even if better, which is a TRADE for the user -- or notably worse) -> the live state is
+# left exactly as it was and the run carries on; a first model stays staged and F skips it. Either way
+# the verdict line, with its reason and cost ratio, goes to $DECISIONS. This is adoption IN THIS TREE: nothing is committed;
+# committing it with the deck's smoke+regression GT re-accepted (the leaf changes play) is the next step.
+phase_adopt() {
+    done_p E_adopt && return 0
+    log "PHASE E.5: adopt a better leaf (phase E A/B verdict)"
+    local row key dir stem mkey base games staged v rc
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        staged="logs/eval/$stem.value.STAGED.json"
+        [ -s "$staged" ] || continue
+        [ -s "$VLQ/m_${key}_ab.log" ] || { log "  $stem: no A/B log -- left as is"; continue; }
+        v=$(python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_ab.log" live --verdict staged --tol "$TRUST_TOL" \
+              | grep '^VERDICT'; exit "${PIPESTATUS[0]}")
+        rc=$?
+        case "$rc" in
+          0) [ -e "$dir/$stem.value.json" ] && cp -f "$dir/$stem.value.json" "$VLQ/$stem.value.PREV.json"
+             cp -f "$staged" "$dir/$stem.value.json" || { log "  $stem: install FAILED"; return 1; }
+             log "  ADOPTED $stem: cheaper, quality not notably worse -> $dir/$stem.value.json (this tree, NOT committed)"
+             log "    $v"
+             { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E.5: ADOPTED $stem (installed in this tree, NOT committed)"
+               echo "    $v"
+               [ -e "$VLQ/$stem.value.PREV.json" ] && echo "    previous live model kept as $VLQ/$stem.value.PREV.json"
+               echo "    next: commit it with the deck's smoke+regression GT re-accepted (the leaf changes play)."
+               echo; } >> "$DECISIONS" ;;
+          2) log "  NOT adopted $stem -- live state left as is; CONTINUING (the reason is the user's to rule on)"
+             log "    $v"
+             { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E.5: NOT ADOPTED $stem -- USER's call (reason in VERDICT)"
+               echo "    $v"
+               echo "    the staged model stays at $staged; nothing in $dir changed. To adopt it anyway:"
+               echo "    cp '$staged' '$dir/$stem.value.json' and re-run (F then fills the generation contract)."
+               echo; } >> "$DECISIONS" ;;
+          *) log "  $stem: verdict FAILED (rc=$rc) -- see $VLQ/m_${key}_ab.log"; return 1 ;;
+        esac
+    done
+    mark E_adopt
 }
 
 # ------------- PHASE F: the deck's MULLIGAN-GENERATION contract, written into its play profile
@@ -1107,13 +1163,20 @@ PY
 phase_mullgen() {
     done_p F_mullgen && return 0
     log "PHASE F: mulligan-generation contract (setting by measurement, + record K)"
-    local row key dir stem mkey base games df failed=""
+    local row key dir stem mkey base games df failed="" skipped=""
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         # Only decks this run actually staged a model for.
         [ -s "logs/eval/$stem.value.STAGED.json" ] || continue
         df=$(deck_file "$dir" "$stem")
         [ -n "$df" ] || { log "  PHASE F: no decklist for $stem under $dir -- skipped"; continue; }
+        # A staged leaf that phase E.5 did NOT adopt has no live sidecar to fit the contract under, and
+        # that is a decision, not a failure: skip it WITHOUT stopping, and leave F unmarked so a re-run
+        # after a human installs the leaf fills it in.
+        if [ ! -e "$dir/$stem.value.json" ]; then
+            log "  PHASE F: $stem has no live leaf (not adopted, see $DECISIONS) -- skipped; re-run after installing"
+            skipped="$skipped $stem"; continue
+        fi
         # PIPESTATUS[0], not $?: $? is `tee`, which always succeeds. mullgen_finalize DID report the
         # failure (rc=1) when it could not derive a setting -- the pipeline threw the status away and
         # `mark` below then recorded the phase as done, so the run reported success while the deck
@@ -1128,6 +1191,7 @@ phase_mullgen() {
         log "  PHASE F: default play settings, silently and at full cost."
         return 1
     fi
+    [ -n "$skipped" ] && { log "  PHASE F: NOT marked done (skipped:$skipped) -- nothing is pending on it in this run"; return 0; }
     mark F_mullgen
 }
 
@@ -1155,13 +1219,13 @@ finish|run)
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_matrix phase_riskgate \
-              phase_meta phase_measure phase_mullgen; do
+              phase_meta phase_measure phase_adopt phase_mullgen; do
         check_freeze || exit 1
         check_decks  || exit 1
         $ph || { log "STOPPED at $ph"; exit 1; }
     done
-    log "=== COMPLETE -- nothing adopted; review the A/B + sweep reports above ==="
-    [ -s "$SIGNOFF" ] && log "=== SIGN-OFF OWED: defaults were taken without stopping -- read $SIGNOFF ==="
+    log "=== COMPLETE -- review the A/B + sweep reports above ==="
+    [ -s "$DECISIONS" ] && log "=== DECISIONS taken without stopping (adoptions, defaults on owed sign-offs): $DECISIONS ==="
     ;;
 status)
     # A real progress report: where the run is, what is left, and how to resume. Reads only files the
@@ -1171,6 +1235,7 @@ status)
         A_split)   echo "A split       ";; B_train)  echo "B train       ";;
         C_matrix)  echo "C matrix      ";; C_riskgate) echo "C.5 risk gate ";;
         D_meta)    echo "D metadata    ";; E_measure)  echo "E measure     ";;
+        E_adopt)   echo "E.5 adopt     ";;
         F_mullgen) echo "F mullgen set ";; esac; }
     echo "queue dir  : $VLQ"
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
@@ -1187,7 +1252,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C_matrix C_riskgate D_meta E_measure F_mullgen; do
+    for p in 00_freeze A_rows A_split B_train C_matrix C_riskgate D_meta E_measure E_adopt F_mullgen; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done
@@ -1269,10 +1334,10 @@ PY
     echo "             only in-flight games. To redo one phase, delete its marker and re-run."
     echo "             If the CLOCK (not the data) ran out inside phase A, use 'finish' instead:"
     echo "             it accepts the rows on disk as final and runs B..E on them."
-    if [ -s "$SIGNOFF" ]; then
+    if [ -s "$DECISIONS" ]; then
         echo
-        echo "SIGN-OFF OWED ($SIGNOFF) -- the run did NOT stop; it took these defaults:"
-        grep -E '^=== |default TAKEN' "$SIGNOFF" | sed 's/^/  /'
+        echo "DECISIONS taken without stopping ($DECISIONS) -- delete the file once read:"
+        grep -E '^=== |default TAKEN|VERDICT' "$DECISIONS" | sed 's/^/  /'
     fi
     tail -5 "$VLQ/driver.log" 2>/dev/null
     exit 0

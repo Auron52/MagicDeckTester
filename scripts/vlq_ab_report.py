@@ -10,7 +10,19 @@ Also asserts the seed-tiling invariant (A/B rule 7): per-game identity is base_s
 bases spaced closer than games-per-job make jobs REPLAY games. A violating run reports enormous
 significance off a handful of distinct games, and the tell is near-zero variance across seeds.
 
-  usage: vlq_ab_report.py <batch.log> [baseline-arm]
+  usage: vlq_ab_report.py <batch.log> [baseline-arm] [--verdict <arm>]
+
+--verdict <arm> [--tol T] adds one machine-readable line for that arm and sets the exit status:
+0 = ADOPT, 2 = do not. valueleaf.sh's adoption step (phase E.5) reads it. The rule is the USER's
+(2026-10-11): "We should adopt automatically if the leaf is better", "Is it better is primarily a
+performance metric, but we may need to wait for a user response if the quality is notably worse",
+"that just means we do not adopt and continue with any other work that remains":
+
+  ADOPT iff  the arm is CHEAPER (core-s ratio < 1, the same games the quality read uses)
+        and  its quality is NOT NOTABLY WORSE: not (mean delta > T and paired t > +2), T = 0.002 turns
+             by default -- the trust tolerance, which prices the same quality-for-cost trade;
+        and  the seed tiling is sound and the arm is not byte-identical to the baseline.
+  Anything else -> do not adopt; the reason names a TRADE (dearer but better) as the user's call.
 """
 import math
 import re
@@ -22,7 +34,7 @@ from collections import defaultdict
 LINE = re.compile(r"(?:[\w]+-)?(\w+?)_s(\d+): played=(\d+) avg=([\d.]+) digest=(\w+)(?: ms=(\d+))?")
 
 
-def main(path, baseline=None):
+def main(path, baseline=None, verdict=None, tol=0.002):
     arms = defaultdict(dict)
     for ln in open(path):
         m = LINE.match(ln.strip())
@@ -91,8 +103,46 @@ def main(path, baseline=None):
               f"{f'{better}/{worse}/{len(seeds)-better-worse}':<20} {f'{same}/{len(seeds)}':<12} "
               f"{cost_s(a):<9.0f} {ratio}{note}")
     print("\n[negative delta = better; THE metric is avg turn-to-win with unwon scored max_turns+1]")
+    if verdict is not None:
+        if verdict not in arms or verdict == baseline:
+            print(f"VERDICT arm={verdict} better=0 reason=no-such-arm")
+            return 2
+        diffs = [arms[verdict][s][1] - arms[baseline][s][1] for s in seeds]
+        mean = sum(diffs) / len(diffs)
+        sd = math.sqrt(sum((x - mean) ** 2 for x in diffs) / (len(diffs) - 1)) if len(diffs) > 1 else 0.0
+        se = sd / math.sqrt(len(diffs)) if sd else 0.0
+        same = sum(1 for s in seeds if arms[verdict][s][2] == arms[baseline][s][2])
+        ratio = cost_s(verdict) / base_cost if base_cost > 0 else float("inf")
+        t = mean / se if se else 0.0
+        cheaper = ratio < 1.0
+        notably_worse = mean > tol and t > 2.0
+        if not ok:
+            adopt, why = False, "seed-overlap: the A/B is not trustworthy"
+        elif same == len(seeds):
+            adopt, why = False, "byte-identical to the baseline: the arm is not engaging"
+        elif notably_worse:
+            adopt, why = False, f"quality NOTABLY WORSE (+{mean:.5f} > {tol}, t {t:+.2f}) -- the user's call"
+        elif not cheaper:
+            q = "better" if mean < 0 else "no better"
+            adopt, why = False, (f"costs MORE ({ratio:.2f}x) with quality {q} ({mean:+.5f}) -- "
+                                 + ("a TRADE, the user's call" if mean < 0 else "not an improvement"))
+        else:
+            adopt, why = True, f"cheaper ({ratio:.2f}x) and quality not notably worse ({mean:+.5f})"
+        print(f"VERDICT arm={verdict} adopt={int(adopt)} delta={mean:+.5f} t={t:+.2f} "
+              f"cost={ratio:.2f}x seeds={len(seeds)} games={n} seeds_ok={int(ok)} why={why}")
+        return 0 if adopt else 2
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
+    args = sys.argv[1:]
+    verdict, tol = None, 0.002
+    for flag in ("--verdict", "--tol"):
+        if flag in args:
+            i = args.index(flag)
+            if flag == "--verdict":
+                verdict = args[i + 1]
+            else:
+                tol = float(args[i + 1])
+            del args[i:i + 2]
+    sys.exit(main(args[0], args[1] if len(args) > 1 else None, verdict, tol))

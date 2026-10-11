@@ -659,7 +659,9 @@ Read `.claude/skills/value-leaf.md` and [build / measure / adopt] the value leaf
 
 **The whole interface is one command** — `bash scripts/valueleaf.sh run decks/<Deck>`
 (and `status decks/<Deck>` for progress). It handles a brand-new deck and a regeneration identically,
-runs all five phases pooled, resumes incrementally, and stages everything without adopting anything.
+runs all five phases pooled, resumes incrementally, and never stops for a decision: it adopts a leaf
+that is cheaper and not notably worse in the run's checkout (uncommitted), leaves anything else staged
+for the user, and records every such call in `<queue>/DECISIONS.txt` (USER 2026-10-11).
 **Do not hand-roll the phases and do not add knobs**: there is ONE route (incremental batching, no
 condemnation at d<=5, profile always attached), fixed inside the script. Hand-rolling is how the
 profile-less-measurement bug, the silent H-cell perf cliff, and a run stuck at 3 of 24 cores all
