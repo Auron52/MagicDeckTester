@@ -28614,6 +28614,11 @@ struct Ctx
     int         attempt_used = -1;      // which deploy order Run carried to its result (see Run)
     int         iters = 0, deploys = 0, draws = 0, acts = 0;
     bool        emit = false;           // the LIVE apply narrates every step into the play history
+    // MTG_EDF_ROUTE_BOARD_DEPLOY's deploy attempts only (see Run): a deploy pays from the lands, so the
+    // loop can start with every land tapped and the deploy's leftover floating -- and the finish step
+    // then spent that float on the finisher and stranded the next blink. Set, the finish keeps the
+    // next blink's mana unless the lands can pay it or the float finishes the kill outright.
+    bool        protect_blink = false;
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
     std::string blink_label;
     std::string log;
@@ -29811,7 +29816,19 @@ static int Loop(Ctx& cx)
         if (f.id != 0)
         {
             int fired = 0;
-            while (!OpponentHasLost(cx.s) && Activate(cx, f)) { ++fired; }
+            // Ctx::protect_blink (deploy attempts only): fire while the lands can still pay the next
+            // blink, or the float keeps it, or the float finishes the kill outright.
+            auto keeps_blink = [&]() -> bool
+            {
+                if (!cx.protect_blink) { return true; }
+                if (AvailableTotal(cx) - static_cast<int>(cx.s.floating_mana.Total())
+                    >= b.blink.ManaValue()) { return true; }
+                if (FloatPays(cx, AddManaCosts(f.act, b.blink))) { return true; }
+                ManaCost all;
+                for (int k = 0; k < std::max(1, f.acts); ++k) { all = AddManaCosts(all, f.act); }
+                return FloatPays(cx, all);
+            };
+            while (!OpponentHasLost(cx.s) && keeps_blink() && Activate(cx, f)) { ++fired; }
             if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); return 1; }
             if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); return 0; }
             if (fired > 0) { prev = TakeSnap(cx); stall = 0; continue; }
@@ -29899,11 +29916,77 @@ static void RestoreCtx(Ctx& cx, const GameState& snapshot, const Ctx& saved)
 // not by whether it put an outlet and a payload on the table. `forced` replays one order only: the
 // LIVE apply narrates into a global event sink that a rollback cannot un-write, so it runs the order
 // its silent trial already found (Ctx::attempt_used).
-static int Run(Ctx& cx, int forced = -1)
+// THE LOOP ALREADY ON THE BOARD STILL GETS ITS DEPLOY (MTG_EDF_ROUTE_BOARD_DEPLOY, DEFAULT ON; =0
+// restores the straight-to-Loop route byte-identically).
+//
+// With an outlet and a payload on the battlefield the route went straight to Loop, which casts only
+// from the FLOAT. So a reducer, a land Aura or an extra land drop in hand -- the very cards that turn
+// a mana-neutral loop into a net-positive one -- were never paid for off the lands: a Displacer
+// blinking a Cloud of Faeries costs {2}{C} against a two-land refund, banks nothing, and stalls
+// ("0 deploys, 61 blinks without a step firing", EDF gi 1408 t5 with Training Grounds in hand; gi 547
+// t5 the same shape). Training Grounds off the untapped lands makes the blink {C} and the loop runs.
+//
+// The deploy is the same DeployPieces the assemble-from-hand route uses (land drop, Auras on the best
+// host, a bigger untapper whose refund covers it, the reducer), and it is judged exactly as that route
+// judges it: by the LOOP it leads to, on the trial's copy. It is tried only when the loop as it stands
+// does not kill, and kept only when it does -- a trial-verified win, so it can turn a stalled route
+// into a kill and can never displace one. The attempt index it rides is the one the live apply
+// replays: -1 = the loop as it stood, 0 / 1 = deploy (Auras first / last) then the loop.
+inline bool BoardDeployOn()
+{
+    static const bool v = EnvOn("MTG_EDF_ROUTE_BOARD_DEPLOY", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EDF_ROUTE_BOARD_DEPLOY, v);
+}
+constexpr int kRunUnforced = -2;   // Run's `forced`: no replay pinned (-1 pins the board loop itself)
+
+static int Run(Ctx& cx, int forced = kRunUnforced)
 {
     if (RouteWon(cx)) { return 1; }
     const Board b0 = ScanBoard(cx);
-    if (b0.outlet != 0 && b0.payload != 0) { cx.attempt_used = -1; return Loop(cx); }
+    if (b0.outlet != 0 && b0.payload != 0)
+    {
+        if (!BoardDeployOn() || forced == -1) { cx.attempt_used = -1; return Loop(cx); }
+        const GameState snapshot = cx.s;
+        const Ctx saved = cx;
+        int direct = 0;
+        GameState          direct_state;   // the board loop's own end state, restored if no deploy kills
+        std::optional<Ctx> direct_ctx;
+        if (forced == kRunUnforced)
+        {
+            direct = Loop(cx);
+            if (direct == 1) { cx.attempt_used = -1; return 1; }
+            if (direct == 2) { direct_state = cx.s; direct_ctx.emplace(cx); }
+        }
+        for (int attempt = 0; attempt < 2; ++attempt)
+        {
+            if (forced >= 0 && attempt != forced) { continue; }
+            RestoreCtx(cx, snapshot, saved);
+            const Snap before = TakeSnap(cx);
+            DeployPieces(cx, /*auras_first=*/attempt == 0);
+            // Nothing deployed: this is the loop that already failed above -- do not pay for it twice.
+            if (forced < 0 && SameSnap(TakeSnap(cx), before)
+                && cx.s.players[cx.me].lands_played_this_turn
+                   == snapshot.players[cx.me].lands_played_this_turn) { continue; }
+            cx.protect_blink = true;
+            const int r = Loop(cx);
+            cx.protect_blink = false;
+            if (r == 1 || (forced >= 0 && r != 0))
+            {
+                cx.Dbg(std::string("board deploy ") + (attempt == 0 ? "A (auras first)" : "B (auras last)")
+                       + " kills");
+                cx.attempt_used = attempt;
+                return r;
+            }
+            cx.Dbg(std::string("board deploy ") + (attempt == 0 ? "A (auras first)" : "B (auras last)")
+                   + " does not kill");
+        }
+        if (forced >= 0) { return 0; }
+        // No deploy kills: the route is what the loop as it stood made of it (no / DEVELOP).
+        if (direct == 2) { RestoreCtx(cx, direct_state, *direct_ctx); }
+        else             { RestoreCtx(cx, snapshot, saved); }
+        cx.attempt_used = -1;
+        return direct;
+    }
     const GameState snapshot = cx.s;
     const Ctx saved = cx;
     for (int attempt = 0; attempt < 2; ++attempt)
@@ -29984,6 +30067,12 @@ inline void Mix(std::uint64_t& h, std::uint64_t v)
 static std::uint64_t BoardKey(const GameState& s, int me)
 {
     std::uint64_t h = 1469598103934665603ULL;
+    // A lever that changes the TRIAL'S ANSWER for the same board must be in the key: this memo is
+    // thread_local and outlives a batch job switch, so a mixed-arm pooled batch (per-job heurarm
+    // flags, paired seeds -> identical boards) would otherwise replay one arm's verdict inside the
+    // other arm's games (the batch-pool-contamination rule the mana cache documents). Folded only
+    // when ON, so the =0 key is unchanged.
+    if (BoardDeployOn()) { Mix(h, 0xB0A2DDE9u); }
     Mix(h, static_cast<std::uint64_t>(s.turn_number));
     Mix(h, static_cast<std::uint64_t>(me));
     Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life));

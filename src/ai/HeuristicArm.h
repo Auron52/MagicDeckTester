@@ -432,6 +432,7 @@ enum Slot : int
     SOLVE_UNTAP_CREDIT,       // MTG_SOLVE_UNTAP_CREDIT      the real payer (SubsetPayableWithFilters) credits an ETB-untap creature's same-turn land untap (tap-ahead, pay, untap, in the realised cast order), and Solve's MTG_SOLVE_PENDING_AURA_EXACT block sends a board-gate-failing subset that casts one to that payer instead of rejecting it: {Cloud of Faeries, Training Grounds} off one {U} land is legal (EDF gi 1408). Keyed on etb_untap_lands. Default ON; =0 -> no credit, byte-identical
     PREPAY_ENERGY_RESTORE,    // MTG_PREPAY_ENERGY_RESTORE   BatchPrepayMainCasts' rollbacks (a failed hold rung, a `wild` decline, the shrink trials) restore the player's {E} with the battlefield: a declined joint solve that tapped Aether Hub coloured no longer leaks the energy, which stranded Trace of Abundance's {R} on the per-cast payment (EDF gi 1985 t3). Executor + rollout (shared). Only Aether Hub carries energy. Default ON; =0 -> the leak, byte-identical
     SOLVE_AURA_PAYER_CHECK,   // MTG_SOLVE_AURA_PAYER_CHECK  Solve's MTG_SOLVE_PENDING_AURA_EXACT block: a subset that casts a land Aura and PASSES the board-only colour gates must still pass the real payer (SubsetPayableWithFilters: host reserved, Aura attached where the plan declared it), because the gates cannot see which land carries the Aura or that an Aether Hub without {E} makes only {C} -- EDF gi 1475 t7 picked Trace of Abundance onto the Hub that paid for it and dropped Displacer. Default ON; =0 -> gate-only, byte-identical
+    EDF_ROUTE_BOARD_DEPLOY,   // MTG_EDF_ROUTE_BOARD_DEPLOY  EDF COMBO OFF route (comboroute::Run): with the outlet + payload already on the battlefield, a loop that does not kill as it stands is retried after DeployPieces (land drop, land Auras, a refund-covered untapper, Training Grounds) paid off the lands, kept only when that trial kills -- a Displacer/Cloud loop stalled at net 0 with Training Grounds in hand (gi 1408 t5, gi 547 t5). The trial memo key folds the lever. Default ON; =0 -> straight to the loop, byte-identical
     COUNT
 };
 
@@ -825,6 +826,7 @@ inline const char* Name(int slot)
         "MTG_SOLVE_UNTAP_CREDIT",
         "MTG_PREPAY_ENERGY_RESTORE",
         "MTG_SOLVE_AURA_PAYER_CHECK",
+        "MTG_EDF_ROUTE_BOARD_DEPLOY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
