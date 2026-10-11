@@ -398,6 +398,7 @@ TEST_CASE("Green Sun's Zenith: the X axis reaches Dina at X = 2 (green), never V
     GameState s = Board2(false);
     for (int k = 0; k < 3; ++k) { Put2(s, "Forest"); }
     Hand2(s, "Green Sun's Zenith");
+    const int gsz_number = s.players[0].hand.back().m_number;
     Lib2(s, "Dina, Soul Steeper");
     Lib2(s, "Vito, Thorn of the Dusk Rose");
     for (int k = 0; k < 10; ++k) { Lib2(s, "Mountain"); }
@@ -426,8 +427,57 @@ TEST_CASE("Green Sun's Zenith: the X axis reaches Dina at X = 2 (green), never V
     const std::vector<Card>& gy = after.players[0].graveyard;
     CHECK(std::none_of(gy.begin(), gy.end(), [](const Card& x) { return x.m_name.str() == "Green Sun's Zenith"; }));
     bool in_lib = false;
-    for (const Card& x : after.players[0].library) { if (x.m_name.str() == "Green Sun's Zenith") { in_lib = true; } }
+    int  lib_number = -1;
+    for (const Card& x : after.players[0].library)
+    { if (x.m_name.str() == "Green Sun's Zenith") { in_lib = true; lib_number = x.m_number; } }
     CHECK(in_lib);
+    // ...and it is the SAME COPY: the one that goes in carries the cast copy's per-copy ID, exactly
+    // as the executor's EffectHandler::MoveToGraveyard shuffles in `entry.source`. Library::
+    // ShuffleByKey places each card by key(seed, m_number), so the definition card's m_number 0
+    // put Zenith at a different depth in the lookahead than in the real game (MTG_SELF_SHUFFLE_COPY_ID:
+    // Prevent Damage s108346 gi345, where the search drew a phantom Zenith on T3).
+    CHECK(lib_number == gsz_number);
+}
+
+TEST_CASE("Green Sun's Zenith: the lookahead's reshuffled library is the executor's, card for card")
+{
+    // The LOCKSTEP pin behind the per-copy-ID check above: resolve the same Zenith once through the
+    // rollout (TurnSolver::ApplyPlan -> apply_one) and once through the executor's own zone move
+    // (ShuffleSelfIntoLibrary with the physical copy, which is what EffectHandler::MoveToGraveyard
+    // calls), from the same state, and require the two libraries to agree in ORDER -- the draws the
+    // search plans against must be the draws the game deals.
+    GameState s = Board2(false);
+    s.game_seed = 108346;
+    for (int k = 0; k < 3; ++k) { Put2(s, "Forest"); }
+    Hand2(s, "Green Sun's Zenith");
+    const Card gsz = s.players[0].hand.back();
+    Lib2(s, "Dina, Soul Steeper");
+    for (int k = 0; k < 25; ++k) { Lib2(s, k % 2 ? "Mountain" : "Plains"); }
+    const TurnSolver::Plan* dina = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].card_name.str() == "Green Sun's Zenith"
+            && p.actions[0].tutor_target.str() == "Dina, Soul Steeper") { dina = &p; }
+    }
+    REQUIRE(dina != nullptr);
+    GameState rollout = s;
+    TurnSolver::ApplyPlan(rollout, *dina, /*is_pre_combat=*/true);
+    REQUIRE(OnBf(rollout, "Dina, Soul Steeper"));
+    // The executor's sequence on the same library: the fetch removes Dina and shuffles (one ordinal),
+    // then the resolved Zenith -- the PHYSICAL copy -- is shuffled in (the next ordinal).
+    GameState exec = s;
+    Library& lib = exec.players[0].library;
+    for (auto it = lib.begin(); it != lib.end(); ++it)
+    { if (it->m_name.str() == "Dina, Soul Steeper") { lib.erase(it); break; } }
+    ShuffleAfterSearch(exec, 0);
+    ShuffleSelfIntoLibrary(exec, 0, gsz);
+    REQUIRE(rollout.search_count == exec.search_count);
+    REQUIRE(rollout.players[0].library.size() == exec.players[0].library.size());
+    for (std::size_t i = 0; i < exec.players[0].library.size(); ++i)
+    {
+        CHECK(rollout.players[0].library[i].m_number == exec.players[0].library[i].m_number);
+    }
 }
 
 // ---- Stage 5 verification guards (2026-09-27) ---------------------------------------------------
