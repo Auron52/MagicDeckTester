@@ -1543,3 +1543,189 @@ adaptive rather than full-bottom, and both are in the suite with raw sidecars pr
 The queued sweep prices `flip_eps` ∈ {0.02, 0.05, 0.10, 0.20} **at kitty's own cap R=30** (the
 directly transferable reading), cap R ∈ {raw 100, 40, 20, 16} at the default gate, and the exact
 **(eps 0.20, cap R 16)** corner this agent launched without approval on 2026-10-10.
+
+---
+
+# 2026-10-11, PART 2 — THE COST IS A CEILING, NOT A PRICE
+
+The user, after the first round came back: *"There should also be lossless optimizations since we
+have a high per-rollout cost. Not just those lossy ones. K=15 is quite reasonable. So we should not
+have a super slow generation."* And then, naming the suspect: *"I strongly suspect the problems are
+related to wide board branches, so we need to prune them."*
+
+Both readings are right, and the second one is now measured rather than suspected.
+
+## 1. The LATEMAIN family is refuted on every axis at once, monotonically
+
+`MTG_EQUIP_ROUTE_LATEMAIN_UNITS`, N=20,000 paired uniform sample of size-7 cell-sides at the
+shipped d2/b3, one arm at a time on an otherwise idle 32-core box:
+
+| arm | core_s | vs base | max rollout | units | `sum_wt` | win turns moved |
+|---|---|---|---|---|---|---|
+| base | 44,155.9 | 1.000x | 1,071.9 s | 168,023,829 | 108,967 | — |
+| lm4 | 45,508.6 | 1.031x | 1,204.2 s | 172,076,523 | 109,045 | 92 |
+| lm16 | 45,021.9 | 1.020x | 1,209.9 s | 179,159,152 | 109,213 | 269 |
+| lm64 | 46,915.6 | 1.062x | 1,203.8 s | 188,434,179 | 109,379 | 470 |
+
+Slower, worse tail, more units, **and the deck wins later** — and those are one fact, not four. The
+equip route is a lethal DETECTOR whose success fires the go-off cut and collapses the frame. Pricing
+its links starves detection mid-flight, no certificate fires, and the decision pays the FULL
+enumeration. Missed kills then *are* the cost, because a hand that goes off wins turn 3 for nothing
+while one that does not pays all `max_turns = 8` turns at full price.
+
+**The lesson, stated so it is not relearned: a large unit share does not mean the work is wasted.**
+`equip_route` is 26–33% of units *because* each success deletes an enumeration. This was predictable
+from the `NodeUnits` price-8 note one function up and should not have needed measuring.
+
+## 2. 63% of all units are a CEILING being hit, and no price can touch them
+
+The per-committed-depth ladder census across the same four arms:
+
+| arm | d1 n | **d1 commit units** | **d1 leaf-TT lookups/dec** | d2 n | d2 commit units | d2 units/dec |
+|---|---|---|---|---|---|---|
+| base | 44,981 | 105,532,422 | 328.606 | 113,126 | 36,111,217 | 319 |
+| lm4 | 45,308 | 105,742,073 | 329.178 | 113,043 | 39,852,592 | 352 |
+| lm16 | 45,817 | 105,447,607 | 328.447 | 112,947 | 47,181,839 | 417 |
+| lm64 | 46,407 | 104,718,527 | 328.423 | 112,808 | 57,082,431 | 506 |
+
+**d1 is flat to four significant figures** — 328.606 → 328.423 lookups per decision across a 12%
+swing in total units — while every bit of the pricing damage lands on d2 (+58%). A natural cost
+moves when prices move; a cost that does not move is hitting a ceiling.
+
+`DecisionWorkMeter.h` names the mechanism: `limit = base_budget_units * MTG_DECISION_WORK_X`, and
+*"when the ceiling trips, running passes bail through the EXISTING mid-pass overrun path and
+iterative deepening commits the deepest completed pass"*. So **d1 is not "a shallow decision" — it
+is a decision that exhausted its work ceiling and fell back**, and the flat ~2,346 units/decision is
+the limit rather than a measured cost. `mullgen.sh` pins `MTG_DECISION_WORK_X=1000`.
+
+Three consequences, and the third is the one that matters:
+
+1. **It explains why the price lever failed.** 63% of the work is in a population that spends a
+   fixed ceiling regardless of what anything costs. Re-pricing cannot reduce it by construction.
+2. **It is a QUALITY problem, not only a cost one.** Those 45k decisions commit *truncated*
+   answers, and those truncated searches are what label the keep table.
+3. **A width prune must therefore be judged on `sum_wt` and the d1/d2 split, NOT on
+   `units_total`.** A pinned decision does not get cheaper when the menu narrows; it uses the same
+   ceiling to reach a deeper commit. Judging the width prunes on units alone would refute them for
+   the wrong reason — the LATEMAIN mistake in a new costume.
+
+The screen brackets the ceiling (`MTG_DECISION_WORK_X` ∈ {250, 1000, 2000}) to confirm pinning
+directly rather than inferring it. Note X is a **precision dial**, so moving it is a USER ruling and
+is reported, never adopted.
+
+## 3. METALCRAFT_EQUIP_HOIST is 2.78x faster, and its quality cost is a SCORING error
+
+| | base | mch |
+|---|---|---|
+| core_s | 44,155.9 | **15,894.2 (0.360x)** |
+| max rollout | 1,071.9 s | **159.6 s** |
+| units | 168,023,829 | 146,761,558 |
+| d1 n / commit units | 44,981 / 105,532,422 | **40,858 / 89,892,729** |
+| d2 n | 113,126 | **119,202** |
+| `sum_wt` | 108,967 | **110,274 (+1,307 turns)** |
+| win turns moved | — | 1,463 |
+
+It moved ~4,100 decisions OFF the ceiling into completed searches — d1 n −9.2%, d2 n +5.4% — so the
+search got *better*, and the labels still got worse by 0.065 turns/rollout. **That rules out
+truncation as the cause** and confirms the mechanism its own slot documents: *"a hoisted equip rides
+every subset without contributing to the mana term"*. The loss is confined to the plan's SCORE.
+
+The tail collapse (1,072 s → 160 s) also dissolves the abandon-wall problem on its own: at a 160 s
+maximum, no wall in the user's 10–50 fail-out range is near firing.
+
+**This is a USER decision and is not adopted here** — it is not a pure identity fold.
+
+### Why the obvious lossless fix does not exist, and what an exact one would require
+
+`MetalcraftWillFreeEquips(state, cands)` counts board artifacts **plus every cast candidate in the
+frame**, so it returns true whenever the frame *could* reach the threshold; the hoist then applies
+to subsets casting none of those artifacts. The threshold comes from exactly one card in the v3
+main 60 — **Puresteel Paladin, 3 artifacts**.
+
+* **"Require metalcraft already live on the battlefield" gains nothing.** If the board already has
+  3 artifacts and a Puresteel, `EquipCostGenericNow` already returns 0, `cost.ManaValue() == 0`, and
+  the *plain* auto-equip collapse already fires. The hoist's entire value is the turn whose own
+  casts FLIP metalcraft.
+* **A per-subset threshold test is cheap** (board artifacts + artifacts cast in `sel`, accumulated
+  while `sel` is built) **but is not sufficient on its own**: force-including a *paid* equip is not
+  dominance, because it deletes the "don't equip" line from that subset. The original collapse
+  excludes costed equips for exactly this reason.
+* So an exact version must make the hoisted equip's inclusion **depend** on the artifact casts that
+  flip the threshold, rather than ride every subset. `BuildEquipPieceDeps` already carries that
+  shape — the free-cast hoist's note records it as *"the first collapse to erase a CAST group"*,
+  stamping a dependent equip `{required, groups=0}`.
+
+That is a real project touching odometer correctness, and it is deliberately NOT started before the
+simple lossless prunes are measured: if the width prunes capture a good share of the 2.78x with no
+scoring error at all, the complex exact hoist is unnecessary.
+
+## 4. The width prunes under screen, and why the host axis comes first
+
+The census says the equipment menu carries the work — `equip_route` 31.4% + `la_cand` 18.8% +
+`greedy_fallback` 18.6% = **69% of units**, all three scaling with the WIDTH of that menu rather
+than with any one price. The slow population says why the board gets wide: those hands are
+land-light, Sram-heavy and hold no Puresteel in the opener, so they never go off, accumulate
+equipment and play all 8 turns against an ever-widening menu. A wide board is both the cause of the
+branching and the signature of a game that does not win.
+
+The menu is (equipment × hosts) PAIRS and the odometer powersets take/skip over them, so **the host
+width is an exponent on the equip axis, not a term beside it.** Collapsing it is the user's own
+standing doctrine (*"There is no double-strike in the deck, so we can just choose one creature and
+put all equipment on it"*), and for v3 the precondition is VERIFIED rather than assumed: Kor
+Duelist — the only `double_strike_while_equipped` card near this list — is **sideboard only**, so
+the main 60 has no double-strike source. Concentration is not merely neutral here either:
+Golem-Skin Gauntlets grants +1/+0 **per Equipment attached to its own host** and the deck runs four,
+so splitting equipment across hosts strictly REDUCES total power. The width-2 default was adopted on
+a measured v1 case (gi=39, *"Greaves -> the Balan cast this same subset"*, which a width-1 haste
+ranking never offers) and v3 plays neither Lightning Greaves nor Balan, so that justification does
+not transfer.
+
+Screened arms: `MTG_EQUIP_HOST_WIDTH=1`, `MTG_EQUIP_RIDER_WIDTH=1`, both; `MTG_FREE_CAST_HOIST`
+(built, argued exactly mana-neutral, **never measured** — v3 holds twenty {0}-cost Equipment and
+hand casts group by hand SLOT, so a mid-game hand powersets every one independently);
+`MTG_EQUIP_COPY_XNAME` (built, never measured); and the three built today.
+
+## 5. The two collapses built today, and the gap they close
+
+**The search keys cards by NAME; the keep table folds them by BEHAVIOUR.** Cathar's Shield and
+Accorder's Shield are byte-identical in `cards.json` — both `{0}`, both
+`{is_equipment, equip_cost_generic:3, equip_tough_bonus:3, equip_grants_vigilance}`, same
+types/subtypes/keywords — and v3 plays four of each. The deck's own equivalence discovery (400
+probes, 1% threshold) puts **Accorder's + Cathar's + Kite Shield + Spidersilk Net in ONE class**. So
+the mulligan generator folds those four names on measured evidence and then pays for a search that
+branches four ways over them on every frame of every rollout it drives.
+
+`CardDefinition::behaviour_identity` already existed with the right failure direction (digests the
+whole entry minus `name` and `oracle_text`; an irrelevant key only *declines* a fold) but had ONE
+consumer, `BuildFungibleEquipClasses` behind default-OFF `MTG_EQUIP_COPY_XNAME`.
+
+* **`MTG_FOLD_XNAME`** routes it into `HandCardContentHash` (the hand-cast fold, default ON, −11.5%
+  greedy subsets across all 40 suite decks; also the permanent and act-source halves) and into the
+  route's `PurchaseKey`. Shared reader in `EngineFlags.h`. `ActionFoldSig` had to change too, and
+  that is not cosmetic: the new tag puts the two cards in one class and condition 1 would then DROP
+  it for differing name/`def` pointers, so the fold would silently stop firing rather than merge.
+* **`MTG_EQUIP_EQCOST_DOMINANCE`** implements the user's rule — *"Same equip costs are the easiest
+  to prioritize. The ones that do more can be always taken in that case... that is dominant just
+  because the extra damage cannot be overridden by mana efficiency."* Bounded by the user's own
+  counter-example: across UNEQUAL equip cost it is a real multi-turn allocation choice (*"we might
+  have enough mana this turn for the shield and be able to equip the spidersilk next turn alongside
+  other things. Mana efficiency takes priority."*) so nothing is pruned there. **Componentwise**,
+  never through `rider_delta`'s weighted scalar — at a fixed host the double-strike flip and
+  Kemba's upkeep token both cancel, so the order reduces to power / Jitte charges / lifelink.
+* **`MTG_EQUIP_POWER_FIRST`** is the user's damage-per-mana ordering (*"prioritize paying equip
+  costs for Gauntlets... hammer is so expensive to equip that the gauntlets will generally be what
+  you choose"*). An ordering, never a prune, so it is inert at unlimited budget by construction.
+
+Applied to the v3 equipment lattice, the user's equal-cost rule prunes this much:
+
+| effective equip | candidates | verdict |
+|---|---|---|
+| 1 | Bone Saw +1/+0, Deconstruction Hammer +1/+1, Skateboard +1/+0 haste | Saw ≡ Dec. Hammer; Skateboard kept (haste is live) |
+| 2 | **Gauntlets** (+1 per attached Equipment), Shadowspear +1/+1, Spidersilk Net +0/+2 | **Spidersilk pruned** — both others add power at the same price |
+| 3 | **Dragonfire Blade** +2/+2, Cathar's / Accorder's / Kite +0/+3 | **all three shields pruned** when a Blade is available |
+| 8 | Colossus Hammer +10/+10 | alone, no dominance applies |
+
+Note this is NOT a repeat of the REFUTED `MTG_ZERO_POWER_EQUIP_FREE_ONLY`, which asserted the
+shields are POOR — a projection whose exception was load-bearing (with three Gauntlets out, every
+further Equipment is +3 power). The new rule asserts only that a strictly better equip at the SAME
+PRICE is preferable, which has no exception.
