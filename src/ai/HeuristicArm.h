@@ -388,6 +388,7 @@ enum Slot : int
     CRACKLE_COUNT_EXACT,      // MTG_CRACKLE_COUNT_EXACT   IsCrackleCountSpell keys on the DirectDamage template, not x_damage_multiplier > 0 (which CardDatabase defaults to 1, so Reality Spasm read as a Crackle and HinataProvider::XCandidates counted an RS in hand as a second Crackle copy, switching off the hold-a-lone-Crackle rule). docs/design/reality-spasm-crackle-classification.md. Default ON; =0 -> the legacy predicate, byte-identical
     HINATA_HOLD_LETHAL_BURN,  // MTG_HINATA_HOLD_LETHAL_BURN  the hold-a-lone-Crackle rule judges "wins this turn" with the subset walks' own projection (every cast's direct damage + the attack, on a payable subset) via HoldCastUnlessLethal, instead of XCandidates' Crackle-plus-attack estimate -- so a Magma Opus / Soulfire co-cast that makes the turn lethal is no longer held (Hinata d0 gi 157 / 196). docs/design/reality-spasm-crackle-classification.md. Default ON; =0 -> the XCandidates estimate, byte-identical
     HINATA_HOLD_NEEDS_HINATA, // MTG_HINATA_HOLD_NEEDS_HINATA the hold-a-lone-Crackle rule applies only while the combo is reachable: Hinata in play or castable from hand this turn (without her, Reality Spasm nets no mana and a lone Crackle is just burn). A SCOPE change to a USER-approved heuristic -> DEFAULT OFF until the USER decides; =1 is the measured arm
+    HINATA_CASTABLE_MANA,     // MTG_HINATA_CASTABLE_MANA   HinataCastableFromHand asks whether the board's real mana (AvailableManaPool: Sol Ring 2, a bounce land 2, colour-aware CanPay) pays her cost, not whether the SOURCE COUNT reaches her mana value (2HG gi 254: Sol Ring + Izzet Boilerworks + Forbidden Orchard = 3 sources, 5 mana, read "not castable"). Gates Reality Spasm's emission and Crackle's X sizing under the same-subset credit. Default ON; =0 -> the source count
     COUNT
 };
 
@@ -737,6 +738,7 @@ inline const char* Name(int slot)
         "MTG_CRACKLE_COUNT_EXACT",
         "MTG_HINATA_HOLD_LETHAL_BURN",
         "MTG_HINATA_HOLD_NEEDS_HINATA",
+        "MTG_HINATA_CASTABLE_MANA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
