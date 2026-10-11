@@ -434,6 +434,7 @@ enum Slot : int
     HINATA_CASTABLE_MANA,     // MTG_HINATA_CASTABLE_MANA   HinataCastableFromHand asks whether the board's real mana (AvailableManaPool: Sol Ring 2, a bounce land 2, colour-aware CanPay) pays her cost, not whether the SOURCE COUNT reaches her mana value (2HG gi 254: Sol Ring + Izzet Boilerworks + Forbidden Orchard = 3 sources, 5 mana, read "not castable"). Gates Reality Spasm's emission and Crackle's X sizing under the same-subset credit. Default ON; =0 -> the source count
     RESTRICTOR_ORDER_EXACT,   // MTG_RESTRICTOR_ORDER_EXACT  the subset walks' cast-restrictor test (Irencrag Feat: only max_casts_after casts after it) also asks whether the casts ranked before the restrictor, and the restrictor itself, can be paid WITHOUT its own float; if not, every payable order casts it ahead of one of them, so one more cast follows it. Stops the d0 runner committing unrealisable {Irencrag, ..., Crackle} lines (Hinata d0 gi 865 / 1773: Irencrag, then an Ornithopter took the one remaining cast; 2HG gi 254: Irencrag's {R}{R}{R} payable only by its own float, nothing cast for four turns). Rank-ordered decks only (not ordering-search decks). Default ON; =0 -> the rank-only count
     SOLVE_UNTAP_CREDIT,       // MTG_SOLVE_UNTAP_CREDIT      the real payer (SubsetPayableWithFilters) credits an ETB-untap creature's same-turn land untap (tap-ahead, pay, untap, in the realised cast order), and Solve's MTG_SOLVE_PENDING_AURA_EXACT block sends a board-gate-failing subset that casts one to that payer instead of rejecting it: {Cloud of Faeries, Training Grounds} off one {U} land is legal (EDF gi 1408). Keyed on etb_untap_lands. Default ON; =0 -> no credit, byte-identical
+    PREPAY_ENERGY_RESTORE,    // MTG_PREPAY_ENERGY_RESTORE   BatchPrepayMainCasts' rollbacks (a failed hold rung, a `wild` decline, the shrink trials) restore the player's {E} with the battlefield: a declined joint solve that tapped Aether Hub coloured no longer leaks the energy, which stranded Trace of Abundance's {R} on the per-cast payment (EDF gi 1985 t3). Executor + rollout (shared). Only Aether Hub carries energy. Default ON; =0 -> the leak, byte-identical
     COUNT
 };
 
@@ -829,6 +830,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_CASTABLE_MANA",
         "MTG_RESTRICTOR_ORDER_EXACT",
         "MTG_SOLVE_UNTAP_CREDIT",
+        "MTG_PREPAY_ENERGY_RESTORE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

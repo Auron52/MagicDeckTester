@@ -38495,6 +38495,14 @@ bool TurnSolver::BatchPrepayMintPrefix(GameState& state, const std::vector<Actio
     return BatchPrepayMainCasts(state, prefix, /*mint_prefix=*/true);
 }
 
+// MTG_PREPAY_ENERGY_RESTORE (DEFAULT ON; =0 disables): a rolled-back prepay solve gives back the {E}
+// its coloured Aether Hub taps spent. See the snapshot in BatchPrepayMainCasts.
+static bool PrepayEnergyRestoreOn()
+{
+    static const bool s_env = EnvOn("MTG_PREPAY_ENERGY_RESTORE", true);
+    return heurarm::Flag(heurarm::PREPAY_ENERGY_RESTORE, s_env);
+}
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                       bool mint_prefix)
 {
@@ -38805,6 +38813,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     const int  la  = state.players[active].life;
     const int  lo  = state.players[1 - active].life;
     const bool oll = state.opponent_lost_life_this_turn;
+    // ...and the ENERGY a coloured Aether Hub tap spends (MTG_PREPAY_ENERGY_RESTORE, DEFAULT ON; =0
+    // restores the leak byte-identically). "{T}, Pay {E}: Add one mana of any color" -- the {E} is
+    // part of the activation cost, so a payment this function rolls back never paid it (CR 601.2h:
+    // a cost is paid only as the spell is cast). Every rollback below restored the battlefield, the
+    // float and both lives but not the player's energy, so a solve that tapped the Hub coloured and
+    // was then DECLINED (an unpayable rung, a `wild` output, a shrink trial) took the {E} with it.
+    // EDF gi 1985 (seed 1651986, d0) t3: Aether Hub dropped this turn ({E} 1), plan {Trace of
+    // Abundance, Eldrazi Displacer}; the joint solve tapped the Hub for {R}, produced `wild` and
+    // declined, and the per-cast payer then found a spent-out Hub with no {R} left for Trace -- the
+    // turn cast nothing (new arm 7, and 4 with the prepay off). Shared by the executor and the
+    // rollout apply, so the fix is lockstep. Only Aether Hub carries energy, so only EDF can move.
+    const bool energy_restore = PrepayEnergyRestoreOn();
+    const int  ea  = state.players[active].energy_counters;
 
     // Whole-turn depletion reservation ("leave out if you can"): a depletion land's counter is spent
     // the instant it taps, so try to HOLD every untapped depletion land whenever the turn's COMBINED
@@ -39032,6 +39053,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.players[active].life         = la;
             state.players[1 - active].life     = lo;
             state.opponent_lost_life_this_turn = oll;
+            if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         }
     }
@@ -39084,6 +39106,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.players[active].life         = la;
             state.players[1 - active].life     = lo;
             state.opponent_lost_life_this_turn = oll;
+            if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         };
         bool staged_ok = false;
@@ -39154,6 +39177,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.players[active].life         = la;
             state.players[1 - active].life     = lo;
             state.opponent_lost_life_this_turn = oll;
+            if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         };
         // A zero-cost noncreature portion still lands here (the single solve ran with
@@ -39207,6 +39231,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         state.players[active].life         = la;
         state.players[1 - active].life     = lo;
         state.opponent_lost_life_this_turn = oll;
+        if (energy_restore) { state.players[active].energy_counters = ea; }
         return Pp(ok ? PP_WILD : PP_UNPAYABLE);
     }
 
@@ -39295,6 +39320,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             int                    best_la   = state.players[active].life;
             int                    best_lo   = state.players[1 - active].life;
             bool                   best_oll  = state.opponent_lost_life_this_turn;
+            int                    best_ea   = state.players[active].energy_counters;
             ManaPool               best_produced = produced;
             int                    released = 0;
             for (int c : cand)
@@ -39306,6 +39332,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 state.players[active].life         = la;
                 state.players[1 - active].life     = lo;
                 state.opponent_lost_life_this_turn = oll;
+                if (energy_restore) { state.players[active].energy_counters = ea; }
                 ManaPool p2;
                 const bool o2 = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures,
                                                     ManaPool{}, /*rp_colors=*/nullptr,
@@ -39321,6 +39348,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     best_la       = state.players[active].life;
                     best_lo       = state.players[1 - active].life;
                     best_oll      = state.opponent_lost_life_this_turn;
+                    best_ea       = state.players[active].energy_counters;
                     best_produced = p2;
                     ++released;
                 }
@@ -39331,6 +39359,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.players[active].life         = best_la;
             state.players[1 - active].life     = best_lo;
             state.opponent_lost_life_this_turn = best_oll;
+            if (energy_restore) { state.players[active].energy_counters = best_ea; }
             produced                           = best_produced;
             if (tapstats::Enabled() && released > 0)
             {
