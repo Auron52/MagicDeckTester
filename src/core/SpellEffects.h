@@ -23337,8 +23337,22 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
             // and rollouts keep the historical commit byte-identical.
             // MTG_TAPAHEAD_PENDING_PIP=0 restores the demand-only argmax.
             static const bool s_pending_pip = EnvOn("MTG_TAPAHEAD_PENDING_PIP", true);
+            // ...AND IN AUTONOMOUS PLAY FOR THE CAST'S OWN PIP (MTG_TAPAHEAD_PENDING_PIP_AUTO,
+            // DEFAULT ON; =0 restores the human-only scope byte-identically). The seed-9 trap is
+            // not a judgement call: tapping the board's only {U} land for {G} to bank mana for a
+            // {1}{U} Cloud of Faeries makes the cast it banks for unpayable, and no player would.
+            // Autonomous play still did it -- held-out EDF d0 gi 147 (seed 5300148) t4: Kitchen
+            // ({G}/{U}, the only blue) banked {G}, Cloud was dropped and the turn cast nothing; the
+            // same commit made Solve's payer (which runs this tap-ahead to price an untapper)
+            // refuse {Wild Growth, Cloud}. Only this first half -- the pending cost's own uncovered
+            // pip -- goes autonomous; the line-priority half below stays human-only. Shared by the
+            // executor, ApplyPlanDirect and both payability walks, so lockstep holds. Only reached
+            // for an ETB-untap cast (Cloud, Peregrine Drake), so only EDF can move.
+            static const bool s_pending_pip_auto_env = EnvOn("MTG_TAPAHEAD_PENDING_PIP_AUTO", true);
+            const bool pending_pip_auto =
+                heurarm::Flag(heurarm::TAPAHEAD_PENDING_PIP_AUTO, s_pending_pip_auto_env);
             bool pip_committed = false;
-            if (s_pending_pip && HumanPlayActive() && pending_cost != nullptr)
+            if (s_pending_pip && (HumanPlayActive() || pending_pip_auto) && pending_cost != nullptr)
             {
                 for (Color c : prod)
                 {
