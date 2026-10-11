@@ -1,0 +1,66 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=7000051 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Sandstone Needle|Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Mercadian Bazaar
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory
+[uo-order] gs=7000051 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Sandstone Needle|Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Mercadian Bazaar
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory
+[uo-order] gs=7000051 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Mercadian Bazaar|Dwarven Hold
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Sandstone Needle(T)
+[uo-order] gs=7000051 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Mercadian Bazaar|Dwarven Hold
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Sandstone Needle
+[uo-order] gs=7000051 t=3 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Dwarven Hold|Sandstone Needle
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Sandstone Needle Mercadian Bazaar(T)
+[uo-order] gs=7000051 t=3 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Dwarven Hold|Sandstone Needle
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Sandstone Needle Mercadian Bazaar
+[uo-order] gs=7000051 t=4 m=1 route=clean pool=4 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Pyretic Ritual|Lathliss, Dragon Queen
+[uo-state] gs=7000051 t=4 cap=-1 pool{w0 u0 b0 r3 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Lathliss, Dragon Queen|Rite of Flame|Irencrag Feat|Pyretic Ritual|Dwarven Hold|Sandstone Needle
+[exec-tap] T4 before Rite of Flame: float{w0 u0 b0 r0 g0 c0 *0} untapped: Unclaimed Territory Sandstone Needle Mercadian Bazaar Mountain
+[uo-cast] gs=7000051 t=4 m=1 d=0 card=Rite of Flame num=39 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T4 Rite of Flame tapped: Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Pyretic Ritual: float{w0 u0 b0 r2 g0 c0 *0} untapped: Unclaimed Territory Sandstone Needle Mercadian Bazaar
+[uo-cast] gs=7000051 t=4 m=1 d=0 card=Pyretic Ritual num=35 staged=0 splice=0 paid=1 pool=5
+[exec-tap] T4 Pyretic Ritual tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Lathliss, Dragon Queen: float{w0 u0 b0 r3 g0 c0 *0} untapped: Unclaimed Territory Sandstone Needle Mercadian Bazaar
+[uo-cast] gs=7000051 t=4 m=1 d=0 card=Lathliss, Dragon Queen num=17 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T4 Lathliss, Dragon Queen tapped: Unclaimed Territory Sandstone Needle  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory(T) Sandstone Needle(T) Mercadian Bazaar Mountain(T) Lathliss, Dragon Queen
+[uo-order] gs=7000051 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Karrthus, Tyrant of Jund|Irencrag Feat|Dwarven Hold|Sandstone Needle
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Sandstone Needle Mercadian Bazaar Mountain Lathliss, Dragon Queen
+[uo-order] gs=7000051 t=5 m=1 route=clean pool=5 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Karrthus, Tyrant of Jund|Irencrag Feat
+[uo-state] gs=7000051 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Irencrag Feat|Sandstone Needle|Lotus Bloom
+[exec-tap] T5 before Karrthus, Tyrant of Jund: float{w0 u0 b0 r0 g0 c0 *0} untapped: Unclaimed Territory Sandstone Needle Mercadian Bazaar Mountain Lathliss, Dragon Queen
+[uo-cast] gs=7000051 t=5 m=1 d=0 card=Karrthus, Tyrant of Jund num=16 staged=0 splice=0 paid=0 pool=3
+[exec-tap] T5 Karrthus, Tyrant of Jund tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Unclaimed Territory Sandstone Needle Mercadian Bazaar Mountain Lathliss, Dragon Queen
+[uo-cast] gs=7000051 t=5 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T5 Irencrag Feat tapped: Unclaimed Territory Sandstone Needle Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory(T) Mercadian Bazaar Mountain(T) Lathliss, Dragon Queen(T) Dwarven Hold(T)
+[uo-order] gs=7000051 t=5 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=5 cap=1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Karrthus, Tyrant of Jund|Sandstone Needle|Lotus Bloom
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Mercadian Bazaar Mountain Lathliss, Dragon Queen Dwarven Hold
+[uo-order] gs=7000051 t=6 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=6 cap=-1 pool{w0 u0 b0 r3 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Seething Song
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory(T) Mercadian Bazaar(T) Mountain(T) Lathliss, Dragon Queen(T) Dwarven Hold Sandstone Needle(T)
+[uo-order] gs=7000051 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000051 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Karrthus, Tyrant of Jund|Seething Song
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Unclaimed Territory Mercadian Bazaar Mountain Lathliss, Dragon Queen Dwarven Hold Sandstone Needle
+[uo-order] gs=7000051 t=7 m=1 route=clean pool=5 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Karrthus, Tyrant of Jund|Seething Song
+[uo-state] gs=7000051 t=7 cap=-1 pool{w0 u0 b0 r4 g0 c0 *1} hand=Karrthus, Tyrant of Jund|Seething Song
+[exec-tap] T7 before Karrthus, Tyrant of Jund: float{w0 u0 b0 r0 g0 c0 *0} untapped: Unclaimed Territory Mercadian Bazaar Mountain Lathliss, Dragon Queen Dwarven Hold Sandstone Needle
+[uo-cast] gs=7000051 t=7 m=1 d=0 card=Karrthus, Tyrant of Jund num=16 staged=0 splice=0 paid=0 pool=3
+[exec-tap] T7 Karrthus, Tyrant of Jund tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Seething Song: float{w0 u0 b0 r0 g0 c0 *0} untapped: Unclaimed Territory Mercadian Bazaar Mountain Lathliss, Dragon Queen Dwarven Hold Sandstone Needle
+[uo-cast] gs=7000051 t=7 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T7 Seething Song tapped: Mountain Sandstone Needle  float{w0 u0 b0 r0 g0 c0 *0}
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g51x/off
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

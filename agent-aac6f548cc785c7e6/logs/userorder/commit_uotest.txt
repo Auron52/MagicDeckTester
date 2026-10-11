@@ -1,0 +1,11 @@
+test(dragonstorm): pin the plain walk where the first-round tests describe it (stale since 916002fc)
+
+Two first-round tests in test_dragonstorm_user_order.cpp assert what the payable-order fallback does
+with the USER order OFF, "the plain walk": it cannot credit the Medallion's discount, so it leaves
+"Medallion first" unpaid, and at apply level the generic order strands the Scourge. MTG_PAYABLE_ORDER_EXACT
+(916002fc, default ON) judges that producer domain with the exact walk for every deck, so the USER_ORDER=0
+arm now finds the paying order too and both assertions failed. They now pin PAYABLE_ORDER_EXACT=0 for the
+plain-walk statement, and the first one also asserts the lever's own effect on that arm ("Rite, Medallion,
+Pyretic, Seething, Scourge").
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,43 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+ "turn": 6,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "opponent_library_size": 40,
+ "library_filler": "Vexing Shusher",
+ "library_size": 40,
+ "energy_counters": 0,
+ "depth": 0,
+ "budget_ms": 0,
+ "max_turns": 6,
+ "battlefield": [
+  {
+   "name": "Aether Hub",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Kitchen",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Cloud of Faeries",
+  "Eldrazi Displacer",
+  "Eldrazi Displacer",
+  "Fertile Ground",
+  "Fertile Ground",
+  "Trace of Abundance",
+  "Wild Growth",
+  "Wild Growth"
+ ],
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc/edf_d0/scen/log_1261_on_t6.json"
+}

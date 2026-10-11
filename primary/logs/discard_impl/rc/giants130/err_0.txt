@@ -1,0 +1,8 @@
+Loaded profile from decks/Giants/Giants.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/giants130/log_0
+[enum-memo] hits=206 misses=4480 clears=0
+[solve-memo] hits=13296 misses=3660 clears=0
+[m2-search-memo] hits=3388 misses=3113 clears=0
+[leaf-eval] published=15144 ties=11398 flips=346 life-equal-ties=7975

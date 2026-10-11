@@ -1,0 +1,43 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Training Grounds: float{w0 u0 b0 r0 g0 c0 *0} untapped: Brushland
+[exec-tap] T1 Training Grounds tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland
+[exec-tap] T2 before Wild Growth: float{w0 u1 b0 r0 g1 c0 *0} untapped:
+[exec-tap] T2 Wild Growth tapped:  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T2 before Training Grounds: float{w0 u1 b0 r0 g0 c0 *0} untapped: Wild Growth
+[exec-tap] T2 Training Grounds tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Yavimaya Coast(T) Wild Growth Training Grounds
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Yavimaya Coast Wild Growth Training Grounds
+[exec-tap] T3 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds
+[exec-tap] T3 Trace of Abundance tapped: Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: Yavimaya Coast Wild Growth Training Grounds Trace of Abundance
+[exec-tap] T3 Living Wish tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Yavimaya Coast(T) Wild Growth Training Grounds Conservatory(T) Trace of Abundance
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Yavimaya Coast(T) Wild Growth Training Grounds Conservatory(T) Trace of Abundance
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g38 c0 *19} own: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Peregrine Drake(T)
+[exec-tap] T4 before Wild Growth: float{w0 u0 b0 r0 g38 c0 *19} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub
+[exec-tap] T4 Wild Growth tapped:  float{w0 u0 b0 r0 g37 c0 *19}
+[exec-tap] T4 before Wild Growth: float{w0 u0 b0 r0 g37 c0 *19} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth
+[exec-tap] T4 Wild Growth tapped:  float{w0 u0 b0 r0 g36 c0 *19}
+[exec-tap] T4 before Fertile Ground: float{w0 u0 b0 r0 g36 c0 *19} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth
+[exec-tap] T4 Fertile Ground tapped:  float{w0 u0 b0 r0 g35 c0 *18}
+[exec-tap] T4 before Trace of Abundance: float{w0 u0 b0 r0 g35 c0 *18} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth Fertile Ground
+[exec-tap] T4 Trace of Abundance tapped:  float{w0 u0 b0 r0 g34 c0 *17}
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g34 c0 *17} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth Fertile Ground Trace of Abundance
+[exec-tap] T4 Overgrowth tapped:  float{w0 u0 b0 r0 g33 c0 *15}
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g33 c0 *15} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth Fertile Ground Trace of Abundance Overgrowth
+[exec-tap] T4 Overgrowth tapped:  float{w0 u0 b0 r0 g32 c0 *13}
+[exec-tap] T4 before Emiel the Blessed: float{w0 u0 b0 r0 g32 c0 *13} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth Fertile Ground Trace of Abundance Overgrowth Overgrowth
+[exec-tap] T4 Emiel the Blessed tapped:  float{w0 u0 b0 r0 g32 c0 *9}
+[exec-tap] T4 before Eldrazi Displacer: float{w0 u0 b0 r0 g32 c0 *9} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth Fertile Ground Trace of Abundance Overgrowth Overgrowth Emiel the Blessed
+[exec-tap] T4 Eldrazi Displacer tapped:  float{w0 u0 b0 r0 g32 c0 *6}
+[exec-tap] T4 before Emiel the Blessed: float{w0 u0 b0 r0 g32 c0 *6} untapped: Brushland Yavimaya Coast Wild Growth Training Grounds Conservatory Trace of Abundance Eldrazi Displacer Essence Depleter Aether Hub Wild Growth Wild Growth Fertile Ground Trace of Abundance Overgrowth Overgrowth Emiel the Blessed Eldrazi Displacer
+[exec-tap] T4 Emiel the Blessed tapped:  float{w0 u0 b0 r0 g32 c0 *2}
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g110_d0_old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

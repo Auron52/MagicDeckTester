@@ -1,0 +1,1357 @@
+{
+  "cardNumbering": {
+    "Ancient Cornucopia": [
+      1
+    ],
+    "Birds of Paradise": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "Blood Crypt": [
+      6
+    ],
+    "Bloom Tender": [
+      7,
+      8
+    ],
+    "Breeding Pool": [
+      9
+    ],
+    "Cosmic Spider-Man": [
+      10,
+      11
+    ],
+    "Deathrite Shaman": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "Faeburrow Elder": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "Garth One-Eye": [
+      20
+    ],
+    "Godless Shrine": [
+      21
+    ],
+    "Island": [
+      22
+    ],
+    "Jared Carthalion": [
+      23,
+      24
+    ],
+    "Jetmir's Garden": [
+      25
+    ],
+    "Lightning Greaves": [
+      26
+    ],
+    "Maelstrom Archangel": [
+      27,
+      28,
+      29,
+      30
+    ],
+    "Mana Cannons": [
+      31,
+      32,
+      33
+    ],
+    "Misty Rainforest": [
+      34,
+      35
+    ],
+    "Mountain": [
+      36
+    ],
+    "Nicol Bolas, Planeswalker": [
+      37,
+      38
+    ],
+    "Oko, Thief of Crowns": [
+      39
+    ],
+    "Overgrown Tomb": [
+      40
+    ],
+    "Progenitus": [
+      41
+    ],
+    "Scalding Tarn": [
+      42,
+      43,
+      44
+    ],
+    "Steam Vents": [
+      45
+    ],
+    "Stomping Ground": [
+      46
+    ],
+    "Two-Headed Hellkite": [
+      47,
+      48,
+      49
+    ],
+    "Unite the Coalition": [
+      50,
+      51
+    ],
+    "Verdant Catacombs": [
+      52,
+      53
+    ],
+    "Windswept Heath": [
+      54,
+      55
+    ],
+    "Wooded Foothills": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Zagoth Triome": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 31,
+          "cardName": "Mana Cannons"
+        },
+        {
+          "card": 54,
+          "cardName": "Windswept Heath"
+        },
+        {
+          "card": 2,
+          "cardName": "Birds of Paradise"
+        },
+        {
+          "card": 56,
+          "cardName": "Wooded Foothills"
+        },
+        {
+          "card": 10,
+          "cardName": "Cosmic Spider-Man"
+        },
+        {
+          "card": 52,
+          "cardName": "Verdant Catacombs"
+        },
+        {
+          "card": 57,
+          "cardName": "Wooded Foothills"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 31,
+      "cardName": "Mana Cannons"
+    },
+    {
+      "card": 54,
+      "cardName": "Windswept Heath"
+    },
+    {
+      "card": 2,
+      "cardName": "Birds of Paradise"
+    },
+    {
+      "card": 56,
+      "cardName": "Wooded Foothills"
+    },
+    {
+      "card": 10,
+      "cardName": "Cosmic Spider-Man"
+    },
+    {
+      "card": 52,
+      "cardName": "Verdant Catacombs"
+    },
+    {
+      "card": 57,
+      "cardName": "Wooded Foothills"
+    }
+  ],
+  "result": {
+    "turn": 4,
+    "winner": "player"
+  },
+  "runId": "20261010_123425_1211666",
+  "seed": 1211666,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 54,
+          "cardName": "Windswept Heath",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 2,
+          "cardName": "Birds of Paradise",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54
+        ],
+        "hand": [
+          31,
+          56,
+          10,
+          52,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54
+        ],
+        "hand": [
+          31,
+          56,
+          10,
+          52,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54
+        ],
+        "hand": [
+          31,
+          56,
+          10,
+          52,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Faeburrow Elder",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54
+        ],
+        "hand": [
+          31,
+          56,
+          10,
+          52,
+          57,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 56,
+          "cardName": "Wooded Foothills",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 18,
+          "cardName": "Faeburrow Elder",
+          "manaPaid": "{1}{W}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56
+        ],
+        "hand": [
+          31,
+          10,
+          52,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 14,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56
+        ],
+        "hand": [
+          31,
+          10,
+          52,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 14,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56
+        ],
+        "hand": [
+          31,
+          10,
+          52,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 14,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 47,
+          "cardName": "Two-Headed Hellkite",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56
+        ],
+        "hand": [
+          31,
+          10,
+          52,
+          57,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 14,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 52,
+          "cardName": "Verdant Catacombs",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 10,
+          "cardName": "Cosmic Spider-Man",
+          "manaPaid": "{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Cosmic Spider-Man",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56,
+          52
+        ],
+        "hand": [
+          31,
+          57,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 11,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "damage": 5,
+          "oppLife": 15,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Cosmic Spider-Man",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          54,
+          56,
+          52
+        ],
+        "hand": [
+          31,
+          57,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Cosmic Spider-Man",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          54,
+          56,
+          52
+        ],
+        "hand": [
+          31,
+          57,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 30,
+          "cardName": "Maelstrom Archangel",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cosmic Spider-Man",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56,
+          52
+        ],
+        "hand": [
+          31,
+          57,
+          47,
+          30
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Wooded Foothills",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 31,
+          "cardName": "Mana Cannons",
+          "manaPaid": "{2}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 47,
+          "cardName": "Two-Headed Hellkite",
+          "manaPaid": "{1}{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Cosmic Spider-Man",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 47,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          54,
+          56,
+          52,
+          57
+        ],
+        "hand": [
+          30
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 10,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 10,
+          "oppLife": 0,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Birds of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Cosmic Spider-Man",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 47,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          54,
+          56,
+          52,
+          57
+        ],
+        "hand": [
+          30,
+          49,
+          34
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 0,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    }
+  ]
+}

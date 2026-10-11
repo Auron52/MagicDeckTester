@@ -1,0 +1,23 @@
+fix(attack-proj): domain dork yield + Astrolabe conversion in the attack-tap need
+
+Two inputs of MTG_ATTACK_TAP_NEED_EXACT's need = cost - (supply - attacking-source yields) were
+wrong, so plans that really tap an attacking dork projected no tap and read as lethal (d0 ranks a
+projected win above everything). Both levers default ON; =0 restores the previous number exactly.
+
+MTG_ATTACK_DOMAIN_DORK_YIELD -- CollectAttackingManaSources took Faeburrow Elder / Bloom Tender's
+yield from PermanentManaYield (the card's static 1) while the pool credits one mana per colour among
+our permanents (AddSourceToPool: amt = DomainColors().size(), up to 5), so the need came out ~4 too
+small. Now the pool's own rule. FiveColour only (the one deck with domain dorks).
+
+MTG_ATTACK_TAP_ASTROLABE_CREDIT -- supply was the pool's raw Total(), which counts a fed Arcum's
+Astrolabe (a colour CONVERSION, tagged ManaPool::wild_phantom) as one more unit. Now Total() minus
+min(wild_phantom, wild), CanPayFlat's own amount. Verified by a printed trace on Snow d0 gi1384
+(seed 1551385) T5: the re-solve's Frost Augur look read supply 2 (phantom 1), need 0, projected 11;
+the only real source was the attacking Boreal Druid (real attack 10).
+
+Unit: test/unit/test_attack_projection.cpp (new) pins each projection exactly (largest opponent
+life at which the plan still reads as a win), lever on and off, in the enumerator and in Solve.
+Recovery (ab3 slower FiveColour d0 games): all 14 reach the old turn (with the Cannons term too,
+next commit). Snow gi1384 additionally needs MTG_SOLVE_ATTACK_ONLY_WIN (last commit of the series).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

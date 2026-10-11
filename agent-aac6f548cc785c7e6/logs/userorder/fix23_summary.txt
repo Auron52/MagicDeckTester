@@ -1,0 +1,16 @@
+fix 2 / fix 3 round (2026-10-11), base b7cfa4f1
+commits: 6f10319d MTG_FB_HOLD_BANKED ; 6c67692b MTG_LINE_FLOAT_TAP_FIRST (one build for both)
+identity: both levers =0 vs b7cfa4f1, 36 jobs (720 games) -> IDENTICAL
+unit: 938/938 pass (new: "Combat pump keeps..." 160 assertions, "Line float..." 38)
+named games:
+  dragonstorm d0 s1191687 gi1686: on 6, off 7   (ab3 old 6)
+  dragonstorm d0 s7600233 gi232 : on 6, off 7
+  dragonstorm d3 s7100081 gi80  : on/off both win T4; on, the search no longer commits the failing T2
+                                  line (T2 = Medallion alone); the T2 board is the unit test
+census (d0, 300 paired games per deck per lever, seeds 8700001 / 8900001 + 10000*deck_idx): census_fb_ft.txt
+  FB_HOLD_BANKED: Dragonstorm -1 (1 faster gi0 6<8, 1 slower gi237 8>7); 6 other pump decks 0/0 (no banked lands)
+    digests differ: Dragonstorm 11/12 chunks; every other deck identical
+    gi237 (s8780238): the T6 non-lethal pump keeps the Bazaar's bank (1 dmg less); T7 has 5 mana instead of 3 and the
+      kill was Seething + Scourge + a pump off the untapped lands, but the d0 rituals-for-payoff guard calls Seething
+      surplus (Scourge is affordable without it) -- opp at 1, kill T8. d3 b10: both arms T7 (recovers).
+  LINE_FLOAT_TAP_FIRST: 32 decks, 0 faster / 0 slower; digests differ only on Dragonstorm (4/12 chunks)

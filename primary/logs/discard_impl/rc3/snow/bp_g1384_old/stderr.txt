@@ -1,0 +1,14 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[bp-pay] exec  T1  cast=Arcum's Astrolabe        cost=1/W0 U0 B0 R0 G0 C0 creature=0 float=W0 U0 B0 R0 G0 C0 wild0 line=1/W0 U0 B0 R0 G0 C0 untapped=[Scrying Sheets] dorks=[]
+[bp-pay] exec  T2  cast=Boreal Druid             cost=0/W0 U0 B0 R0 G1 C0 creature=1 float=W0 U0 B0 R0 G0 C0 wild0 line=0/W0 U0 B0 R0 G1 C0 untapped=[Scrying Sheets,Snow-Covered Island] dorks=[]
+[bp-pay] exec  T3  cast=Abominable Treefolk      cost=2/W0 U1 B0 R0 G1 C0 creature=1 float=W0 U0 B0 R0 G0 C0 wild0 line=2/W0 U1 B0 R0 G1 C0 untapped=[Scrying Sheets,Snow-Covered Island,Snow-Covered Island] dorks=[Boreal Druid#9]
+[bp-pay] exec  T4  cast=Frost Augur              cost=0/W0 U1 B0 R0 G0 C0 creature=1 float=W0 U0 B0 R0 G0 C0 wild0 line=0/W0 U1 B0 R0 G0 C0 untapped=[Scrying Sheets,Snow-Covered Island,Snow-Covered Island,Snow-Covered Island] dorks=[Boreal Druid#9]
+[bp-exec]  turn=4 idx=-1 bp_at=0 bp_choice=-1 searched=0
+[bp-pay] exec  T5  cast=Coldsteel Heart          cost=2/W0 U0 B0 R0 G0 C0 creature=0 float=W0 U0 B0 R0 G0 C0 wild0 line=2/W0 U0 B0 R0 G0 C0 untapped=[Scrying Sheets,Snow-Covered Island,Snow-Covered Island,Snow-Covered Island,Scrying Sheets] dorks=[Boreal Druid#9]
+[bp-exec]  turn=5 idx=-1 bp_at=0 bp_choice=-1 searched=0
+[bp-pay] exec  T5  cast=Jorn, God of Winter      cost=2/W0 U0 B0 R0 G1 C0 creature=1 float=W0 U0 B0 R0 G0 C0 wild0 line=0/W0 U0 B0 R0 G0 C0 untapped=[Scrying Sheets,Snow-Covered Island] dorks=[Boreal Druid#9]
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/bp_g1384_old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

@@ -1,0 +1,5 @@
+hin d0: 300 paired; turns on 2112 off 2112 (delta +0); faster 0 slower 0; ms on/off 1056/369 units 0/0
+hin d3: 100 paired; turns on 560 off 560 (delta +0); faster 0 slower 0; ms on/off 298349/302347 units 4327045/4346219
+ds d0: 300 paired; turns on 1562 off 1562 (delta +0); faster 0 slower 0; ms on/off 345/188 units 0/0
+cyc d0: 300 paired; turns on 2700 off 2700 (delta +0); faster 0 slower 0; ms on/off 38/30 units 0/0
+mw d0: 300 paired; turns on 1777 off 1777 (delta +0); faster 0 slower 0; ms on/off 744/187 units 0/0

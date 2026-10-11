@@ -1,0 +1,45 @@
+#### edf d0 gi=76 old=5 new=6
+  new failed casts: ["T2 Eladamri's Call", "T2 Eladamri's Call", 'T5 Living Wish']
+  old failed casts: ["T2 Eladamri's Call", "T2 Eladamri's Call", 'T5 Emiel the Blessed']
+#### edf d0 gi=110 old=4 new=6
+  new failed casts: ['T2 Living Wish']
+  old failed casts: ['T1 Training Grounds', 'T2 Training Grounds']
+#### edf d0 gi=354 old=4 new=5
+  new failed casts: -
+  old failed casts: ['T2 Trace of Abundance', 'T3 Eldrazi Displacer']
+#### edf d0 gi=373 old=4 new=5
+  new failed casts: ['T2 Living Wish', 'T4 Dimensional Infiltrator']
+  old failed casts: ['T2 Eldrazi Displacer']
+#### edf d0 gi=432 old=7 new=8
+  new failed casts: ['T3 Cloud of Faeries']
+  old failed casts: ['T1 Wild Growth', 'T2 Training Grounds']
+#### edf d0 gi=547 old=5 new=6
+  new failed casts: -
+  old failed casts: ['T2 Cloud of Faeries']
+#### edf d0 gi=604 old=6 new=7
+  new failed casts: -
+  old failed casts: -
+#### edf d0 gi=985 old=6 new=7
+  new failed casts: -
+  old failed casts: ['T2 Trace of Abundance', 'T3 Trace of Abundance', 'T5 Emiel the Blessed']
+#### edf d0 gi=1031 old=6 new=7
+  new failed casts: -
+  old failed casts: ['T1 Wild Growth', 'T2 Wild Growth', 'T4 Training Grounds']
+#### edf d0 gi=1408 old=4 new=5
+  new failed casts: -
+  old failed casts: -
+#### edf d0 gi=1475 old=7 new=8
+  new failed casts: ['T5 Peregrine Drake', 'T6 Peregrine Drake']
+  old failed casts: ['T4 Eldrazi Displacer', 'T5 Eldrazi Displacer']
+#### edf d0 gi=1620 old=6 new=7
+  new failed casts: -
+  old failed casts: ['T5 Emiel the Blessed', 'T6 Living Wish']
+#### edf d0 gi=1676 old=4 new=5
+  new failed casts: ['T4 Fertile Ground']
+  old failed casts: ['T4 Emiel the Blessed']
+#### edf d0 gi=1985 old=6 new=7
+  new failed casts: ['T3 Trace of Abundance', 'T3 Eldrazi Displacer']
+  old failed casts: ['T2 Trace of Abundance']
+#### edf d3 gi=285 old=4 new=5
+  new failed casts: ['T3 Eldrazi Displacer']
+  old failed casts: -

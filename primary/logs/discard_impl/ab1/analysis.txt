@@ -1,0 +1,140 @@
+deck[arm-base]               cell      n     base  arm-base       t faster slower
+angels                       2hg     200   5.1200   +0.0000    0.00      0      0
+angels[on-nodist]            2hg     200   5.1200   +0.0000    0.00      0      0
+angels                       d0     2000   5.2985   +0.0000    0.00      0      0
+angels[on-nodist]            d0     2000   5.2985   +0.0000    0.00      0      0
+angels                       d3      400   4.6025   +0.0000    0.00      0      0
+angels[on-nodist]            d3      400   4.6025   +0.0000    0.00      0      0
+angels                       ship    300   4.6133   +0.0000    0.00      0      0
+angels[on-nodist]            ship    300   4.6133   +0.0000    0.00      0      0
+auras                        2hg     200   4.5800   +0.0000    0.00      0      0
+auras[on-nodist]             2hg     200   4.5800   +0.0000    0.00      0      0
+auras[on-noseq]              2hg     200   4.5800   +0.0000    0.00      0      0
+auras                        d0     2000   4.3475   +0.0000    0.00      0      0
+auras[on-nodist]             d0     2000   4.3475   +0.0000    0.00      0      0
+auras[on-noseq]              d0     2000   4.3475   +0.0000    0.00      0      0
+auras                        d3      400   4.1400   +0.0000    0.00      0      0
+auras[on-nodist]             d3      400   4.1400   +0.0000    0.00      0      0
+auras[on-noseq]              d3      400   4.1400   +0.0000    0.00      0      0
+auras                        ship    300   4.1000   +0.0000    0.00      0      0
+auras[on-nodist]             ship    300   4.1000   +0.0000    0.00      0      0
+auras[on-noseq]              ship    300   4.1000   +0.0000    0.00      0      0
+breaching                    2hg     200   3.0700   +0.0000    0.00      0      0
+breaching                    d0     2000   4.8330   +0.0000    0.00      0      0
+breaching                    d3      400   3.0875   +0.0000    0.00      0      0
+breaching                    ship    300   3.0933   +0.0000    0.00      0      0
+burn                         2hg     200   5.9150   +0.0000    0.00      0      0
+burn                         d0     2000   4.4700   +0.0000    0.00      0      0
+burn                         d3      400   4.3275   +0.0000    0.00      0      0
+burn                         ship    300   4.3500   +0.0000    0.00      0      0
+creature_giving              2hg     200   4.8550   +0.0000    0.00      0      0
+creature_giving[gen-off]     2hg     200   4.8550   +0.0000    0.00      0      0
+creature_giving[on-gen]      2hg     200   4.8550   +0.0000    0.00      0      0
+creature_giving              d0     2000   5.5550   +0.0000    0.00      0      0
+creature_giving[gen-off]     d0     2000   5.5550   +0.0000    0.00      0      0
+creature_giving[on-gen]      d0     2000   5.5550   +0.0000    0.00      0      0
+creature_giving              d3      400   4.6050   +0.0000    0.00      0      0
+creature_giving[gen-off]     d3      400   4.6050   +0.0000    0.00      0      0
+creature_giving[on-gen]      d3      400   4.6050   +0.0000    0.00      0      0
+creature_giving              ship    300   4.6567   +0.0000    0.00      0      0
+creature_giving[gen-off]     ship    300   4.6567   +0.0000    0.00      0      0
+creature_giving[on-gen]      ship    300   4.6567   +0.0000    0.00      0      0
+critter                      2hg     200   4.6650   +0.0000    0.00      0      0
+critter[on-nodist]           2hg     200   4.6650   +0.0000    0.00      0      0
+critter                      d0     2000   4.6500   +0.0000    0.00      0      0
+critter[on-nodist]           d0     2000   4.6500   +0.0000    0.00      0      0
+critter                      d3      400   4.3800   +0.0000    0.00      0      0
+critter[on-nodist]           d3      400   4.3800   +0.0000    0.00      0      0
+critter                      ship    300   4.3400   +0.0000    0.00      0      0
+critter[on-nodist]           ship    300   4.3400   +0.0000    0.00      0      0
+dragonstorm                  2hg     200   4.7050   -0.0100   -1.42      2      0
+dragonstorm                  d0     2000   5.4900   -0.0025   -1.51      3      0
+dragonstorm                  d3      400   4.4025   -0.0025   -1.00      1      0
+dragonstorm                  ship    300   4.3133   +0.0000    0.00      0      0
+edf                          d0     2000   5.8925   -0.0080   -3.03     16      3
+edf                          d3      400   4.3375   +0.0025    1.00      0      1
+edf                          ship    300   4.3767   +0.0000    0.00      1      1
+fluctuator                   2hg     200   3.5500   +0.0000    0.00      0      0
+fluctuator                   d0     2000   5.1615   -0.0005   -1.00      1      0
+fluctuator                   d3      400   3.6350   +0.0000    0.00      0      0
+fluctuator                   ship    300   3.6267   +0.0000    0.00      0      0
+fungus                       d0     2000   5.6575   +0.0000    0.00      0      0
+fungus                       d3      400   5.3475   +0.0000    0.00      0      0
+fungus                       ship    300   5.3533   -0.0033   -1.00      1      0
+fungusb                      d0     2000   6.1830   -0.0005   -1.00      1      0
+fungusb                      d3      400   5.2750   +0.0000    0.00      0      0
+fungusb                      ship    300   5.2533   +0.0000    0.00      0      0
+giants                       d0     2000   6.1060   +0.0005    1.00      0      1
+giants[on-nodist]            d0     2000   6.1065   +0.0000    0.00      0      0
+giants[on-w6]                d0     2000   6.1065   +0.0000    0.00      0      0
+giants                       d3      400   5.6850   +0.0000    0.00      0      0
+giants[on-nodist]            d3      400   5.6850   +0.0000    0.00      0      0
+giants[on-w6]                d3      400   5.6850   +0.0000    0.00      0      0
+giants                       ship    300   5.6200   +0.0000    0.00      0      0
+giants[on-nodist]            ship    300   5.6200   +0.0000    0.00      0      0
+giants[on-w6]                ship    300   5.6200   +0.0000    0.00      0      0
+goblins                      2hg     200   4.2700   +0.0000    0.00      0      0
+goblins[on-nodist]           2hg     200   4.2700   +0.0000    0.00      0      0
+goblins[on-vialle]           2hg     200   4.2700   +0.0000    0.00      0      0
+goblins                      d0     2000   4.1075   +0.0000    0.00      0      0
+goblins[on-nodist]           d0     2000   4.1075   +0.0000    0.00      0      0
+goblins[on-vialle]           d0     2000   4.1075   +0.0000    0.00      0      0
+goblins                      d3      400   3.8100   +0.0000    0.00      0      0
+goblins[on-nodist]           d3      400   3.8100   +0.0000    0.00      0      0
+goblins[on-vialle]           d3      400   3.8100   +0.0000    0.00      0      0
+goblins                      ship    300   3.7533   +0.0000    0.00      0      0
+goblins[on-nodist]           ship    300   3.7533   +0.0000    0.00      0      0
+goblins[on-vialle]           ship    300   3.7533   +0.0000    0.00      0      0
+knights                      2hg     200   4.9750   +0.0000    0.00      0      0
+knights                      d0     2000   4.5385   +0.0000    0.00      0      0
+knights                      d3      400   4.3100   +0.0000    0.00      0      0
+knights                      ship    300   4.3200   +0.0000    0.00      0      0
+melira                       2hg     200   4.8000   +0.0000    0.00      0      0
+melira                       d0     2000   6.4045   -0.0005   -1.00      1      0
+melira                       d3      400   4.7575   -0.0025   -1.00      1      0
+melira                       ship    300   4.7467   +0.0000    0.00      0      0
+selesnya                     d0     2000   5.9350   +0.0000    0.00      0      0
+selesnya[on-nodist]          d0     2000   5.9350   +0.0000    0.00      0      0
+selesnya                     d3      400   5.2225   +0.0000    0.00      0      0
+selesnya[on-nodist]          d3      400   5.2225   +0.0000    0.00      0      0
+selesnya                     ship    300   5.2433   +0.0000    0.00      0      0
+selesnya[on-nodist]          ship    300   5.2433   +0.0000    0.00      0      0
+slivers                      2hg     200   4.8900   +0.0000    0.00      0      0
+slivers                      d0     2000   4.6740   +0.0000    0.00      0      0
+slivers                      d3      400   4.2125   +0.0000    0.00      0      0
+slivers                      ship    300   4.2400   +0.0000    0.00      0      0
+whiteknights                 2hg     200   4.5850   +0.0000    0.00      0      0
+whiteknights                 d0     2000   4.5875   +0.0000    0.00      0      0
+whiteknights                 d3      400   4.1250   +0.0000    0.00      0      0
+whiteknights                 ship    300   4.1000   +0.0000    0.00      0      0
+
+per deck (all cells pooled): n, sum(arm-base), faster, slower
+  angels                         2900       +0      0      0
+  angels[on-nodist]              2900       +0      0      0
+  auras                          2900       +0      0      0
+  auras[on-nodist]               2900       +0      0      0
+  auras[on-noseq]                2900       +0      0      0
+  breaching                      2900       +0      0      0
+  burn                           2900       +0      0      0
+  creature_giving                2900       +0      0      0
+  creature_giving[gen-off]       2900       +0      0      0
+  creature_giving[on-gen]        2900       +0      0      0
+  critter                        2900       +0      0      0
+  critter[on-nodist]             2900       +0      0      0
+  dragonstorm                    2900       -8      6      0
+  edf                            2700      -15     17      5
+  fluctuator                     2900       -1      1      0
+  fungus                         2700       -1      1      0
+  fungusb                        2700       -1      1      0
+  giants                         2700       +1      0      1
+  giants[on-nodist]              2700       +0      0      0
+  giants[on-w6]                  2700       +0      0      0
+  goblins                        2900       +0      0      0
+  goblins[on-nodist]             2900       +0      0      0
+  goblins[on-vialle]             2900       +0      0      0
+  knights                        2900       +0      0      0
+  melira                         2900       -2      2      0
+  selesnya                       2700       +0      0      0
+  selesnya[on-nodist]            2700       +0      0      0
+  slivers                        2900       +0      0      0
+  whiteknights                   2900       +0      0      0

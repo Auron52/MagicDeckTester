@@ -1,0 +1,150 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=5 budget=20ms source=value_play(depth)+cli(budget)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1320059 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Mystic Monastery|Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1320059 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Mystic Monastery|Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T2 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1320059 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[exec-tap] T2 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[uo-order] gs=1320059 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[exec-tap] T3 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[uo-order] gs=1320059 t=3 m=1 route=clean pool=2 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Irencrag Feat|Crackle with Power
+[uo-state] gs=1320059 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *2} hand=Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat
+[exec-tap] T3 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320059 t=3 m=1 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T3 Irencrag Feat tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Crackle with Power: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320059 t=3 m=1 d=5 card=Crackle with Power num=3 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T3 Crackle with Power tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard
+[exec-tap] T3 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard
+[uo-order] gs=1320059 t=3 m=2 route=clean pool=2 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Irencrag Feat|Crackle with Power
+[uo-state] gs=1320059 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *2} hand=Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat
+[exec-tap] T3 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320059 t=3 m=2 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T3 Irencrag Feat tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Crackle with Power: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320059 t=3 m=2 d=5 card=Crackle with Power num=3 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T3 Crackle with Power tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard
+[exec-tap] T4 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard
+[uo-order] gs=1320059 t=4 m=1 route=clean pool=3 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Irencrag Feat|Crackle with Power
+[uo-state] gs=1320059 t=4 cap=-1 pool{w0 u0 b0 r1 g0 c0 *2} hand=Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat
+[exec-tap] T4 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain
+[uo-cast] gs=1320059 t=4 m=1 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T4 Irencrag Feat tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Crackle with Power: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain
+[uo-cast] gs=1320059 t=4 m=1 d=5 card=Crackle with Power num=3 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T4 Crackle with Power tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain
+[exec-tap] T4 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain
+[uo-order] gs=1320059 t=4 m=2 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ornithopter of Paradise
+[uo-state] gs=1320059 t=4 cap=-1 pool{w0 u0 b0 r1 g0 c0 *2} hand=Ornithopter of Paradise|Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat
+[exec-tap] T4 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain
+[uo-cast] gs=1320059 t=4 m=2 d=5 card=Ornithopter of Paradise num=37 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T4 Ornithopter of Paradise tapped: Mystic Monastery Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise
+[exec-tap] T5 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise
+[uo-order] gs=1320059 t=5 m=1 route=opaque pool=4 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain
+[uo-state] gs=1320059 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c0 *3} hand=Preordain|Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm
+[exec-tap] T5 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token
+[uo-cast] gs=1320059 t=5 m=1 d=5 card=Preordain num=43 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T5 Preordain tapped: Mystic Monastery  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320059 t=5 m=1 route=replay pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c0 *2} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm|Mystic Monastery
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery(T)
+[exec-tap] T5 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery(T)
+[uo-order] gs=1320059 t=5 m=2 route=clean pool=3 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Irencrag Feat|Crackle with Power
+[uo-state] gs=1320059 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c0 *2} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm
+[exec-tap] T5 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token
+[uo-cast] gs=1320059 t=5 m=2 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T5 Irencrag Feat tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Crackle with Power: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token
+[uo-cast] gs=1320059 t=5 m=2 d=5 card=Crackle with Power num=3 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T5 Crackle with Power tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery
+[exec-tap] T6 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery
+[uo-order] gs=1320059 t=6 m=1 route=opaque pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1320059 t=6 cap=-1 pool{w0 u0 b0 r1 g0 c0 *4} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm|Ponder
+[exec-tap] T6 before Ponder: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery 1/1 Spirit Token
+[uo-cast] gs=1320059 t=6 m=1 d=5 card=Ponder num=40 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T6 Ponder tapped: Mystic Monastery  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320059 t=6 m=1 route=replay pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=6 cap=-1 pool{w0 u0 b0 r1 g0 c0 *3} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm|Island
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island
+[exec-tap] T6 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island
+[uo-order] gs=1320059 t=6 m=2 route=clean pool=5 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=6 cap=-1 pool{w0 u1 b0 r1 g0 c0 *3} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island
+[exec-tap] T7 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island
+[uo-order] gs=1320059 t=7 m=1 route=clean pool=6 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Irencrag Feat|Soulfire Eruption
+[uo-state] gs=1320059 t=7 cap=-1 pool{w0 u1 b0 r1 g0 c0 *4} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Irencrag Feat|Reality Spasm|Soulfire Eruption
+[exec-tap] T7 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery 1/1 Spirit Token Island 1/1 Spirit Token
+[uo-cast] gs=1320059 t=7 m=1 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T7 Irencrag Feat tapped: Mystic Monastery Mountain Mystic Monastery Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Soulfire Eruption: float{w0 u0 b0 r7 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 6/6 Creature 1/1 Creature Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token 1/1 Spirit Token 1/1 Spirit Token
+[uo-cast] gs=1320059 t=7 m=1 d=5 card=Soulfire Eruption num=59 staged=0 splice=0 paid=1 pool=7
+[exec-tap] T7 Soulfire Eruption tapped: Forbidden Orchard Ornithopter of Paradise  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320059 t=7 m=1 route=replay pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320059 t=7 cap=0 pool{w0 u0 b0 r0 g0 c0 *0} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Reality Spasm|Mountain*|Preordain*|Crackle with Power*|Distorting Wake*|Reflecting Pool*|Soulfire Eruption*|Forbidden Orchard*|Sol Ring*|Distorting Wake*
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard(T) Mountain(T) Ornithopter of Paradise(T) Mystic Monastery(T) Island(T) Reflecting Pool
+[exec-tap] T7 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard(T) Mountain(T) Ornithopter of Paradise(T) Mystic Monastery(T) Island(T) Reflecting Pool
+[uo-order] gs=1320059 t=7 m=2 route=opaque pool=1 n=2 pays=0 ppays=1 mpos=-1 mearl=-1 seq=Sol Ring|Preordain
+[uo-state] gs=1320059 t=7 cap=0 pool{w0 u0 b0 r0 g0 c0 *1} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Reality Spasm|Mountain*|Preordain*|Crackle with Power*|Distorting Wake*|Soulfire Eruption*|Forbidden Orchard*|Sol Ring*|Distorting Wake*
+[exec-tap] T7 before Sol Ring: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 6/6 Creature 1/1 Spirit Token 1/1 Spirit Token Reflecting Pool
+[uo-cast] gs=1320059 t=7 m=2 d=5 card=Sol Ring num=56 staged=1 splice=0 paid=0 pool=1
+[exec-tap] T7 Sol Ring tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 6/6 Creature 1/1 Spirit Token 1/1 Spirit Token Reflecting Pool
+[uo-cast] gs=1320059 t=7 m=2 d=5 card=Preordain num=45 staged=1 splice=0 paid=0 pool=1
+[exec-tap] T7 Preordain tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island Reflecting Pool
+[exec-tap] T8 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island Reflecting Pool
+[uo-order] gs=1320059 t=8 m=1 route=opaque pool=8 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Sol Ring|Preordain|Magma Opus
+[uo-state] gs=1320059 t=8 cap=-1 pool{w0 u1 b0 r1 g0 c0 *6} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Reality Spasm|Mystic Monastery|Mountain*|Preordain*|Crackle with Power*|Distorting Wake*|Soulfire Eruption*|Sol Ring*|Distorting Wake*
+[exec-tap] T8 before Sol Ring: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature Forbidden Orchard 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery Island Reflecting Pool 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320059 t=8 m=1 d=5 card=Sol Ring num=56 staged=1 splice=0 paid=1 pool=7
+[exec-tap] T8 Sol Ring tapped: Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T8 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature Forbidden Orchard 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery Island Reflecting Pool 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token Sol Ring
+[uo-cast] gs=1320059 t=8 m=1 d=5 card=Preordain num=45 staged=1 splice=0 paid=1 pool=8
+[exec-tap] T8 Preordain tapped: Island  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320059 t=8 m=1 route=replay pool=8 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Hinata, Dawn-Crowned
+[uo-state] gs=1320059 t=8 cap=-1 pool{w0 u0 b0 r0 g0 c2 *6} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Reality Spasm|Mystic Monastery|Mountain*|Crackle with Power*|Distorting Wake*|Soulfire Eruption*|Distorting Wake*|Hinata, Dawn-Crowned
+[exec-tap] T8 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature Forbidden Orchard 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery Reflecting Pool 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token Sol Ring
+[uo-cast] gs=1320059 t=8 m=1 d=5 card=Hinata, Dawn-Crowned num=18 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T8 Hinata, Dawn-Crowned tapped: Mystic Monastery Forbidden Orchard Mystic Monastery Sol Ring  float{w0 u0 b0 r0 g0 c1 *0}
+[exec-tap] T8 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard(T) Mountain(T) Ornithopter of Paradise Mystic Monastery(T) Island(T) Reflecting Pool Forbidden Orchard Sol Ring(T) Hinata, Dawn-Crowned
+[exec-tap] T8 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Forbidden Orchard(T) Mountain(T) Ornithopter of Paradise Mystic Monastery(T) Island(T) Reflecting Pool Forbidden Orchard Sol Ring(T) Hinata, Dawn-Crowned
+[uo-order] gs=1320059 t=8 m=2 route=clean pool=3 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Reality Spasm|Reality Spasm|Crackle with Power
+[uo-state] gs=1320059 t=8 cap=-1 pool{w0 u0 b0 r0 g0 c0 *3} hand=Reality Spasm|Crackle with Power|Magma Opus|Memory Lapse|Reality Spasm|Mystic Monastery|Mountain*|Crackle with Power*|Distorting Wake*|Soulfire Eruption*|Distorting Wake*
+[exec-tap] T8 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 6/6 Creature 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token Reflecting Pool 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned
+[exec-tap] T8 tap-ahead for Reality Spasm X=9 -> float{w0 u0 b0 r0 g0 c0 *3}
+[uo-cast] gs=1320059 t=8 m=2 d=5 card=Reality Spasm num=49 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T8 Reality Spasm tapped: Ornithopter of Paradise Reflecting Pool Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T8 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *1} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature Forbidden Orchard 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery Island Reflecting Pool 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token Sol Ring Hinata, Dawn-Crowned
+[exec-tap] T8 tap-ahead for Reality Spasm X=9 -> float{w0 u3 b0 r1 g0 c2 *5}
+[uo-cast] gs=1320059 t=8 m=2 d=5 card=Reality Spasm num=48 staged=0 splice=0 paid=1 pool=11
+[exec-tap] T8 Reality Spasm tapped: Mystic Monastery Forbidden Orchard Mountain Ornithopter of Paradise Mystic Monastery Island Reflecting Pool Forbidden Orchard Sol Ring  float{w0 u1 b0 r1 g0 c2 *5}
+[exec-tap] T8 before Crackle with Power: float{w0 u1 b0 r1 g0 c2 *5} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 6/6 Creature Forbidden Orchard 1/1 Spirit Token Mountain Ornithopter of Paradise 1/1 Spirit Token Mystic Monastery Island Reflecting Pool 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token Sol Ring Hinata, Dawn-Crowned
+[uo-cast] gs=1320059 t=8 m=2 d=5 card=Crackle with Power num=6 staged=1 splice=0 paid=1 pool=10
+[exec-tap] T8 Crackle with Power tapped: Mystic Monastery Forbidden Orchard Mountain Mystic Monastery Island Reflecting Pool Forbidden Orchard Sol Ring  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=9232 misses=38867 clears=0
+[solve-memo] hits=69213 misses=20109 clears=0
+[m2-search-memo] hits=5236 misses=6356 clears=0
+[leaf-eval] published=28244 ties=18444 flips=516 life-equal-ties=12030
+Seed          : 1320059
+Games played  : 1
+avg (turns)   : 8.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

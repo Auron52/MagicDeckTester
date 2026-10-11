@@ -1,0 +1,20 @@
+fix(attack-proj): tap-on-entry Aura host + creature-only mana in the attack-tap discount
+
+Both default ON; =0 restores the previous number exactly.
+
+MTG_ATTACK_AURA_HOST_TAP -- an Aura that taps its host as it enters (Colossification,
+aura_etb_tap_host) cast onto a would-be attacker now takes that attacker out of the projected attack,
+on the same bits (and re-projection) as a {T} ability.
+
+MTG_ATTACK_TAP_CREATURE_ONLY -- creature-only mana (Somberwald Sage, creature_mana_only) sat in the
+supply the need was measured against but cannot pay the plan's NONCREATURE share. That share now gets
+its own need -- its cost beyond the noncreature-spendable non-attacker supply (pool_noncreature) --
+covered first by the attacking sources whose mana a noncreature spell can spend
+(AttackTapDiscountSplit; with no noncreature need it is the old prefix walk exactly). The generic
+provider attacks with 0-power creatures, so the Sage itself is an attacking source; the split is what
+stops it "paying" for an Aura.
+
+Not done: the COLOUR-aware half of the need ({U}{U} with one blue land forcing the blue dork) -- not
+cheap, and Bruna already passed its bar.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

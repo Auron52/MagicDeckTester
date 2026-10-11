@@ -1,0 +1,4 @@
+Loaded 60 mainboard card(s)
+Seed          : 1534
+Games played  : 1
+avg (turns)   : 8.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

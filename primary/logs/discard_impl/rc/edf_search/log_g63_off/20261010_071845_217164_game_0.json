@@ -1,0 +1,2661 @@
+{
+  "cardNumbering": {
+    "Adarkar Wastes": [
+      1,
+      2
+    ],
+    "Aether Hub": [
+      3,
+      4,
+      5
+    ],
+    "Brushland": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "Cloud of Faeries": [
+      10,
+      11,
+      12
+    ],
+    "Conservatory": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Eladamri's Call": [
+      17
+    ],
+    "Eldrazi Displacer": [
+      18,
+      19,
+      20
+    ],
+    "Emiel the Blessed": [
+      21,
+      22,
+      23,
+      24
+    ],
+    "Fertile Ground": [
+      25,
+      26,
+      27,
+      28
+    ],
+    "Kitchen": [
+      29,
+      30
+    ],
+    "Living Wish": [
+      31,
+      32,
+      33,
+      34
+    ],
+    "Mariposa Military Base": [
+      35,
+      36,
+      37
+    ],
+    "Overgrowth": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Peregrine Drake": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Shivan Gorge": [
+      46
+    ],
+    "Trace of Abundance": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Training Grounds": [
+      51,
+      52
+    ],
+    "Wild Growth": [
+      53,
+      54,
+      55,
+      56
+    ],
+    "Yavimaya Coast": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake"
+        },
+        {
+          "card": 21,
+          "cardName": "Emiel the Blessed"
+        },
+        {
+          "card": 57,
+          "cardName": "Yavimaya Coast"
+        },
+        {
+          "card": 25,
+          "cardName": "Fertile Ground"
+        },
+        {
+          "card": 22,
+          "cardName": "Emiel the Blessed"
+        },
+        {
+          "card": 43,
+          "cardName": "Peregrine Drake"
+        },
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 1,
+      "bottomed": [
+        {
+          "card": 38,
+          "cardName": "Overgrowth"
+        }
+      ],
+      "hand": [
+        {
+          "card": 17,
+          "cardName": "Eladamri's Call"
+        },
+        {
+          "card": 26,
+          "cardName": "Fertile Ground"
+        },
+        {
+          "card": 15,
+          "cardName": "Conservatory"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth"
+        },
+        {
+          "card": 54,
+          "cardName": "Wild Growth"
+        },
+        {
+          "card": 30,
+          "cardName": "Kitchen"
+        },
+        {
+          "card": 53,
+          "cardName": "Wild Growth"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 17,
+      "cardName": "Eladamri's Call"
+    },
+    {
+      "card": 26,
+      "cardName": "Fertile Ground"
+    },
+    {
+      "card": 15,
+      "cardName": "Conservatory"
+    },
+    {
+      "card": 54,
+      "cardName": "Wild Growth"
+    },
+    {
+      "card": 30,
+      "cardName": "Kitchen"
+    },
+    {
+      "card": 53,
+      "cardName": "Wild Growth"
+    }
+  ],
+  "result": {
+    "turn": 5,
+    "winner": "player"
+  },
+  "runId": "20261010_071845_217164",
+  "seed": 217164,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 15,
+          "cardName": "Conservatory",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          54,
+          30,
+          53
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          54,
+          30,
+          53
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          54,
+          30,
+          53
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          54,
+          30,
+          53,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 30,
+          "cardName": "Kitchen",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 54,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          53,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          53,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          53,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 10,
+          "cardName": "Cloud of Faeries",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          26,
+          53,
+          18,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 53,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 26,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          18,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          18,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          18,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 55,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          17,
+          18,
+          10,
+          55
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 55,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 17,
+          "cardName": "Eladamri's Call",
+          "manaPaid": "{W}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            23
+          ],
+          "lookedAt": [
+            {
+              "card": 23,
+              "cardName": "Emiel the Blessed",
+              "to": "to hand"
+            }
+          ],
+          "source": "Eladamri's Call (searched)",
+          "type": "REVEAL"
+        },
+        {
+          "card": 10,
+          "cardName": "Cloud of Faeries",
+          "manaPaid": "{1}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 23,
+          "cardName": "Emiel the Blessed",
+          "manaPaid": "{2}{W}{W}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 20,
+          "cardName": "Eldrazi Displacer",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 14,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 27,
+          "cardName": "Fertile Ground",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 16,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 24,
+          "cardName": "Emiel the Blessed",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 36,
+          "cardName": "Mariposa Military Base",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 33,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200006
+          ],
+          "lookedAt": [
+            {
+              "card": 200006,
+              "cardName": "Essence Depleter",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 52,
+          "cardName": "Training Grounds",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 60,
+          "cardName": "Yavimaya Coast",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17
+        ],
+        "hand": [
+          18,
+          13,
+          20,
+          14,
+          27,
+          42,
+          38,
+          47,
+          16,
+          24,
+          36,
+          52,
+          35,
+          60
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17
+        ],
+        "hand": [
+          18,
+          13,
+          20,
+          14,
+          27,
+          42,
+          38,
+          47,
+          16,
+          24,
+          36,
+          52,
+          35,
+          60
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17
+        ],
+        "hand": [
+          18,
+          13,
+          20,
+          14,
+          27,
+          42,
+          38,
+          47,
+          16,
+          24,
+          36,
+          52,
+          35,
+          60
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake",
+          "type": "DISCARD"
+        },
+        {
+          "card": 24,
+          "cardName": "Emiel the Blessed",
+          "type": "DISCARD"
+        },
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "type": "DISCARD"
+        },
+        {
+          "card": 20,
+          "cardName": "Eldrazi Displacer",
+          "type": "DISCARD"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth",
+          "type": "DISCARD"
+        },
+        {
+          "card": 27,
+          "cardName": "Fertile Ground",
+          "type": "DISCARD"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance",
+          "type": "DISCARD"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17,
+          42,
+          24,
+          18,
+          20,
+          38,
+          27,
+          47
+        ],
+        "hand": [
+          13,
+          14,
+          16,
+          36,
+          52,
+          35,
+          60
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "CLEANUP",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 50,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17,
+          42,
+          24,
+          18,
+          20,
+          38,
+          27,
+          47
+        ],
+        "hand": [
+          13,
+          14,
+          16,
+          36,
+          52,
+          35,
+          60,
+          50
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 60,
+          "cardName": "Yavimaya Coast",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 50,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 52,
+          "cardName": "Training Grounds",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 30,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 15,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 60,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "ability": "blink x14",
+          "card": 23,
+          "cardName": "Emiel the Blessed",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 30,
+            "card": 50,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17,
+          42,
+          24,
+          18,
+          20,
+          38,
+          27,
+          47
+        ],
+        "hand": [
+          13,
+          14,
+          16,
+          36,
+          35
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 6,
+        "playerLife": 34,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 6,
+          "oppLife": 0,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 15,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 30,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 15,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 1014,
+            "cardName": "Clue Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 30,
+            "card": 50,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          17,
+          42,
+          24,
+          18,
+          20,
+          38,
+          27,
+          47
+        ],
+        "hand": [
+          13,
+          14,
+          16,
+          36,
+          35
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 0,
+        "playerLife": 34,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    }
+  ]
+}

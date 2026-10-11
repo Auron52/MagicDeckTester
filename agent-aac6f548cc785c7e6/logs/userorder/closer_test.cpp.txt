@@ -1,0 +1,20 @@
+
+TEST_CASE("Irencrag needs a closer in the subset (MTG_DRAGONSTORM_IRENCRAG_CLOSER)")
+{
+    // Eight Mountains: {Seething, Apex, Irencrag} pays in the USER order (Seething, Apex, Irencrag -- Apex's
+    // ten fund Irencrag), but Irencrag is then the LAST cast: nothing spends its seven red. With a Dragon in
+    // the subset Irencrag is placed right before it and the line is real.
+    ArmFu user(heurarm::DRAGONSTORM_USER_ORDER, true);
+    const GameState s = BoardFu(std::vector<std::string>(8, "Mountain"),
+                                { "Seething Song", "Apex of Power", "Irencrag Feat", "Scourge of Valkas" }, 6);
+    const std::vector<Action> cands = { CastFu(s, "Seething Song"), CastFu(s, "Apex of Power"),
+                                        CastFu(s, "Irencrag Feat"), CastFu(s, "Scourge of Valkas") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::DRAGONSTORM_IRENCRAG_CLOSER, on);
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, { 0, 1, 2 }) == !on);
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, { 0, 1, 2, 3 }));
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, { 0, 1 }));   // no restrictor: untouched
+    }
+}

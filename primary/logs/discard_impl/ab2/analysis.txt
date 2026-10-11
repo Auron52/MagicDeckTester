@@ -1,0 +1,20 @@
+deck       cell      n       on   amend-on       t faster slower
+edf        d0     5000   5.8494    -0.0006   -1.34      4      1
+edf        d3     1000   4.2340    +0.0000    0.00      0      0
+edf        ship    600   4.2150    +0.0000    0.00      0      0
+giants     d0     5000   6.1112    -0.0008   -1.63      3      0
+giants     d3     1000   5.7590    +0.0000    0.00      0      0
+giants     ship    600   5.6700    +0.0000    0.00      0      0
+selesnya   d0     5000   5.9102    +0.0000    0.00      0      0
+selesnya   d3     1000   5.2070    +0.0000    0.00      0      0
+selesnya   ship    600   5.1633    +0.0000    0.00      0      0
+
+changed games (deck cell gi on amend seed):
+  edf       d0   gi=883   on=8 amend=7 faster seed=430884
+  edf       d0   gi=954   on=9 amend=8 faster seed=430955
+  edf       d0   gi=1173  on=9 amend=8 faster seed=431174
+  edf       d0   gi=3836  on=7 amend=8 SLOWER seed=433837
+  edf       d0   gi=4433  on=9 amend=8 faster seed=434434
+  giants    d0   gi=1308  on=9 amend=7 faster seed=411309
+  giants    d0   gi=2172  on=9 amend=8 faster seed=412173
+  giants    d0   gi=4310  on=8 amend=7 faster seed=414311

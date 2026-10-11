@@ -1,0 +1,13 @@
+[flags] WARNING: MTG_PGO is set but is not a flag this binary reads -- a typo or a deleted flag? It will have NO effect (`mtg --list-flags` prints the known set).
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Seed          : 8101647
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 1646  seed 8101647
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/logs/rs_crackle/LB/d0_1646_bon
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

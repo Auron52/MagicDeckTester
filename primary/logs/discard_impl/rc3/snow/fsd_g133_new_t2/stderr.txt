@@ -1,0 +1,33 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=800 land=Snow-Covered Island: Boreal Druid + Frost Augur
+[fs-root] tail win=6 bp=-1 pc=-1 val=800 land=Snow-Covered Island: Boreal Druid + Frost Augur
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Boreal Druid
+[fs-root] tail win=9 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Boreal Druid
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] bp-child win=6 bp=0 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Frost Augur
+[fs-root] tail win=9 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Frost Augur
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Scrying Sheets: Boreal Druid
+[fs-root] tail win=9 bp=-1 pc=-1 val=400 land=Scrying Sheets: Boreal Druid
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Scrying Sheets: Frost Augur
+[fs-root] tail win=9 bp=-1 pc=-1 val=400 land=Scrying Sheets: Frost Augur
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=(defer): Boreal Druid
+[fs-root] tail win=9 bp=-1 pc=-1 val=400 land=(defer): Boreal Druid
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=(defer): Frost Augur
+[fs-root] tail win=9 bp=-1 pc=-1 val=400 land=(defer): Frost Augur
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Snow-Covered Island: 
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=Snow-Covered Island: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Scrying Sheets: 
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=Scrying Sheets: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=(defer): 
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/fsd_g133_new_t2
+[enum-memo] hits=7 misses=496 clears=0
+[solve-memo] hits=11726 misses=27194 clears=1

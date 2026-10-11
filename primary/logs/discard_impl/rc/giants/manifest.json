@@ -1,0 +1,5 @@
+{"jobs":[
+{"name": "g_off", "deck": "decks/Giants/Giants.cod", "profile": "decks/Giants/Giants.profile.json", "games": 1, "seed": 222895, "game_index": 1694, "budget_ms": 0, "flags": {"MTG_GIANTS_BUCKET_DISCARD": false}, "depth": 0, "ignore_play_profile": true},
+{"name": "g_on", "deck": "decks/Giants/Giants.cod", "profile": "decks/Giants/Giants.profile.json", "games": 1, "seed": 222895, "game_index": 1694, "budget_ms": 0, "flags": {"MTG_GIANTS_BUCKET_DISCARD": true}, "depth": 0, "ignore_play_profile": true},
+{"name": "g_nodist", "deck": "decks/Giants/Giants.cod", "profile": "decks/Giants/Giants.profile.json", "games": 1, "seed": 222895, "game_index": 1694, "budget_ms": 0, "flags": {"MTG_GIANTS_BUCKET_DISCARD": true, "MTG_DISCARD_DIST_MODEL": false}, "depth": 0, "ignore_play_profile": true}
+]}

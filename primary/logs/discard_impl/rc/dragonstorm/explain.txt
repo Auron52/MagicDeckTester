@@ -1,0 +1,19 @@
+    explain dragonstorm_smoke_d0_s1001 gi533  (seed 1001+533=1534, d0, 0ms)
+      win turn:  old T5  ->  new T8
+      kept hand + draws IDENTICAL -> a clean like-for-like LINE change.
+      T1=  land Sandstone Needle   [opp 20]
+      T2=  land Mercadian Bazaar   [opp 20]
+      T3=  (nothing)   [opp 20]
+      T4=  (nothing)   [opp 20]
+      T5   old: land Mountain; Desperate Ritual; Seething Song; Rite of Flame; Pyretic Ritual; Apex of Power; Rite of Flame; Dragonstorm; ATTACK   [opp -354]
+      T5   new: land Mountain; Desperate Ritual; Seething Song; Scourge of Valkas; Rite of Flame; Pyretic Ritual   [opp 19]
+      T6   old: (no turn)
+      T6   new: ATTACK   [opp 9]
+      T7   old: (no turn)
+      T7   new: ATTACK   [opp 4]
+      T8   old: (no turn)
+      T8   new: land Mountain; ATTACK   [opp -3]
+      >> SLOWER -> classify: bash test/classify_turn_later.sh smoke
+         recovers at higher budget = churn (benign search truncation);
+         persists + divergence above = variance (different physical game);
+         persists + identical draws = a REAL slowdown (inspect the first differing turn).

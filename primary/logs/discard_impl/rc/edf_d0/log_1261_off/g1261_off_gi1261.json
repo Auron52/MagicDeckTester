@@ -1,0 +1,2527 @@
+{
+  "cardNumbering": {},
+  "deckId": "g1261_off",
+  "gameNumber": 1261,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer"
+        },
+        {
+          "card": 31,
+          "cardName": "Living Wish"
+        },
+        {
+          "card": 29,
+          "cardName": "Kitchen"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth"
+        },
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base"
+        },
+        {
+          "card": 3,
+          "cardName": "Aether Hub"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 18,
+      "cardName": "Eldrazi Displacer"
+    },
+    {
+      "card": 31,
+      "cardName": "Living Wish"
+    },
+    {
+      "card": 29,
+      "cardName": "Kitchen"
+    },
+    {
+      "card": 38,
+      "cardName": "Overgrowth"
+    },
+    {
+      "card": 35,
+      "cardName": "Mariposa Military Base"
+    },
+    {
+      "card": 3,
+      "cardName": "Aether Hub"
+    },
+    {
+      "card": 47,
+      "cardName": "Trace of Abundance"
+    }
+  ],
+  "result": {
+    "turn": 8,
+    "winner": "player"
+  },
+  "runId": "",
+  "seed": 218462,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 3,
+          "cardName": "Aether Hub",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          31,
+          29,
+          38,
+          35,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          31,
+          29,
+          38,
+          35,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          31,
+          29,
+          38,
+          35,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Fertile Ground",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          31,
+          29,
+          38,
+          35,
+          47,
+          25
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 31,
+          "cardName": "Living Wish",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200002
+          ],
+          "lookedAt": [
+            {
+              "card": 200002,
+              "cardName": "Cloud of Faeries",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          29,
+          38,
+          47,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          29,
+          38,
+          47,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          29,
+          38,
+          47,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 26,
+          "cardName": "Fertile Ground",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          29,
+          38,
+          47,
+          25,
+          200002,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 29,
+          "cardName": "Kitchen",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 19,
+          "cardName": "Eldrazi Displacer",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 53,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19,
+          53
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19,
+          53
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19,
+          53
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          18,
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19,
+          53
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "type": "DISCARD"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19,
+          53
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "CLEANUP",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 54,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          25,
+          200002,
+          26,
+          19,
+          53,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 200002,
+          "cardName": "Cloud of Faeries",
+          "manaPaid": "{1}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          19,
+          53,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          19,
+          53,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          19,
+          53,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 55,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          19,
+          53,
+          54,
+          55
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 53,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 54,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 19,
+          "cardName": "Eldrazi Displacer",
+          "manaPaid": "{2}{W}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          55
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 19,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          55
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          55
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 48,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          38,
+          47,
+          26,
+          55,
+          48
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 39,
+          "cardName": "Overgrowth",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 30,
+          "cardName": "Kitchen",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 57,
+          "cardName": "Yavimaya Coast",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 43,
+          "cardName": "Peregrine Drake",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 1,
+          "cardName": "Adarkar Wastes",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 46,
+          "cardName": "Shivan Gorge",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 3,
+              "cardName": "Aether Hub"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "ability": "combo route: win",
+          "card": 0,
+          "cardName": "Combo Off",
+          "type": "ABILITY"
+        },
+        {
+          "card": 55,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 26,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth",
+          "manaPaid": "{2}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 29,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          48,
+          39,
+          30,
+          57,
+          43,
+          1,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 0,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "damage": 3,
+          "oppLife": -3,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 3,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 3,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 54,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 29,
+            "card": 55,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          48,
+          39,
+          30,
+          57,
+          43,
+          1,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": -3,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 8
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/pd_g1384_old
+ACT_DROP_AUDIT  DEFECTS tapped=1 unpaid=0 | benign gone=0 noTap=0 | fired=2  <-- enumerated activations the trailing pass silently declined
+ACT_HOLD_COST   pay_calls=22 hold_mask=3 (13.64%) hold_solo=3 hold_retry=0 solo_retry=0 (0.00% of pay_calls = the EXTRA solves)
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

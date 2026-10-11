@@ -1,0 +1,42 @@
+fix(solve): a cast restrictor's subset must be realisable in some order (MTG_RESTRICTOR_ORDER_EXACT)
+
+The d0-runner stall (Hinata2 2HG gi 254, d0 gi 195 / 865 / 1773). Both subset walks count the casts
+after Irencrag Feat ("you can cast only one more spell this turn") by CastOrderRank and judge payability
+order-free, crediting his seven red to the whole subset, his own cost included. Two failures follow:
+  * 2HG gi 254 / d0 gi 195: {Irencrag, Crackle} whose {R}{R}{R} only his own float pays (Sol Ring + Izzet
+    Boilerworks + Forbidden Orchard make two red) was committed and failed at payment turn after turn --
+    nothing cast T3-T6 (17 failed casts);
+  * d0 gi 865 / 1773: {Irencrag, Ornithopter, Crackle} on four mana is payable only Irencrag-first, so the
+    executor's payable-order fallback cast him first, the Ornithopter took his one remaining cast and the
+    Crackle was refused.
+Neither is a USER-owned decision (payability/legality modelling, not cast order or policy).
+
+RestrictorPrePayable, in both walks right after the existing casts-after test, REJECT-ONLY (`after` is
+untouched, so the USER's Irencrag waste gate keeps judging the rank order and never readmits a subset):
+  (1) pre-set: the casts ranked at or before the restrictor + the restrictor, paid WITHOUT its float? If
+      not, one more cast follows it -> rejected when that breaks the cap;
+  (2) self: the restrictor alone from the board + every other producer, any order? If not, rejected.
+Bill = the subset's credited bill minus every non-pre action; supply = board + pre-pass / pre-ranked
+producers; colours = the walks' own ColorFeasibility on the pre-set -- all generous, so a payable line is
+never rejected. Rank-ordered decks only (not OrderingSearchEnabled, i.e. not Dragonstorm). heurarm slot
+RESTRICTOR_ORDER_EXACT appended; DEFAULT ON; =0 -> the rank-only count.
+
+Recovery: 2HG gi 254 with the hold disabled 9 -> 4 (17 failed casts -> 1, the unrelated T1 rock case);
+d0 gi 195 8 -> 6 (5 -> 0); d0 gi 865 / 1773 failed Crackle 1 -> 0 (still unwon under lever B -- B's own chip
+mechanism); shipped-hold games unchanged.
+Held-out (seeds 8300001+, one pooled batch, 6 threads): shipped b20 200 0 (1/1, units 1.013), d3 b10 200
+0 (0/0, 0.997) -- both budget cells CONTENDED, digests reproduced across runs -- 2HG d0 400 -2 (2/0), d0
+2000 -3 (3/0): Hinata2 net -5 (6 faster / 1 slower). Faster = off-arm Irencrag lines that fail at payment
+(d0 gi 1487: 24 failed casts T4-T6). Slower: shipped gi 68 (5 -> 6), first divergence the T3 land drop of
+the depth-5 search; on T5 the on arm's {Irencrag, Soulfire} realises Irencrag-first and strands Soulfire's
+staged casts -- not rejected by the lever, a residual of the same mismatch in its after=0 form (deferred,
+documented).
+Byte-identity: both new levers =0 vs 3d64d9a6 -- Hinata 32 jobs / 1500 games, 0 mismatches; levers ON vs
+3d64d9a6 -- burn / dragonstorm / stompy, 0 mismatches.
+
+Unit: test_restrictor_order.cpp (Irencrag+Ornithopter+Crackle on four / seven Mountains, the gi 254 board
+with Crackle and with Magma Opus -- the self test -- and a payable control). Suite 932/932.
+Doc: docs/design/reality-spasm-crackle-classification.md, "The d0-runner stall", plus two deferred
+follow-ups (the same-turn ROCK form of producer-pays-itself; the after=0 restrictor form).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

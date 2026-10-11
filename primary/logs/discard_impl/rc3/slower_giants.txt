@@ -1,0 +1,1 @@
+  giants           d0   gi=991   old=5 new=6 seed=1290992

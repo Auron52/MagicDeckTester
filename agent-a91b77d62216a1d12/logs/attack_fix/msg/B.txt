@@ -1,0 +1,15 @@
+fix(attack-proj): Mana Cannons' cast triggers in the this-turn projection
+
+MTG_ATTACK_CANNONS_TRIGGER (default ON; =0 not projected). Mana Cannons ("whenever you cast a
+multicolored spell, deal X damage, X = its colour count"; FireOnCastTriggers) was in neither
+consider() site, so a Cannons + five-colour-body turn never read as the lethal it was. Both sites now
+add, per multicoloured cast of the plan, its colour count times the Cannons on our battlefield, walking
+the casts in the order the apply worlds cast them (PlanCastOrder: CastOrderLess + the deck's set
+arrangement) so a Cannons cast earlier in the same plan counts for the casts after it and never for
+itself. Direct damage, so it counts in either main. Inert unless a Cannons is on our battlefield or
+castable and a multicoloured cast is on offer.
+
+Recovery: FiveColour d0 gi 492 / 1022 / 1405 / 1724 (the domain-yield fix's emulation-slower games,
+all Cannons lines) back to the old turn; gi 374 and 1054 need it too.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

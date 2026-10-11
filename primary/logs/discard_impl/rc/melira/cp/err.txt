@@ -1,0 +1,4 @@
+Loaded profile from decks/Melira Pod/Melira Pod.profile.json
+[enum-memo] hits=56 misses=930 clears=0
+[solve-memo] hits=1732 misses=7854 clears=0
+[leaf-eval] published=3559 ties=1909 flips=385 life-equal-ties=384

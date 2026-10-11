@@ -1,0 +1,8 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[goldfish] SLOW-GAME 34724ms  gi=285 wt=4 units=62018  repro: --seed 1645286 --game-index 285 --games 1
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/bisect/g285_d3_oldp_EDF_GORGE_RED_SIZING
+[enum-memo] hits=1 misses=277 clears=0
+[solve-memo] hits=6527 misses=17639 clears=0
+[leaf-eval] published=3685 ties=3317 flips=76 life-equal-ties=263

@@ -1,0 +1,353 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-turn] t2 lands=1 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-turn] t3 lands=2 auras=0 untapper=1 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-turn] t3 lands=3 auras=0 untapper=1 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-turn] t4 lands=3 auras=0 untapper=1 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-turn] t5 lands=4 auras=1 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=5 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-turn] t6 lands=5 auras=2 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=8 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-loop] begin iters=48 outlet=21 payload=10 cash=1 want_draw=0 hold_c=1 sinks=1
+[edf-loop] k=0 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c3 *0} up=[Mariposa Military Base,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=0 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c3 *0} up=[Mariposa Military Base,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast]
+[edf-loop] k=0 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c3 *0} up=[Mariposa Military Base,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast]
+[edf-loop] k=0 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c3 *0} up=[Mariposa Military Base,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast]
+[edf-loop] k=1 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c1 *2} up=[Brushland,Mariposa Military Base] tapped=[Yavimaya Coast,Yavimaya Coast,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c1 *2} up=[Brushland,Mariposa Military Base] tapped=[Yavimaya Coast,Yavimaya Coast,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c1 *2} up=[Brushland,Mariposa Military Base] tapped=[Yavimaya Coast,Yavimaya Coast,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c1 *2} up=[Brushland,Mariposa Military Base] tapped=[Yavimaya Coast,Yavimaya Coast,Aether Hub,Shivan Gorge]
+[edf-loop] k=2 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=2 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=2 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=2 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=3 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=3 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=3 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=3 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=4 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=4 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=4 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=4 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=5 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=5 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=5 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=5 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=6 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=6 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=6 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=6 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=7 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=7 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=7 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=7 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=8 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=8 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=8 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=8 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=9 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=9 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=9 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=9 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=10 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=10 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=10 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=10 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=11 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=11 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=11 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=11 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=12 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=12 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=12 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=12 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=13 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=13 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=13 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=13 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=14 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=14 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=14 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=14 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=15 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=15 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=15 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=15 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=16 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=16 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=16 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=16 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=17 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=17 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=17 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=17 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=18 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=18 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=18 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=18 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=19 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=19 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=19 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=19 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=20 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=20 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=20 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=20 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=21 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=21 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=21 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=21 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=22 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=22 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=22 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=22 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=23 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=23 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=23 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=23 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=24 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=24 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=24 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=24 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=25 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=25 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=25 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=25 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=26 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=26 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=26 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=26 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=27 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=27 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=27 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=27 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=28 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=28 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=28 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=28 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=29 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=29 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=29 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=29 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=30 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=30 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=30 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=30 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=31 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=31 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=31 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=31 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=32 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=32 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=32 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=32 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=33 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=33 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=33 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=33 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=34 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=34 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=34 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=34 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=35 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=35 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=35 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=35 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=36 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=36 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=36 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=36 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=37 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=37 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=37 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=37 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=38 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=38 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=38 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=38 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=39 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=39 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=39 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=39 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=40 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *1} avail{w0 u0 b0 r0 g2 c2 *1} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=40 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *1} avail{w0 u0 b0 r0 g2 c2 *1} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=40 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *1} avail{w0 u0 b0 r0 g2 c2 *1} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=40 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *1} avail{w0 u0 b0 r0 g2 c2 *1} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=41 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c0 *2} up=[Brushland] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=41 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c0 *2} up=[Brushland] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=41 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c0 *2} up=[Brushland] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=41 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c0 *2} up=[Brushland] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=42 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=42 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=42 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=42 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=43 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=43 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=43 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=43 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=44 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *3} up=[Yavimaya Coast,Brushland] tapped=[Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=44 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *3} up=[Yavimaya Coast,Brushland] tapped=[Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=44 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *3} up=[Yavimaya Coast,Brushland] tapped=[Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=44 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *3} up=[Yavimaya Coast,Brushland] tapped=[Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=45 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=45 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=45 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=45 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=46 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=46 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=46 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=46 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=47 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *3} up=[Yavimaya Coast,Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink FIRING sink=46 cost={2}{R} keep={3} trial=1
+[edf-loop] k=47 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Aether Hub] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Shivan Gorge]
+[edf-loop] k=47 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Aether Hub] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Shivan Gorge]
+[edf-loop] k=47 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Aether Hub] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Shivan Gorge]
+[edf-loop] end done=48/48
+[edf-loop] begin iters=17 outlet=21 payload=10 cash=1 want_draw=0 hold_c=1 sinks=1
+[edf-loop] k=0 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=0 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=0 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=0 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=1 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=1 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=1 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=1 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=2 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=2 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=2 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=2 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=3 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=3 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=3 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=3 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=4 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=4 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=4 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=4 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=5 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=5 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=5 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=5 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=6 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=6 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=6 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=6 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=7 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=7 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=7 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=7 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=8 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=8 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=8 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=8 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=9 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=9 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=9 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=9 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=10 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=10 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=10 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=10 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=11 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=11 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=11 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=11 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=12 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=12 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=12 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=12 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=13 enter             cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=13 post-damage-sink  cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=13 post-draw-sink    cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=13 post-tapahead     cost={3} float{w0 u0 b0 r0 g1 c0 *0} avail{w0 u0 b0 r0 g1 c1 *2} up=[Brushland,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=14 enter             cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=14 post-damage-sink  cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=14 post-draw-sink    cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=14 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c0 *0} avail{w0 u0 b0 r0 g2 c1 *0} up=[Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub]
+[edf-loop] k=15 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=15 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=15 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=15 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *0} up=[Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=16 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink DECLINED (real trial): sink=46 cost={2}{R} keep={3}
+[edf-loop] k=16 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=16 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop] k=16 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Brushland,Aether Hub,Shivan Gorge] tapped=[Yavimaya Coast,Yavimaya Coast,Mariposa Military Base]
+[edf-loop]   damage-sink FIRING sink=46 cost={2}{R} keep= trial=0
+[edf-loop] end done=17/17
+[edf-turn] t7 lands=6 auras=2 untapper=1 outlet=1 drawland=1 wish=0 | ok=1 untaps=2 refund=5 cost=3 net=2 pool=9 gorge=1/3 drain=0/0 exile=2 setup=0 needgorge=6 needdrain=4
+[edf-loop] begin iters=11 outlet=21 payload=42 cash=1 want_draw=0 hold_c=1 sinks=1
+[edf-loop] k=0 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c3 *5} up=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge] tapped=[]
+[edf-loop]   damage-sink FIRING sink=46 cost={2}{R} keep={3} trial=1
+[edf-loop] k=0 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Yavimaya Coast,Mariposa Military Base,Aether Hub] tapped=[Yavimaya Coast,Brushland,Shivan Gorge]
+[edf-loop] k=0 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g2 c2 *2} up=[Yavimaya Coast,Mariposa Military Base,Aether Hub] tapped=[Yavimaya Coast,Brushland,Shivan Gorge]
+[edf-loop] k=0 post-tapahead     cost={3} float{w0 u0 b0 r0 g2 c2 *1} avail{w0 u0 b0 r0 g2 c3 *1} up=[Mariposa Military Base] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 enter             cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *0} up=[] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 post-damage-sink  cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *0} up=[] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 post-draw-sink    cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *0} up=[] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] k=1 post-tapahead     cost={3} float{w0 u0 b0 r0 g0 c0 *0} avail{w0 u0 b0 r0 g0 c0 *0} up=[] tapped=[Yavimaya Coast,Brushland,Yavimaya Coast,Mariposa Military Base,Aether Hub,Shivan Gorge]
+[edf-loop] STOP at k=1: pay-failed
+[edf-loop] end done=1/11
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/lt_g604_new
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

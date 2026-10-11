@@ -1,0 +1,1 @@
+{"jobs": [{"name": "angels", "deck": "decks/Angels/Angels.cod", "profile": "decks/Angels/Angels.profile.json", "games": 10, "seed": 220001, "depth": 3, "budget_ms": 10, "ignore_play_profile": true}]}

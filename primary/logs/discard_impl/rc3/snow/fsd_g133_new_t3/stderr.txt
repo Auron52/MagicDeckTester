@@ -1,0 +1,184 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=7 bp=0 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=6 bp=0 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=401 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=401 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=0 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=6 bp=0 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=0 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=6 bp=1 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=6 bp=2 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=3 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=4 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=5 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=6 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=Scrying Sheets: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=Snow-Covered Island: Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=0 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=1 pc=-1 val=400 land=(defer): Ice-Fang Coatl + Arcum's Astrolabe
+[fs-root] scan win=-1 bp=-1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] bp-child win=6 bp=0 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=1 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] bp-child win=6 bp=2 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] tail win=9 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] tail win=9 bp=1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=Scrying Sheets: Ice-Fang Coatl + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=Snow-Covered Island: Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=301 land=(defer): Ice-Fang Coatl + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=300 land=Scrying Sheets: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=-1 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] bp-child win=6 bp=0 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] bp-child win=9 bp=1 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] bp-child win=6 bp=2 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=-1 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] bp-child win=9 bp=0 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] bp-child win=6 bp=1 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] bp-child win=6 bp=3 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] bp-child win=9 bp=4 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=300 land=Scrying Sheets: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=300 land=Scrying Sheets: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=300 land=Scrying Sheets: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=300 land=Scrying Sheets: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=300 land=Scrying Sheets: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=300 land=Snow-Covered Island: Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] scan win=-1 bp=0 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] scan win=-1 bp=1 pc=-1 val=300 land=(defer): Ice-Fang Coatl
+[fs-root] scan win=-1 bp=-1 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] tail win=9 bp=0 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=102 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=1 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=2 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=3 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=4 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=5 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=6 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=101 land=(defer): Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=101 land=Scrying Sheets: Arcum's Astrolabe + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1048576 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=0 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=1 pc=-1 val=101 land=Snow-Covered Island: Arcum's Astrolabe + Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=100 land=Scrying Sheets: Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=0 pc=-1 val=100 land=Scrying Sheets: Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=2 pc=-1 val=100 land=Scrying Sheets: Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=100 land=Scrying Sheets: Arcum's Astrolabe
+[fs-root] scan win=-1 bp=-1 pc=-1 val=100 land=Snow-Covered Island: Arcum's Astrolabe
+[fs-root] bp-child win=6 bp=0 pc=-1 val=100 land=Snow-Covered Island: Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=2 pc=-1 val=100 land=Snow-Covered Island: Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=100 land=Snow-Covered Island: Arcum's Astrolabe
+[fs-root] scan win=-1 bp=-1 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=6 bp=0 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=2 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=4 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=6 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=7 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=9 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] bp-child win=9 bp=1048576 pc=-1 val=100 land=(defer): Arcum's Astrolabe
+[fs-root] scan win=-1 bp=-1 pc=-1 val=2 land=Scrying Sheets: Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] bp-child win=9 bp=0 pc=-1 val=2 land=Scrying Sheets: Frost Augur(x1) + Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=1 land=Scrying Sheets: Frost Augur(x1)
+[fs-root] tail win=9 bp=-1 pc=-1 val=1 land=Scrying Sheets: Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=1 land=Scrying Sheets: Scrying Sheets(x1)
+[fs-root] tail win=9 bp=-1 pc=-1 val=1 land=Scrying Sheets: Scrying Sheets(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=1 land=Snow-Covered Island: Frost Augur(x1)
+[fs-root] tail win=9 bp=-1 pc=-1 val=1 land=Snow-Covered Island: Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=1 land=(defer): Frost Augur(x1)
+[fs-root] tail win=9 bp=-1 pc=-1 val=1 land=(defer): Frost Augur(x1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Scrying Sheets: 
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=Scrying Sheets: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Snow-Covered Island: 
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=Snow-Covered Island: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=(defer): 
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/fsd_g133_new_t3
+[enum-memo] hits=7 misses=496 clears=0
+[solve-memo] hits=11726 misses=27194 clears=1

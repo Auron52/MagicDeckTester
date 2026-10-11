@@ -1,0 +1,8 @@
+Loaded profile from decks/Melira Pod/Melira Pod.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile) (then-auto)
+[then-auto] --choices exhausted after 4 picks (main_ordinal 1) at turn 1 -- handing the board to the search
+[then-auto] search takes over: turn 1 pre-combat main
+Claude-play trace written to /workspaces/MagicDeckTester/logs/discard_impl/rc/melira/cf_f0_0_1_4_3/claude_s2035_gi33.json
+[enum-memo] hits=75 misses=1134 clears=0
+[solve-memo] hits=2940 misses=10905 clears=0
+[leaf-eval] published=7499 ties=3182 flips=711 life-equal-ties=860

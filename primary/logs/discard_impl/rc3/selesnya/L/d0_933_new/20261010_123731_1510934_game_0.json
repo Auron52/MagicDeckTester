@@ -1,0 +1,2792 @@
+{
+  "cardNumbering": {
+    "Accomplished Alchemist": [
+      1,
+      2,
+      3
+    ],
+    "Ageless Entity": [
+      4,
+      5,
+      6,
+      7
+    ],
+    "Blighted Steppe": [
+      8,
+      9
+    ],
+    "Blossoming Bogbeast": [
+      10
+    ],
+    "Blossoming Sands": [
+      11,
+      12
+    ],
+    "Branchloft Pathway": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Brushland": [
+      17,
+      18,
+      19,
+      20
+    ],
+    "Craterhoof Behemoth": [
+      21
+    ],
+    "Elvish Archdruid": [
+      22,
+      23,
+      24
+    ],
+    "Elvish Mystic": [
+      25,
+      26,
+      27
+    ],
+    "Feed the Clan": [
+      28,
+      29,
+      30
+    ],
+    "Forest": [
+      31,
+      32,
+      33,
+      34,
+      35
+    ],
+    "Genesis Wave": [
+      36,
+      37,
+      38,
+      39
+    ],
+    "Llanowar Elves": [
+      40,
+      41,
+      42,
+      43
+    ],
+    "Nykthos Paragon": [
+      44,
+      45,
+      46,
+      47
+    ],
+    "Priest of Titania": [
+      48,
+      49,
+      50,
+      51
+    ],
+    "Selesnya Sanctuary": [
+      52,
+      53
+    ],
+    "Verdant Sun's Avatar": [
+      54,
+      55,
+      56,
+      57
+    ],
+    "Wellwisher": [
+      58,
+      59
+    ],
+    "Wirewood Lodge": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 40,
+          "cardName": "Llanowar Elves"
+        },
+        {
+          "card": 22,
+          "cardName": "Elvish Archdruid"
+        },
+        {
+          "card": 13,
+          "cardName": "Branchloft Pathway"
+        },
+        {
+          "card": 1,
+          "cardName": "Accomplished Alchemist"
+        },
+        {
+          "card": 31,
+          "cardName": "Forest"
+        },
+        {
+          "card": 32,
+          "cardName": "Forest"
+        },
+        {
+          "card": 44,
+          "cardName": "Nykthos Paragon"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 40,
+      "cardName": "Llanowar Elves"
+    },
+    {
+      "card": 22,
+      "cardName": "Elvish Archdruid"
+    },
+    {
+      "card": 13,
+      "cardName": "Branchloft Pathway"
+    },
+    {
+      "card": 1,
+      "cardName": "Accomplished Alchemist"
+    },
+    {
+      "card": 31,
+      "cardName": "Forest"
+    },
+    {
+      "card": 32,
+      "cardName": "Forest"
+    },
+    {
+      "card": 44,
+      "cardName": "Nykthos Paragon"
+    }
+  ],
+  "result": {
+    "turn": 6,
+    "winner": "player"
+  },
+  "runId": "20261010_123731_1510934",
+  "seed": 1510934,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Branchloft Pathway",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 40,
+          "cardName": "Llanowar Elves",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          22,
+          1,
+          31,
+          32,
+          44
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          22,
+          1,
+          31,
+          32,
+          44
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          22,
+          1,
+          31,
+          32,
+          44
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 2,
+          "cardName": "Accomplished Alchemist",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          22,
+          1,
+          31,
+          32,
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 22,
+          "cardName": "Elvish Archdruid",
+          "manaPaid": "{1}{G}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          32,
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          32,
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          32,
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 36,
+          "cardName": "Genesis Wave",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          32,
+          44,
+          2,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 32,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 1,
+          "cardName": "Accomplished Alchemist",
+          "manaPaid": "{3}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          2,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "damage": 2,
+          "oppLife": 18,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          2,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          2,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 8,
+          "cardName": "Blighted Steppe",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          2,
+          36,
+          8
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 8,
+          "cardName": "Blighted Steppe",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 36,
+          "cardName": "Genesis Wave",
+          "chosenX": 6,
+          "manaPaid": "{6}{G}{G}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            3,
+            58,
+            11,
+            14,
+            45,
+            48
+          ],
+          "lookedAt": [
+            {
+              "card": 3,
+              "cardName": "Accomplished Alchemist",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 58,
+              "cardName": "Wellwisher",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 11,
+              "cardName": "Blossoming Sands",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 14,
+              "cardName": "Branchloft Pathway",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 45,
+              "cardName": "Nykthos Paragon",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 48,
+              "cardName": "Priest of Titania",
+              "to": "→ battlefield"
+            }
+          ],
+          "source": "Genesis Wave (reveal X=6)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [
+          44,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Elvish Mystic",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [
+          44,
+          2,
+          25
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 2,
+          "cardName": "Accomplished Alchemist",
+          "manaPaid": "{3}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 25,
+          "cardName": "Elvish Mystic",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 44,
+          "cardName": "Nykthos Paragon",
+          "manaPaid": "{4}{W}{W}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 15,
+          "oppLife": 3,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 3,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 3,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Nykthos Paragon",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36
+        ],
+        "hand": [
+          46
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 3,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Nykthos Paragon",
+          "manaPaid": "{4}{W}{W}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "ability": "sacrifice it: gain 2 life for each creature you control",
+          "card": 8,
+          "cardName": "Blighted Steppe",
+          "type": "ABILITY"
+        },
+        {
+          "ability": "gain 1 life for each Elf on the battlefield",
+          "card": 58,
+          "cardName": "Wellwisher",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36,
+          8
+        ],
+        "hand": [],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 3,
+        "playerLife": 51,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 416,
+          "oppLife": -413,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Elvish Archdruid",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 32,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 67,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 66,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          36,
+          8
+        ],
+        "hand": [],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -413,
+        "playerLife": 51,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    }
+  ]
+}

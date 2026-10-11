@@ -1,0 +1,106 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=5 budget=20ms source=value_play(depth)+cli(budget)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1320192 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Ornithopter of Paradise|Ponder|Soulfire Eruption|Ponder|Mountain|Memory Lapse
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[exec-tap] T1 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[uo-order] gs=1320192 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Ornithopter of Paradise|Ponder|Soulfire Eruption|Ponder|Mountain|Memory Lapse
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[exec-tap] T2 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[uo-order] gs=1320192 t=2 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ornithopter of Paradise
+[uo-state] gs=1320192 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Ornithopter of Paradise|Ponder|Soulfire Eruption|Ponder|Memory Lapse|Preordain
+[exec-tap] T2 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery Mountain
+[uo-cast] gs=1320192 t=2 m=1 d=5 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T2 Ornithopter of Paradise tapped: Mystic Monastery Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Mountain(T) Ornithopter of Paradise
+[exec-tap] T2 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Mountain(T) Ornithopter of Paradise
+[uo-order] gs=1320192 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Ponder|Soulfire Eruption|Ponder|Memory Lapse|Preordain
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise
+[exec-tap] T3 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise
+[uo-order] gs=1320192 t=3 m=1 route=opaque pool=3 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder|Ponder
+[uo-state] gs=1320192 t=3 cap=-1 pool{w0 u2 b0 r1 g0 c0 *0} hand=Ponder|Soulfire Eruption|Ponder|Memory Lapse|Preordain|Remand
+[exec-tap] T3 before Ponder: float{w0 u2 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mountain
+[uo-cast] gs=1320192 t=3 m=1 d=5 card=Ponder num=39 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T3 Ponder tapped:  float{w0 u1 b0 r0 g0 c0 *0}
+[uo-order] gs=1320192 t=3 m=1 route=replay pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain
+[uo-state] gs=1320192 t=3 cap=-1 pool{w0 u1 b0 r1 g0 c0 *0} hand=Soulfire Eruption|Ponder|Memory Lapse|Preordain|Remand|Forbidden Orchard
+[exec-tap] T3 before Preordain: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mountain Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320192 t=3 m=1 d=5 card=Preordain num=43 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T3 Preordain tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320192 t=3 m=1 route=replay pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1320192 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Soulfire Eruption|Ponder|Memory Lapse|Remand|Gamble
+[exec-tap] T3 before Ponder: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mountain Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320192 t=3 m=1 d=5 card=Ponder num=40 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T3 Ponder tapped: Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320192 t=3 m=1 route=replay pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Gamble
+[uo-state] gs=1320192 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Soulfire Eruption|Memory Lapse|Remand|Gamble|Hinata, Dawn-Crowned
+[exec-tap] T3 before Gamble: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mountain 1/1 Spirit Token
+[uo-cast] gs=1320192 t=3 m=1 d=5 card=Gamble num=14 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T3 Gamble tapped: Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Mountain(T) Ornithopter of Paradise(T) Forbidden Orchard(T)
+[exec-tap] T3 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Mountain(T) Ornithopter of Paradise(T) Forbidden Orchard(T)
+[uo-order] gs=1320192 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Memory Lapse|Remand|Hinata, Dawn-Crowned|Sol Ring
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard
+[exec-tap] T4 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard
+[uo-order] gs=1320192 t=4 m=1 route=clean pool=5 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Sol Ring|Hinata, Dawn-Crowned
+[uo-state] gs=1320192 t=4 cap=-1 pool{w0 u0 b0 r1 g0 c0 *4} hand=Memory Lapse|Remand|Hinata, Dawn-Crowned|Sol Ring
+[exec-tap] T4 before Sol Ring: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Reflecting Pool
+[uo-cast] gs=1320192 t=4 m=1 d=5 card=Sol Ring num=56 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T4 Sol Ring tapped: Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery Ornithopter of Paradise Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Reflecting Pool Sol Ring
+[uo-cast] gs=1320192 t=4 m=1 d=5 card=Hinata, Dawn-Crowned num=17 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T4 Hinata, Dawn-Crowned tapped: Mystic Monastery Forbidden Orchard Reflecting Pool Sol Ring  float{w0 u0 b0 r0 g0 c1 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Mountain(T) Ornithopter of Paradise Forbidden Orchard(T) Reflecting Pool(T) Sol Ring(T) Hinata, Dawn-Crowned
+[exec-tap] T4 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Mountain(T) Ornithopter of Paradise Forbidden Orchard(T) Reflecting Pool(T) Sol Ring(T) Hinata, Dawn-Crowned
+[uo-order] gs=1320192 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Memory Lapse|Remand
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[exec-tap] T5 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[uo-order] gs=1320192 t=5 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[exec-tap] T5 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[uo-order] gs=1320192 t=5 m=2 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[exec-tap] T6 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[uo-order] gs=1320192 t=6 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=6 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake|Distorting Wake
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[exec-tap] T6 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[uo-order] gs=1320192 t=6 m=2 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=6 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake|Distorting Wake
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[exec-tap] T7 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[uo-order] gs=1320192 t=7 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=7 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake|Distorting Wake|Irencrag Feat
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[exec-tap] T7 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[uo-order] gs=1320192 t=7 m=2 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=7 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake|Distorting Wake|Irencrag Feat
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[exec-tap] T8 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned
+[uo-order] gs=1320192 t=8 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=8 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake|Distorting Wake|Irencrag Feat|Reality Spasm
+[exec-tap] T8 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[exec-tap] T8 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Mountain Ornithopter of Paradise Forbidden Orchard Reflecting Pool Sol Ring Hinata, Dawn-Crowned(T)
+[uo-order] gs=1320192 t=8 m=2 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320192 t=8 cap=-1 pool{w0 u0 b0 r1 g0 c2 *4} hand=Memory Lapse|Remand|Distorting Wake|Distorting Wake|Irencrag Feat|Reality Spasm
+[payable-order] site=apply in_domain=25490 default_pays=17964 bound_fail=2 hoist_rescue=0 perm_rescue=294 none_pays=7230
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=2819 misses=8398 clears=0
+[solve-memo] hits=17983 misses=15196 clears=0
+[m2-search-memo] hits=8089 misses=1302 clears=0
+[leaf-eval] published=8720 ties=3022 flips=53 life-equal-ties=2679
+Seed          : 1320192
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 191  seed 1320192

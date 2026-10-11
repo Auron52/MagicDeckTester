@@ -1,0 +1,2 @@
+Loaded 60 mainboard card(s) + 8 sideboard card(s)
+exit=139

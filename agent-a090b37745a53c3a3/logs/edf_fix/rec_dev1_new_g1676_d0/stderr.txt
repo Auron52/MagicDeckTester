@@ -1,0 +1,37 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[edf-goff-cut] t1 no goff cand
+[tmp-edbg] T1 d0 plan pre=1 land= val=100 win=0: Wild Growth(k0,x0,h60) 
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Yavimaya Coast
+[exec-tap] T1 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth
+[edf-goff-cut] t2 no goff cand
+[tmp-edbg] T2 d0 plan pre=1 land= val=500 win=0: Eldrazi Displacer(k0,x0,h0) Cloud of Faeries(k0,x0,h0) 
+[exec-tap] T2 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Yavimaya Coast Wild Growth
+[exec-tap] T2 Cloud of Faeries tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Yavimaya Coast Wild Growth Conservatory Cloud of Faeries
+[exec-tap] T2 Eldrazi Displacer tapped: Yavimaya Coast Conservatory  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Conservatory(T) Cloud of Faeries Eldrazi Displacer
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Conservatory Cloud of Faeries Eldrazi Displacer
+[edf-goff-cut] t3 no goff cand
+[tmp-edbg] T3 d0 plan pre=1 land= val=200 win=0: Fertile Ground(k0,x0,h15) Fertile Ground(k0,x0,h60) 
+[exec-tap] T3 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Yavimaya Coast Wild Growth Conservatory Cloud of Faeries Eldrazi Displacer
+[exec-tap] T3 Fertile Ground tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Wild Growth Conservatory Cloud of Faeries Eldrazi Displacer Fertile Ground
+[exec-tap] T3 Fertile Ground tapped: Conservatory  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Conservatory(T) Cloud of Faeries(T) Eldrazi Displacer(T) Fertile Ground Fertile Ground
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Conservatory Cloud of Faeries Eldrazi Displacer Fertile Ground Fertile Ground
+[edf-goff-cut] t4 k=39 projected=0
+[edf-goff-cut] t4 k=39 projected=0 applied verified=1 opp_life=0 decked=0
+[tmp-edbg] T4 d0 plan pre=1 land= val=39 win=1: Eldrazi Displacer(k25,x39,h0) 
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *1} own: Yavimaya Coast(T) Wild Growth Conservatory(T) Eldrazi Displacer Fertile Ground Fertile Ground Essence Depleter Emiel the Blessed Cloud of Faeries
+[edf-goff-cut] t4 no goff cand
+[tmp-edbg] T4 d0 plan pre=1 land= val=100 win=1: Wild Growth(k0,x0,h60) 
+[exec-tap] T4 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *1} untapped: 3/3 Creature Wild Growth Eldrazi Displacer Fertile Ground Fertile Ground Essence Depleter Emiel the Blessed Cloud of Faeries Mariposa Military Base
+[exec-tap] T4 Wild Growth tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/rec_dev1_new_g1676_d0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

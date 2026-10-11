@@ -1,0 +1,665 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t1 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t1 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t1 skip Peregrine Drake: avail 1 < cost
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order A (auras first) leaves no loop
+[combo-route]   t1 skip Peregrine Drake: avail 1 < cost
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order B (auras last) leaves no loop
+[combo-route] t1 no loop: neither deploy order reaches a finish
+[combo-route] t1 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t1 no goff cand
+[edf-turn] t2 lands=1 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t2 tap Shivan Gorge -> Colorless
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t2 tap Aether Hub -> Green
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t2 skip Peregrine Drake: avail 2 < cost
+[combo-route]     t2 tap Aether Hub -> Green
+[combo-route]     t2 tap Shivan Gorge -> Colorless
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]   t2 skip Peregrine Drake: avail 2 < cost
+[combo-route]     t2 tap Aether Hub -> Green
+[combo-route]     t2 tap Shivan Gorge -> Colorless
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=20 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-turn] t2 lands=2 auras=0 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-turn] t3 lands=2 auras=0 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Shivan Gorge -> Colorless
+[combo-route]   t3 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t3 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]   t3 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t3 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Shivan Gorge -> Colorless
+[combo-route]   t3 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t3 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t3 skip Peregrine Drake: avail 2 < cost
+[combo-route]   t3 skip Peregrine Drake: avail 2 < cost
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Shivan Gorge -> Colorless
+[combo-route]   t3 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t3 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Shivan Gorge -> Colorless
+[combo-route]   t3 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order A (auras first) leaves no loop
+[combo-route]   t3 skip Peregrine Drake: avail 2 < cost
+[combo-route]   t3 skip Peregrine Drake: avail 2 < cost
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Shivan Gorge -> Colorless
+[combo-route]   t3 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t3 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Shivan Gorge -> Colorless
+[combo-route]   t3 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order B (auras last) leaves no loop
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-turn] t4 lands=3 auras=0 untapper=0 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c2 *0 lands available=3
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c2 *0 lands available=3
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c3 *0 lands available=3
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c2 *0 lands available=3
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t4 skip Peregrine Drake: avail 4 < cost
+[combo-route]   t4 skip Peregrine Drake: avail 4 < cost
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c3 *0 lands available=4
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g1 c3 *0 lands available=4
+[combo-route]   t4 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c3 *0 lands available=4
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order A (auras first) leaves no loop
+[combo-route]   t4 skip Peregrine Drake: avail 4 < cost
+[combo-route]   t4 skip Peregrine Drake: avail 4 < cost
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c3 *0 lands available=4
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g1 c3 *0 lands available=4
+[combo-route]   t4 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Shivan Gorge -> Colorless
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c3 *0 lands available=4
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order B (auras last) leaves no loop
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t4 no goff cand
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-turn] t5 lands=4 auras=1 untapper=0 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=6 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c2 *0 lands available=3
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g3 c2 *0 lands available=3
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c3 *0 lands available=3
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g3 c2 *0 lands available=3
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Blue
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route] t5 cast Peregrine Drake
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Blue
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route] t5 cast Peregrine Drake
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g4 c4 *0 lands available=4
+[combo-route]   t5 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g4 c4 *0 lands available=4
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order A (auras first) leaves no loop
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Blue
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route] t5 cast Peregrine Drake
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Blue
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route] t5 cast Peregrine Drake
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g4 c4 *0 lands available=4
+[combo-route]   t5 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Shivan Gorge -> Colorless
+[combo-route]     t5 tap Kitchen -> Green
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g4 c4 *0 lands available=4
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order B (auras last) leaves no loop
+[combo-route] t5 no loop: neither deploy order reaches a finish
+[combo-route] t5 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=20 opp=20 | cast Peregrine Drake; cast Peregrine Drake; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t5 no goff cand
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,Wild Growth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Mariposa Military Base,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Mariposa Military Base,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Mariposa Military Base,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Mariposa Military Base,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Mariposa Military Base,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Wild Growth,Mariposa Military Base,]
+[edf-turn] t6 lands=4 auras=2 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=7 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c2 *0 lands available=3
+[combo-route]   t6 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g4 c2 *0 lands available=3
+[combo-route]   t6 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g3 c3 *0 lands available=3
+[combo-route]   t6 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]   t6 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g4 c2 *0 lands available=3
+[combo-route]   t6 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Blue
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route] t6 cast Peregrine Drake
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g5 c4 *0 lands available=4
+[combo-route]   t6 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g5 c4 *0 lands available=4
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order A (auras first) leaves no loop
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Blue
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route] t6 cast Peregrine Drake
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g5 c4 *0 lands available=4
+[combo-route]   t6 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route]     t6 tap Shivan Gorge -> Colorless
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g5 c4 *0 lands available=4
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order B (auras last) leaves no loop
+[combo-route] t6 no loop: neither deploy order reaches a finish
+[combo-route] t6 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=20 opp=20 | cast Peregrine Drake; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t6 k=106 projected=0
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Peregrine Drake,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Peregrine Drake,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,]
+[edf-prosp] t6 outlets=1 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,]
+[edf-loop] t6 net=4 cost=3 refund=7 pool=7 avail=2 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Fertile Ground,]
+[edf-prosp] t6 outlets=1 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Peregrine Drake,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Peregrine Drake,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,]
+[edf-prosp] t6 outlets=1 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,]
+[edf-loop] t6 net=4 cost=3 refund=7 pool=7 avail=2 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Fertile Ground,]
+[edf-prosp] t6 outlets=1 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Peregrine Drake,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Peregrine Drake,Fertile Ground,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Shivan Gorge,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Shivan Gorge,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Shivan Gorge,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Shivan Gorge,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Eladamri's Call,Fertile Ground,Kitchen,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Mariposa Military Base,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Mariposa Military Base,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Mariposa Military Base,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Mariposa Military Base,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Mariposa Military Base,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Fertile Ground,Mariposa Military Base,]
+[edf-prosp] t6 outlets=2 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,Eldrazi Displacer,]
+[edf-prosp] t6 outlets=2 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,Eldrazi Displacer,]
+[edf-prosp] t6 outlets=2 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,Eldrazi Displacer,]
+[edf-prosp] t6 outlets=2 payloads=1 casting=[Eldrazi Displacer,Fertile Ground,Eldrazi Displacer,]
+[edf-turn] t7 lands=4 auras=3 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=8 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t7 tap Shivan Gorge -> Colorless
+[combo-route]     t7 tap Kitchen -> Green
+[combo-route]     t7 tap Mariposa Military Base -> Colorless
+[combo-route]   t7 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c2 *0 lands available=3
+[combo-route]   t7 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t7 tap Aether Hub -> Colorless +aura Red,
+[combo-route] t7 cast Trace of Abundance -> land
+[combo-route]     t7 tap Shivan Gorge -> Colorless +aura Blue,
+[combo-route] t7 cast Training Grounds
+[combo-route]     t7 tap Kitchen -> Green
+[combo-route]     t7 tap Mariposa Military Base -> Colorless
+[combo-route]   t7 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g3 c3 *0 lands available=2
+[combo-route]   t7 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t7 tap Kitchen -> Green
+[combo-route]     t7 tap Mariposa Military Base -> Colorless
+[combo-route]   t7 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g3 c3 *0 lands available=2
+[combo-route]   t7 deploy: no outlet on the battlefield
+[combo-route]   t7 deploy order A (auras first) leaves no loop
+[combo-route]     t7 tap Aether Hub -> Colorless +aura Blue,
+[combo-route] t7 cast Training Grounds
+[combo-route]     t7 tap Shivan Gorge -> Colorless
+[combo-route]     t7 tap Kitchen -> Green
+[combo-route]     t7 tap Mariposa Military Base -> Colorless
+[combo-route]   t7 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g4 c3 *0 lands available=3
+[combo-route]   t7 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]     t7 tap Shivan Gorge -> Colorless
+[combo-route]     t7 tap Kitchen -> Green
+[combo-route]     t7 tap Mariposa Military Base -> Colorless
+[combo-route]   t7 pay {W}{G} FAILED (rolled back); float w0 u0 b0 r0 g4 c3 *0 lands available=3
+[combo-route]   t7 deploy: no outlet on the battlefield
+[combo-route]   t7 deploy order B (auras last) leaves no loop
+[combo-route] t7 no loop: neither deploy order reaches a finish
+[combo-route] t7 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=20 opp=18 | cast Training Grounds; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t7 k=18 projected=0
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=5 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=3 gorge=1/3 drain=1/2 exile=0 casting=[Trace of Abundance,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=3 gorge=1/3 drain=1/2 exile=0 casting=[Trace of Abundance,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eladamri's Call,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=3 gorge=1/3 drain=1/2 exile=0 casting=[Eladamri's Call,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eladamri's Call,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Training Grounds,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Training Grounds,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=4 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Training Grounds,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Training Grounds,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Shivan Gorge,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Shivan Gorge,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=5 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Shivan Gorge,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Shivan Gorge,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,Kitchen,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Kitchen,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=5 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Kitchen,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Kitchen,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,Kitchen,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=3 gorge=1/3 drain=1/2 exile=0 casting=[Trace of Abundance,Eldrazi Displacer,Kitchen,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Training Grounds,Kitchen,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=4 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Training Grounds,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Shivan Gorge,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Shivan Gorge,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Shivan Gorge,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Shivan Gorge,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Shivan Gorge,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Shivan Gorge,Kitchen,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Eladamri's Call,Mariposa Military Base,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Mariposa Military Base,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=5 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Mariposa Military Base,]
+[edf-prosp] t7 outlets=1 payloads=2 casting=[Eldrazi Displacer,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Trace of Abundance,Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Eladamri's Call,Training Grounds,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Shivan Gorge,Mariposa Military Base,]
+[edf-prosp] t7 outlets=0 payloads=2 casting=[Shivan Gorge,Mariposa Military Base,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Eldrazi Displacer,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=2 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=0 gorge=1/3 drain=1/2 exile=0 casting=[Trace of Abundance,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=0 gorge=1/3 drain=1/2 exile=0 casting=[Trace of Abundance,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Trace of Abundance,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Eladamri's Call,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=0 gorge=1/3 drain=1/2 exile=0 casting=[Eladamri's Call,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Eladamri's Call,Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Eldrazi Displacer,Training Grounds,Eldrazi Displacer,]
+[edf-loop] t7 net=5 cost=3 refund=8 pool=8 avail=1 gorge=1/3 drain=1/2 exile=0 casting=[Eldrazi Displacer,Training Grounds,Eldrazi Displacer,]
+[edf-prosp] t7 outlets=2 payloads=2 casting=[Eldrazi Displacer,Training Grounds,Eldrazi Displacer,]
+[edf-turn] t8 lands=4 auras=4 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=9 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Blue,Blue,
+[combo-route]     t8 tap Shivan Gorge -> Colorless
+[combo-route]     t8 tap Kitchen -> Blue
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route] t8 cast Peregrine Drake
+[combo-route] t8 cast Training Grounds
+[combo-route]     t8 tap Aether Hub -> Colorless +aura White,White,
+[combo-route] t8 cast Eldrazi Displacer
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x14 switch=0 demand={28}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w1 u0 b0 r0 g3 c2 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w1 u0 b0 r0 g3 c2 *0(c0)
+[combo-route]   t8 bank: float=6 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Shivan Gorge -> Colorless
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x14 switch=0 demand={28}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w1 u0 b0 r0 g4 c3 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w1 u0 b0 r0 g4 c3 *0(c0)
+[combo-route]   t8 bank: float=8 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Shivan Gorge -> Colorless
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x14 switch=0 demand={28}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w1 u0 b0 r2 g8 c5 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x13 switch=0 demand={26}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r1 g7 c5 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r1 g7 c5 *0(c0)
+[combo-route]   t8 bank: float=13 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x13 switch=0 demand={26}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r3 g11 c6 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x12 switch=0 demand={24}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r2 g9 c6 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r2 g9 c6 *0(c0)
+[combo-route]   t8 bank: float=17 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x12 switch=0 demand={24}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r4 g13 c7 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x11 switch=0 demand={22}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r3 g11 c7 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r3 g11 c7 *0(c0)
+[combo-route]   t8 bank: float=21 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x11 switch=0 demand={22}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r5 g15 c8 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x10 switch=0 demand={20}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r4 g13 c8 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r4 g13 c8 *0(c0)
+[combo-route]   t8 bank: float=25 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x10 switch=0 demand={20}{R}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r6 g17 c9 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x9 switch=0 demand={18}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r5 g15 c9 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r5 g15 c9 *0(c0)
+[combo-route]   t8 bank: float=29 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x9 switch=0 demand={18}{R}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r7 g19 c10 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x8 switch=0 demand={16}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r6 g17 c10 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r6 g17 c10 *0(c0)
+[combo-route]   t8 bank: float=33 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura Red,Red,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x8 switch=0 demand={16}{R}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r8 g21 c11 *0(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x7 switch=0 demand={14}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r7 g19 c11 *0(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r7 g19 c11 *0(c0)
+[combo-route]   t8 bank: float=37 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x7 switch=0 demand={14}{R}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r7 g23 c12 *2(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x6 switch=0 demand={12}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r6 g21 c12 *2(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r6 g21 c12 *2(c0)
+[combo-route]   t8 bank: float=41 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x6 switch=0 demand={12}{R}{R}{R}{R}{R}{R} float=w0 u0 b0 r6 g25 c13 *4(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x5 switch=0 demand={10}{R}{R}{R}{R}{R} float=w0 u0 b0 r5 g23 c13 *4(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r5 g23 c13 *4(c0)
+[combo-route]   t8 bank: float=45 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x5 switch=0 demand={10}{R}{R}{R}{R}{R} float=w0 u0 b0 r5 g27 c14 *6(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x4 switch=0 demand={8}{R}{R}{R}{R} float=w0 u0 b0 r4 g25 c14 *6(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r4 g25 c14 *6(c0)
+[combo-route]   t8 bank: float=49 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x4 switch=0 demand={8}{R}{R}{R}{R} float=w0 u0 b0 r4 g29 c15 *8(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x3 switch=0 demand={6}{R}{R}{R} float=w0 u0 b0 r3 g27 c15 *8(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r3 g27 c15 *8(c0)
+[combo-route]   t8 bank: float=53 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x3 switch=0 demand={6}{R}{R}{R} float=w0 u0 b0 r3 g31 c16 *10(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x2 switch=0 demand={4}{R}{R} float=w0 u0 b0 r2 g29 c16 *10(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r2 g29 c16 *10(c0)
+[combo-route]   t8 bank: float=57 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x2 switch=0 demand={4}{R}{R} float=w0 u0 b0 r2 g33 c17 *12(c0)
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x1 switch=0 demand={2}{R} float=w0 u0 b0 r1 g31 c17 *12(c0)
+[combo-route]   t8 finish: {2}{R} not payable from float w0 u0 b0 r1 g31 c17 *12(c0)
+[combo-route]   t8 bank: float=61 target=4 ready=1 income=8 per_iter=0 n_untap=4
+[combo-route]     t8 tap Aether Hub -> Colorless +aura *,*,
+[combo-route]     t8 tap Kitchen -> Green
+[combo-route]     t8 tap Mariposa Military Base -> Colorless
+[combo-route]   t8 fin k=3 id=46 hand=-1 wish=-1 act={2}{R} x1 switch=0 demand={2}{R} float=w0 u0 b0 r1 g35 c18 *14(c0)
+[combo-route] t8 finisher x14 -- the opponent is dead
+[combo-route] t8 TRIAL WIN: deploys=3 iters=15 draws=0 acts=14 life=20 opp=0 | cast Peregrine Drake; cast Training Grounds; cast Eldrazi Displacer; Eldrazi Displacer: blink Peregrine Drake x15; finisher x14 -- the opponent is dead; 
+[edf-goff-cut] t8 k=14 projected=0

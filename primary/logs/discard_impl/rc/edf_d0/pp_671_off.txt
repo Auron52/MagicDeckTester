@@ -1,0 +1,114 @@
+result {'turn': 7, 'winner': 'player'}
+mull 0 ['Overgrowth', 'Living Wish', 'Yavimaya Coast', 'Overgrowth', 'Conservatory', 'Brushland', 'Conservatory'] kept
+T1 MAIN_1: PLAY_LAND Yavimaya Coast
+    hand(6): ['Brushland', 'Conservatory', 'Conservatory', 'Living Wish', 'Overgrowth', 'Overgrowth']
+    bf: ['Yavimaya Coast']
+    opp life 20
+T1 COMBAT: 
+    hand(6): ['Brushland', 'Conservatory', 'Conservatory', 'Living Wish', 'Overgrowth', 'Overgrowth']
+    bf: ['Yavimaya Coast']
+    opp life 20
+T1 MAIN_2: 
+    hand(6): ['Brushland', 'Conservatory', 'Conservatory', 'Living Wish', 'Overgrowth', 'Overgrowth']
+    bf: ['Yavimaya Coast']
+    opp life 20
+T2 DRAW: DRAW Shivan Gorge
+    hand(7): ['Brushland', 'Conservatory', 'Conservatory', 'Living Wish', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast']
+    opp life 20
+T2 MAIN_1: PLAY_LAND Brushland; CAST_SPELL Living Wish {"manaPaid":"{1}{G}"}; REVEAL {"bottomed":[],"kept":[200003],"lookedAt":[{"card":200003,"cardName":"Eldrazi Displacer","to":"to hand"}],"source":"Living Wish (searched)"}
+    hand(6): ['Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)']
+    opp life 20
+T2 COMBAT: 
+    hand(6): ['Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)']
+    opp life 20
+T2 MAIN_2: 
+    hand(6): ['Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)']
+    opp life 20
+T3 DRAW: DRAW Aether Hub
+    hand(7): ['Aether Hub', 'Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast', 'Brushland']
+    opp life 20
+T3 MAIN_1: PLAY_LAND Aether Hub; CAST_SPELL Eldrazi Displacer {"manaPaid":"{2}{W}"}
+    hand(5): ['Conservatory', 'Conservatory', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer']
+    opp life 20
+T3 COMBAT: 
+    hand(5): ['Conservatory', 'Conservatory', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer']
+    opp life 20
+T3 MAIN_2: 
+    hand(5): ['Conservatory', 'Conservatory', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer']
+    opp life 20
+T4 DRAW: DRAW Adarkar Wastes
+    hand(6): ['Adarkar Wastes', 'Conservatory', 'Conservatory', 'Overgrowth', 'Overgrowth', 'Shivan Gorge']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer']
+    opp life 20
+T4 MAIN_1: PLAY_LAND Adarkar Wastes; CAST_SPELL Overgrowth {"manaPaid":"{2}{G}"}; CAST_SPELL Overgrowth {"manaPaid":"{2}{G}"}
+    hand(3): ['Conservatory', 'Conservatory', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer', 'Adarkar Wastes(T)', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]']
+    opp life 20
+T4 COMBAT: ATTACK {"damage":3,"oppLife":17}
+    hand(3): ['Conservatory', 'Conservatory', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer(T)', 'Adarkar Wastes(T)', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]']
+    opp life 17
+T4 MAIN_2: 
+    hand(3): ['Conservatory', 'Conservatory', 'Shivan Gorge']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer(T)', 'Adarkar Wastes(T)', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]']
+    opp life 17
+T5 DRAW: DRAW Living Wish
+    hand(4): ['Conservatory', 'Conservatory', 'Living Wish', 'Shivan Gorge']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]']
+    opp life 17
+T5 MAIN_1: PLAY_LAND Shivan Gorge; CAST_SPELL Living Wish {"manaPaid":"{1}{G}"}; REVEAL {"bottomed":[],"kept":[200002],"lookedAt":[{"card":200002,"cardName":"Cloud of Faeries","to":"to hand"}],"source":"Living Wish (searched)"}; ABILITY Shivan Gorge {"ability":"deals damage to each opponent"}
+    hand(3): ['Cloud of Faeries', 'Conservatory', 'Conservatory']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer', 'Adarkar Wastes(T)', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge(T)']
+    opp life 16
+T5 COMBAT: ATTACK {"damage":3,"oppLife":13}
+    hand(3): ['Cloud of Faeries', 'Conservatory', 'Conservatory']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer(T)', 'Adarkar Wastes(T)', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge(T)']
+    opp life 13
+T5 MAIN_2: 
+    hand(3): ['Cloud of Faeries', 'Conservatory', 'Conservatory']
+    bf: ['Yavimaya Coast(T)', 'Brushland(T)', 'Aether Hub(T)', 'Eldrazi Displacer(T)', 'Adarkar Wastes(T)', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge(T)']
+    opp life 13
+T6 DRAW: DRAW Peregrine Drake
+    hand(4): ['Cloud of Faeries', 'Conservatory', 'Conservatory', 'Peregrine Drake']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge']
+    opp life 13
+T6 MAIN_1: PLAY_LAND Conservatory; CAST_SPELL Cloud of Faeries {"manaPaid":"{1}{U}"}; CAST_SPELL Peregrine Drake {"manaPaid":"{4}{U}"}; DRAW Overgrowth; DRAW Trace of Abundance; DRAW Yavimaya Coast; DRAW Training Grounds; DRAW Conservatory; DRAW Overgrowth; DRAW Wild Growth; DRAW Wild Growth; DRAW Adarkar Wastes; DRAW Peregrine Drake; DRAW Trace of Abundance; DRAW Emiel the Blessed [+15 UNTAP_SOURCES]
+    hand(13): ['Adarkar Wastes', 'Conservatory', 'Conservatory', 'Emiel the Blessed', 'Overgrowth', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Trace of Abundance', 'Training Grounds', 'Wild Growth', 'Wild Growth', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast(T)', 'Brushland', 'Aether Hub(T)', 'Eldrazi Displacer', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge(T)', 'Conservatory(T)', 'Cloud of Faeries', 'Peregrine Drake(T)']
+    opp life 13
+T6 COMBAT: ATTACK {"damage":3,"oppLife":10}
+    hand(13): ['Adarkar Wastes', 'Conservatory', 'Conservatory', 'Emiel the Blessed', 'Overgrowth', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Trace of Abundance', 'Training Grounds', 'Wild Growth', 'Wild Growth', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast(T)', 'Brushland', 'Aether Hub(T)', 'Eldrazi Displacer(T)', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge(T)', 'Conservatory(T)', 'Cloud of Faeries', 'Peregrine Drake(T)']
+    opp life 10
+T6 MAIN_2: DRAW Emiel the Blessed; DRAW Fertile Ground; DRAW Eladamri's Call; DRAW Aether Hub; DRAW Eldrazi Displacer; DRAW Wild Growth; DRAW Cloud of Faeries; DRAW Trace of Abundance [+10 UNTAP_SOURCES]
+    hand(21): ['Adarkar Wastes', 'Aether Hub', 'Cloud of Faeries', 'Conservatory', 'Conservatory', "Eladamri's Call", 'Eldrazi Displacer', 'Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Overgrowth', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Trace of Abundance', 'Trace of Abundance', 'Training Grounds', 'Wild Growth', 'Wild Growth', 'Wild Growth', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer(T)', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge', 'Conservatory(T)', 'Cloud of Faeries', 'Peregrine Drake(T)']
+    opp life 10
+T6 CLEANUP: DISCARD Peregrine Drake; DISCARD Emiel the Blessed; DISCARD Emiel the Blessed; DISCARD Overgrowth; DISCARD Overgrowth; DISCARD Eldrazi Displacer; DISCARD Trace of Abundance; DISCARD Trace of Abundance; DISCARD Fertile Ground; DISCARD Eladamri's Call; DISCARD Cloud of Faeries; DISCARD Trace of Abundance; DISCARD Training Grounds; DISCARD Wild Growth
+    hand(7): ['Adarkar Wastes', 'Aether Hub', 'Conservatory', 'Conservatory', 'Wild Growth', 'Wild Growth', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer(T)', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge', 'Conservatory(T)', 'Cloud of Faeries', 'Peregrine Drake(T)']
+    gy: ['Peregrine Drake', 'Emiel the Blessed', 'Emiel the Blessed', 'Overgrowth', 'Overgrowth', 'Eldrazi Displacer', 'Trace of Abundance', 'Trace of Abundance', 'Fertile Ground', "Eladamri's Call", 'Cloud of Faeries', 'Trace of Abundance', 'Training Grounds', 'Wild Growth']
+    opp life 10
+T7 DRAW: DRAW Eldrazi Displacer
+    hand(8): ['Adarkar Wastes', 'Aether Hub', 'Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Wild Growth', 'Wild Growth', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge', 'Conservatory', 'Cloud of Faeries', 'Peregrine Drake']
+    gy: ['Peregrine Drake', 'Emiel the Blessed', 'Emiel the Blessed', 'Overgrowth', 'Overgrowth', 'Eldrazi Displacer', 'Trace of Abundance', 'Trace of Abundance', 'Fertile Ground', "Eladamri's Call", 'Cloud of Faeries', 'Trace of Abundance', 'Training Grounds', 'Wild Growth']
+    opp life 10
+T7 MAIN_1: PLAY_LAND Yavimaya Coast; DRAW Trace of Abundance; DRAW Mariposa Military Base; DRAW Brushland; DRAW Mariposa Military Base; DRAW Peregrine Drake; DRAW Brushland; DRAW Emiel the Blessed; DRAW Cloud of Faeries; DRAW Peregrine Drake; DRAW Emiel the Blessed; DRAW Eldrazi Displacer; DRAW Yavimaya Coast; DRAW Conservatory; DRAW Cloud of Faeries; DRAW Kitchen; DRAW Fertile Ground; DRAW Fertile Ground; DRAW Aether Hub; DRAW Living Wish; REVEAL {"bottomed":[],"kept":[200007],"lookedAt":[{"card":200007,"cardName":"Dimensional Infiltrator","to":"to hand"}],"source":"Living Wish (searched)"}; ABILITY Combo Off {"ability":"combo route: win"}; DRAW Kitchen; DRAW Training Grounds; DRAW Living Wish; REVEAL {"bottomed":[],"kept":[200006],"lookedAt":[{"card":200006,"cardName":"Essence Depleter","to":"to hand"}],"source":"Living Wish (searched)"}; DRAW Fertile Ground; CAST_SPELL Wild Growth {"manaPaid":"{G}"}; CAST_SPELL Wild Growth {"manaPaid":"{G}"}; CAST_SPELL Fertile Ground {"manaPaid":"{1}{G}"}; CAST_SPELL Peregrine Drake {"manaPaid":"{4}{U}"}; CAST_SPELL Cloud of Faeries {"manaPaid":"{1}{U}"} [+51 UNTAP_SOURCES]
+    hand(21): ['Adarkar Wastes', 'Aether Hub', 'Aether Hub', 'Brushland', 'Brushland', 'Cloud of Faeries', 'Conservatory', 'Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Fertile Ground', 'Kitchen', 'Kitchen', 'Mariposa Military Base', 'Mariposa Military Base', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge', 'Conservatory', 'Cloud of Faeries', 'Yavimaya Coast', 'Dimensional Infiltrator', 'Emiel the Blessed', 'Fertile Ground[attachedTo=1]', 'Essence Depleter', "Peregrine Drake[counters=[{'count': 1, 'kind': '+1/+1'}]]", 'Wild Growth[attachedTo=58]', 'Wild Growth[attachedTo=1]', 'Fertile Ground[attachedTo=58]', 'Peregrine Drake', 'Cloud of Faeries']
+    gy: ['Peregrine Drake', 'Emiel the Blessed', 'Emiel the Blessed', 'Overgrowth', 'Overgrowth', 'Eldrazi Displacer', 'Trace of Abundance', 'Trace of Abundance', 'Fertile Ground', "Eladamri's Call", 'Cloud of Faeries', 'Trace of Abundance', 'Training Grounds', 'Wild Growth']
+    opp life -3
+T7 COMBAT: ATTACK {"damage":4,"oppLife":-7}
+    hand(21): ['Adarkar Wastes', 'Aether Hub', 'Aether Hub', 'Brushland', 'Brushland', 'Cloud of Faeries', 'Conservatory', 'Conservatory', 'Conservatory', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Fertile Ground', 'Kitchen', 'Kitchen', 'Mariposa Military Base', 'Mariposa Military Base', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds', 'Yavimaya Coast']
+    bf: ['Yavimaya Coast', 'Brushland', 'Aether Hub', 'Eldrazi Displacer(T)', 'Adarkar Wastes', 'Overgrowth[attachedTo=1]', 'Overgrowth[attachedTo=1]', 'Shivan Gorge', 'Conservatory', 'Cloud of Faeries(T)', 'Yavimaya Coast', 'Dimensional Infiltrator', 'Emiel the Blessed', 'Fertile Ground[attachedTo=1]', 'Essence Depleter', "Peregrine Drake[counters=[{'count': 1, 'kind': '+1/+1'}]]", 'Wild Growth[attachedTo=58]', 'Wild Growth[attachedTo=1]', 'Fertile Ground[attachedTo=58]', 'Peregrine Drake', 'Cloud of Faeries']
+    gy: ['Peregrine Drake', 'Emiel the Blessed', 'Emiel the Blessed', 'Overgrowth', 'Overgrowth', 'Eldrazi Displacer', 'Trace of Abundance', 'Trace of Abundance', 'Fertile Ground', "Eladamri's Call", 'Cloud of Faeries', 'Trace of Abundance', 'Training Grounds', 'Wild Growth']
+    opp life -7

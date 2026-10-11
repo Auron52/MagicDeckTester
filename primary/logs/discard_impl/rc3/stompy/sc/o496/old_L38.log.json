@@ -1,0 +1,348 @@
+{
+  "cardNumbering": {
+    "Apex Altisaur": [
+      1
+    ],
+    "Call of the Wild": [
+      2,
+      3
+    ],
+    "Craterhoof Behemoth": [
+      4,
+      5
+    ],
+    "Elderscale Wurm": [
+      6
+    ],
+    "Elvish Archdruid": [
+      7,
+      8,
+      9,
+      10
+    ],
+    "Elvish Mystic": [
+      11,
+      12,
+      13,
+      14
+    ],
+    "Forest": [
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "Fyndhorn Elves": [
+      28,
+      29,
+      30,
+      31
+    ],
+    "Ghalta, Stampede Tyrant": [
+      32
+    ],
+    "Hornet Queen": [
+      33
+    ],
+    "Llanowar Elves": [
+      34,
+      35,
+      36,
+      37
+    ],
+    "Natural Order": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Priest of Titania": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Sol Ring": [
+      46
+    ],
+    "Terastodon": [
+      47,
+      48
+    ],
+    "Turntimber Symbiosis": [
+      49,
+      50,
+      51,
+      52
+    ],
+    "Vaultborn Tyrant": [
+      53
+    ],
+    "World War Hulk": [
+      54,
+      55
+    ],
+    "Worldly Tutor": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Worldspine Wurm": [
+      60
+    ]
+  },
+  "deckId": "StompySurprise",
+  "gameNumber": 0,
+  "mulliganSequence": [],
+  "openingHand": [],
+  "result": {
+    "turn": null,
+    "winner": "none"
+  },
+  "runId": "scenario",
+  "seed": 1,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 9,
+          "cardName": "Elvish Mystic",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 10,
+          "cardName": "Apex Altisaur",
+          "manaPaid": "{7}{G}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Fyndhorn Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Apex Altisaur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          8
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 38,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 3,
+          "oppLife": 35,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Fyndhorn Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Apex Altisaur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          8
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 35,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Fyndhorn Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Apex Altisaur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          8
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 35,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    }
+  ]
+}

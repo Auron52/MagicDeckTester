@@ -1,0 +1,29 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7600052 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=1 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual
+[uo-order] gs=7600052 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=1 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual
+[uo-order] gs=7600052 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual
+[uo-order] gs=7600052 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual
+[uo-order] gs=7600052 t=3 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual|Dragonstorm
+[uo-order] gs=7600052 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual|Dragonstorm
+[uo-order] gs=7600052 t=4 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=4 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual|Dragonstorm|Desperate Ritual
+[uo-order] gs=7600052 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600052 t=4 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual|Dragonstorm|Desperate Ritual
+[uo-order] gs=7600052 t=5 m=1 route=clean pool=2 n=5 pays=2 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Desperate Ritual|Desperate Ritual:s1|Irencrag Feat|Dragonstorm
+[uo-state] gs=7600052 t=5 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Ruby Medallion|Irencrag Feat|Pyretic Ritual|Desperate Ritual|Dragonstorm|Desperate Ritual
+[uo-cast] gs=7600052 t=5 m=1 d=0 card=Pyretic Ritual num=38 staged=0 splice=0 paid=1 pool=0
+[uo-cast] gs=7600052 t=5 m=1 d=0 card=Desperate Ritual num=6 staged=0 splice=0 paid=1 pool=3
+[uo-cast] gs=7600052 t=5 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=1 paid=1 pool=4
+[uo-cast] gs=7600052 t=5 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=7600052 t=5 m=1 d=0 card=Dragonstorm num=10 staged=0 splice=0 paid=1 pool=9
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g51b/off
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

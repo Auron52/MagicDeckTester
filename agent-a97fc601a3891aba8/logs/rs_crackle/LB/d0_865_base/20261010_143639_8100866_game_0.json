@@ -1,0 +1,2755 @@
+{
+  "cardNumbering": {
+    "Cascade Bluffs": [
+      1,
+      2
+    ],
+    "Crackle with Power": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "Distorting Wake": [
+      7,
+      8
+    ],
+    "Expressive Iteration": [
+      9
+    ],
+    "Forbidden Orchard": [
+      10,
+      11,
+      12,
+      13
+    ],
+    "Gamble": [
+      14
+    ],
+    "Hinata, Dawn-Crowned": [
+      15,
+      16,
+      17,
+      18
+    ],
+    "Icy Blast": [
+      19
+    ],
+    "Irencrag Feat": [
+      20
+    ],
+    "Island": [
+      21,
+      22,
+      23
+    ],
+    "Izzet Boilerworks": [
+      24,
+      25
+    ],
+    "Magma Opus": [
+      26
+    ],
+    "Memory Lapse": [
+      27,
+      28
+    ],
+    "Mountain": [
+      29,
+      30,
+      31
+    ],
+    "Mystic Monastery": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "Ornithopter of Paradise": [
+      36,
+      37,
+      38
+    ],
+    "Ponder": [
+      39,
+      40,
+      41,
+      42
+    ],
+    "Preordain": [
+      43,
+      44,
+      45,
+      46
+    ],
+    "Reality Spasm": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Reflecting Pool": [
+      51,
+      52
+    ],
+    "Remand": [
+      53,
+      54,
+      55
+    ],
+    "Sol Ring": [
+      56
+    ],
+    "Soulfire Eruption": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 32,
+          "cardName": "Mystic Monastery"
+        },
+        {
+          "card": 7,
+          "cardName": "Distorting Wake"
+        },
+        {
+          "card": 8,
+          "cardName": "Distorting Wake"
+        },
+        {
+          "card": 33,
+          "cardName": "Mystic Monastery"
+        },
+        {
+          "card": 10,
+          "cardName": "Forbidden Orchard"
+        },
+        {
+          "card": 39,
+          "cardName": "Ponder"
+        },
+        {
+          "card": 15,
+          "cardName": "Hinata, Dawn-Crowned"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 1,
+      "bottomed": [
+        {
+          "card": 40,
+          "cardName": "Ponder"
+        }
+      ],
+      "hand": [
+        {
+          "card": 20,
+          "cardName": "Irencrag Feat"
+        },
+        {
+          "card": 11,
+          "cardName": "Forbidden Orchard"
+        },
+        {
+          "card": 12,
+          "cardName": "Forbidden Orchard"
+        },
+        {
+          "card": 46,
+          "cardName": "Preordain"
+        },
+        {
+          "card": 40,
+          "cardName": "Ponder"
+        },
+        {
+          "card": 38,
+          "cardName": "Ornithopter of Paradise"
+        },
+        {
+          "card": 3,
+          "cardName": "Crackle with Power"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 20,
+      "cardName": "Irencrag Feat"
+    },
+    {
+      "card": 11,
+      "cardName": "Forbidden Orchard"
+    },
+    {
+      "card": 12,
+      "cardName": "Forbidden Orchard"
+    },
+    {
+      "card": 46,
+      "cardName": "Preordain"
+    },
+    {
+      "card": 38,
+      "cardName": "Ornithopter of Paradise"
+    },
+    {
+      "card": 3,
+      "cardName": "Crackle with Power"
+    }
+  ],
+  "result": {
+    "turn": 6,
+    "winner": "player"
+  },
+  "runId": "20261010_143639_8100866",
+  "seed": 8100866,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 11,
+          "cardName": "Forbidden Orchard",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 46,
+          "cardName": "Preordain",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            21,
+            36
+          ],
+          "lookedAt": [
+            {
+              "card": 21,
+              "cardName": "Island"
+            },
+            {
+              "card": 36,
+              "cardName": "Ornithopter of Paradise"
+            }
+          ],
+          "source": "Preordain",
+          "type": "REVEAL"
+        },
+        {
+          "card": 21,
+          "cardName": "Island",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          12,
+          38,
+          3,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          12,
+          38,
+          3,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          12,
+          38,
+          3,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 36,
+          "cardName": "Ornithopter of Paradise",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          12,
+          38,
+          3,
+          21,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 12,
+          "cardName": "Forbidden Orchard",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 38,
+          "cardName": "Ornithopter of Paradise",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          21,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          21,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          21,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Mountain",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          21,
+          36,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1003,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 21,
+          "cardName": "Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 36,
+          "cardName": "Ornithopter of Paradise",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1003,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1003,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1003,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 58,
+          "cardName": "Soulfire Eruption",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46
+        ],
+        "hand": [
+          20,
+          3,
+          31,
+          58
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1002,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1003,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1005,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1006,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Mountain",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 20,
+          "cardName": "Irencrag Feat",
+          "manaPaid": "{1}{R}{R}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 58,
+          "cardName": "Soulfire Eruption",
+          "manaPaid": "{6}{R}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            }
+          ],
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            4,
+            27,
+            35,
+            13,
+            24,
+            17,
+            47,
+            52,
+            56,
+            18
+          ],
+          "lookedAt": [
+            {
+              "card": 4,
+              "cardName": "Crackle with Power",
+              "to": "→ opponent face (2)"
+            },
+            {
+              "card": 27,
+              "cardName": "Memory Lapse",
+              "to": "→ you (2)"
+            },
+            {
+              "card": 35,
+              "cardName": "Mystic Monastery",
+              "to": "→ opponent 2/2 Creature (0)"
+            },
+            {
+              "card": 13,
+              "cardName": "Forbidden Orchard",
+              "to": "→ opponent 1/1 Spirit Token (0)"
+            },
+            {
+              "card": 24,
+              "cardName": "Izzet Boilerworks",
+              "to": "→ opponent 1/1 Spirit Token (0)"
+            },
+            {
+              "card": 17,
+              "cardName": "Hinata, Dawn-Crowned",
+              "to": "→ opponent 1/1 Spirit Token (4)"
+            },
+            {
+              "card": 47,
+              "cardName": "Reality Spasm",
+              "to": "→ opponent 1/1 Spirit Token (2)"
+            },
+            {
+              "card": 52,
+              "cardName": "Reflecting Pool",
+              "to": "→ opponent 1/1 Spirit Token (0)"
+            },
+            {
+              "card": 56,
+              "cardName": "Sol Ring",
+              "to": "→ opponent 1/1 Spirit Token (1)"
+            },
+            {
+              "card": 18,
+              "cardName": "Hinata, Dawn-Crowned",
+              "to": "→ opponent 1/1 Spirit Token (4)"
+            }
+          ],
+          "source": "Soulfire Eruption (exiled)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58
+        ],
+        "hand": [
+          3
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58
+        ],
+        "hand": [
+          3
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58
+        ],
+        "hand": [
+          3
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 37,
+          "cardName": "Ornithopter of Paradise",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58
+        ],
+        "hand": [
+          3,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Forbidden Orchard",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 56,
+          "cardName": "Sol Ring",
+          "manaPaid": "{1}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 17,
+          "cardName": "Hinata, Dawn-Crowned",
+          "manaPaid": "{1}{W}{U}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 18,
+          "cardName": "Hinata, Dawn-Crowned",
+          "manaPaid": "{1}{W}{U}{R}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58,
+          18
+        ],
+        "hand": [
+          3,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1009,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58,
+          18
+        ],
+        "hand": [
+          3,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1009,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58,
+          18
+        ],
+        "hand": [
+          3,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1009,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 22,
+          "cardName": "Island",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 17,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58,
+          18
+        ],
+        "hand": [
+          3,
+          37,
+          22
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1000,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1009,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1010,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1011,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1012,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 22,
+          "cardName": "Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 3,
+          "cardName": "Crackle with Power",
+          "chosenX": 4,
+          "manaPaid": "{8}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            }
+          ],
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58,
+          18,
+          3
+        ],
+        "hand": [
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1009,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1010,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1011,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1012,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -2,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 4,
+          "oppLife": -6,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 12,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 38,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          46,
+          20,
+          58,
+          18,
+          3
+        ],
+        "hand": [
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1004,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1007,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1008,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1009,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1010,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1011,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1012,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -6,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    }
+  ]
+}

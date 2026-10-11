@@ -1,0 +1,614 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast
+[paydbg] cost={G} ok=0 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=4 energy=0
+[paydbg] cost={G} ok=1 energy 0->0 taps: Yavimaya Coast
+[exec-tap] T1 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth
+[tapdbg] tap Yavimaya Coast col=4 energy=0
+[paydbg] cost={1}{G} ok=1 energy 0->0 taps: Yavimaya Coast
+[exec-tap] T2 Living Wish tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T)
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen
+[tmp-edbg] T3 land Aether Hub energy now 1 state=0x78be36a72c90
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be35e45f10 real=0
+[exec-tap] T3 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Kitchen Aether Hub
+[tapdbg] tap Aether Hub col=3 energy=1
+[tmp-edbg] T3 TapSourceIntoFloat Aether Hub spent energy -> 0 state=0x78be36a72c90 real=1
+[tapdbg] tap Kitchen col=4 energy=0
+[paydbg] cost={R}{G} ok=1 energy 1->0 taps: Kitchen Aether Hub
+[paydbg] cost={R}{G} ok=1 energy 1->0 taps: Kitchen Aether Hub
+[exec-tap] T3 Trace of Abundance tapped: Kitchen Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Trace of Abundance
+[paydbg] cost={2}{W} ok=1 energy 0->0 taps: Yavimaya Coast
+[exec-tap] T3 Eldrazi Displacer tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T) Aether Hub(T) Trace of Abundance Eldrazi Displacer
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Trace of Abundance Eldrazi Displacer
+[tapdbg] tap Yavimaya Coast col=1 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g38 c0 *19} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Trace of Abundance Eldrazi Displacer Training Grounds Essence Depleter Peregrine Drake(T)
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={C} ok=1 energy 0->0 taps: Aether Hub
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={C} ok=1 energy 0->0 taps:
+[tapdbg] tap Brushland col=0 energy=0
+[paydbg] cost={2}{W}{W} ok=1 energy 0->0 taps: Brushland
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[tapdbg] tap Brushland col=0 energy=0
+[paydbg] cost={2}{W}{W} ok=1 energy 0->0 taps: Brushland
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[paydbg] cost={2} ok=1 energy 0->0 taps:
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps: Aether Hub
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[paydbg] cost={1} ok=1 energy 0->0 taps: Yavimaya Coast
+[paydbg] cost={4} ok=1 energy 0->0 taps:
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps: Aether Hub
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={4} ok=1 energy 0->0 taps: Aether Hub
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps: Yavimaya Coast
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[tapdbg] tap Aether Hub col=5 energy=0
+[paydbg] cost={4} ok=1 energy 0->0 taps: Aether Hub
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps: Yavimaya Coast
+[paydbg] cost={1} ok=1 energy 0->0 taps:
+[paydbg] cost={G} ok=0 energy 0->0 taps:
+[paydbg] cost={W} ok=0 energy 0->0 taps:
+[paydbg] cost={G} ok=0 energy 0->0 taps:
+[paydbg] cost={G} ok=0 energy 0->0 taps:
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Yavimaya Coast col=5 energy=0
+[paydbg] cost={4} ok=1 energy 0->0 taps: Yavimaya Coast Aether Hub
+[tapdbg] tap Brushland col=5 energy=0
+[paydbg] cost={2} ok=1 energy 0->0 taps: Brushland
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/g1985_edbg3
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

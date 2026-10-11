@@ -1,0 +1,30 @@
+Loaded profile from decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle(T)
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle Mercadian Bazaar(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle Mercadian Bazaar
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle Mercadian Bazaar
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle Mercadian Bazaar
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle Mercadian Bazaar
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Sandstone Needle Mercadian Bazaar
+[exec-tap] T5 before Desperate Ritual: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Sandstone Needle 2/2 Creature Mercadian Bazaar 2/2 Creature Mountain
+[exec-tap] T5 Desperate Ritual tapped: Sandstone Needle Mountain  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T5 before Seething Song: float{w0 u0 b0 r4 g0 c0 *0} untapped: 2/2 Creature 2/2 Creature Mercadian Bazaar 2/2 Creature
+[exec-tap] T5 Seething Song tapped:  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T5 before Rite of Flame: float{w0 u0 b0 r6 g0 c0 *0} untapped: 2/2 Creature 2/2 Creature Mercadian Bazaar 2/2 Creature
+[exec-tap] T5 Rite of Flame tapped:  float{w0 u0 b0 r5 g0 c0 *0}
+[exec-tap] T5 before Pyretic Ritual: float{w0 u0 b0 r7 g0 c0 *0} untapped: 2/2 Creature 2/2 Creature Mercadian Bazaar 2/2 Creature
+[exec-tap] T5 Pyretic Ritual tapped:  float{w0 u0 b0 r5 g0 c0 *0}
+[exec-tap] T5 before Apex of Power: float{w0 u0 b0 r8 g0 c0 *0} untapped: 2/2 Creature 2/2 Creature Mercadian Bazaar 2/2 Creature
+[exec-tap] T5 Apex of Power tapped: Mercadian Bazaar  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Rite of Flame: float{w0 u0 b0 r10 g0 c0 *0} untapped: 2/2 Creature 2/2 Creature 2/2 Creature
+[exec-tap] T5 Rite of Flame tapped:  float{w0 u0 b0 r9 g0 c0 *0}
+[exec-tap] T5 before Dragonstorm: float{w0 u0 b0 r12 g0 c0 *0} untapped: 2/2 Creature 2/2 Creature 2/2 Creature
+[exec-tap] T5 Dragonstorm tapped:  float{w0 u0 b0 r3 g0 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r3 g0 c0 *0} own: Sandstone Needle(T) Mercadian Bazaar(T) Mountain(T) Scourge of Valkas Scourge of Valkas Utvara Hellkite Utvara Hellkite Karrthus, Tyrant of Jund Dragonlord Kolaghan
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/dragonstorm/et_off
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

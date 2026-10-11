@@ -1,0 +1,3 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+g1424_off: played=1 avg=8.0000 digest=a607a9d779ab4970 ms=9 units=0
+=== BATCH done (1 jobs, 1 games) ===

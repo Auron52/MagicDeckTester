@@ -1,0 +1,458 @@
+{
+ "jobs": [
+  {
+   "name": "ds_d3_on.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_off.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_on.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950026,
+   "game_index": 25,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_off.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950026,
+   "game_index": 25,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_on.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950051,
+   "game_index": 50,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_off.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950051,
+   "game_index": 50,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_on.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950076,
+   "game_index": 75,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d3_off.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7950076,
+   "game_index": 75,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900026,
+   "game_index": 25,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900026,
+   "game_index": 25,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900051,
+   "game_index": 50,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900051,
+   "game_index": 50,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900076,
+   "game_index": 75,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900076,
+   "game_index": 75,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900101,
+   "game_index": 100,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900101,
+   "game_index": 100,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c125",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900126,
+   "game_index": 125,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c125",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900126,
+   "game_index": 125,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c150",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900151,
+   "game_index": 150,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c150",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900151,
+   "game_index": 150,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c175",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900176,
+   "game_index": 175,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c175",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900176,
+   "game_index": 175,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c200",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900201,
+   "game_index": 200,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c200",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900201,
+   "game_index": 200,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c225",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900226,
+   "game_index": 225,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c225",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900226,
+   "game_index": 225,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c250",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900251,
+   "game_index": 250,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c250",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900251,
+   "game_index": 250,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_on.c275",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900276,
+   "game_index": 275,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": true
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  },
+  {
+   "name": "ds_d0_off.c275",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "games": 25,
+   "seed": 7900276,
+   "game_index": 275,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_BP_LEFTOVERS": false
+   },
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json"
+  }
+ ],
+ "meta": {
+  "base": 7900001,
+  "decks": [
+   "ds"
+  ]
+ }
+}

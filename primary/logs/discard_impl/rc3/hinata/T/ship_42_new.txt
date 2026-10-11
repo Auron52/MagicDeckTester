@@ -1,0 +1,104 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=5 budget=20ms source=value_play(depth)+cli(budget)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1320043 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320043 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Gamble|Magma Opus|Ponder|Irencrag Feat|Island|Ornithopter of Paradise
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[exec-tap] T1 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[uo-order] gs=1320043 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320043 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Gamble|Magma Opus|Ponder|Irencrag Feat|Island|Ornithopter of Paradise
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[exec-tap] T2 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[uo-order] gs=1320043 t=2 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ornithopter of Paradise
+[uo-state] gs=1320043 t=2 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Gamble|Magma Opus|Ponder|Irencrag Feat|Ornithopter of Paradise|Ponder
+[exec-tap] T2 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature Mystic Monastery 1/1 Creature 1/1 Creature Island
+[uo-cast] gs=1320043 t=2 m=1 d=5 card=Ornithopter of Paradise num=37 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T2 Ornithopter of Paradise tapped: Mystic Monastery Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Island(T) Ornithopter of Paradise
+[exec-tap] T2 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Island(T) Ornithopter of Paradise
+[uo-order] gs=1320043 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320043 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Gamble|Magma Opus|Ponder|Irencrag Feat|Ponder
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise
+[exec-tap] T3 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise
+[uo-order] gs=1320043 t=3 m=1 route=opaque pool=4 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder|Ponder|Gamble
+[uo-state] gs=1320043 t=3 cap=-1 pool{w0 u2 b0 r1 g0 c0 *1} hand=Gamble|Magma Opus|Ponder|Irencrag Feat|Ponder
+[exec-tap] T3 before Ponder: float{w0 u2 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Ornithopter of Paradise 1/1 Creature 1/1 Creature
+[uo-cast] gs=1320043 t=3 m=1 d=5 card=Ponder num=39 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T3 Ponder tapped:  float{w0 u1 b0 r1 g0 c0 *0}
+[uo-order] gs=1320043 t=3 m=1 route=replay pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1320043 t=3 cap=-1 pool{w0 u1 b0 r1 g0 c0 *1} hand=Gamble|Magma Opus|Irencrag Feat|Ponder|Crackle with Power
+[exec-tap] T3 before Ponder: float{w0 u1 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Ornithopter of Paradise 1/1 Creature 1/1 Creature
+[uo-cast] gs=1320043 t=3 m=1 d=5 card=Ponder num=41 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T3 Ponder tapped:  float{w0 u0 b0 r1 g0 c0 *0}
+[uo-order] gs=1320043 t=3 m=1 route=replay pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Gamble
+[uo-state] gs=1320043 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Gamble|Magma Opus|Irencrag Feat|Crackle with Power|Soulfire Eruption
+[exec-tap] T3 before Gamble: float{w0 u0 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Ornithopter of Paradise 1/1 Creature 1/1 Creature
+[uo-cast] gs=1320043 t=3 m=1 d=5 card=Gamble num=14 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T3 Gamble tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Island(T) Ornithopter of Paradise Island(T)
+[exec-tap] T3 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Island(T) Ornithopter of Paradise Island(T)
+[uo-order] gs=1320043 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320043 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Magma Opus|Irencrag Feat|Soulfire Eruption|Hinata, Dawn-Crowned
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island
+[exec-tap] T4 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island
+[uo-order] gs=1320043 t=4 m=1 route=clean pool=4 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Hinata, Dawn-Crowned
+[uo-state] gs=1320043 t=4 cap=-1 pool{w0 u2 b0 r0 g0 c0 *2} hand=Magma Opus|Irencrag Feat|Soulfire Eruption|Hinata, Dawn-Crowned|Expressive Iteration
+[exec-tap] T4 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature Mystic Monastery 1/1 Creature 1/1 Creature Island Ornithopter of Paradise 1/1 Creature 1/1 Creature Island
+[uo-cast] gs=1320043 t=4 m=1 d=5 card=Hinata, Dawn-Crowned num=18 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T4 Hinata, Dawn-Crowned tapped: Mystic Monastery Island Ornithopter of Paradise Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Island(T) Ornithopter of Paradise(T) Island(T) Hinata, Dawn-Crowned
+[exec-tap] T4 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T) Island(T) Ornithopter of Paradise(T) Island(T) Hinata, Dawn-Crowned
+[uo-order] gs=1320043 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1320043 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Magma Opus|Irencrag Feat|Soulfire Eruption|Expressive Iteration
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island Hinata, Dawn-Crowned
+[exec-tap] T5 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island Hinata, Dawn-Crowned
+[uo-order] gs=1320043 t=5 m=1 route=clean pool=4 n=2 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Irencrag Feat|Magma Opus
+[uo-state] gs=1320043 t=5 cap=-1 pool{w0 u2 b0 r0 g0 c0 *2} hand=Magma Opus|Irencrag Feat|Soulfire Eruption|Expressive Iteration|Reality Spasm
+[exec-tap] T5 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature Mystic Monastery 1/1 Creature 1/1 Creature Island Ornithopter of Paradise 1/1 Creature 1/1 Creature Island Hinata, Dawn-Crowned
+[uo-cast] gs=1320043 t=5 m=1 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=0 pool=2
+[exec-tap] T5 Irencrag Feat tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Magma Opus: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature Mystic Monastery 1/1 Creature 1/1 Creature Island Ornithopter of Paradise 1/1 Creature 1/1 Creature Island Hinata, Dawn-Crowned
+[uo-cast] gs=1320043 t=5 m=1 d=5 card=Magma Opus num=26 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T5 Magma Opus tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island Hinata, Dawn-Crowned(T)
+[exec-tap] T5 after-solve pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island Hinata, Dawn-Crowned(T)
+[uo-order] gs=1320043 t=5 m=2 route=opaque pool=4 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Expressive Iteration|Reality Spasm|Soulfire Eruption
+[uo-state] gs=1320043 t=5 cap=-1 pool{w0 u2 b0 r0 g0 c0 *2} hand=Magma Opus|Irencrag Feat|Soulfire Eruption|Expressive Iteration|Reality Spasm
+[exec-tap] T5 before Expressive Iteration: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature Mystic Monastery 1/1 Creature 1/1 Creature Island Ornithopter of Paradise 1/1 Creature 1/1 Creature Island
+[uo-cast] gs=1320043 t=5 m=2 d=5 card=Expressive Iteration num=9 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T5 Expressive Iteration tapped: Mystic Monastery Island  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1320043 t=5 m=2 route=replay pool=2 n=3 pays=1 ppays=1 mpos=-1 mearl=-1 seq=Reality Spasm|Irencrag Feat|Crackle with Power
+[uo-state] gs=1320043 t=5 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Magma Opus|Irencrag Feat|Soulfire Eruption|Reality Spasm|Forbidden Orchard|Forbidden Orchard*
+[exec-tap] T5 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Ornithopter of Paradise 1/1 Creature 1/1 Creature Island Forbidden Orchard 1/1 Spirit Token
+[exec-tap] T5 tap-ahead for Reality Spasm X=5 -> float{w0 u1 b0 r0 g0 c0 *2}
+[uo-cast] gs=1320043 t=5 m=2 d=5 card=Reality Spasm num=50 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T5 Reality Spasm tapped: Ornithopter of Paradise Island Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T5 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *1} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature Mystic Monastery 1/1 Creature 1/1 Creature Island Ornithopter of Paradise 1/1 Creature 1/1 Creature Island Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320043 t=5 m=2 d=5 card=Irencrag Feat num=20 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T5 Irencrag Feat tapped: Mystic Monastery Island Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Soulfire Eruption: float{w0 u0 b0 r7 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Ornithopter of Paradise 1/1 Creature 1/1 Creature Island 1/1 Spirit Token
+[uo-cast] gs=1320043 t=5 m=2 d=5 card=Soulfire Eruption num=60 staged=0 splice=0 paid=1 pool=9
+[exec-tap] T5 Soulfire Eruption tapped:  float{w0 u0 b0 r4 g0 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island Hinata, Dawn-Crowned Forbidden Orchard
+[exec-tap] T6 after-solve pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery Island Ornithopter of Paradise Island Hinata, Dawn-Crowned Forbidden Orchard
+[uo-order] gs=1320043 t=6 m=1 route=clean pool=6 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Reality Spasm|Crackle with Power
+[uo-state] gs=1320043 t=6 cap=-1 pool{w0 u2 b0 r0 g0 c0 *4} hand=Magma Opus|Remand|Reality Spasm*|Memory Lapse*|Memory Lapse*|Preordain*|Crackle with Power*|Reflecting Pool*|Crackle with Power*|Icy Blast*|Soulfire Eruption*
+[exec-tap] T6 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 1/1 Creature Island Ornithopter of Paradise Island Hinata, Dawn-Crowned Forbidden Orchard 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token
+[exec-tap] T6 tap-ahead for Reality Spasm X=6 -> float{w0 u3 b0 r0 g0 c0 *3}
+[uo-cast] gs=1320043 t=6 m=1 d=5 card=Reality Spasm num=49 staged=1 splice=0 paid=1 pool=6
+[exec-tap] T6 Reality Spasm tapped: Mystic Monastery Island Ornithopter of Paradise Island Forbidden Orchard Forbidden Orchard  float{w0 u1 b0 r0 g0 c0 *3}
+[exec-tap] T6 before Crackle with Power: float{w0 u1 b0 r0 g0 c0 *3} untapped: Opponent Land Opponent Land Opponent Land Mystic Monastery 1/1 Creature Island Ornithopter of Paradise Island Hinata, Dawn-Crowned Forbidden Orchard 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1320043 t=6 m=1 d=5 card=Crackle with Power num=5 staged=1 splice=0 paid=1 pool=4
+[exec-tap] T6 Crackle with Power tapped: Mystic Monastery Island Ornithopter of Paradise Island Forbidden Orchard Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=14172 default_pays=9291 bound_fail=0 hoist_rescue=0 perm_rescue=945 none_pays=3936
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=1182 misses=11498 clears=0
+[solve-memo] hits=10384 misses=14490 clears=0
+[m2-search-memo] hits=439 misses=1757 clears=0
+[leaf-eval] published=441 ties=153 flips=32 life-equal-ties=76
+Seed          : 1320043
+Games played  : 1
+avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

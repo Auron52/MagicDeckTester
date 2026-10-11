@@ -1,0 +1,64 @@
+deck       cell    gi src     old new  on off   needs(noX!=on)                 alone-recovers(onlyX<=old)
+fivecolour d0     275 ab3       4   5   4   5                                  DOMAIN CANNONS
+fivecolour d0     374 ab3       5   6   5   6   CANNONS=6                      CANNONS
+fivecolour d0     400 ab3       5   6   5   6                                  DOMAIN CANNONS
+fivecolour d0     500 ab3       4   5   4   5                                  DOMAIN CANNONS
+fivecolour d0     839 ab3       4   5   4   5                                  DOMAIN CANNONS
+fivecolour d0     912 ab3       4   5   4   5                                  DOMAIN CANNONS
+fivecolour d0    1054 ab3       5   6   5   6   CANNONS=6                      CANNONS
+fivecolour d0    1063 ab3       4   5   4   5                                  DOMAIN CANNONS
+fivecolour d0    1191 ab3       6   7   6   7                                  DOMAIN CANNONS
+fivecolour d0    1665 ab3       4   5   4   5                                  DOMAIN CANNONS
+fivecolour d0    1700 ab3       5   6   5   6                                  DOMAIN CANNONS
+fivecolour d0    1760 ab3       5   6   5   6                                  DOMAIN CANNONS
+fivecolour d0    1817 ab3       5   6   5   6                                  DOMAIN CANNONS
+fivecolour d0    1882 ab3       4   5   4   5                                  DOMAIN CANNONS
+stompy     d0     496 ab3       4   5   4   5   HOOF=5                         HOOF
+stompy     d0     588 ab3       5   6   5   6   HOOF=6                         HOOF
+stompy     d0     724 ab3       5   6   6   6   PAYER=5                        HOOF
+stompy     d0    1714 ab3       5   6   5   6   HOOF=6                         HOOF
+selesnya   d0     392 ab3       8   9   7   9   LIFE=9                         LIFE
+selesnya   d0     882 ab3       5   6   4   6   LIFE=5                         REPROJ LIFE
+selesnya   d0     933 ab3       5   6   5   6   LIFE=6                         LIFE
+selesnya   d0     979 ab3       6   7   7   7                                  
+selesnya   d0    1094 ab3       6   7   6   7   AOW=7                          AOW
+selesnya   d0    1344 ab3       6   7   6   7   HOOF=7                         HOOF
+selesnya   d0    1737 ab3       6   7   6   7   HOOF=7                         HOOF
+selesnya   d0    1861 ab3       5   6   5   6   HOOF=6                         HOOF
+selesnya   d0    1868 ab3       5   6   5   6   LIFE=6                         LIFE
+selesnya   d0    1896 ab3       5   6   6   6                                  
+bruna      d0     652 ab3       7   8   6   8                                  BRUNASC AURAHOST
+bruna      d0     960 ab3       7   9   9   9                                  
+bruna      d0    1153 ab3       8   9   8   9                                  BRUNASC CRONLY
+bruna      d0    1238 ab3       8   9   6   9   BRUNASC=9                      BRUNASC
+bruna      d0    1247 ab3       8   9   9   9                                  
+bruna      d0    1461 ab3       8   9   7   9   BRUNASC=8                      BRUNASC AURAHOST
+bruna      d0    1909 ab3       7   9   9   9                                  
+bruna      d0    1933 ab3       7   9   6   9   BOUNCE=9                       BOUNCE
+bruna      ship   198 ab3       5   6   6   6                                  
+snow       d0    1384 ab3       5   6   5   6   ASTRO=6 AOW=6                  
+snow       d3     133 ab3       6   7   7   7                                  
+fivecolour d0     123 emu       6   7   6   6   KINDS=7                        ASTRO CANNONS REPROJ HOOF LIFE BRUNASC AURAHOST BOUNCE CRONLY AOW KINDS PAYER
+fivecolour d0     492 emu       4   5   4   4   CANNONS=5                      ASTRO CANNONS REPROJ HOOF LIFE BRUNASC AURAHOST BOUNCE CRONLY AOW KINDS PAYER
+fivecolour d0    1022 emu       5   6   5   5   CANNONS=6                      ASTRO CANNONS REPROJ HOOF LIFE BRUNASC AURAHOST BOUNCE CRONLY AOW KINDS PAYER
+fivecolour d0    1405 emu       4   5   4   4   CANNONS=5                      ASTRO CANNONS REPROJ HOOF LIFE BRUNASC AURAHOST BOUNCE CRONLY AOW KINDS PAYER
+fivecolour d0    1724 emu       4   5   4   4   CANNONS=5                      ASTRO CANNONS REPROJ HOOF LIFE BRUNASC AURAHOST BOUNCE CRONLY AOW KINDS PAYER
+stompy     d0    1118 heldout   4   5   4   5   HOOF=5 PAYER=5                 
+stompy     d0    2036 heldout   5   6   5   6   HOOF=6                         HOOF
+stompy     d0    2199 heldout   6   5   5   5                                  DOMAIN ASTRO CANNONS REPROJ HOOF LIFE BRUNASC AURAHOST BOUNCE CRONLY AOW KINDS PAYER
+stompy     d0    3068 heldout   4   5   4   5   HOOF=5                         HOOF
+stompy     d0    3504 heldout   4   5   4   5                                  HOOF PAYER
+stompy     d0    3746 heldout   4   5   4   5   HOOF=5 PAYER=5                 
+stompy     d0     416 heldout   5   6   5   6   PAYER=6                        PAYER
+stompy     d0    4612 heldout   4   5   4   5                                  HOOF PAYER
+stompy     d0    4847 heldout   4   5   4   5   HOOF=5 PAYER=5                 
+stompy     d0    5172 heldout   4   5   4   5   HOOF=5                         HOOF
+stompy     d0    6068 heldout   4   5   4   5                                  HOOF PAYER
+stompy     d0    6828 heldout   4   5   4   5   HOOF=5                         HOOF
+stompy     d0    7960 heldout   5   6   5   6   PAYER=6                        PAYER
+stompy     d0    8172 heldout   4   5   4   5   HOOF=5                         HOOF
+stompy     d0    8401 heldout   5   6   5   6   HOOF=6                         HOOF
+stompy     d0    8514 heldout   5   6   5   6   HOOF=6                         HOOF
+stompy     d0    8979 heldout   4   5   4   5   HOOF=5                         HOOF
+stompy     d0    9287 heldout   5   6   5   6   HOOF=6 PAYER=6                 
+games=62  sum old=319 ab3new=382 on=321 off=377   on reaches old-or-better: 54/62

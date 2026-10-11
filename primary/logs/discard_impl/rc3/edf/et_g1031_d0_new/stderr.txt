@@ -1,0 +1,49 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes
+[exec-tap] T2 before Training Grounds: float{w0 u0 b0 r0 g0 c0 *0} untapped: Adarkar Wastes
+[exec-tap] T2 Training Grounds tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Conservatory(T) Training Grounds
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Conservatory Training Grounds
+[exec-tap] T3 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: Adarkar Wastes Conservatory Training Grounds
+[exec-tap] T3 Wild Growth tapped: Conservatory  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: Adarkar Wastes Training Grounds Wild Growth
+[exec-tap] T3 Trace of Abundance tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Conservatory(T) Training Grounds Wild Growth Trace of Abundance
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance
+[exec-tap] T4 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance
+[exec-tap] T4 Fertile Ground tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *1} untapped: Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground
+[exec-tap] T4 Overgrowth tapped: Conservatory  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Conservatory(T) Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth
+[exec-tap] T5 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth
+[exec-tap] T5 Overgrowth tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth
+[exec-tap] T5 Peregrine Drake tapped: Conservatory  float{w0 u0 b0 r0 g1 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake
+[exec-tap] T6 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake
+[exec-tap] T6 Fertile Ground tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T6 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *1} untapped: Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake Fertile Ground
+[exec-tap] T6 Cloud of Faeries tapped: Conservatory  float{w0 u0 b0 r0 g5 c0 *1}
+[exec-tap] T6 before Living Wish: float{w0 u0 b0 r0 g5 c0 *1} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake Fertile Ground Cloud of Faeries
+[exec-tap] T6 Living Wish tapped:  float{w0 u0 b0 r0 g4 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *1} own: Adarkar Wastes(T) Conservatory(T) Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake Fertile Ground Cloud of Faeries
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Conservatory(T) Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake(T) Fertile Ground Cloud of Faeries
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Peregrine Drake Fertile Ground Cloud of Faeries
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g83 c0 *51} own: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Fertile Ground Cloud of Faeries Eldrazi Displacer Training Grounds Emiel the Blessed Essence Depleter Peregrine Drake
+[exec-tap] T7 before Fertile Ground: float{w0 u0 b0 r0 g83 c0 *51} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Fertile Ground Cloud of Faeries Eldrazi Displacer Training Grounds Emiel the Blessed Essence Depleter Peregrine Drake Brushland
+[exec-tap] T7 Fertile Ground tapped:  float{w0 u0 b0 r0 g82 c0 *50}
+[exec-tap] T7 before Trace of Abundance: float{w0 u0 b0 r0 g82 c0 *50} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Fertile Ground Cloud of Faeries Eldrazi Displacer Training Grounds Emiel the Blessed Essence Depleter Peregrine Drake Brushland Fertile Ground
+[exec-tap] T7 Trace of Abundance tapped:  float{w0 u0 b0 r0 g81 c0 *49}
+[exec-tap] T7 before Trace of Abundance: float{w0 u0 b0 r0 g81 c0 *49} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Fertile Ground Cloud of Faeries Eldrazi Displacer Training Grounds Emiel the Blessed Essence Depleter Peregrine Drake Brushland Fertile Ground Trace of Abundance
+[exec-tap] T7 Trace of Abundance tapped:  float{w0 u0 b0 r0 g80 c0 *48}
+[exec-tap] T7 before Overgrowth: float{w0 u0 b0 r0 g80 c0 *48} untapped: Adarkar Wastes Conservatory Training Grounds Wild Growth Trace of Abundance Fertile Ground Overgrowth Overgrowth Fertile Ground Cloud of Faeries Eldrazi Displacer Training Grounds Emiel the Blessed Essence Depleter Peregrine Drake Brushland Fertile Ground Trace of Abundance Trace of Abundance
+[exec-tap] T7 Overgrowth tapped:  float{w0 u0 b0 r0 g79 c0 *46}
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g1031_d0_new
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

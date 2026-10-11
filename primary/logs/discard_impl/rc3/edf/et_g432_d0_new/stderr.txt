@@ -1,0 +1,47 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Training Grounds: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes
+[exec-tap] T1 Training Grounds tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Training Grounds
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds
+[exec-tap] T2 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub
+[exec-tap] T2 Wild Growth tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Wild Growth
+[exec-tap] T2 Living Wish tapped: Adarkar Wastes  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Training Grounds Aether Hub(T) Wild Growth
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Training Grounds Aether Hub(T) Wild Growth
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth
+[exec-tap] T3 before Wild Growth: float{w0 u1 b0 r0 g2 c0 *1} untapped: 1/1 Creature 1/1 Creature Training Grounds 1/1 Creature 1/1 Creature Wild Growth 1/1 Creature 1/1 Creature
+[exec-tap] T3 Wild Growth tapped:  float{w0 u1 b0 r0 g1 c0 *1}
+[exec-tap] T3 before Wild Growth: float{w0 u1 b0 r0 g1 c0 *1} untapped: 1/1 Creature 1/1 Creature Training Grounds 1/1 Creature 1/1 Creature Wild Growth 1/1 Creature 1/1 Creature Wild Growth
+[exec-tap] T3 Wild Growth tapped:  float{w0 u1 b0 r0 g0 c0 *1}
+[exec-tap] T3 before Cloud of Faeries: float{w0 u1 b0 r0 g0 c0 *1} untapped: 1/1 Creature 1/1 Creature Training Grounds 1/1 Creature 1/1 Creature Wild Growth 1/1 Creature 1/1 Creature Wild Growth Wild Growth
+[exec-tap] T3 Cloud of Faeries tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland(T) Wild Growth Wild Growth Cloud of Faeries
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Cloud of Faeries
+[exec-tap] T4 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub Wild Growth 1/1 Creature 1/1 Creature Brushland Wild Growth Wild Growth Cloud of Faeries Aether Hub
+[exec-tap] T4 Emiel the Blessed tapped: Adarkar Wastes Brushland  float{w0 u0 b0 r0 g1 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes(T) Training Grounds Aether Hub Wild Growth Brushland(T) Wild Growth Wild Growth Cloud of Faeries(T) Aether Hub Emiel the Blessed
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Cloud of Faeries Aether Hub Emiel the Blessed
+[exec-tap] T5 before Eladamri's Call: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub Wild Growth 1/1 Creature 1/1 Creature Brushland Wild Growth Wild Growth Cloud of Faeries Aether Hub Emiel the Blessed
+[exec-tap] T5 Eladamri's Call tapped: Adarkar Wastes  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g7 c2 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries
+[exec-tap] T5 before Cloud of Faeries: float{w0 u0 b0 r0 g7 c2 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub Wild Growth 1/1 Creature 1/1 Creature Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries
+[exec-tap] T5 Cloud of Faeries tapped: Adarkar Wastes  float{w0 u0 b0 r0 g10 c1 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed(T) Cloud of Faeries Cloud of Faeries
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries Cloud of Faeries
+[exec-tap] T6 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub Wild Growth 1/1 Creature 1/1 Creature Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries Cloud of Faeries
+[exec-tap] T6 Cloud of Faeries tapped: Adarkar Wastes  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed(T) Cloud of Faeries(T) Cloud of Faeries Cloud of Faeries
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries Cloud of Faeries Cloud of Faeries
+[exec-tap] T7 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub Wild Growth 1/1 Creature 1/1 Creature Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries Cloud of Faeries Cloud of Faeries
+[exec-tap] T7 Wild Growth tapped: Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed(T) Cloud of Faeries(T) Cloud of Faeries(T) Wild Growth Cloud of Faeries
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Adarkar Wastes Training Grounds Aether Hub Wild Growth Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries Cloud of Faeries Wild Growth Cloud of Faeries
+[exec-tap] T8 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Adarkar Wastes Training Grounds 1/1 Creature 1/1 Creature Aether Hub Wild Growth 1/1 Creature 1/1 Creature Brushland Wild Growth Wild Growth Aether Hub Emiel the Blessed Cloud of Faeries Cloud of Faeries Wild Growth Cloud of Faeries
+[exec-tap] T8 Fertile Ground tapped: Aether Hub Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g432_d0_new
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

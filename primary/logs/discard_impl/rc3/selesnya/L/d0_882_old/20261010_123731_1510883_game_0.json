@@ -1,0 +1,2149 @@
+{
+  "cardNumbering": {
+    "Accomplished Alchemist": [
+      1,
+      2,
+      3
+    ],
+    "Ageless Entity": [
+      4,
+      5,
+      6,
+      7
+    ],
+    "Blighted Steppe": [
+      8,
+      9
+    ],
+    "Blossoming Bogbeast": [
+      10
+    ],
+    "Blossoming Sands": [
+      11,
+      12
+    ],
+    "Branchloft Pathway": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Brushland": [
+      17,
+      18,
+      19,
+      20
+    ],
+    "Craterhoof Behemoth": [
+      21
+    ],
+    "Elvish Archdruid": [
+      22,
+      23,
+      24
+    ],
+    "Elvish Mystic": [
+      25,
+      26,
+      27
+    ],
+    "Feed the Clan": [
+      28,
+      29,
+      30
+    ],
+    "Forest": [
+      31,
+      32,
+      33,
+      34,
+      35
+    ],
+    "Genesis Wave": [
+      36,
+      37,
+      38,
+      39
+    ],
+    "Llanowar Elves": [
+      40,
+      41,
+      42,
+      43
+    ],
+    "Nykthos Paragon": [
+      44,
+      45,
+      46,
+      47
+    ],
+    "Priest of Titania": [
+      48,
+      49,
+      50,
+      51
+    ],
+    "Selesnya Sanctuary": [
+      52,
+      53
+    ],
+    "Verdant Sun's Avatar": [
+      54,
+      55,
+      56,
+      57
+    ],
+    "Wellwisher": [
+      58,
+      59
+    ],
+    "Wirewood Lodge": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 40,
+          "cardName": "Llanowar Elves"
+        },
+        {
+          "card": 52,
+          "cardName": "Selesnya Sanctuary"
+        },
+        {
+          "card": 36,
+          "cardName": "Genesis Wave"
+        },
+        {
+          "card": 28,
+          "cardName": "Feed the Clan"
+        },
+        {
+          "card": 17,
+          "cardName": "Brushland"
+        },
+        {
+          "card": 1,
+          "cardName": "Accomplished Alchemist"
+        },
+        {
+          "card": 10,
+          "cardName": "Blossoming Bogbeast"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 40,
+      "cardName": "Llanowar Elves"
+    },
+    {
+      "card": 52,
+      "cardName": "Selesnya Sanctuary"
+    },
+    {
+      "card": 36,
+      "cardName": "Genesis Wave"
+    },
+    {
+      "card": 28,
+      "cardName": "Feed the Clan"
+    },
+    {
+      "card": 17,
+      "cardName": "Brushland"
+    },
+    {
+      "card": 1,
+      "cardName": "Accomplished Alchemist"
+    },
+    {
+      "card": 10,
+      "cardName": "Blossoming Bogbeast"
+    }
+  ],
+  "result": {
+    "turn": 5,
+    "winner": "player"
+  },
+  "runId": "20261010_123731_1510883",
+  "seed": 1510883,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Branchloft Pathway",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          40,
+          52,
+          36,
+          28,
+          17,
+          1,
+          10,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 17,
+          "cardName": "Brushland",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 40,
+          "cardName": "Llanowar Elves",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 48,
+          "cardName": "Priest of Titania",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10,
+          13,
+          48
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Branchloft Pathway",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 48,
+          "cardName": "Priest of Titania",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 19,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 19,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 19,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 60,
+          "cardName": "Wirewood Lodge",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          10,
+          60
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 19,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 60,
+          "cardName": "Wirewood Lodge",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 10,
+          "cardName": "Blossoming Bogbeast",
+          "manaPaid": "{4}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 19,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 18,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 58,
+          "cardName": "Wellwisher",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          52,
+          36,
+          28,
+          1,
+          58
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 52,
+          "cardName": "Selesnya Sanctuary",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 1,
+          "cardName": "Accomplished Alchemist",
+          "manaPaid": "{3}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 58,
+          "cardName": "Wellwisher",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Selesnya Sanctuary",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          36,
+          28,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 5,
+          "oppLife": 13,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Selesnya Sanctuary",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          36,
+          28,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 13,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Selesnya Sanctuary",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          36,
+          28,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 13,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 49,
+          "cardName": "Priest of Titania",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Selesnya Sanctuary",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          36,
+          28,
+          13,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 13,
+        "playerLife": 21,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Branchloft Pathway",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 36,
+          "cardName": "Genesis Wave",
+          "chosenX": 10,
+          "manaPaid": "{10}{G}{G}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            37
+          ],
+          "kept": [
+            18,
+            59,
+            31,
+            25,
+            8,
+            50,
+            11,
+            44,
+            4
+          ],
+          "lookedAt": [
+            {
+              "card": 18,
+              "cardName": "Brushland",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 59,
+              "cardName": "Wellwisher",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 37,
+              "cardName": "Genesis Wave",
+              "to": "→ graveyard"
+            },
+            {
+              "card": 31,
+              "cardName": "Forest",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 25,
+              "cardName": "Elvish Mystic",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 8,
+              "cardName": "Blighted Steppe",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 50,
+              "cardName": "Priest of Titania",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 11,
+              "cardName": "Blossoming Sands",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 44,
+              "cardName": "Nykthos Paragon",
+              "to": "→ battlefield"
+            },
+            {
+              "card": 4,
+              "cardName": "Ageless Entity",
+              "to": "→ battlefield"
+            }
+          ],
+          "source": "Genesis Wave (reveal X=10)",
+          "type": "REVEAL"
+        },
+        {
+          "ability": "gain 1 life for each Elf on the battlefield",
+          "card": 58,
+          "cardName": "Wellwisher",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Selesnya Sanctuary",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 59,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Ageless Entity",
+            "counters": [
+              {
+                "count": 9,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          37,
+          36
+        ],
+        "hand": [
+          28,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 13,
+        "playerLife": 29,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 14,
+          "oppLife": -1,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 17,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 40,
+            "cardName": "Llanowar Elves",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Wirewood Lodge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 10,
+            "cardName": "Blossoming Bogbeast",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Selesnya Sanctuary",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Accomplished Alchemist",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 58,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Branchloft Pathway",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 59,
+            "cardName": "Wellwisher",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Elvish Mystic",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Blighted Steppe",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Priest of Titania",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Blossoming Sands",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 44,
+            "cardName": "Nykthos Paragon",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Ageless Entity",
+            "counters": [
+              {
+                "count": 11,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          37,
+          36
+        ],
+        "hand": [
+          28,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -1,
+        "playerLife": 31,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    }
+  ]
+}

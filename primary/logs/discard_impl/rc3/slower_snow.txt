@@ -1,0 +1,2 @@
+  snow             d0   gi=1384  old=5 new=6 seed=1551385
+  snow             d3   gi=133   old=6 new=7 seed=1545134

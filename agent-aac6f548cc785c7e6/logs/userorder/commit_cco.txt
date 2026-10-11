@@ -1,0 +1,19 @@
+fix(walk): a creature-only source pays a noncreature spell {C}, not wild (MTG_EXACT_WALK_CCO)
+
+The exact order walk (ExactOrderFirstUnpayable / ExactOrderPaidMask) starts from AvailableManaPool,
+which books an Unclaimed Territory / Cavern of Souls as one WILD unit. For a noncreature cast that
+unit is {C}, so the walk read e.g. Rite of Flame's {R} as payable off a lone Territory. The walk now
+counts the untapped colored_creature_only units, presents them as {C} to a noncreature cast (and
+returns what that cast leaves), and lets a creature cast spend them as wild.
+
+Found classifying follow-up item 4 ("decided order projected payable, cast unpaid"). The game that
+surfaced it, dragonstorm d3 s7100081 T2, is NOT this defect: its order pays with the Territory's {C}
+on the Medallion's {2}, and the executor's float-first generic spends the floating {R}{R} instead
+(an executor payment divergence, reported separately).
+
+Lever: MTG_EXACT_WALK_CCO (default ON) + heurarm slot EXACT_WALK_CCO.
+Unit test: test_dragonstorm_followups.cpp "Exact walk: a creature-only source's mana is {C} ...".
+=0 byte-identical vs b3b068ca on the 27-job ident manifest. Paired sanity, Dragonstorm, seeds
+8100001+: d0 300 -- 0 faster / 0 slower; d3 100 -- 0 faster / 0 slower.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,378 @@
+{
+  "cardNumbering": {
+    "Arcanum Wings": [
+      1,
+      2
+    ],
+    "Avacyn's Pilgrim": [
+      3,
+      4,
+      5
+    ],
+    "Azorius Chancery": [
+      6,
+      7,
+      8
+    ],
+    "Birds of Paradise": [
+      9,
+      10
+    ],
+    "Boseiju, Who Endures": [
+      11
+    ],
+    "Botanical Sanctum": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "Bruna, Light of Alabaster": [
+      16,
+      17,
+      18
+    ],
+    "Colossification": [
+      19,
+      20,
+      21,
+      22
+    ],
+    "Eldrazi Conscription": [
+      23,
+      24,
+      25,
+      26
+    ],
+    "Forest": [
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "Glittering Wish": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "Lightning Greaves": [
+      36,
+      37,
+      38
+    ],
+    "Mother of Runes": [
+      39,
+      40
+    ],
+    "Mythic Proportions": [
+      41,
+      42
+    ],
+    "Open the Armory": [
+      43,
+      44
+    ],
+    "Prodigious Growth": [
+      45
+    ],
+    "Razorverge Thicket": [
+      46,
+      47,
+      48
+    ],
+    "Remote Farm": [
+      49,
+      50,
+      51
+    ],
+    "Seaside Citadel": [
+      52,
+      53
+    ],
+    "Skycloud Expanse": [
+      54
+    ],
+    "Sol Ring": [
+      55
+    ],
+    "Somberwald Sage": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Wild Growth": [
+      60
+    ]
+  },
+  "deckId": "Bruna",
+  "gameNumber": 0,
+  "mulliganSequence": [],
+  "openingHand": [],
+  "result": {
+    "turn": null,
+    "winner": "none"
+  },
+  "runId": "scenario",
+  "seed": 1,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 11,
+          "cardName": "Colossification",
+          "manaPaid": "{5}{G}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 12,
+          "cardName": "Lightning Greaves",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Razorverge Thicket",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Avacyn's Pilgrim",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Botanical Sanctum",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Remote Farm",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Remote Farm",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 8,
+            "cardName": "Mythic Proportions",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 11,
+            "cardName": "Colossification",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          10,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 7,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Razorverge Thicket",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Avacyn's Pilgrim",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Botanical Sanctum",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Remote Farm",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Remote Farm",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 8,
+            "cardName": "Mythic Proportions",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 11,
+            "cardName": "Colossification",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          10,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 7,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Razorverge Thicket",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Avacyn's Pilgrim",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Botanical Sanctum",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Remote Farm",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Remote Farm",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 8,
+            "cardName": "Mythic Proportions",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 11,
+            "cardName": "Colossification",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 12,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          10,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 7,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    }
+  ]
+}

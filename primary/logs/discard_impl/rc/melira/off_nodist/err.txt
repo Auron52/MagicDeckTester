@@ -1,0 +1,11 @@
+Loaded profile from decks/Melira Pod/Melira Pod.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/melira/off_nodist
+[enum-memo] hits=0 misses=1541 clears=0
+[solve-memo] hits=1001 misses=2520 clears=0
+[leaf-eval] published=154 ties=0 flips=0 life-equal-ties=0
+
+=== SHED STATS: real=1  rollout=95 (low-land=95)  cleanups-that-shed=95  sheds/cleanup=1.00 ===
+=== SHED COST: calls=95  cpu=0.000s  (0.639 us/call, summed over threads) ===
+=== SHED HAND SIZE AT ENTRY: 8:95 ===

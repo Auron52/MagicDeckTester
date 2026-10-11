@@ -1,0 +1,430 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-goff-cut] t1 no goff cand
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-turn] t2 lands=1 auras=1 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t2 tap Yavimaya Coast -> Green
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c0 *0 lands available=1
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t2 tap Yavimaya Coast -> Green
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]     t2 tap Yavimaya Coast -> Green
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-turn] t3 lands=2 auras=1 untapper=0 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Kitchen -> Green
+[combo-route]     t3 tap Aether Hub -> Red
+[combo-route] t3 cast Trace of Abundance -> land
+[combo-route]     t3 tap Yavimaya Coast -> Green +aura Red,
+[combo-route] t3 cast Trace of Abundance -> land
+[combo-route]   t3 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=0
+[combo-route]   t3 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t3 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=0
+[combo-route]   t3 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=0
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order A (auras first) leaves no loop
+[combo-route]     t3 tap Yavimaya Coast -> Green
+[combo-route] t3 combo finish: Living Wish → Cloud of Faeries
+[combo-route]     t3 tap Kitchen -> Blue
+[combo-route]     t3 tap Aether Hub -> Green
+[combo-route] t3 cast Cloud of Faeries
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy order B (auras last) leaves no loop
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Cloud of Faeries; cast Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-turn] t4 lands=3 auras=3 untapper=0 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=6 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Yavimaya Coast -> Green +aura Green,
+[combo-route] t4 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t4 land Adarkar Wastes
+[combo-route]     t4 tap Aether Hub -> Colorless +aura Green,
+[combo-route] t4 cast Overgrowth -> land
+[combo-route]     t4 tap Adarkar Wastes -> Blue
+[combo-route]   t4 pay {2}{G} FAILED (rolled back); float w0 u1 b0 r0 g0 c0 *0 lands available=1
+[combo-route]   t4 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t4 tap Kitchen -> Blue
+[combo-route] t4 cast Overgrowth -> land
+[combo-route]   t4 skip Peregrine Drake: avail 3 < cost
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order A (auras first) leaves no loop
+[combo-route]     t4 tap Yavimaya Coast -> Green +aura Green,
+[combo-route] t4 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t4 land Adarkar Wastes
+[combo-route]     t4 tap Aether Hub -> Colorless +aura Blue,
+[combo-route]     t4 tap Kitchen -> Green
+[combo-route]     t4 tap Adarkar Wastes -> Blue
+[combo-route] t4 cast Peregrine Drake
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy order B (auras last) leaves no loop
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=17 opp=20 | combo finish: Living Wish → Adarkar Wastes; land Adarkar Wastes; cast Peregrine Drake; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t4 no goff cand
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Peregrine Drake,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Peregrine Drake,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Kitchen,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Kitchen,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Kitchen,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Living Wish,Kitchen,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Living Wish,Kitchen,]
+[edf-turn] t5 lands=3 auras=4 untapper=1 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=8 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t5 tap Yavimaya Coast -> Green +aura Blue,
+[combo-route] t5 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t5 land Adarkar Wastes
+[combo-route]     t5 tap Aether Hub -> Colorless +aura Blue,
+[combo-route] t5 cast Overgrowth -> land
+[combo-route]     t5 tap Kitchen -> Blue
+[combo-route] t5 cast Training Grounds
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order A (auras first) leaves no loop
+[combo-route]     t5 tap Yavimaya Coast -> Green +aura Blue,
+[combo-route] t5 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t5 land Adarkar Wastes
+[combo-route]     t5 tap Kitchen -> Blue
+[combo-route] t5 cast Training Grounds
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order B (auras last) leaves no loop
+[combo-route] t5 no loop: neither deploy order reaches a finish
+[combo-route] t5 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Adarkar Wastes; land Adarkar Wastes; cast Training Grounds; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t5 no goff cand
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Training Grounds,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Living Wish,Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Training Grounds,Kitchen,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Training Grounds,Kitchen,]
+[edf-turn] t5 lands=3 auras=5 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=8 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t5 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g4 c0 *0 lands available=0
+[combo-route]   t5 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order A (auras first) leaves no loop
+[combo-route]   t5 pay {2}{W} FAILED (rolled back); float w0 u0 b0 r0 g4 c0 *0 lands available=0
+[combo-route]   t5 cast Eldrazi Displacer: cannot pay {2}{W}
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order B (auras last) leaves no loop
+[combo-route] t5 no loop: neither deploy order reaches a finish
+[combo-route] t5 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=19 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-turn] t6 lands=3 auras=5 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=10 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura White,
+[combo-route] t6 cast Eldrazi Displacer
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c1 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c1 *0(c0)
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c1 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c1 *1(c0)
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g11 c2 *3(c0)
+[combo-route] t6 Kitchen -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c2 *1(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c1 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c1 *0(c0)
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c2 *2(c0)
+[combo-route] t6 Kitchen -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *0(c0)
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g2 c3 *2(c0)
+[combo-route] t6 Kitchen -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g2 c2 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g2 c2 *2(c0)
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g9 c3 *4(c0)
+[combo-route] t6 Kitchen -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g5 c3 *2(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g1 c3 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g1 c3 *0(c0)
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g2 c4 *2(c0)
+[combo-route] t6 Kitchen -> investigate -> draw
+[combo-route]   t6 fin k=1 id=0 hand=-1 wish=6 -> Essence Depleter act={1}{C} x18 switch=0 demand={21}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c2 *0(c0)
+[combo-route]   t6 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c2 *0(c0)
+[combo-route]   t6 bank: float=2 target=8 ready=0 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura Black,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=0 hand=-1 wish=6 -> Essence Depleter act={1}{C} x18 switch=0 demand={21}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g2 c3 *1(c0)
+[combo-route] t6 combo finish: Living Wish → Essence Depleter
+[combo-route]   t6 fin k=1 id=0 hand=6 wish=-1 act={1}{C} x18 switch=0 demand={20}{B}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c2 *1(c0)
+[combo-route] t6 cast Essence Depleter
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x18 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *1(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x17 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t6 bank: float=1 target=2 ready=0 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x17 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g7 c1 *3(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x16 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g7 c0 *3(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g7 c0 *3(c0)
+[combo-route]   t6 bank: float=10 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x16 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g14 c1 *5(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x15 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g14 c0 *5(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g14 c0 *5(c0)
+[combo-route]   t6 bank: float=19 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x15 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g21 c1 *7(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x14 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g21 c0 *7(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g21 c0 *7(c0)
+[combo-route]   t6 bank: float=28 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x14 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g28 c1 *9(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x13 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g28 c0 *9(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g28 c0 *9(c0)
+[combo-route]   t6 bank: float=37 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x13 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g35 c1 *11(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x12 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g35 c0 *11(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g35 c0 *11(c0)
+[combo-route]   t6 bank: float=46 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x12 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g42 c1 *13(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x11 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g42 c0 *13(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g42 c0 *13(c0)
+[combo-route]   t6 bank: float=55 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x11 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g49 c1 *15(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x10 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g49 c0 *15(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g49 c0 *15(c0)
+[combo-route]   t6 bank: float=64 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x10 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g56 c1 *17(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x9 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g56 c0 *17(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g56 c0 *17(c0)
+[combo-route]   t6 bank: float=73 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x9 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g63 c1 *19(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x8 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g63 c0 *19(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g63 c0 *19(c0)
+[combo-route]   t6 bank: float=82 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x8 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g70 c1 *21(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x7 switch=0 demand={C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g70 c0 *21(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g70 c0 *21(c0)
+[combo-route]   t6 bank: float=91 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x7 switch=0 demand={C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g77 c1 *23(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x6 switch=0 demand={C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g77 c0 *23(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g77 c0 *23(c0)
+[combo-route]   t6 bank: float=100 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x6 switch=0 demand={C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g84 c1 *25(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x5 switch=0 demand={C}{C}{C}{C}{C} float=w0 u0 b0 r0 g84 c0 *25(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g84 c0 *25(c0)
+[combo-route]   t6 bank: float=109 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x5 switch=0 demand={C}{C}{C}{C}{C} float=w0 u0 b0 r0 g91 c1 *27(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x4 switch=0 demand={C}{C}{C}{C} float=w0 u0 b0 r0 g91 c0 *27(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g91 c0 *27(c0)
+[combo-route]   t6 bank: float=118 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x4 switch=0 demand={C}{C}{C}{C} float=w0 u0 b0 r0 g98 c1 *29(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x3 switch=0 demand={C}{C}{C} float=w0 u0 b0 r0 g98 c0 *29(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g98 c0 *29(c0)
+[combo-route]   t6 bank: float=127 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x3 switch=0 demand={C}{C}{C} float=w0 u0 b0 r0 g105 c1 *31(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x2 switch=0 demand={C}{C} float=w0 u0 b0 r0 g105 c0 *31(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g105 c0 *31(c0)
+[combo-route]   t6 bank: float=136 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x2 switch=0 demand={C}{C} float=w0 u0 b0 r0 g112 c1 *33(c0)
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x1 switch=0 demand={C} float=w0 u0 b0 r0 g112 c0 *33(c0)
+[combo-route]   t6 finish: {C} not payable from float w0 u0 b0 r0 g112 c0 *33(c0)
+[combo-route]   t6 bank: float=145 target=2 ready=1 income=11 per_iter=0 n_untap=4
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t6 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t6 tap Kitchen -> Green
+[combo-route]     t6 tap Conservatory -> Green
+[combo-route]   t6 fin k=1 id=200006 hand=-1 wish=-1 act={C} x1 switch=0 demand={C} float=w0 u0 b0 r0 g119 c1 *35(c0)
+[combo-route] t6 finisher x18 -- the opponent is dead
+[combo-route] t6 TRIAL WIN: deploys=3 iters=25 draws=7 acts=18 life=37 opp=0 | cast Eldrazi Displacer; Eldrazi Displacer: blink Peregrine Drake x2; Kitchen -> investigate -> draw; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Kitchen -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Kitchen -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x2; Kitchen -> investigate -> draw; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Kitchen -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; combo finish: Living Wish → Essence Depleter; cast Essence Depleter; Eldrazi Displacer: blink Peregrine Drake x17; finisher x18 -- the opponent is dead; 
+[edf-goff-cut] t6 k=91 projected=0

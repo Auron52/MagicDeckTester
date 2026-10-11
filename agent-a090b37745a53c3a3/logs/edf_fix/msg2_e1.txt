@@ -1,0 +1,23 @@
+fix(solve): the real payer credits an ETB-untap creature's land untap (MTG_SOLVE_UNTAP_CREDIT)
+
+EDF gi 1408 (seed 1651409, d0) t4: {Cloud of Faeries {1}{U}, Training Grounds {U}} off ONE blue land is
+legal -- Cloud taps the Coast, its ETB untaps it, Training Grounds taps it again -- and the old arm cast
+both and went off. Once MTG_SOLVE_PENDING_AURA_EXACT stopped the in-hand Fertile Ground widening the
+colour gates, the subset read as {U}{U} off one source and was rejected outright: nothing in the gates
+or in SubsetPayableWithFilters credited a same-turn untap.
+
+One lever, heurarm slot SOLVE_UNTAP_CREDIT (appended), default ON; =0 byte-identical.
+ * SubsetPayableWithFiltersImpl: a subset holding an etb_untap_lands cast is walked in the realised cast
+   order (CastOrderLess), with the executor's tap-ahead (EtbUntapTapAheadIntoFloat) before the creature's
+   payment and its ETB untap (EtbUntapLands) after it -- the refund funds later casts, never itself.
+   Keyed on the card parameter, not a name; every other subset walks exactly as before.
+ * SolveUncached, PAE block: a subset failing the board-only gates that casts such a creature goes to
+   that payer instead of being rejected (a land-Aura subset already did).
+ * test_edf_d0_play.cpp: the PAE case pins this lever off (it isolates the phantom {W}); a new case
+   checks that with the untap credited, Displacer is cast only beside the Aura and Cloud that make its
+   {W}, and that execution realises it.
+
+Unit: test/unit/test_edf_untap_credit.cpp (the gi 1408 t4 board: on casts Cloud + Training Grounds, off
+does not; execution realises both; the untap never funds its own creature).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

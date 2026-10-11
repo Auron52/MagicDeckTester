@@ -1,0 +1,20 @@
+edf_ship_L1: played=40 avg=4.2000 digest=8abf0d04b2d0b1d0 ms=4001019 units=3248418
+edf_ship_L2a: played=40 avg=4.2000 digest=74c552af73b8ef6b ms=3430519 units=3434767
+edf_ship_L2b: played=40 avg=4.2000 digest=802fc291fb7327c5 ms=2782688 units=3422025
+edf_ship_L3: played=40 avg=4.2250 digest=5b17060246b3f35f ms=2898615 units=3431611
+edf_ship_L4: played=40 avg=4.2000 digest=802fc291fb7327c5 ms=2503763 units=3423240
+edf_d3_on: played=80 avg=4.3375 digest=47a3df16feed4902 ms=3246954 units=6924733
+edf_d3_L1: played=80 avg=4.3750 digest=d21138d2227ca655 ms=3822008 units=6711046
+edf_d3_L2a: played=80 avg=4.3375 digest=8cb11ee08e7570a5 ms=3894883 units=6957546
+edf_d3_L2b: played=80 avg=4.3375 digest=17f8f627c2dc667d ms=3242471 units=6934093
+edf_d3_L3: played=80 avg=4.3375 digest=aff7cf4841c1c8a2 ms=1996252 units=7089203
+edf_d3_L4: played=80 avg=4.3375 digest=47a3df16feed4902 ms=2690790 units=6966328
+edf_d0_on: played=1500 avg=5.5333 digest=95e7f050e282d406 ms=730182 units=0
+edf_d0_L1: played=1500 avg=5.6287 digest=43eb84aba9af2758 ms=565510 units=0
+edf_d0_L2a: played=1500 avg=5.5500 digest=e44b9fc7e2812baf ms=737822 units=0
+edf_d0_L2b: played=1500 avg=5.5300 digest=48ca65e4ebecaa17 ms=370670 units=0
+edf_d0_L3: played=1500 avg=5.5713 digest=3bfc81985e591ece ms=378816 units=0
+edf_d0_L4: played=1500 avg=5.5413 digest=f1bb7b18f31e9245 ms=128386 units=0
+edf_d0_off: played=1500 avg=5.6713 digest=d365ea5ee0f28467 ms=100896 units=0
+=== BATCH done (18 jobs, 11180 games) ===
+exit=0

@@ -1,0 +1,188 @@
+{
+ "MTG_ANGELS_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_AURA_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_BREACH_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_BURN_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_CG_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_CRITTER_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_DRAGONSTORM_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_EDF_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_FLUCT_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_GIANTS_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_GOBLIN_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_KNIGHTS_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_POD_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_SLIVERS_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_FUNGUS_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_WK_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_SELESNYA_BUCKET_DISCARD": [
+  "true"
+ ],
+ "MTG_CG_DOTH_LAST": [
+  "true"
+ ],
+ "MTG_DISCARD_DIST_MODEL": [
+  "true"
+ ],
+ "MTG_GIANTS_TUTOR_WIDTH": [
+  "true"
+ ],
+ "MTG_GOBLIN_TUTOR_VIAL_EXACT": [
+  "true"
+ ],
+ "MTG_AURA_RESTRICTED_NEW_CREATURE": [
+  "true"
+ ],
+ "MTG_EDF_OUTLET_PIPS": [
+  "true"
+ ],
+ "MTG_SELESNYA_ELF_WINDOW": [
+  "true"
+ ],
+ "MTG_SELESNYA_ALCHEMIST_BURST": [
+  "true"
+ ],
+ "MTG_GIANTS_ROCK_AFTER_LANDS": [
+  "true"
+ ],
+ "MTG_COLOR_EXACT_SCALED": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_NEED_EXACT": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_ABILITY_DISCOUNT": [
+  "true"
+ ],
+ "MTG_ROLLOUT_LAND_ACT_COLOR": [
+  "true"
+ ],
+ "MTG_DRAGONSTORM_ORDER_OPAQUE": [
+  "true"
+ ],
+ "MTG_EXEC_FAILED_CAST_NO_RESOLVE": [
+  "false"
+ ],
+ "MTG_PAYABLE_ORDER_RITUALS": [
+  "true"
+ ],
+ "MTG_SOLVE_VERIFIED_WIN": [
+  "true"
+ ],
+ "MTG_EDF_GORGE_RED_SIZING": [
+  "true"
+ ],
+ "MTG_SOLVE_PENDING_AURA_EXACT": [
+  "true"
+ ],
+ "MTG_ANTILIFE_TUTOR_BRANCH": [
+  "false"
+ ],
+ "MTG_DRAGONSTORM_USER_ORDER": [
+  "true"
+ ],
+ "MTG_CRACKLE_COUNT_EXACT": [
+  "true"
+ ],
+ "MTG_HINATA_HOLD_LETHAL_BURN": [
+  "true"
+ ],
+ "MTG_HINATA_HOLD_NEEDS_HINATA": [
+  "false"
+ ],
+ "MTG_RITUAL_FLOAT_COLOR_EXACT": [
+  "true"
+ ],
+ "MTG_DRAGONSTORM_BP_LEFTOVERS": [
+  "true"
+ ],
+ "MTG_RITUAL_GUARD_APEX": [
+  "true"
+ ],
+ "MTG_EXACT_WALK_CCO": [
+  "true"
+ ],
+ "MTG_PAYABLE_ORDER_EXACT": [
+  "true"
+ ],
+ "MTG_PAYABLE_ORDER_DYNAMIC_DECLINE": [
+  "true"
+ ],
+ "MTG_DRAGONSTORM_IRENCRAG_CLOSER": [
+  "true"
+ ],
+ "MTG_ATTACK_DOMAIN_DORK_YIELD": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_ASTROLABE_CREDIT": [
+  "true"
+ ],
+ "MTG_ATTACK_CANNONS_TRIGGER": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_REPROJECT": [
+  "true"
+ ],
+ "MTG_ATTACK_TEAM_PUMP_ETB": [
+  "true"
+ ],
+ "MTG_ATTACK_PLAN_LIFEGAIN": [
+  "true"
+ ],
+ "MTG_BRUNA_LETHAL_SHORTCIRCUIT": [
+  "true"
+ ],
+ "MTG_LAND_BOUNCE_GUARD": [
+  "true"
+ ],
+ "MTG_ATTACK_AURA_HOST_TAP": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_CREATURE_ONLY": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_ABILITY_KINDS": [
+  "true"
+ ],
+ "MTG_ATTACK_TAP_PAYER_ORDER": [
+  "true"
+ ],
+ "MTG_SOLVE_ATTACK_ONLY_WIN": [
+  "true"
+ ],
+ "MTG_SNOW_LOOK_COLOR": [
+  "true"
+ ]
+}

@@ -1,0 +1,28 @@
+fix(attack-proj): re-project the plan's taps, Craterhoof's team pump and the plan's life gain
+
+Three projection gaps, each its own lever (default ON; =0 restores the previous number exactly):
+
+MTG_ATTACK_TAP_REPROJECT -- the mana half of the attack-tap discount subtracted each spent dork's
+base power, so a tapped dork kept its share of every team pump (Bogbeast's +X, battle cry, exalted).
+The board is now re-projected with the spent sources TAPPED through PendingAttackDamage, memoised by
+the spent set (about #sources + 1 re-projections per enumeration).
+
+MTG_ATTACK_TEAM_PUMP_ETB -- a hard-cast Craterhoof was credited only its printed 5. Keyed on the
+card's etb_team_pump_per_creature param (not its name): in the plan's cast order the pump gives every
+own creature +X, X = own creatures once it entered, exactly the resolution's loop.
+
+MTG_ATTACK_PLAN_LIFEGAIN -- the plan's own life gain (Feed the Clan, Wellwisher's {T}, Blighted
+Steppe, Verdant Sun's Avatar's enter trigger) never reached the per-life attack pumps (Bogbeast's X,
+Nykthos Paragon / Ageless Entity / Pridemate / Thune counters). It is now applied through the engine's
+own ApplyCastLifegain / GainLife on a projection copy, so the very watchers combat reads fire.
+
+The pump and the life gain run in one WALK of the plan's casts on a copy of the re-projected board
+(ProjectPlanWalk; cast bodies enter sick and are removed before the attack is read -- a hasty cast
+keeps only what the walk gave it). A walk always taps the spent dorks.
+
+Recovery: Stompy d0 gi 496 / 588 / 724 / 1714 and 11 of the 17 held-out Craterhoof games (the rest need
+the payer order, a later commit); SelesnyaLifegain d0 gi 882 / 933 / 1344 / 1737 / 1861 / 1868 back to the
+old turn, 392 one faster (8 -> 7). Lever census: also moves CritterLifegain and Angels (their
+lifegain counter watchers), net faster.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

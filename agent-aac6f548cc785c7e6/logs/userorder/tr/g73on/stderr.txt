@@ -1,0 +1,50 @@
+[flags] WARNING: MTG_NONE is set but is not a flag this binary reads -- a typo or a deleted flag? It will have NO effect (`mtg --list-flags` prints the known set).
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=8500074 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Apex of Power|Sandstone Needle|Irencrag Feat|Desperate Ritual
+[uo-order] gs=8500074 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Apex of Power|Sandstone Needle|Irencrag Feat|Desperate Ritual
+[uo-order] gs=8500074 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas
+[uo-order] gs=8500074 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas
+[uo-order] gs=8500074 t=3 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas
+[uo-order] gs=8500074 t=3 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas
+[uo-order] gs=8500074 t=4 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas|Pyretic Ritual
+[uo-order] gs=8500074 t=4 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas|Pyretic Ritual
+[uo-order] gs=8500074 t=5 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=5 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas|Pyretic Ritual
+[uo-order] gs=8500074 t=5 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=5 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas|Pyretic Ritual
+[uo-order] gs=8500074 t=6 m=1 route=opaque pool=8 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Desperate Ritual|Apex of Power
+[uo-state] gs=8500074 t=6 cap=-1 pool{w0 u0 b0 r7 g0 c0 *1} hand=Apex of Power|Irencrag Feat|Desperate Ritual|Scourge of Valkas|Pyretic Ritual|Apex of Power
+[uo-cast] gs=8500074 t=6 m=1 d=0 card=Pyretic Ritual num=37 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=8500074 t=6 m=1 d=0 card=Desperate Ritual num=8 staged=0 splice=0 paid=1 pool=9
+[uo-cast] gs=8500074 t=6 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=5
+[uo-order] gs=8500074 t=6 m=1 route=cont pool=10 n=2 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion|Ruby Medallion
+[uo-state] gs=8500074 t=6 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Lotus Bloom*|Ruby Medallion*|Dragonlord Kolaghan*|Ruby Medallion*|Mercadian Bazaar*|Mercadian Bazaar*|Mountain*
+[uo-cast] gs=8500074 t=6 m=1 d=0 card=Ruby Medallion num=43 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=8500074 t=6 m=1 d=0 card=Ruby Medallion num=44 staged=1 splice=0 paid=1 pool=8
+[uo-order] gs=8500074 t=6 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-state] gs=8500074 t=6 cap=-1 pool{w0 u0 b0 r6 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Lotus Bloom*|Dragonlord Kolaghan*|Mercadian Bazaar*|Mercadian Bazaar*|Mountain*
+[uo-cast] gs=8500074 t=6 m=1 d=0 card=Scourge of Valkas num=52 staged=0 splice=0 paid=1 pool=6
+[uo-order] gs=8500074 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Irencrag Feat|Apex of Power|Lotus Bloom*|Dragonlord Kolaghan*|Mercadian Bazaar*|Mercadian Bazaar*|Mountain*
+[uo-order] gs=8500074 t=7 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-state] gs=8500074 t=7 cap=-1 pool{w0 u0 b0 r4 g0 c0 *1} hand=Irencrag Feat|Apex of Power|Scourge of Valkas
+[uo-cast] gs=8500074 t=7 m=1 d=0 card=Scourge of Valkas num=51 staged=0 splice=0 paid=1 pool=1
+[uo-order] gs=8500074 t=7 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=7 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Irencrag Feat|Apex of Power
+[uo-order] gs=8500074 t=8 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=8 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Irencrag Feat|Apex of Power
+[uo-order] gs=8500074 t=8 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=8500074 t=8 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Irencrag Feat|Apex of Power
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/tr/g73on
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

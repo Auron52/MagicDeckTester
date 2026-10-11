@@ -1,0 +1,56 @@
+{
+ "deck": "decks/FiveColour/FiveColour.cod",
+ "profile": "decks/FiveColour/FiveColour.profile.json",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "resume_at": "main1",
+ "active_life": 17,
+ "battlefield": [
+  {
+   "name": "Overgrown Tomb",
+   "controller": 0
+  },
+  {
+   "name": "Deathrite Shaman",
+   "controller": 0
+  },
+  {
+   "name": "Steam Vents",
+   "controller": 0
+  },
+  {
+   "name": "Faeburrow Elder",
+   "controller": 0
+  },
+  {
+   "name": "Breeding Pool",
+   "controller": 0
+  },
+  {
+   "name": "Cosmic Spider-Man",
+   "controller": 0
+  },
+  {
+   "name": "Deathrite Shaman",
+   "controller": 0
+  },
+  {
+   "name": "Birds of Paradise",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Two-Headed Hellkite",
+  "Jared Carthalion",
+  "Mana Cannons"
+ ],
+ "graveyard": [],
+ "library_filler": "Island",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 19,
+ "env": {},
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/fivecolour/sc/o912/new_L19.log.json"
+}

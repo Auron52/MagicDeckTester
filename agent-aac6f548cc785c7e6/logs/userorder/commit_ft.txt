@@ -1,0 +1,36 @@
+fix(pay): pay a generic pip off a spare source before floating colour the line still owes (MTG_LINE_FLOAT_TAP_FIRST)
+
+The shared payer spends the turn-scoped reserve (state.floating_mana) before it taps anything,
+generic pips included (SpendFloatingTowardCost). dragonstorm d3 s7100081 T2: Mountain + Unclaimed
+Territory, Rite of Flame floats {R}{R}, Ruby Medallion's {2} spent BOTH, and Pyretic Ritual's {R} was
+left to the Territory, which makes only {C} for a noncreature spell. The line "Rite, Medallion, Pyretic,
+Seething, Lathliss" pays with the Territory's {C} on the Medallion (the exact walk says so) but lost
+three casts.
+
+New first rung in TapForCostSharedImpl, the autonomous twin of the human-only MTG_PAY_LINE_FLOAT_HOLD.
+When the reserve would pay generic pips out of colours the rest of the applying line still owes
+(g_line_unpaid_cost minus this cost's own pips), one held attempt keeps k of those generic pips off the
+reserve and reserves every NON-spare source, so a spare one pays them:
+  * spare = a land or rock whose payment-legal colours include no colour a later pip owes; never a dork,
+    a depletion / storage land or a pay-sac source;
+  * a creature-only-colour land (Territory, Cavern) is spare for a noncreature payment only if every
+    colour the line owes that it could make for a later creature is also on offer from the reserve or
+    another unrestricted untapped source (the s7100151 shape: the Territory was Kolaghan's only {B});
+  * k = min(that owed generic, the spare yield); a later {C} pip in the line disables it.
+Any failure falls through to the unchanged sequence. Off in human play. Executor, rollout and the
+payability walks share the payer, so they stay in lockstep.
+
+Named game: s7100081 (d3 b10). With the lever on the search no longer commits the failing T2 line (it
+now prices it right) and casts the Medallion alone; win turn 4 on both arms. The T2 board itself is the
+unit test.
+
+Lever: MTG_LINE_FLOAT_TAP_FIRST (default ON) + heurarm slot LINE_FLOAT_TAP_FIRST, appended after
+FB_HOLD_BANKED; shared reader LineFloatTapFirstOn (EngineFlags.h).
+Unit test: test_dragonstorm_followups.cpp "Line float: a spare source pays the generic ..." (the T2
+board on both arms, the {B} guard, no live line).
+
+Both new levers =0: byte-identical to b7cfa4f1 on 36 jobs (720 games: Dragonstorm d0 / d3 / shipped,
+Hinata2 d0 / d3, Mirrorwing d0 / d3, Dragons d0 / d3, Giants, Knights, Minotaur, Angels, Prevent Damage,
+Cyclone d0). Unit binary: 938 / 938 pass.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

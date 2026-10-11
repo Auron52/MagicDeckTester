@@ -1,0 +1,35 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/rs_g285_new
+[enum-memo] hits=4 misses=94 clears=0
+[solve-memo] hits=2020 misses=3811 clears=0
+[bp-cands] LIST FINGERPRINTS: lists=384 entries=289 distinct=289 duplicate=0 (0.0%) mean len=0.8 -> 0.8
+[leaf-eval] published=70 ties=0 flips=0 life-equal-ties=0
+[rollout-stats] calls=4520 turn_steps=5929 steps_per_call=1.31173
+[rollout-stats] interior_nodes=74 interior_frac=0.0123272 (of interior+turn_steps)
+[rollout-stats] interior_esc=0 esc_share=0 (interior nodes re-traversed by the heuristic escalation)
+[rollout-stats] plan_axes etbcounter_variants=0 sweep_variants=0 axis_dup_skips=882 m2_variant_dup_skips=0 m2_stillborn_skips=0 armnew_declined_m1=18 armnew_declined_m2=0 armnew_verify_match=0 armnew_verify_mismatch=0 le_variants=0
+[rollout-stats] nodrop_axes m1: enums=246 axis_variants=0 | m2: enums=0 axis_variants=0
+[rollout-stats] w0_nobp skipped=1632  (variants whose base plan's apply reached NO breakpoint, so they ARE that base plan)
+[rollout-stats] w0_unif_collapse skipped=20  (uniform variants that ARE their rank sibling: the apply reached <= 1 enabled-class breakpoint)
+[rollout-stats] w0_unif_miss nomemo=0 multi=20 nomemo_share=0  (nomemo = coverage, a lever; multi = 2+ class-on breakpoints, where uniform k is NOT rank k and declining it deletes a line)
+[rollout-stats] cand_scored=5710 condemn_drops=0 (greedy=0 searched=0 greedy_frac=0)
+[rollout-stats] bp_condemn_seen=0 drops=0 drop_rate=0 (searched=0 exec=0 rollout=0 rollout_frac=0)
+[rollout-stats] bp_newonly lists=298 seen=403 dropped=314 drop_rate=0.779156 kept_new=82 kept_act=2 kept_unknown=3 kept_plan=2
+[rollout-stats] bp_condemn_nowin_trunc=OFF spared_demotions=0
+  NO POWER -- the watermark was never bumped at this site anyway; any work delta is NOT this lever.
+[rollout-stats] id_depth n=5 mean=1 hist=1:5 
+[rollout-stats] committed_depth n=5 mean=0 hist=0:5 
+[rollout-stats] units_total=17920
+FOLD_PREFIX_MAP armed=3569 disarmed_by_auto_sel=0 disarmed_by_independent=0
+[rollout-stats] id_pass starts=5 aborted=0 rescuable=0 waste_units=0 waste_share=0
+[rollout-stats] heuristic-ladder by committed depth (n, warm units, commit units, per-decision warm/commit): d1=5/0/17920/0/3584
+[rollout-stats]   heuristic-ladder leaf-TT by committed depth (commit pass: lookups/decision, hit rate; warm passes: lookups/decision, hit rate): d1=966.6/0.0647631 0/0
+[rollout-stats]   heuristic-ladder totals: decisions=5 warm=0 commit=17920 warm_share_of_ladder=0
+[rollout-stats]   units.rollout_step=5929 share=0.330859
+[rollout-stats]   units.fs_pre=65 share=0.00362723
+[rollout-stats]   units.fs_bp_wave=9 share=0.000502232
+[rollout-stats]   units.greedy_fallback=5831 share=0.325391
+[rollout-stats]   units.la_cand=5710 share=0.318638
+[rollout-stats]   units.la_bp_wave=376 share=0.0209821

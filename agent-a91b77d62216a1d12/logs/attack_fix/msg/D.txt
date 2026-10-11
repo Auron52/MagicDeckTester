@@ -1,0 +1,14 @@
+feat(bruna): opt into the board-lethal short-circuit
+
+MTG_BRUNA_LETHAL_SHORTCIRCUIT (default ON; =0 no cut). BrunaProvider::UseLethalShortCircuit: when
+the board's attack already kills, Solve / EnumeratePlans take the attack-only plan without
+enumerating casts. Sound -- winning this turn is the minimum win turn. ab3 d0 gi1238 (seed 1091239)
+T6, opponent at 10 and the board swinging for 19: without the cut the plan swapped Almost Perfect in
+through Arcanum Wings and recast the Wings, tapping Birds of Paradise (wearing Eldrazi Conscription,
+the only attacker), and nothing attacked; with it d0 attacks. gi1461 recovers only with it too.
+
+test_bruna_sweep's "Colossification stays off Bruna" case is now played at 40 life: at 20 Bruna's
+gather (the hand Colossification, +20) already makes the board lethal and the cut rightly ends the
+enumeration before the host ranking the case is about.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

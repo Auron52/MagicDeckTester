@@ -1,0 +1,6 @@
+Loaded 60 mainboard card(s)
+Seed          : 7600011
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 10  seed 7600011

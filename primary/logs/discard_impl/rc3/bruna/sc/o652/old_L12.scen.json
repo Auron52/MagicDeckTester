@@ -1,0 +1,69 @@
+{
+ "deck": "decks/Bruna/Bruna.cod",
+ "profile": "decks/Bruna/Bruna.profile.json",
+ "turn": 6,
+ "on_the_play": true,
+ "max_turns": 6,
+ "resume_at": "main1",
+ "active_life": 20,
+ "battlefield": [
+  {
+   "name": "Razorverge Thicket",
+   "controller": 0
+  },
+  {
+   "name": "Avacyn's Pilgrim",
+   "controller": 0
+  },
+  {
+   "name": "Botanical Sanctum",
+   "controller": 0
+  },
+  {
+   "name": "Sol Ring",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Remote Farm",
+   "controller": 0
+  },
+  {
+   "name": "Remote Farm",
+   "controller": 0
+  },
+  {
+   "name": "Mythic Proportions",
+   "controller": 0,
+   "equips": "Avacyn's Pilgrim"
+  }
+ ],
+ "hand": [
+  "Eldrazi Conscription",
+  "Eldrazi Conscription",
+  "Colossification",
+  "Lightning Greaves",
+  "Mother of Runes"
+ ],
+ "graveyard": [],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 12,
+ "env": {
+  "MTG_DRAGONSTORM_ORDER_OPAQUE": "0",
+  "MTG_PAYABLE_ORDER_RITUALS": "0",
+  "MTG_COLOR_EXACT_SCALED": "0",
+  "MTG_ATTACK_TAP_NEED_EXACT": "0",
+  "MTG_ATTACK_TAP_ABILITY_DISCOUNT": "0",
+  "MTG_ROLLOUT_LAND_ACT_COLOR": "0",
+  "MTG_SOLVE_VERIFIED_WIN": "0",
+  "MTG_EDF_GORGE_RED_SIZING": "0",
+  "MTG_SOLVE_PENDING_AURA_EXACT": "0"
+ },
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/bruna/sc/o652/old_L12.log.json"
+}

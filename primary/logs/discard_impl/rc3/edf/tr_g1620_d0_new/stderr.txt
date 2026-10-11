@@ -1,0 +1,527 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t1 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]   t1 skip Peregrine Drake: avail 1 < cost
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 skip outlet Emiel the Blessed: avail < cost
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order A (auras first) leaves no loop
+[combo-route]   t1 skip Peregrine Drake: avail 1 < cost
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 skip outlet Emiel the Blessed: avail < cost
+[combo-route]     t1 tap Aether Hub -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order B (auras last) leaves no loop
+[combo-route] t1 no loop: neither deploy order reaches a finish
+[combo-route] t1 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t1 no goff cand
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-turn] t2 lands=1 auras=1 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t2 tap Yavimaya Coast -> Green
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t2 tap Aether Hub -> Colorless
+[combo-route] t2 cast Fertile Ground -> land
+[combo-route]   t2 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t2 tap Yavimaya Coast -> Green +aura Green,
+[combo-route]   t2 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c0 *0 lands available=1
+[combo-route]   t2 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t2 skip Peregrine Drake: avail 2 < cost
+[combo-route]     t2 tap Yavimaya Coast -> Green +aura Green,
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]   t2 skip Peregrine Drake: avail 3 < cost
+[combo-route]     t2 tap Aether Hub -> Colorless
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 1 < cost
+[combo-route]   t2 skip Peregrine Drake: avail 1 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=20 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,Wild Growth,]
+[edf-turn] t2 lands=2 auras=2 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t2 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t2 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]   t2 skip Peregrine Drake: avail 0 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-turn] t3 lands=2 auras=2 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=4 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Yavimaya Coast -> Green +aura Green,
+[combo-route]   t3 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c0 *0 lands available=1
+[combo-route]   t3 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]   t3 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c1 *0 lands available=1
+[combo-route]   t3 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t3 skip Peregrine Drake: avail 4 < cost
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Yavimaya Coast -> Green +aura White,
+[combo-route]   t3 pay {2}{W}{W} FAILED (rolled back); float w1 u0 b0 r0 g2 c1 *0 lands available=2
+[combo-route]   t3 cast Emiel the Blessed: cannot pay {2}{W}{W}
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order A (auras first) leaves no loop
+[combo-route]   t3 skip Peregrine Drake: avail 4 < cost
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Yavimaya Coast -> Green +aura White,
+[combo-route]   t3 pay {2}{W}{W} FAILED (rolled back); float w1 u0 b0 r0 g2 c1 *0 lands available=2
+[combo-route]   t3 cast Emiel the Blessed: cannot pay {2}{W}{W}
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order B (auras last) leaves no loop
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Dimensional Infiltrator,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Dimensional Infiltrator,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Dimensional Infiltrator,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Dimensional Infiltrator,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Dimensional Infiltrator,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Dimensional Infiltrator,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Overgrowth,]
+[edf-turn] t4 lands=2 auras=3 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=5 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Yavimaya Coast -> Green +aura Green,
+[combo-route]   t4 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c0 *0 lands available=1
+[combo-route]   t4 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route] t4 cast Overgrowth -> land
+[combo-route]   t4 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t4 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t4 tap Yavimaya Coast -> Blue +aura White,
+[combo-route] t4 cast Overgrowth -> land
+[combo-route]   t4 skip Cloud of Faeries: avail 1 < cost
+[combo-route]   t4 skip Peregrine Drake: avail 1 < cost
+[combo-route]   t4 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order A (auras first) leaves no loop
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Yavimaya Coast -> Blue +aura Blue,
+[combo-route] t4 cast Cloud of Faeries
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Yavimaya Coast -> Blue +aura White,
+[combo-route] t4 cast Peregrine Drake
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Yavimaya Coast -> Colorless +aura White,
+[combo-route]   t4 pay {2}{W}{W} FAILED (rolled back); float w1 u1 b0 r0 g4 c2 *0 lands available=2
+[combo-route]   t4 cast Emiel the Blessed: cannot pay {2}{W}{W}
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy order B (auras last) leaves no loop
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=17 opp=20 | cast Cloud of Faeries; cast Peregrine Drake; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t4 no goff cand
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Cloud of Faeries,Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=0 payloads=1 casting=[Cloud of Faeries,Dimensional Infiltrator,]
+[edf-turn] t5 lands=2 auras=3 untapper=1 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=5 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t5 tap Yavimaya Coast -> Green +aura Green,
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c0 *0 lands available=1
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g2 c1 *0 lands available=1
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Yavimaya Coast -> Blue +aura Blue,
+[combo-route] t5 cast Cloud of Faeries
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Yavimaya Coast -> Colorless +aura White,
+[combo-route]   t5 pay {2}{W}{W} FAILED (rolled back); float w1 u1 b0 r0 g4 c2 *0 lands available=2
+[combo-route]   t5 cast Emiel the Blessed: cannot pay {2}{W}{W}
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order A (auras first) leaves no loop
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Yavimaya Coast -> Blue +aura Blue,
+[combo-route] t5 cast Cloud of Faeries
+[combo-route]     t5 tap Aether Hub -> Colorless
+[combo-route]     t5 tap Yavimaya Coast -> Colorless +aura White,
+[combo-route]   t5 pay {2}{W}{W} FAILED (rolled back); float w1 u1 b0 r0 g4 c2 *0 lands available=2
+[combo-route]   t5 cast Emiel the Blessed: cannot pay {2}{W}{W}
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order B (auras last) leaves no loop
+[combo-route] t5 no loop: neither deploy order reaches a finish
+[combo-route] t5 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=18 opp=18 | cast Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t5 no goff cand
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,Trace of Abundance,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=2 casting=[Cloud of Faeries,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-turn] t6 lands=2 auras=4 untapper=1 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=7 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route] t6 combo finish: Living Wish → Mariposa Military Base
+[combo-route] t6 land Mariposa Military Base
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura Red,
+[combo-route] t6 cast Trace of Abundance -> land
+[combo-route] t6 cast Overgrowth -> land
+[combo-route]   t6 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order A (auras first) leaves no loop
+[combo-route]     t6 tap Aether Hub -> Colorless
+[combo-route] t6 combo finish: Living Wish → Mariposa Military Base
+[combo-route] t6 land Mariposa Military Base
+[combo-route]     t6 tap Yavimaya Coast -> Colorless +aura White,
+[combo-route]     t6 tap Mariposa Military Base -> Colorless
+[combo-route]   t6 pay {2}{W}{W} FAILED (rolled back); float w1 u0 b0 r0 g3 c2 *0 lands available=2
+[combo-route]   t6 cast Emiel the Blessed: cannot pay {2}{W}{W}
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order B (auras last) leaves no loop
+[combo-route] t6 no loop: neither deploy order reaches a finish
+[combo-route] t6 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=19 opp=14 | combo finish: Living Wish → Mariposa Military Base; land Mariposa Military Base; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t6 k=24 projected=0
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Trace of Abundance,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Trace of Abundance,Living Wish,Dimensional Infiltrator,]
+[edf-turn] t6 lands=2 auras=6 untapper=1 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t6 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order A (auras first) leaves no loop
+[combo-route]   t6 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order B (auras last) leaves no loop
+[combo-route] t6 no loop: neither deploy order reaches a finish
+[combo-route] t6 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=18 opp=14 | no loop: neither deploy order reaches a finish; 
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Dimensional Infiltrator,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Dimensional Infiltrator,]
+[edf-turn] t7 lands=3 auras=6 untapper=1 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=11 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t7 tap Aether Hub -> Colorless +aura White,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura White,
+[combo-route] t7 cast Emiel the Blessed
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x46 switch=0 demand={46}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g4 c2 *0(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x44 switch=0 demand={44}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g2 c0 *0(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g2 c0 *0(c0)
+[combo-route]   t7 bank: float=2 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x44 switch=0 demand={44}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t7 bank: float=1 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x44 switch=0 demand={44}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c5 *2(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x39 switch=0 demand={39}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t7 bank: float=0 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x39 switch=0 demand={39}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *2(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x35 switch=0 demand={35}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t7 bank: float=1 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x35 switch=0 demand={35}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *3(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x31 switch=0 demand={31}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t7 bank: float=2 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x31 switch=0 demand={31}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *4(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x27 switch=0 demand={27}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t7 bank: float=3 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x27 switch=0 demand={27}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *5(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x23 switch=0 demand={23}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t7 bank: float=4 target=5 ready=0 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x23 switch=0 demand={23}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *6(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x19 switch=0 demand={19}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t7 bank: float=5 target=5 ready=1 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x19 switch=0 demand={19}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *7(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t7 bank: float=6 target=5 ready=1 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *8(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t7 bank: float=7 target=5 ready=1 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *9(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t7 bank: float=8 target=5 ready=1 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *10(c0)
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t7 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t7 bank: float=9 target=5 ready=1 income=12 per_iter=0 n_untap=4
+[combo-route]     t7 tap Aether Hub -> Colorless +aura *,
+[combo-route]     t7 tap Yavimaya Coast -> Colorless +aura *,
+[combo-route]     t7 tap Adarkar Wastes -> Colorless
+[combo-route]     t7 tap Brushland -> Colorless
+[combo-route]   t7 fin k=2 id=200007 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g3 c4 *11(c0)
+[combo-route] t7 finisher x46 -- the opponent is dead
+[combo-route] t7 TRIAL WIN: deploys=1 iters=12 draws=0 acts=46 life=18 opp=9 | cast Emiel the Blessed; Emiel the Blessed: blink Peregrine Drake x12; finisher x46 -- the opponent is dead; 
+[edf-goff-cut] t7 k=12 projected=0

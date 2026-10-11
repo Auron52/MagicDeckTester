@@ -1,0 +1,31 @@
+fix(dragonstorm): breakpoint leftovers are ordered with the continuation, not cast after it (MTG_DRAGONSTORM_BP_LEFTOVERS)
+
+USER: "after the breakpoint the cast order should follow my order" -- Dragonstorm last. When an Apex of
+Power breakpoint interrupted a cast list (the main plan or a continuation), the list's REMAINING casts
+were made after the continuation the breakpoint re-solved: after its Dragonstorm (d0 s7000158 T8:
+Scourge cast after the storm, so it pinged once instead of per storm Dragon and missed the storm count),
+or Irencrag after the continuation's Utvara, its seven red wasted (suite-A/B game s1191413 T3).
+
+Design: the leftovers JOIN the continuation. MergeBreakpointLeftovers (ManaPayment) orders the union
+by the deck's order (comparator + ArrangeCastOrder + payable fallback) and keeps it when no
+continuation cast loses its payment (ExactOrderPaidMask -- the exact walk run the way the executor runs
+a list, skipping what it cannot pay). Otherwise the leftovers are CARRIED after the continuation's own
+casts: a later breakpoint inside it (a second Apex) takes them as its own leftovers and orders them
+again with the mana its exile brings (s7000158: Scourge cannot precede Dragonstorm on the first exile's
+mana but can on the second's); with none they are cast after, as before (the nearest order that pays).
+Either way the continuation is replayed as an explicit order and the interrupted list stops there.
+Chosen over "leftovers first" (it would put a leftover Irencrag/Dragonstorm in front of the exiled
+rituals and cap the continuation) and over "drop them" (the d0 second pass then casts them after the
+storm anyway, and a searched line would lose them).
+
+Lockstep: the executor merges in resolve_draw_breakpoint at the point ApplyPlanDirect's impulse-exile
+branch merges (after the continuation's land and pre-casts); the executor's lists stop with
+bp_trunc_exec, the rollout's with bp_truncate; a committed line replays the merged recorded segment.
+Provider-owned opt-in (DecisionProvider::MergesBreakpointLeftovers): Dragonstorm, an Apex site, USER
+order on. Lever MTG_DRAGONSTORM_BP_LEFTOVERS (heurarm slot appended), default ON; =0 byte-identical to
+f1cd15e4 (27 jobs / 540 games). Sanity A/B (paired, seeds 7900001+): d0 300: 0 turns (0 faster, 0
+slower); d3 100: 0 (search units 318557 vs 318565). s7000158 T8 now casts Seething, Scourge,
+Dragonstorm; s1191413 T3 Apex, Irencrag, Utvara -- same win turns.
+Unit: test_dragonstorm_followups.cpp (merge in order, carry, dedupe, Irencrag before a lone Dragon).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

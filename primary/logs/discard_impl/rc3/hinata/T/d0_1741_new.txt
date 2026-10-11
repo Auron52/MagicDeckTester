@@ -1,0 +1,107 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1331742 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Izzet Boilerworks|Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Cascade Bluffs
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard
+[uo-order] gs=1331742 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Izzet Boilerworks|Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Cascade Bluffs
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard
+[uo-order] gs=1331742 t=2 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *2} hand=Izzet Boilerworks|Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Soulfire Eruption
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Cascade Bluffs
+[uo-order] gs=1331742 t=2 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *2} hand=Izzet Boilerworks|Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Soulfire Eruption
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Cascade Bluffs
+[uo-order] gs=1331742 t=3 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ornithopter of Paradise
+[uo-state] gs=1331742 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c1 *1} hand=Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Soulfire Eruption|Ornithopter of Paradise|Forbidden Orchard
+[exec-tap] T3 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *1} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token 1/1 Spirit Token Cascade Bluffs 1/1 Spirit Token
+[uo-cast] gs=1331742 t=3 m=1 d=0 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T3 Ornithopter of Paradise tapped: Cascade Bluffs  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs(T) Izzet Boilerworks(T) Ornithopter of Paradise
+[uo-order] gs=1331742 t=3 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Soulfire Eruption|Forbidden Orchard
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs(T) Izzet Boilerworks(T) Ornithopter of Paradise
+[uo-order] gs=1331742 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Soulfire Eruption|Forbidden Orchard
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise
+[uo-order] gs=1331742 t=4 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Hinata, Dawn-Crowned
+[uo-state] gs=1331742 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *5} hand=Remand|Memory Lapse|Irencrag Feat|Hinata, Dawn-Crowned|Soulfire Eruption|Distorting Wake
+[exec-tap] T4 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token 1/1 Spirit Token Cascade Bluffs 1/1 Spirit Token Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1331742 t=4 m=1 d=0 card=Hinata, Dawn-Crowned num=15 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T4 Hinata, Dawn-Crowned tapped: Cascade Bluffs Izzet Boilerworks Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs(T) Izzet Boilerworks(T) Ornithopter of Paradise Forbidden Orchard(T) Hinata, Dawn-Crowned
+[uo-order] gs=1331742 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Remand|Memory Lapse|Irencrag Feat|Soulfire Eruption|Distorting Wake
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned
+[uo-order] gs=1331742 t=5 m=1 route=opaque pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1331742 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *5} hand=Remand|Memory Lapse|Irencrag Feat|Soulfire Eruption|Distorting Wake|Ponder
+[exec-tap] T5 before Ponder: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token 1/1 Spirit Token Cascade Bluffs 1/1 Spirit Token Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token
+[uo-cast] gs=1331742 t=5 m=1 d=0 card=Ponder num=39 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T5 Ponder tapped: Izzet Boilerworks  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r1 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks(T) Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned
+[uo-order] gs=1331742 t=5 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Soulfire Eruption
+[uo-state] gs=1331742 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c0 *4} hand=Remand|Memory Lapse|Irencrag Feat|Soulfire Eruption|Distorting Wake
+[exec-tap] T5 before Soulfire Eruption: float{w0 u0 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token 1/1 Spirit Token Cascade Bluffs 1/1 Spirit Token Ornithopter of Paradise Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token Reflecting Pool
+[uo-cast] gs=1331742 t=5 m=1 d=0 card=Soulfire Eruption num=57 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T5 Soulfire Eruption tapped: Cascade Bluffs Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs(T) Izzet Boilerworks(T) Ornithopter of Paradise Forbidden Orchard(T) Hinata, Dawn-Crowned(T) Reflecting Pool
+[uo-order] gs=1331742 t=5 m=2 route=clean pool=2 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Reality Spasm|Ornithopter of Paradise|Irencrag Feat|Soulfire Eruption
+[uo-state] gs=1331742 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *2} hand=Remand|Memory Lapse|Irencrag Feat|Distorting Wake|Mountain*|Reality Spasm*|Mystic Monastery*|Reality Spasm*|Soulfire Eruption*|Ornithopter of Paradise*|Gamble*
+[exec-tap] T5 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Ornithopter of Paradise Reflecting Pool
+[exec-tap] T5 tap-ahead for Reality Spasm X=5 -> float{w0 u0 b0 r0 g0 c0 *2}
+[uo-cast] gs=1331742 t=5 m=2 d=0 card=Reality Spasm num=47 staged=1 splice=0 paid=1 pool=2
+[exec-tap] T5 Reality Spasm tapped: Ornithopter of Paradise Reflecting Pool  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Reflecting Pool
+[uo-cast] gs=1331742 t=5 m=2 d=0 card=Ornithopter of Paradise num=37 staged=1 splice=0 paid=1 pool=4
+[exec-tap] T5 Ornithopter of Paradise tapped: Izzet Boilerworks  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Irencrag Feat: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Cascade Bluffs Ornithopter of Paradise Forbidden Orchard Reflecting Pool Ornithopter of Paradise
+[uo-cast] gs=1331742 t=5 m=2 d=0 card=Irencrag Feat num=20 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T5 Irencrag Feat tapped: Cascade Bluffs Ornithopter of Paradise Forbidden Orchard Reflecting Pool  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Soulfire Eruption: float{w0 u0 b0 r7 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Ornithopter of Paradise
+[uo-cast] gs=1331742 t=5 m=2 d=0 card=Soulfire Eruption num=58 staged=1 splice=0 paid=1 pool=7
+[exec-tap] T5 Soulfire Eruption tapped:  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r1 g0 c0 *0} own: Cascade Bluffs(T) Izzet Boilerworks(T) Ornithopter of Paradise(T) Forbidden Orchard(T) Hinata, Dawn-Crowned(T) Reflecting Pool(T) Ornithopter of Paradise
+[uo-order] gs=1331742 t=5 m=2 route=clean pool=1 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Gamble
+[uo-state] gs=1331742 t=5 cap=0 pool{w0 u0 b0 r1 g0 c0 *0} hand=Remand|Memory Lapse|Distorting Wake|Mountain*|Mystic Monastery*|Reality Spasm*|Gamble*|Reality Spasm*|Hinata, Dawn-Crowned*|Icy Blast*
+[exec-tap] T5 before Gamble: float{w0 u0 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Ornithopter of Paradise
+[uo-cast] gs=1331742 t=5 m=2 d=0 card=Gamble num=14 staged=1 splice=0 paid=0 pool=1
+[exec-tap] T5 Gamble tapped:  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned Reflecting Pool Ornithopter of Paradise
+[uo-order] gs=1331742 t=6 m=1 route=clean pool=8 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Gamble
+[uo-state] gs=1331742 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *8} hand=Remand|Memory Lapse|Distorting Wake|Mountain*|Mystic Monastery*|Reality Spasm*|Gamble*|Reality Spasm*|Hinata, Dawn-Crowned*|Icy Blast*
+[exec-tap] T6 before Gamble: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned Reflecting Pool Ornithopter of Paradise 1/1 Spirit Token Reflecting Pool
+[uo-cast] gs=1331742 t=6 m=1 d=0 card=Gamble num=14 staged=1 splice=0 paid=1 pool=6
+[exec-tap] T6 Gamble tapped: Izzet Boilerworks  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u1 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks(T) Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned Reflecting Pool Ornithopter of Paradise Reflecting Pool
+[uo-order] gs=1331742 t=6 m=1 route=clean pool=7 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Sol Ring
+[uo-state] gs=1331742 t=6 cap=-1 pool{w0 u1 b0 r0 g0 c0 *6} hand=Remand|Memory Lapse|Distorting Wake|Sol Ring|Mystic Monastery*|Reality Spasm*|Reality Spasm*|Hinata, Dawn-Crowned*|Icy Blast*
+[exec-tap] T6 before Sol Ring: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Cascade Bluffs Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned Reflecting Pool Ornithopter of Paradise 1/1 Spirit Token Reflecting Pool
+[uo-cast] gs=1331742 t=6 m=1 d=0 card=Sol Ring num=56 staged=0 splice=0 paid=1 pool=7
+[exec-tap] T6 Sol Ring tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks(T) Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned(T) Reflecting Pool Ornithopter of Paradise Reflecting Pool Sol Ring
+[uo-order] gs=1331742 t=6 m=2 route=clean pool=8 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c2 *6} hand=Remand|Memory Lapse|Distorting Wake|Mystic Monastery*|Reality Spasm*|Reality Spasm*|Hinata, Dawn-Crowned*|Icy Blast*
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned Reflecting Pool Ornithopter of Paradise Reflecting Pool Sol Ring
+[uo-order] gs=1331742 t=7 m=1 route=clean pool=11 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=7 cap=-1 pool{w0 u0 b0 r1 g0 c2 *8} hand=Remand|Memory Lapse|Distorting Wake
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned(T) Reflecting Pool Ornithopter of Paradise Reflecting Pool Sol Ring Mountain
+[uo-order] gs=1331742 t=7 m=2 route=clean pool=11 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=7 cap=-1 pool{w0 u0 b0 r1 g0 c2 *8} hand=Remand|Memory Lapse|Distorting Wake
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned Reflecting Pool Ornithopter of Paradise Reflecting Pool Sol Ring Mountain
+[uo-order] gs=1331742 t=8 m=1 route=clean pool=12 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=8 cap=-1 pool{w0 u0 b0 r1 g0 c2 *9} hand=Remand|Memory Lapse|Distorting Wake
+[exec-tap] T8 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Cascade Bluffs Izzet Boilerworks Ornithopter of Paradise Forbidden Orchard Hinata, Dawn-Crowned(T) Reflecting Pool Ornithopter of Paradise Reflecting Pool Sol Ring Mountain Forbidden Orchard
+[uo-order] gs=1331742 t=8 m=2 route=clean pool=12 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331742 t=8 cap=-1 pool{w0 u0 b0 r1 g0 c2 *9} hand=Remand|Memory Lapse|Distorting Wake
+[payable-order] site=apply in_domain=1 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=1 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1331742
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 1741  seed 1331742

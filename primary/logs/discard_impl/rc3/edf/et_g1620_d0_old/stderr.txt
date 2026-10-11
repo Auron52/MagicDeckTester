@@ -1,0 +1,43 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub
+[exec-tap] T1 Wild Growth tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth
+[exec-tap] T2 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub Wild Growth Yavimaya Coast
+[exec-tap] T2 Fertile Ground tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: Wild Growth Yavimaya Coast Fertile Ground
+[exec-tap] T2 Living Wish tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Wild Growth Yavimaya Coast(T) Fertile Ground
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Wild Growth Yavimaya Coast(T) Fertile Ground
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground
+[exec-tap] T3 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub Wild Growth Yavimaya Coast Fertile Ground
+[exec-tap] T3 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T3 before Dimensional Infiltrator: float{w0 u0 b0 r0 g0 c0 *1} untapped: Aether Hub Wild Growth Fertile Ground Wild Growth
+[exec-tap] T3 Dimensional Infiltrator tapped: Aether Hub  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Wild Growth Yavimaya Coast(T) Fertile Ground Wild Growth Dimensional Infiltrator
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator
+[exec-tap] T4 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator
+[exec-tap] T4 Peregrine Drake tapped: Aether Hub Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator(T) Peregrine Drake
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake
+[exec-tap] T5 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake
+[exec-tap] T5 Emiel the Blessed tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator(T) Peregrine Drake(T)
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake
+[exec-tap] T6 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake
+[exec-tap] T6 Overgrowth tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *0} untapped: Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake Overgrowth
+[exec-tap] T6 Cloud of Faeries tapped: Yavimaya Coast  float{w0 u0 b0 r0 g1 c0 *1}
+[exec-tap] T6 before Living Wish: float{w0 u0 b0 r0 g1 c0 *1} untapped: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake Overgrowth Cloud of Faeries
+[exec-tap] T6 Living Wish tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake Overgrowth Cloud of Faeries
+[exec-tap] T6 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: Aether Hub Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake Overgrowth Cloud of Faeries Adarkar Wastes
+[exec-tap] T6 Overgrowth tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c0 *0} untapped: Wild Growth Yavimaya Coast Fertile Ground Wild Growth Dimensional Infiltrator Peregrine Drake Overgrowth Cloud of Faeries Adarkar Wastes Overgrowth
+[exec-tap] T6 Emiel the Blessed tapped: Yavimaya Coast Adarkar Wastes  float{w0 u0 b0 r0 g3 c0 *0}
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g1620_d0_old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

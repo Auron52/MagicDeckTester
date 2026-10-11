@@ -1,0 +1,2648 @@
+{
+  "cardNumbering": {
+    "Adarkar Wastes": [
+      1,
+      2
+    ],
+    "Aether Hub": [
+      3,
+      4,
+      5
+    ],
+    "Brushland": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "Cloud of Faeries": [
+      10,
+      11,
+      12
+    ],
+    "Conservatory": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Eladamri's Call": [
+      17
+    ],
+    "Eldrazi Displacer": [
+      18,
+      19,
+      20
+    ],
+    "Emiel the Blessed": [
+      21,
+      22,
+      23,
+      24
+    ],
+    "Fertile Ground": [
+      25,
+      26,
+      27,
+      28
+    ],
+    "Kitchen": [
+      29,
+      30
+    ],
+    "Living Wish": [
+      31,
+      32,
+      33,
+      34
+    ],
+    "Mariposa Military Base": [
+      35,
+      36,
+      37
+    ],
+    "Overgrowth": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Peregrine Drake": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Shivan Gorge": [
+      46
+    ],
+    "Trace of Abundance": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Training Grounds": [
+      51,
+      52
+    ],
+    "Wild Growth": [
+      53,
+      54,
+      55,
+      56
+    ],
+    "Yavimaya Coast": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 1,
+          "cardName": "Adarkar Wastes"
+        },
+        {
+          "card": 25,
+          "cardName": "Fertile Ground"
+        },
+        {
+          "card": 53,
+          "cardName": "Wild Growth"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth"
+        },
+        {
+          "card": 39,
+          "cardName": "Overgrowth"
+        },
+        {
+          "card": 13,
+          "cardName": "Conservatory"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 1,
+      "cardName": "Adarkar Wastes"
+    },
+    {
+      "card": 25,
+      "cardName": "Fertile Ground"
+    },
+    {
+      "card": 53,
+      "cardName": "Wild Growth"
+    },
+    {
+      "card": 38,
+      "cardName": "Overgrowth"
+    },
+    {
+      "card": 39,
+      "cardName": "Overgrowth"
+    },
+    {
+      "card": 13,
+      "cardName": "Conservatory"
+    },
+    {
+      "card": 47,
+      "cardName": "Trace of Abundance"
+    }
+  ],
+  "result": {
+    "turn": 7,
+    "winner": "player"
+  },
+  "runId": "20261010_123552_1651032",
+  "seed": 1651032,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 1,
+          "cardName": "Adarkar Wastes",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          13,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          13,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          13,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 51,
+          "cardName": "Training Grounds",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          13,
+          47,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 51,
+          "cardName": "Training Grounds",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          47
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 26,
+          "cardName": "Fertile Ground",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          53,
+          38,
+          39,
+          47,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 53,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          38,
+          39,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          38,
+          39,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          38,
+          39,
+          26
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          25,
+          38,
+          39,
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth",
+          "manaPaid": "{2}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          39,
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          39,
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          39,
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          39,
+          26,
+          31,
+          42
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 39,
+          "cardName": "Overgrowth",
+          "manaPaid": "{2}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake",
+          "manaPaid": "{4}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          26,
+          31
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 10,
+          "cardName": "Cloud of Faeries",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          26,
+          31,
+          10
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 26,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 10,
+          "cardName": "Cloud of Faeries",
+          "manaPaid": "{1}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 31,
+          "cardName": "Living Wish",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200003
+          ],
+          "lookedAt": [
+            {
+              "card": 200003,
+              "cardName": "Eldrazi Displacer",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        },
+        {
+          "card": 48,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        },
+        {
+          "ability": "investigate",
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          200003,
+          48
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 2,
+          "oppLife": 18,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 13,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          200003,
+          48
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 13,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          200003,
+          48
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 40,
+          "cardName": "Overgrowth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          200003,
+          48,
+          40
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 21,
+          "cardName": "Emiel the Blessed",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 27,
+          "cardName": "Fertile Ground",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 52,
+          "cardName": "Training Grounds",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 49,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 6,
+          "cardName": "Brushland",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 32,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200006
+          ],
+          "lookedAt": [
+            {
+              "card": 200006,
+              "cardName": "Essence Depleter",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "ability": "combo route: win",
+          "card": 0,
+          "cardName": "Combo Off",
+          "type": "ABILITY"
+        },
+        {
+          "card": 6,
+          "cardName": "Brushland",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 27,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 48,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 49,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 40,
+          "cardName": "Overgrowth",
+          "manaPaid": "{2}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 3,
+          "cardName": "Aether Hub",
+          "type": "DRAW"
+        },
+        {
+          "ability": "investigate",
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "ABILITY"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 7,
+          "cardName": "Brushland",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 2,
+          "cardName": "Adarkar Wastes",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 22,
+          "cardName": "Emiel the Blessed",
+          "type": "DRAW"
+        },
+        {
+          "ability": "blink x3",
+          "card": 200003,
+          "cardName": "Eldrazi Displacer",
+          "type": "ABILITY"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            },
+            {
+              "card": 1,
+              "cardName": "Adarkar Wastes"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "ability": "blink x3",
+          "card": 21,
+          "cardName": "Emiel the Blessed",
+          "type": "ABILITY"
+        },
+        {
+          "ability": "target opponent loses life",
+          "card": 200006,
+          "cardName": "Essence Depleter",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200003,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 27,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 48,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 6,
+            "card": 49,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 40,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          3,
+          7,
+          2,
+          22
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": -1,
+        "playerLife": 37,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": -2,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Adarkar Wastes",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 47,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 38,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 39,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 26,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 10,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 200003,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 27,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 13,
+            "card": 48,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 6,
+            "card": 49,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          40
+        ],
+        "hand": [
+          3,
+          7,
+          2,
+          22
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": -2,
+        "playerLife": 37,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    }
+  ]
+}

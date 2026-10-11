@@ -1,0 +1,157 @@
+{
+ "decks": {
+  "fivecolour": {
+   "seed_d0": 5900001
+  },
+  "stompy": {
+   "seed_d0": 5910001
+  },
+  "selesnya": {
+   "seed_d0": 5920001
+  },
+  "bruna": {
+   "seed_d0": 5930001
+  },
+  "snow": {
+   "seed_d0": 5940001
+  },
+  "burn": {
+   "seed_d0": 5950001
+  },
+  "dragonstorm": {
+   "seed_d0": 5960001
+  },
+  "hinata": {
+   "seed_d0": 5970001
+  },
+  "critter": {
+   "seed_d0": 5980001
+  },
+  "angels": {
+   "seed_d0": 5990001
+  },
+  "giants": {
+   "seed_d0": 6000001
+  },
+  "goblins": {
+   "seed_d0": 6010001
+  },
+  "pirates": {
+   "seed_d0": 6020001
+  },
+  "kitty": {
+   "seed_d0": 6030001
+  },
+  "knights": {
+   "seed_d0": 6040001
+  },
+  "whiteknights": {
+   "seed_d0": 6050001
+  },
+  "antilife": {
+   "seed_d0": 6060001
+  },
+  "auras": {
+   "seed_d0": 6070001
+  },
+  "creature_giving": {
+   "seed_d0": 6080001
+  },
+  "mirrorwing": {
+   "seed_d0": 6090001
+  },
+  "minotaur": {
+   "seed_d0": 6100001
+  },
+  "dragons": {
+   "seed_d0": 6110001
+  },
+  "breaching": {
+   "seed_d0": 6120001
+  },
+  "melira": {
+   "seed_d0": 6130001
+  },
+  "fluctuator": {
+   "seed_d0": 6140001
+  },
+  "soldiers": {
+   "seed_d0": 6150001
+  },
+  "pd": {
+   "seed_d0": 6160001
+  },
+  "fungus": {
+   "seed_d0": 6170001
+  },
+  "slivers": {
+   "seed_d0": 6180001
+  },
+  "th": {
+   "seed_d0": 6190001
+  }
+ },
+ "cells": {
+  "d0": {
+   "games": 200,
+   "chunk": 100
+  }
+ },
+ "arms": {
+  "on": [],
+  "off": [
+   "MTG_ATTACK_DOMAIN_DORK_YIELD",
+   "MTG_ATTACK_TAP_ASTROLABE_CREDIT",
+   "MTG_ATTACK_CANNONS_TRIGGER",
+   "MTG_ATTACK_TAP_REPROJECT",
+   "MTG_ATTACK_TEAM_PUMP_ETB",
+   "MTG_ATTACK_PLAN_LIFEGAIN",
+   "MTG_BRUNA_LETHAL_SHORTCIRCUIT",
+   "MTG_ATTACK_AURA_HOST_TAP",
+   "MTG_LAND_BOUNCE_GUARD",
+   "MTG_ATTACK_TAP_CREATURE_ONLY",
+   "MTG_SOLVE_ATTACK_ONLY_WIN",
+   "MTG_ATTACK_TAP_ABILITY_KINDS",
+   "MTG_ATTACK_TAP_PAYER_ORDER"
+  ],
+  "noDOMAIN": [
+   "MTG_ATTACK_DOMAIN_DORK_YIELD"
+  ],
+  "noASTRO": [
+   "MTG_ATTACK_TAP_ASTROLABE_CREDIT"
+  ],
+  "noCANNONS": [
+   "MTG_ATTACK_CANNONS_TRIGGER"
+  ],
+  "noREPROJ": [
+   "MTG_ATTACK_TAP_REPROJECT"
+  ],
+  "noHOOF": [
+   "MTG_ATTACK_TEAM_PUMP_ETB"
+  ],
+  "noLIFE": [
+   "MTG_ATTACK_PLAN_LIFEGAIN"
+  ],
+  "noBRUNASC": [
+   "MTG_BRUNA_LETHAL_SHORTCIRCUIT"
+  ],
+  "noAURAHOST": [
+   "MTG_ATTACK_AURA_HOST_TAP"
+  ],
+  "noBOUNCE": [
+   "MTG_LAND_BOUNCE_GUARD"
+  ],
+  "noCRONLY": [
+   "MTG_ATTACK_TAP_CREATURE_ONLY"
+  ],
+  "noAOW": [
+   "MTG_SOLVE_ATTACK_ONLY_WIN"
+  ],
+  "noKINDS": [
+   "MTG_ATTACK_TAP_ABILITY_KINDS"
+  ],
+  "noPAYER": [
+   "MTG_ATTACK_TAP_PAYER_ORDER"
+  ]
+ }
+}

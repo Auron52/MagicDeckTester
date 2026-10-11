@@ -1,0 +1,40 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7000043 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000043 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-order] gs=7000043 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000043 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-order] gs=7000043 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000043 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-order] gs=7000043 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000043 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-order] gs=7000043 t=3 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000043 t=3 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas|Apex of Power
+[uo-order] gs=7000043 t=3 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000043 t=3 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas|Apex of Power
+[uo-order] gs=7000043 t=4 m=1 route=opaque pool=7 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Desperate Ritual|Seething Song|Apex of Power
+[uo-state] gs=7000043 t=4 cap=-1 pool{w0 u0 b0 r7 g0 c0 *0} hand=Apex of Power|Desperate Ritual|Pyretic Ritual|Seething Song|Scourge of Valkas|Apex of Power|Lotus Bloom
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Pyretic Ritual num=38 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Desperate Ritual num=8 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Seething Song num=55 staged=0 splice=0 paid=1 pool=9
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=1 pool=7
+[uo-order] gs=7000043 t=4 m=1 route=cont pool=11 n=6 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Pyretic Ritual|Desperate Ritual|Seething Song|Apex of Power|Scourge of Valkas
+[uo-state] gs=7000043 t=4 cap=-1 pool{w0 u0 b0 r11 g0 c0 *0} hand=Scourge of Valkas|Apex of Power|Lotus Bloom|Mountain*|Ruby Medallion*|Ruby Medallion*|Rite of Flame*|Seething Song*|Pyretic Ritual*|Desperate Ritual*
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Rite of Flame num=42 staged=1 splice=0 paid=1 pool=11
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Pyretic Ritual num=37 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Desperate Ritual num=6 staged=1 splice=0 paid=1 pool=13
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Seething Song num=54 staged=1 splice=0 paid=1 pool=14
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Apex of Power num=2 staged=0 splice=0 paid=1 pool=16
+[uo-order] gs=7000043 t=4 m=1 route=cont pool=16 n=5 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion|Ruby Medallion|Rite of Flame|Scourge of Valkas|Dragonstorm
+[uo-state] gs=7000043 t=4 cap=-1 pool{w0 u0 b0 r16 g0 c0 *0} hand=Scourge of Valkas|Lotus Bloom|Mountain*|Ruby Medallion*|Ruby Medallion*|Apex of Power*|Dragonstorm*|Ruby Medallion*|Mountain*|Unclaimed Territory*|Karrthus, Tyrant of Jund*|Rite of Flame*
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Ruby Medallion num=43 staged=1 splice=0 paid=1 pool=16
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Ruby Medallion num=44 staged=1 splice=0 paid=1 pool=14
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Rite of Flame num=40 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Scourge of Valkas num=52 staged=0 splice=0 paid=1 pool=14
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Dragonstorm num=13 staged=1 splice=0 paid=1 pool=11
+[uo-order] gs=7000043 t=4 m=1 route=clean pool=4 n=1 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion
+[uo-state] gs=7000043 t=4 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Lotus Bloom|Mountain*|Apex of Power*|Ruby Medallion*|Mountain*|Unclaimed Territory*|Karrthus, Tyrant of Jund*
+[uo-cast] gs=7000043 t=4 m=1 d=0 card=Ruby Medallion num=45 staged=1 splice=0 paid=1 pool=4
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

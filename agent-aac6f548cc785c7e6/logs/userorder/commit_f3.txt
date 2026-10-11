@@ -1,0 +1,25 @@
+fix(solve): the rituals-for-payoff guard keeps an Apex line's rituals; a restrictor still earns its place (MTG_RITUAL_GUARD_APEX)
+
+The d0/rollout rituals-for-payoff guard rejects a non-winning subset holding a SURPLUS ritual (one it
+could drop and still pay), exempting only a storm tutor. It judged Apex of Power as a fixed-cost
+payoff -- but Apex's value is its exile: seven cards castable this turn, paid for by whatever mana is
+left after it, so no ritual cast before it is surplus. Worse, with the accel-prefix collapse the
+subset WITHOUT the cheapest ritual is never enumerated, so calling Rite of Flame surplus deleted every
+Apex line on a board with one mana to spare (d0 s7600011 T6: with the USER order's Medallion-first
+continuation saving one mana, {Apex, Rite, Desperate x2, Seething} was refused and the turn stalled:
+T6 -> unwon).
+
+Both arms root-caused. Exempting Apex outright fixed the USER-order arm (T6) but sent the generic-order
+arm (MTG_DRAGONSTORM_USER_ORDER=0) from T6 to unwon: it now admitted {Seething, Medallion, Irencrag,
+Apex}, which the GENERIC rank (Irencrag 18 < Apex 20) realises as the Irencrag -> Apex trap. The
+rules-right version: every NON-restricting ritual is kept for the exile; a cast RESTRICTOR (Irencrag,
+max_casts_after) still has to be needed -- it is never "before Apex", and after Apex it funds only the
+one closer it allows. s7600011 is T6 in all four lever combinations except USER on + this off (9).
+
+Lever MTG_RITUAL_GUARD_APEX (heurarm slot appended), default ON; =0 byte-identical to 6328ba07 (27 jobs /
+540 games). Reaches only Dragonstorm (the one impulse-exile card). Sanity A/B (paired, seeds 8000001+):
+d0 300: -7 turns (5 faster, 0 slower); d3 100: -1 (1 faster, 0 slower).
+Also recovers three of the suite-A/B slower games: s1191012 7 -> 5, s1191413 5 -> 3, s1191591 7 -> 6.
+Unit: test_dragonstorm_followups.cpp (the Apex chain survives; Irencrag stays refused).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

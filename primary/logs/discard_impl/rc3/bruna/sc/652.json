@@ -1,0 +1,80 @@
+{
+ "base": {
+  "deck": "decks/Bruna/Bruna.cod",
+  "profile": "decks/Bruna/Bruna.profile.json",
+  "turn": 6,
+  "on_the_play": true,
+  "max_turns": 6,
+  "resume_at": "main1",
+  "active_life": 20,
+  "battlefield": [
+   {
+    "name": "Razorverge Thicket",
+    "controller": 0
+   },
+   {
+    "name": "Avacyn's Pilgrim",
+    "controller": 0
+   },
+   {
+    "name": "Botanical Sanctum",
+    "controller": 0
+   },
+   {
+    "name": "Sol Ring",
+    "controller": 0
+   },
+   {
+    "name": "Forest",
+    "controller": 0
+   },
+   {
+    "name": "Remote Farm",
+    "controller": 0
+   },
+   {
+    "name": "Remote Farm",
+    "controller": 0
+   },
+   {
+    "name": "Mythic Proportions",
+    "controller": 0,
+    "equips": "Avacyn's Pilgrim"
+   }
+  ],
+  "hand": [
+   "Eldrazi Conscription",
+   "Eldrazi Conscription",
+   "Colossification",
+   "Lightning Greaves",
+   "Mother of Runes"
+  ],
+  "graveyard": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0
+ },
+ "lives": [
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20
+ ],
+ "real_opp_life": 8
+}

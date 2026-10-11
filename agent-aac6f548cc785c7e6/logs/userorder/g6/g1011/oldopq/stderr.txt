@@ -1,0 +1,47 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=1191012 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Lotus Bloom|Apex of Power|Pyretic Ritual|Seething Song|Ruby Medallion
+[uo-order] gs=1191012 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Lotus Bloom|Apex of Power|Pyretic Ritual|Seething Song|Ruby Medallion
+[uo-order] gs=1191012 t=2 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion
+[uo-state] gs=1191012 t=2 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Lotus Bloom|Apex of Power|Pyretic Ritual|Seething Song|Ruby Medallion|Desperate Ritual
+[uo-cast] gs=1191012 t=2 m=1 d=0 card=Ruby Medallion num=43 staged=0 splice=0 paid=1 pool=0
+[uo-order] gs=1191012 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Lotus Bloom|Apex of Power|Pyretic Ritual|Seething Song|Desperate Ritual
+[uo-order] gs=1191012 t=3 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Desperate Ritual|Rite of Flame
+[uo-order] gs=1191012 t=3 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Desperate Ritual|Rite of Flame
+[uo-order] gs=1191012 t=4 m=1 route=opaque pool=5 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Desperate Ritual|Apex of Power
+[uo-state] gs=1191012 t=4 cap=-1 pool{w0 u0 b0 r5 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Desperate Ritual|Rite of Flame|Apex of Power
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Pyretic Ritual num=35 staged=0 splice=0 paid=1 pool=5
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=7
+[uo-order] gs=1191012 t=4 m=1 route=cont pool=10 n=5 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Utvara Hellkite|Rite of Flame|Desperate Ritual|Seething Song|Apex of Power
+[uo-state] gs=1191012 t=4 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Seething Song|Rite of Flame|Apex of Power|Mountain*|Utvara Hellkite*|Scourge of Valkas*|Desperate Ritual*|Apex of Power*|Sandstone Needle*|Lotus Bloom*
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Utvara Hellkite num=59 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Rite of Flame num=39 staged=0 splice=0 paid=1 pool=3
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Desperate Ritual num=6 staged=1 splice=0 paid=1 pool=4
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=1191012 t=4 m=1 d=0 card=Apex of Power num=3 staged=1 splice=0 paid=1 pool=9
+[uo-order] gs=1191012 t=4 m=1 route=cont pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Mountain*|Scourge of Valkas*|Sandstone Needle*|Lotus Bloom*|Rite of Flame*|Desperate Ritual*|Sandstone Needle*|Seething Song*|Lotus Bloom*|Mountain*|Ruby Medallion*
+[uo-order] gs=1191012 t=4 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Mountain*|Scourge of Valkas*|Sandstone Needle*|Lotus Bloom*|Rite of Flame*|Desperate Ritual*|Sandstone Needle*|Seething Song*|Lotus Bloom*|Mountain*|Ruby Medallion*
+[uo-order] gs=1191012 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Mountain*|Scourge of Valkas*|Sandstone Needle*|Lotus Bloom*|Rite of Flame*|Desperate Ritual*|Sandstone Needle*|Seething Song*|Lotus Bloom*|Mountain*|Ruby Medallion*
+[uo-order] gs=1191012 t=5 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Scourge of Valkas
+[uo-order] gs=1191012 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Scourge of Valkas
+[uo-order] gs=1191012 t=6 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Scourge of Valkas|Seething Song
+[uo-order] gs=1191012 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Scourge of Valkas|Seething Song
+[uo-order] gs=1191012 t=7 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191012 t=7 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Scourge of Valkas|Seething Song
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/g6/g1011/oldopq
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

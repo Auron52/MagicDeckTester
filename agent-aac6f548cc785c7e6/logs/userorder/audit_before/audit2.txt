@@ -1,0 +1,45 @@
+==============================================================================================================
+setting d0: games=300, phases with a cast=498, of which with an Apex breakpoint=62; decided-order routes {'clean': 496, 'opaque': 64, 'cont': 155}
+  class                                                             pre   post   examples (game seed, turn, main)
+  Dragon before Medallion                                             1      7   [(7000093, 7, 1), (7000109, 3, 1), (7000112, 4, 1), (7000150, 5, 1)]
+  Dragonstorm not last                                                0      4   [(7000126, 7, 1), (7000201, 6, 1), (7000284, 5, 1), (7000289, 7, 1)]
+  Irencrag -> Dragon (allowed, USER rule 2)                           3      0   [(7000044, 8, 1), (7000091, 4, 1), (7000230, 4, 1)]
+  Irencrag -> non-Dragonstorm spell                                   7      0   [(7000028, 5, 1), (7000082, 3, 1), (7000107, 4, 1), (7000143, 6, 1)]
+  Irencrag before Apex (trap)                                         7      0   [(7000028, 5, 1), (7000082, 3, 1), (7000107, 4, 1), (7000143, 6, 1)]
+  Irencrag last (no spell after)                                      1      0   [(7000051, 5, 1)]
+  Medallion later than its earliest payable slot [clean]              4      0   [(7000015, 4, 1), (7000033, 7, 1), (7000055, 4, 1), (7000207, 1, 1)]
+  Medallion later than its earliest payable slot [cont]               0     12   [(7000047, 5, 1), (7000093, 7, 1), (7000109, 3, 1), (7000112, 4, 1)]
+  Medallion later than its earliest payable slot [opaque]             1      0   [(7000018, 6, 1)]
+  hand Medallion cast after Apex (not in pre-Apex plan)               0      3   [(7000003, 5, 1), (7000093, 7, 1), (7000204, 4, 1)]
+  hand ritual cast after Apex (not in pre-Apex plan)                  0     12   [(7000027, 5, 1), (7000078, 5, 1), (7000109, 3, 1), (7000125, 5, 1)]
+  hard-cast Dragon before Apex                                        3      5   [(7000018, 6, 1), (7000043, 5, 1), (7000094, 5, 1), (7000093, 7, 1)]
+  hard-cast Dragon before a ritual                                    5     16   [(7000018, 6, 1), (7000027, 5, 1), (7000043, 5, 1), (7000069, 3, 1)]
+  ritual order not per USER list                                     48      8   [(7000003, 5, 1), (7000010, 6, 1), (7000012, 4, 1), (7000014, 3, 1)]
+  unpaid cast, decided order cannot pay                              11      8   [(7000028, 5, 1), (7000051, 5, 1), (7000051, 7, 1), (7000082, 3, 1)]
+  unpaid cast, decided order projected payable                        1      1   [(7000158, 8, 1), (7000192, 4, 1)]
+==============================================================================================================
+setting d3b10: games=200, phases with a cast=332, of which with an Apex breakpoint=42; decided-order routes {'searched': 254, 'opaque': 6, 'replay': 51, 'clean': 72}
+  class                                                             pre   post   examples (game seed, turn, main)
+  Dragonstorm not last                                                0      2   [(7100022, 6, 1), (7100054, 5, 1)]
+  Irencrag -> Dragon (allowed, USER rule 2)                           8      2   [(7100002, 5, 1), (7100005, 2, 1), (7100065, 2, 1), (7100072, 1, 1)]
+  Irencrag -> non-Dragonstorm spell                                   0      1   [(7100196, 4, 1)]
+  Irencrag last (no spell after)                                      1      0   [(7100151, 5, 1)]
+  Medallion EARLIER than payable (drops the line) [searched]          3      0   [(7100081, 2, 1), (7100101, 4, 1), (7100182, 2, 1)]
+  Medallion later than its earliest payable slot [searched]           2      0   [(7100111, 3, 1), (7100159, 3, 1)]
+  hard-cast Dragon before a ritual                                    0      1   [(7100196, 4, 1)]
+  ritual order not per USER list                                     56      8   [(7100008, 4, 1), (7100010, 4, 1), (7100015, 3, 1), (7100016, 4, 1)]
+  splice-legal: plain Desperate after spliced (info)                  9      1   [(7100043, 3, 1), (7100047, 3, 1), (7100063, 4, 1), (7100099, 4, 1)]
+  unpaid cast, decided order cannot pay                              47      1   [(7100010, 3, 1), (7100027, 2, 1), (7100033, 3, 1), (7100033, 5, 1)]
+  unpaid cast, decided order projected payable                        1      0   [(7100046, 4, 1)]
+==============================================================================================================
+setting ship: games=200, phases with a cast=297, of which with an Apex breakpoint=40; decided-order routes {'searched': 234, 'replay': 49, 'clean': 62, 'opaque': 1}
+  class                                                             pre   post   examples (game seed, turn, main)
+  Dragonstorm not last                                                0      1   [(7200139, 5, 1)]
+  Irencrag -> Dragon (allowed, USER rule 2)                           3      1   [(7200027, 5, 1), (7200097, 2, 1), (7200117, 4, 1), (7200161, 5, 1)]
+  Medallion EARLIER than payable (drops the line) [searched]          5      0   [(7200008, 5, 1), (7200081, 3, 1), (7200136, 3, 1), (7200139, 3, 1)]
+  hand Medallion cast after Apex (not in pre-Apex plan)               0      1   [(7200055, 5, 1)]
+  hand ritual cast after Apex (not in pre-Apex plan)                  0      1   [(7200054, 5, 1)]
+  hard-cast Dragon before a ritual                                    0      1   [(7200077, 4, 1)]
+  ritual order not per USER list                                     39      6   [(7200001, 6, 1), (7200006, 6, 1), (7200013, 2, 1), (7200020, 5, 1)]
+  splice-legal: plain Desperate after spliced (info)                  9      1   [(7200022, 6, 1), (7200060, 3, 1), (7200054, 5, 1), (7200070, 4, 1)]
+  unpaid cast, decided order cannot pay                              31      0   [(7200002, 1, 1), (7200002, 2, 1), (7200007, 1, 1), (7200008, 5, 1)]

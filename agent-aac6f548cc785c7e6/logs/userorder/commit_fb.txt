@@ -1,0 +1,24 @@
+fix(combat): a non-lethal pump keeps the depletion / storage lands' mana (MTG_FB_HOLD_BANKED)
+
+ApplyFirebreathing spends ALL leftover mana on attacker pumps (Scourge {R}, Lathliss {1}{R}) on the
+premise that combat is the turn's last mana use, so unspent mana is lost. That is false for a BANKED
+source: a depletion land (Sandstone Needle: a counter per tap, sacrificed at zero) and a storage land
+(Mercadian Bazaar, Dwarven Hold: counters banked over turns, +1 more for each turn left untapped).
+
+A pump now holds those sources back unless the full pump makes the attack lethal. Lethality is judged
+on a copy -- the full pump with the caller's own payer, then the shared ResolveCombatDamage. One helper
+in Combat.cpp (FbHoldBankedThisCombat, FbBankedHoldScope, FbPumpPayHold), called from both pump sites
+(AIEngine::Firebreathe and the rollout's SimulateCombat), so executor and rollout stay in lockstep. The
+pump payer re-installs the hold per payment, so a pay-sac erase cannot misdirect it. The human-chooser
+path is left to the human.
+
+Named games (dragonstorm d0): s1191687 gi1686 7 -> 6 (the ab3 old arm's 6; the Needle was sacrificed
+to a non-lethal T3 pump) and s7600233 gi232 7 -> 6 (the Bazaar's bank).
+
+Lever: MTG_FB_HOLD_BANKED (default ON) + heurarm slot FB_HOLD_BANKED, appended after
+DRAGONSTORM_IRENCRAG_CLOSER; shared reader FbHoldBankedOn (EngineFlags.h).
+Unit test: test_dragonstorm_followups.cpp "Combat pump keeps a depletion / storage land's mana ..."
+(Needle and Bazaar, non-lethal and lethal, both arms).
+Built and tested together with the next commit (MTG_LINE_FLOAT_TAP_FIRST), one build for both.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

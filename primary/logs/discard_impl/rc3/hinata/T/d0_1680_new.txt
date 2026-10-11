@@ -1,0 +1,117 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1331681 t=1 m=1 route=opaque pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain
+[uo-state] gs=1331681 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Preordain|Island|Reality Spasm|Ponder|Island|Reality Spasm
+[exec-tap] T1 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1331681 t=1 m=1 d=0 card=Preordain num=44 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T1 Preordain tapped: Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard(T)
+[uo-order] gs=1331681 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Island|Reality Spasm|Ponder|Island|Reality Spasm|Izzet Boilerworks
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard(T)
+[uo-order] gs=1331681 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Island|Reality Spasm|Ponder|Island|Reality Spasm|Izzet Boilerworks
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard
+[uo-order] gs=1331681 t=2 m=1 route=opaque pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1331681 t=2 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Reality Spasm|Ponder|Island|Reality Spasm|Izzet Boilerworks|Hinata, Dawn-Crowned
+[exec-tap] T2 before Ponder: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Island
+[uo-cast] gs=1331681 t=2 m=1 d=0 card=Ponder num=41 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T2 Ponder tapped: Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island(T)
+[uo-order] gs=1331681 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Reality Spasm|Island|Reality Spasm|Izzet Boilerworks|Hinata, Dawn-Crowned|Crackle with Power
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island(T)
+[uo-order] gs=1331681 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Reality Spasm|Island|Reality Spasm|Izzet Boilerworks|Hinata, Dawn-Crowned|Crackle with Power
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island
+[uo-order] gs=1331681 t=3 m=1 route=opaque pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1331681 t=3 cap=-1 pool{w0 u2 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Hinata, Dawn-Crowned|Crackle with Power|Ponder
+[exec-tap] T3 before Ponder: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token Island 1/1 Spirit Token Island
+[uo-cast] gs=1331681 t=3 m=1 d=0 card=Ponder num=40 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T3 Ponder tapped: Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island(T) Island
+[uo-order] gs=1331681 t=3 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=3 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Hinata, Dawn-Crowned|Crackle with Power|Izzet Boilerworks
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island(T) Island
+[uo-order] gs=1331681 t=3 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=3 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Hinata, Dawn-Crowned|Crackle with Power|Izzet Boilerworks
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Island
+[uo-order] gs=1331681 t=4 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=4 cap=-1 pool{w0 u2 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Hinata, Dawn-Crowned|Crackle with Power|Izzet Boilerworks|Mystic Monastery|Island
+[exec-tap] T4 entry pre=1 float{w0 u1 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks(T)
+[uo-order] gs=1331681 t=4 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=4 cap=-1 pool{w0 u2 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Hinata, Dawn-Crowned|Crackle with Power|Izzet Boilerworks|Mystic Monastery|Island
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks(T)
+[uo-order] gs=1331681 t=4 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=4 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Hinata, Dawn-Crowned|Crackle with Power|Izzet Boilerworks|Mystic Monastery|Island
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks
+[uo-order] gs=1331681 t=5 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Crackle with Power
+[uo-state] gs=1331681 t=5 cap=-1 pool{w0 u2 b0 r0 g0 c0 *3} hand=Reality Spasm|Reality Spasm|Hinata, Dawn-Crowned|Crackle with Power|Izzet Boilerworks|Mystic Monastery|Mountain
+[exec-tap] T5 before Crackle with Power: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token 1/1 Spirit Token Island 1/1 Spirit Token Izzet Boilerworks 1/1 Spirit Token Island
+[uo-cast] gs=1331681 t=5 m=1 d=0 card=Crackle with Power num=4 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T5 Crackle with Power tapped: Forbidden Orchard Island Izzet Boilerworks Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard(T) Island(T) Izzet Boilerworks(T) Island(T)
+[uo-order] gs=1331681 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Reality Spasm|Reality Spasm|Hinata, Dawn-Crowned|Izzet Boilerworks|Mystic Monastery|Mountain
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks Island
+[uo-order] gs=1331681 t=6 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Hinata, Dawn-Crowned
+[uo-state] gs=1331681 t=6 cap=-1 pool{w0 u2 b0 r0 g0 c0 *4} hand=Reality Spasm|Reality Spasm|Hinata, Dawn-Crowned|Izzet Boilerworks|Mystic Monastery|Mountain
+[exec-tap] T6 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token 1/1 Spirit Token Island 1/1 Spirit Token Izzet Boilerworks 1/1 Spirit Token Island 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1331681 t=6 m=1 d=0 card=Hinata, Dawn-Crowned num=16 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T6 Hinata, Dawn-Crowned tapped: Forbidden Orchard Island Izzet Boilerworks  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard(T) Island(T) Izzet Boilerworks(T) Island Forbidden Orchard Hinata, Dawn-Crowned
+[uo-order] gs=1331681 t=6 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=6 cap=-1 pool{w0 u1 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Mountain
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks Island Forbidden Orchard Hinata, Dawn-Crowned
+[uo-order] gs=1331681 t=7 m=1 route=clean pool=7 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Soulfire Eruption
+[uo-state] gs=1331681 t=7 cap=-1 pool{w0 u2 b0 r1 g0 c0 *4} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Soulfire Eruption
+[exec-tap] T7 before Soulfire Eruption: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token 1/1 Spirit Token 1/1 Spirit Token Island 1/1 Spirit Token Izzet Boilerworks 1/1 Spirit Token Island 1/1 Spirit Token Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token Mountain
+[uo-cast] gs=1331681 t=7 m=1 d=0 card=Soulfire Eruption num=59 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T7 Soulfire Eruption tapped: Forbidden Orchard Izzet Boilerworks Mountain  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T7 entry pre=1 float{w0 u1 b0 r0 g0 c0 *0} own: Forbidden Orchard(T) Island Izzet Boilerworks(T) Island Forbidden Orchard Hinata, Dawn-Crowned Mountain(T)
+[uo-order] gs=1331681 t=7 m=1 route=clean pool=4 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Gamble|Sol Ring
+[uo-state] gs=1331681 t=7 cap=-1 pool{w0 u3 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Mystic Monastery*|Hinata, Dawn-Crowned*|Soulfire Eruption*|Cascade Bluffs*|Sol Ring*|Gamble*|Hinata, Dawn-Crowned*|Forbidden Orchard*|Hinata, Dawn-Crowned*|Reflecting Pool*|Distorting Wake*
+[exec-tap] T7 before Gamble: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Island Island 1/1 Spirit Token Forbidden Orchard Hinata, Dawn-Crowned 1/1 Spirit Token
+[uo-cast] gs=1331681 t=7 m=1 d=0 card=Gamble num=14 staged=1 splice=0 paid=1 pool=3
+[exec-tap] T7 Gamble tapped: Forbidden Orchard  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Sol Ring: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Island Island 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token
+[uo-cast] gs=1331681 t=7 m=1 d=0 card=Sol Ring num=56 staged=1 splice=0 paid=1 pool=3
+[exec-tap] T7 Sol Ring tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard(T) Island Izzet Boilerworks(T) Island Forbidden Orchard(T) Hinata, Dawn-Crowned(T) Mountain(T) Sol Ring
+[uo-order] gs=1331681 t=7 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=7 cap=-1 pool{w0 u2 b0 r0 g0 c2 *0} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Mystic Monastery*|Hinata, Dawn-Crowned*|Soulfire Eruption*|Cascade Bluffs*|Hinata, Dawn-Crowned*|Forbidden Orchard*|Hinata, Dawn-Crowned*|Reflecting Pool*|Distorting Wake*
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks Island Forbidden Orchard Hinata, Dawn-Crowned Mountain Sol Ring
+[uo-order] gs=1331681 t=8 m=1 route=clean pool=10 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Soulfire Eruption
+[uo-state] gs=1331681 t=8 cap=-1 pool{w0 u2 b0 r1 g0 c2 *5} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Distorting Wake|Mystic Monastery*|Hinata, Dawn-Crowned*|Soulfire Eruption*|Hinata, Dawn-Crowned*|Forbidden Orchard*|Hinata, Dawn-Crowned*|Reflecting Pool*|Distorting Wake*
+[exec-tap] T8 before Soulfire Eruption: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token Island Izzet Boilerworks Island 1/1 Spirit Token Forbidden Orchard Hinata, Dawn-Crowned 1/1 Spirit Token Mountain Sol Ring 1/1 Spirit Token 1/1 Spirit Token Cascade Bluffs
+[uo-cast] gs=1331681 t=8 m=1 d=0 card=Soulfire Eruption num=57 staged=1 splice=0 paid=1 pool=6
+[exec-tap] T8 Soulfire Eruption tapped: Izzet Boilerworks Mountain Cascade Bluffs  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r1 g0 c0 *0} own: Forbidden Orchard Island Izzet Boilerworks(T) Island Forbidden Orchard Hinata, Dawn-Crowned Mountain(T) Sol Ring Cascade Bluffs(T)
+[uo-order] gs=1331681 t=8 m=1 route=opaque pool=7 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain|Magma Opus
+[uo-state] gs=1331681 t=8 cap=-1 pool{w0 u2 b0 r1 g0 c2 *2} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Distorting Wake|Mystic Monastery*|Hinata, Dawn-Crowned*|Hinata, Dawn-Crowned*|Forbidden Orchard*|Hinata, Dawn-Crowned*|Reflecting Pool*|Distorting Wake*|Preordain*|Ornithopter of Paradise*|Cascade Bluffs*|Magma Opus*|Icy Blast*|Mountain*|Irencrag Feat*
+[exec-tap] T8 before Preordain: float{w0 u0 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token Island Island Forbidden Orchard Hinata, Dawn-Crowned Sol Ring 1/1 Spirit Token
+[uo-cast] gs=1331681 t=8 m=1 d=0 card=Preordain num=45 staged=1 splice=0 paid=1 pool=6
+[exec-tap] T8 Preordain tapped: Island  float{w0 u0 b0 r1 g0 c0 *0}
+[exec-tap] T8 before Magma Opus: float{w0 u0 b0 r1 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Forbidden Orchard 1/1 Spirit Token Island Forbidden Orchard Hinata, Dawn-Crowned Sol Ring 1/1 Spirit Token
+[uo-cast] gs=1331681 t=8 m=1 d=0 card=Magma Opus num=26 staged=1 splice=0 paid=1 pool=2
+[exec-tap] T8 Magma Opus tapped: Forbidden Orchard Island Sol Ring  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1331681 t=8 m=1 route=cont pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain
+[uo-state] gs=1331681 t=8 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Distorting Wake|Mystic Monastery*|Hinata, Dawn-Crowned*|Hinata, Dawn-Crowned*|Forbidden Orchard*|Hinata, Dawn-Crowned*|Reflecting Pool*|Distorting Wake*|Ornithopter of Paradise*|Cascade Bluffs*|Icy Blast*|Mountain*|Irencrag Feat*|Preordain|Expressive Iteration|Forbidden Orchard
+[exec-tap] T8 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Spirit Token Forbidden Orchard Hinata, Dawn-Crowned 1/1 Spirit Token
+[uo-cast] gs=1331681 t=8 m=1 d=0 card=Preordain num=43 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T8 Preordain tapped: Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T8 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forbidden Orchard(T) Island(T) Izzet Boilerworks(T) Island(T) Forbidden Orchard(T) Hinata, Dawn-Crowned(T) Mountain(T) Sol Ring(T) Cascade Bluffs(T)
+[uo-order] gs=1331681 t=8 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1331681 t=8 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Reality Spasm|Reality Spasm|Izzet Boilerworks|Mystic Monastery|Distorting Wake|Expressive Iteration|Forbidden Orchard|Crackle with Power|Mystic Monastery*|Hinata, Dawn-Crowned*|Hinata, Dawn-Crowned*|Forbidden Orchard*|Hinata, Dawn-Crowned*|Reflecting Pool*|Distorting Wake*|Ornithopter of Paradise*|Cascade Bluffs*|Icy Blast*|Mountain*|Irencrag Feat*
+[payable-order] site=apply in_domain=1 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=1 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1331681
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 1680  seed 1331681

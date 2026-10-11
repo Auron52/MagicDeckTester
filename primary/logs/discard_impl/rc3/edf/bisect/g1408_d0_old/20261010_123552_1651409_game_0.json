@@ -1,0 +1,2420 @@
+{
+  "cardNumbering": {
+    "Adarkar Wastes": [
+      1,
+      2
+    ],
+    "Aether Hub": [
+      3,
+      4,
+      5
+    ],
+    "Brushland": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "Cloud of Faeries": [
+      10,
+      11,
+      12
+    ],
+    "Conservatory": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Eladamri's Call": [
+      17
+    ],
+    "Eldrazi Displacer": [
+      18,
+      19,
+      20
+    ],
+    "Emiel the Blessed": [
+      21,
+      22,
+      23,
+      24
+    ],
+    "Fertile Ground": [
+      25,
+      26,
+      27,
+      28
+    ],
+    "Kitchen": [
+      29,
+      30
+    ],
+    "Living Wish": [
+      31,
+      32,
+      33,
+      34
+    ],
+    "Mariposa Military Base": [
+      35,
+      36,
+      37
+    ],
+    "Overgrowth": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Peregrine Drake": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Shivan Gorge": [
+      46
+    ],
+    "Trace of Abundance": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Training Grounds": [
+      51,
+      52
+    ],
+    "Wild Growth": [
+      53,
+      54,
+      55,
+      56
+    ],
+    "Yavimaya Coast": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 13,
+          "cardName": "Conservatory"
+        },
+        {
+          "card": 31,
+          "cardName": "Living Wish"
+        },
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base"
+        },
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer"
+        },
+        {
+          "card": 21,
+          "cardName": "Emiel the Blessed"
+        },
+        {
+          "card": 29,
+          "cardName": "Kitchen"
+        },
+        {
+          "card": 51,
+          "cardName": "Training Grounds"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 13,
+      "cardName": "Conservatory"
+    },
+    {
+      "card": 31,
+      "cardName": "Living Wish"
+    },
+    {
+      "card": 35,
+      "cardName": "Mariposa Military Base"
+    },
+    {
+      "card": 18,
+      "cardName": "Eldrazi Displacer"
+    },
+    {
+      "card": 21,
+      "cardName": "Emiel the Blessed"
+    },
+    {
+      "card": 29,
+      "cardName": "Kitchen"
+    },
+    {
+      "card": 51,
+      "cardName": "Training Grounds"
+    }
+  ],
+  "result": {
+    "turn": 4,
+    "winner": "player"
+  },
+  "runId": "20261010_123552_1651409",
+  "seed": 1651409,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Fertile Ground",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          13,
+          31,
+          35,
+          18,
+          21,
+          29,
+          51,
+          25
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          31,
+          18,
+          21,
+          29,
+          51,
+          25
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          31,
+          18,
+          21,
+          29,
+          51,
+          25
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          31,
+          18,
+          21,
+          29,
+          51,
+          25
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 6,
+          "cardName": "Brushland",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          31,
+          18,
+          21,
+          29,
+          51,
+          25,
+          6
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 6,
+          "cardName": "Brushland",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 31,
+          "cardName": "Living Wish",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200002
+          ],
+          "lookedAt": [
+            {
+              "card": 200002,
+              "cardName": "Cloud of Faeries",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          18,
+          21,
+          29,
+          51,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          18,
+          21,
+          29,
+          51,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          18,
+          21,
+          29,
+          51,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Yavimaya Coast",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          18,
+          21,
+          29,
+          51,
+          25,
+          200002,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Yavimaya Coast",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "manaPaid": "{2}{W}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          21,
+          29,
+          51,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          21,
+          29,
+          51,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          21,
+          29,
+          51,
+          25,
+          200002
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 14,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          13,
+          21,
+          29,
+          51,
+          25,
+          200002,
+          14
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 200002,
+          "cardName": "Cloud of Faeries",
+          "manaPaid": "{1}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 51,
+          "cardName": "Training Grounds",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 1,
+          "cardName": "Adarkar Wastes",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 22,
+          "cardName": "Emiel the Blessed",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 58,
+          "cardName": "Yavimaya Coast",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 53,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 15,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 46,
+          "cardName": "Shivan Gorge",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 19,
+          "cardName": "Eldrazi Displacer",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 32,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200006
+          ],
+          "lookedAt": [
+            {
+              "card": 200006,
+              "cardName": "Essence Depleter",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            },
+            {
+              "card": 13,
+              "cardName": "Conservatory"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 57,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          29,
+          14,
+          1,
+          22,
+          47,
+          58,
+          53,
+          15,
+          46,
+          38,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 0,
+        "playerLife": 35,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 3,
+          "oppLife": -3,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 57,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200006,
+            "cardName": "Essence Depleter",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Emiel the Blessed",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "+1/+1"
+              }
+            ],
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          29,
+          14,
+          1,
+          22,
+          47,
+          58,
+          53,
+          15,
+          46,
+          38,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "6/6 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -3,
+        "playerLife": 35,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    }
+  ]
+}

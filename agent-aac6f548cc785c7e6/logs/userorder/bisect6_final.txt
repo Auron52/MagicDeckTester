@@ -1,0 +1,6 @@
+gi=445 seed=1190446 head=7.0000 old=6.0000 | old+USER=6.0000 old+RIT=7.0000 old+OPQ=7.0000 | head-USER=7.0000 head-RIT=7.0000 head-OPQ=7.0000 head-others=7.0000
+gi=1011 seed=1191012 head=5.0000 old=5.0000 | old+USER=5.0000 old+RIT=5.0000 old+OPQ=5.0000 | head-USER=5.0000 head-RIT=5.0000 head-OPQ=5.0000 head-others=5.0000
+gi=1412 seed=1191413 head=3.0000 old=4.0000 | old+USER=4.0000 old+RIT=3.0000 old+OPQ=6.0000 | head-USER=3.0000 head-RIT=3.0000 head-OPQ=3.0000 head-others=3.0000
+gi=1590 seed=1191591 head=6.0000 old=6.0000 | old+USER=6.0000 old+RIT=6.0000 old+OPQ=6.0000 | head-USER=6.0000 head-RIT=6.0000 head-OPQ=6.0000 head-others=6.0000
+gi=1686 seed=1191687 head=7.0000 old=6.0000 | old+USER=7.0000 old+RIT=7.0000 old+OPQ=6.0000 | head-USER=7.0000 head-RIT=7.0000 head-OPQ=7.0000 head-others=7.0000
+gi=1701 seed=1191702 head=9.0000 old=8.0000 | old+USER=8.0000 old+RIT=9.0000 old+OPQ=9.0000 | head-USER=9.0000 head-RIT=9.0000 head-OPQ=9.0000 head-others=9.0000

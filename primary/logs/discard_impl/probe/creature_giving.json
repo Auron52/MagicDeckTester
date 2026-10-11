@@ -1,0 +1,1 @@
+{"jobs": [{"name": "creature_giving", "deck": "decks/Creature Giving/Creature Giving.cod", "profile": "decks/Creature Giving/Creature Giving.profile.json", "games": 10, "seed": 220001, "depth": 3, "budget_ms": 10, "ignore_play_profile": true}]}

@@ -1,0 +1,42 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[edf-goff-cut] t1 no goff cand
+[tmp-edbg] T1 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base
+[edf-goff-cut] t2 no goff cand
+[tmp-edbg] T2 d0 plan pre=1 land= val=100 win=0: Living Wish(k0,x0,h0) 
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: Mariposa Military Base Brushland
+[exec-tap] T2 Living Wish tapped: Mariposa Military Base Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base(T) Brushland(T)
+[tmp-edbg] T2 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base(T) Brushland(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base Brushland
+[edf-goff-cut] t3 no goff cand
+[tmp-edbg] T3 d0 plan pre=1 land= val=500 win=0: Eldrazi Displacer(k0,x0,h0) Cloud of Faeries(k0,x0,h0) 
+[exec-tap] T3 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *0} untapped: Mariposa Military Base Brushland 6/6 Creature 1/1 Creature Yavimaya Coast
+[exec-tap] T3 Cloud of Faeries tapped: Mariposa Military Base Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: Mariposa Military Base Brushland 6/6 Creature 1/1 Creature Yavimaya Coast Cloud of Faeries
+[exec-tap] T3 Eldrazi Displacer tapped: Mariposa Military Base Brushland Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base(T) Brushland(T) Yavimaya Coast(T) Cloud of Faeries Eldrazi Displacer
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base Brushland Yavimaya Coast Cloud of Faeries Eldrazi Displacer
+[edf-goff-cut] t4 no goff cand
+[tmp-edbg] T4 d0 plan pre=1 land= val=200 win=0: Training Grounds(k0,x0,h0) Fertile Ground(k0,x0,h6) 
+[exec-tap] T4 before Fertile Ground: float{w0 u1 b0 r0 g1 c0 *1} untapped: 6/6 Creature 1/1 Creature Cloud of Faeries Eldrazi Displacer
+[exec-tap] T4 Fertile Ground tapped:  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Training Grounds: float{w0 u1 b0 r0 g0 c0 *0} untapped: 6/6 Creature 1/1 Creature Cloud of Faeries Eldrazi Displacer Fertile Ground
+[exec-tap] T4 Training Grounds tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base(T) Brushland(T) Yavimaya Coast(T) Cloud of Faeries(T) Eldrazi Displacer(T) Conservatory(T) Fertile Ground Training Grounds
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base Brushland Yavimaya Coast Cloud of Faeries Eldrazi Displacer Conservatory Fertile Ground Training Grounds
+[edf-goff-cut] t5 k=62 projected=0
+[edf-goff-cut] t5 k=62 projected=0 applied verified=1 opp_life=16 decked=1
+[tmp-edbg] T5 d0 plan pre=1 land= val=62 win=1: Eldrazi Displacer(k25,x62,h0) 
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mariposa Military Base(T) Brushland Yavimaya Coast(T) Eldrazi Displacer Conservatory(T) Fertile Ground Training Grounds Adarkar Wastes(T) Dimensional Infiltrator Emiel the Blessed Cloud of Faeries
+[edf-goff-cut] t5 k=60 projected=0
+[edf-goff-cut] t5 k=60 projected=0 applied verified=1 opp_life=0 decked=1
+[tmp-edbg] T5 d0 plan pre=1 land= val=60 win=1: Emiel the Blessed(k25,x60,h0) 
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/rec_dev1_new_g1408_d0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

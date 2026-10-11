@@ -1,0 +1,6 @@
+d0   gi=445   old=6 new(head)=7 STILL SLOWER
+d0   gi=1011  old=5 new(head)=7 STILL SLOWER
+d0   gi=1412  old=4 new(head)=5 STILL SLOWER
+d0   gi=1590  old=6 new(head)=7 STILL SLOWER
+d0   gi=1686  old=6 new(head)=7 STILL SLOWER
+d0   gi=1701  old=8 new(head)=9 STILL SLOWER

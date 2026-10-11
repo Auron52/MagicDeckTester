@@ -1,0 +1,31 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Arcum's Astrolabe: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Scrying Sheets
+[exec-tap] T1 Arcum's Astrolabe tapped: Scrying Sheets  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets(T) Arcum's Astrolabe
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets(T) Arcum's Astrolabe
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets Arcum's Astrolabe
+[exec-tap] T2 before Boreal Druid: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Scrying Sheets Arcum's Astrolabe Snow-Covered Island
+[exec-tap] T2 Boreal Druid tapped: Scrying Sheets Arcum's Astrolabe  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets(T) Arcum's Astrolabe(T) Snow-Covered Island Boreal Druid
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid
+[exec-tap] T3 before Abominable Treefolk: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid Snow-Covered Island
+[exec-tap] T3 Abominable Treefolk tapped: Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid Snow-Covered Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets(T) Arcum's Astrolabe(T) Snow-Covered Island(T) Boreal Druid(T) Snow-Covered Island(T) Abominable Treefolk
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid Snow-Covered Island Abominable Treefolk
+[exec-tap] T4 before Frost Augur: float{w0 u0 b0 r0 g0 c0 *0} untapped: Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid Snow-Covered Island Abominable Treefolk Snow-Covered Island
+[exec-tap] T4 Frost Augur tapped: Snow-Covered Island  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets(T) Arcum's Astrolabe Snow-Covered Island(T) Boreal Druid(T) Snow-Covered Island(T) Abominable Treefolk(T) Snow-Covered Island(T) Frost Augur
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid Snow-Covered Island Abominable Treefolk Snow-Covered Island Frost Augur
+[exec-tap] T5 before Coldsteel Heart: float{w0 u0 b0 r0 g0 c0 *0} untapped: Scrying Sheets Arcum's Astrolabe Snow-Covered Island Boreal Druid Snow-Covered Island Abominable Treefolk Snow-Covered Island Frost Augur Scrying Sheets
+[exec-tap] T5 Coldsteel Heart tapped: Snow-Covered Island Scrying Sheets  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Jorn, God of Winter: float{w0 u0 b0 r0 g0 c0 *0} untapped: Scrying Sheets Arcum's Astrolabe Boreal Druid Abominable Treefolk Snow-Covered Island
+[exec-tap] T5 Jorn, God of Winter tapped: Scrying Sheets Arcum's Astrolabe Boreal Druid Snow-Covered Island  float{w0 u0 b0 r0 g0 c0 *0}
+ACT_DROP t5 Scrying Sheets mv=2 tapped(mana stole the {T})
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/ad_g1384_old
+ACT_DROP_AUDIT  DEFECTS tapped=1 unpaid=0 | benign gone=0 noTap=0 | fired=2  <-- enumerated activations the trailing pass silently declined
+ACT_HOLD_COST   pay_calls=22 hold_mask=3 (13.64%) hold_solo=3 hold_retry=0 solo_retry=0 (0.00% of pay_calls = the EXTRA solves)
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

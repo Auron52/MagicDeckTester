@@ -1,0 +1,37 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[edf-goff-cut] t1 no goff cand
+[tmp-edbg] T1 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland
+[edf-goff-cut] t2 no goff cand
+[tmp-edbg] T2 d0 plan pre=1 land= val=100 win=0: Trace of Abundance(k0,x0,h6) 
+[exec-tap] T2 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: Brushland Brushland
+[exec-tap] T2 Trace of Abundance tapped: Brushland Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Brushland(T) Trace of Abundance
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Brushland Trace of Abundance
+[edf-goff-cut] t3 no goff cand
+[tmp-edbg] T3 d0 plan pre=1 land= val=300 win=0: Eldrazi Displacer(k0,x0,h0) 
+[exec-tap] T3 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: Brushland Brushland Trace of Abundance 4/4 Creature Mariposa Military Base
+[exec-tap] T3 Eldrazi Displacer tapped: Brushland Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Brushland(T) Trace of Abundance Mariposa Military Base Eldrazi Displacer
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Brushland Trace of Abundance Mariposa Military Base Eldrazi Displacer
+[edf-goff-cut] t4 no goff cand
+[tmp-edbg] T4 d0 plan pre=1 land= val=300 win=0: Living Wish(k0,x0,h0) Cloud of Faeries(k0,x0,h0) 
+[exec-tap] T4 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *0} untapped: Brushland Brushland Trace of Abundance 4/4 Creature Mariposa Military Base Eldrazi Displacer Mariposa Military Base
+[exec-tap] T4 Cloud of Faeries tapped: Brushland Mariposa Military Base Mariposa Military Base  float{w0 u0 b0 r0 g0 c2 *0}
+[exec-tap] T4 before Living Wish: float{w0 u0 b0 r0 g0 c2 *0} untapped: Brushland Brushland Trace of Abundance 4/4 Creature Mariposa Military Base Eldrazi Displacer Cloud of Faeries
+[exec-tap] T4 Living Wish tapped: Brushland  float{w0 u0 b0 r0 g0 c1 *1}
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c1 *1} own: Brushland(T) Brushland Trace of Abundance Mariposa Military Base Eldrazi Displacer Mariposa Military Base(T) Cloud of Faeries
+[tmp-edbg] T4 d0 plan pre=1 land= val=300 win=0: Emiel the Blessed(k0,x0,h0) 
+[exec-tap] T4 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c1 *1} untapped: Brushland Trace of Abundance 4/4 Creature Mariposa Military Base Eldrazi Displacer Cloud of Faeries
+[exec-tap] T4 Emiel the Blessed tapped: Brushland Mariposa Military Base  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Brushland(T) Trace of Abundance Mariposa Military Base(T) Eldrazi Displacer(T) Mariposa Military Base(T) Cloud of Faeries Emiel the Blessed
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Brushland Trace of Abundance Mariposa Military Base Eldrazi Displacer Mariposa Military Base Cloud of Faeries Emiel the Blessed
+[edf-goff-cut] t5 no goff cand
+[tmp-edbg] T5 d0 plan pre=1 land= val=999 win=1: Combo Off(k29,x999,h0) 
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/rec_dev1_new_g547_d0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

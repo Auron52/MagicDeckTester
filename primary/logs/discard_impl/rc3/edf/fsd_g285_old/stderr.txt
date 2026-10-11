@@ -1,0 +1,27 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Kitchen: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Kitchen: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Mariposa Military Base: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Mariposa Military Base: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Shivan Gorge: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Shivan Gorge: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Mariposa Military Base[rad]: 
+[fs-root] tail win=4 bp=-1 pc=-1 val=0 land=Mariposa Military Base[rad]: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Kitchen: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Kitchen: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Mariposa Military Base: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Mariposa Military Base: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Shivan Gorge: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Shivan Gorge: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Mariposa Military Base[rad]: 
+[fs-root] tail win=4 bp=-1 pc=-1 val=0 land=Mariposa Military Base[rad]: 
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/fsd_g285_old
+[enum-memo] hits=1 misses=277 clears=0
+[solve-memo] hits=6531 misses=17649 clears=0
+[leaf-eval] published=3693 ties=3317 flips=76 life-equal-ties=263

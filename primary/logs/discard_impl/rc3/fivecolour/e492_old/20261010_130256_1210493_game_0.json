@@ -1,0 +1,1730 @@
+{
+  "cardNumbering": {
+    "Ancient Cornucopia": [
+      1
+    ],
+    "Birds of Paradise": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "Blood Crypt": [
+      6
+    ],
+    "Bloom Tender": [
+      7,
+      8
+    ],
+    "Breeding Pool": [
+      9
+    ],
+    "Cosmic Spider-Man": [
+      10,
+      11
+    ],
+    "Deathrite Shaman": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "Faeburrow Elder": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "Garth One-Eye": [
+      20
+    ],
+    "Godless Shrine": [
+      21
+    ],
+    "Island": [
+      22
+    ],
+    "Jared Carthalion": [
+      23,
+      24
+    ],
+    "Jetmir's Garden": [
+      25
+    ],
+    "Lightning Greaves": [
+      26
+    ],
+    "Maelstrom Archangel": [
+      27,
+      28,
+      29,
+      30
+    ],
+    "Mana Cannons": [
+      31,
+      32,
+      33
+    ],
+    "Misty Rainforest": [
+      34,
+      35
+    ],
+    "Mountain": [
+      36
+    ],
+    "Nicol Bolas, Planeswalker": [
+      37,
+      38
+    ],
+    "Oko, Thief of Crowns": [
+      39
+    ],
+    "Overgrown Tomb": [
+      40
+    ],
+    "Progenitus": [
+      41
+    ],
+    "Scalding Tarn": [
+      42,
+      43,
+      44
+    ],
+    "Steam Vents": [
+      45
+    ],
+    "Stomping Ground": [
+      46
+    ],
+    "Two-Headed Hellkite": [
+      47,
+      48,
+      49
+    ],
+    "Unite the Coalition": [
+      50,
+      51
+    ],
+    "Verdant Catacombs": [
+      52,
+      53
+    ],
+    "Windswept Heath": [
+      54,
+      55
+    ],
+    "Wooded Foothills": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Zagoth Triome": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 46,
+          "cardName": "Stomping Ground"
+        },
+        {
+          "card": 27,
+          "cardName": "Maelstrom Archangel"
+        },
+        {
+          "card": 47,
+          "cardName": "Two-Headed Hellkite"
+        },
+        {
+          "card": 10,
+          "cardName": "Cosmic Spider-Man"
+        },
+        {
+          "card": 28,
+          "cardName": "Maelstrom Archangel"
+        },
+        {
+          "card": 48,
+          "cardName": "Two-Headed Hellkite"
+        },
+        {
+          "card": 40,
+          "cardName": "Overgrown Tomb"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 1,
+      "bottomed": [
+        {
+          "card": 60,
+          "cardName": "Zagoth Triome"
+        }
+      ],
+      "hand": [
+        {
+          "card": 60,
+          "cardName": "Zagoth Triome"
+        },
+        {
+          "card": 52,
+          "cardName": "Verdant Catacombs"
+        },
+        {
+          "card": 9,
+          "cardName": "Breeding Pool"
+        },
+        {
+          "card": 15,
+          "cardName": "Deathrite Shaman"
+        },
+        {
+          "card": 33,
+          "cardName": "Mana Cannons"
+        },
+        {
+          "card": 17,
+          "cardName": "Faeburrow Elder"
+        },
+        {
+          "card": 25,
+          "cardName": "Jetmir's Garden"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 52,
+      "cardName": "Verdant Catacombs"
+    },
+    {
+      "card": 9,
+      "cardName": "Breeding Pool"
+    },
+    {
+      "card": 15,
+      "cardName": "Deathrite Shaman"
+    },
+    {
+      "card": 33,
+      "cardName": "Mana Cannons"
+    },
+    {
+      "card": 17,
+      "cardName": "Faeburrow Elder"
+    },
+    {
+      "card": 25,
+      "cardName": "Jetmir's Garden"
+    }
+  ],
+  "result": {
+    "turn": 4,
+    "winner": "player"
+  },
+  "runId": "20261010_130256_1210493",
+  "seed": 1210493,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 49,
+          "cardName": "Two-Headed Hellkite",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          52,
+          9,
+          15,
+          33,
+          17,
+          25,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 52,
+          "cardName": "Verdant Catacombs",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 15,
+          "cardName": "Deathrite Shaman",
+          "manaPaid": "{B}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          52
+        ],
+        "hand": [
+          9,
+          33,
+          17,
+          25,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          52
+        ],
+        "hand": [
+          9,
+          33,
+          17,
+          25,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          52
+        ],
+        "hand": [
+          9,
+          33,
+          17,
+          25,
+          49
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 21,
+          "cardName": "Godless Shrine",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          52
+        ],
+        "hand": [
+          9,
+          33,
+          17,
+          25,
+          49,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 9,
+          "cardName": "Breeding Pool",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 17,
+          "cardName": "Faeburrow Elder",
+          "manaPaid": "{1}{W}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          49,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          49,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          49,
+          21
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 59,
+          "cardName": "Wooded Foothills",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          49,
+          21,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 21,
+          "cardName": "Godless Shrine",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 49,
+          "cardName": "Two-Headed Hellkite",
+          "manaPaid": "{1}{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 49,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "damage": 6,
+          "oppLife": 14,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 49,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          59,
+          55,
+          41
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 14,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 49,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          59,
+          55,
+          41
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 14,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 47,
+          "cardName": "Two-Headed Hellkite",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          25,
+          59,
+          55,
+          41,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 14,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 59,
+          "cardName": "Wooded Foothills",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 33,
+          "cardName": "Mana Cannons",
+          "manaPaid": "{2}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 47,
+          "cardName": "Two-Headed Hellkite",
+          "manaPaid": "{1}{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 49,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 33,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 47,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          59
+        ],
+        "hand": [
+          25,
+          55,
+          41
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 9,
+        "playerLife": 10,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 11,
+          "oppLife": -2,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Deathrite Shaman",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 49,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 33,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 47,
+            "cardName": "Two-Headed Hellkite",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          59
+        ],
+        "hand": [
+          25,
+          55,
+          41,
+          31,
+          53,
+          29,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500003,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500004,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500005,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -2,
+        "playerLife": 10,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    }
+  ]
+}

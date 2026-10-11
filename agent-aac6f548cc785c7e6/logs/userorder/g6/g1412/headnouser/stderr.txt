@@ -1,0 +1,280 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=1191413 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Utvara Hellkite|Irencrag Feat|Apex of Power|Desperate Ritual|Sandstone Needle|Ruby Medallion
+[uo-order] gs=1191413 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Utvara Hellkite|Irencrag Feat|Apex of Power|Desperate Ritual|Sandstone Needle|Ruby Medallion
+[uo-order] gs=1191413 t=2 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion
+[uo-state] gs=1191413 t=2 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Utvara Hellkite|Irencrag Feat|Apex of Power|Desperate Ritual|Ruby Medallion|Seething Song
+[uo-cast] gs=1191413 t=2 m=1 d=0 card=Ruby Medallion num=43 staged=0 splice=0 paid=1 pool=0
+[uo-order] gs=1191413 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Utvara Hellkite|Irencrag Feat|Apex of Power|Desperate Ritual|Seething Song
+[uo-order] gs=1191413 t=3 m=1 route=opaque pool=4 n=6 pays=2 ppays=-1 mpos=-1 mearl=-1 seq=Desperate Ritual|Seething Song|Desperate Ritual:s1|Utvara Hellkite|Irencrag Feat|Apex of Power
+[uo-state] gs=1191413 t=3 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Utvara Hellkite|Irencrag Feat|Apex of Power|Desperate Ritual|Seething Song|Desperate Ritual
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=0 paid=1 pool=2
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Desperate Ritual num=6 staged=0 splice=1 paid=1 pool=9
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Utvara Hellkite num=59 staged=0 splice=0 paid=1 pool=12
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=1 pool=5
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=7
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=opaque pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=1 route=cont pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Apex of Power
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-cast] gs=1191413 t=3 m=1 d=0 card=Apex of Power num=2 staged=1 splice=0 paid=0 pool=10
+[uo-order] gs=1191413 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=3 cap=0 pool{w0 u0 b0 r0 g0 c0 *0} hand=Mercadian Bazaar*|Mountain*|Dwarven Hold*|Pyretic Ritual*|Mountain*|Mountain*|Apex of Power*
+[uo-order] gs=1191413 t=4 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Dragonstorm
+[uo-order] gs=1191413 t=4 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Dragonstorm
+[uo-order] gs=1191413 t=5 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=5 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Dragonstorm|Desperate Ritual
+[uo-order] gs=1191413 t=5 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191413 t=5 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Dragonstorm|Desperate Ritual
+[uo-order] gs=1191413 t=6 m=1 route=clean pool=6 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Desperate Ritual|Dragonstorm
+[uo-state] gs=1191413 t=6 cap=-1 pool{w0 u0 b0 r5 g0 c0 *1} hand=Dragonstorm|Desperate Ritual
+[uo-cast] gs=1191413 t=6 m=1 d=0 card=Desperate Ritual num=7 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=1191413 t=6 m=1 d=0 card=Dragonstorm num=10 staged=0 splice=0 paid=1 pool=5
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/g6/g1412/headnouser
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

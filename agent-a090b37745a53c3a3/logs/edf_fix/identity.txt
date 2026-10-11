@@ -1,0 +1,13 @@
+job              tip (played avg digest)      mine levers=0                      mine defaults                     
+bruna_d0         150 6.3333 97d28eba320cf28f  SAME                               DIFF avg 6.3333 be866be6bdf8c978  
+bruna_d3         15 4.8667 bbb58215848d1028   SAME                               SAME                              
+burn_d0          150 4.5333 3e7006134384fc00  SAME                               SAME                              
+burn_d3          15 4.6667 85ab7f8a66f45904   SAME                               SAME                              
+dragonstorm_d0   150 5.1000 ffa8e9a7a0a33608  SAME                               SAME                              
+dragonstorm_d3   15 4.7333 bb4a536b01ad7567   SAME                               SAME                              
+edf_d0           150 5.5267 60da9465e609936d  SAME                               DIFF avg 5.4000 41dc33a021b5c2d3  
+edf_d3           15 4.6000 e5d8ca8ed109670d   SAME                               DIFF avg 4.6000 0f7f71ce28368d82  
+fungus_d0        150 5.7400 b272ddc5cd918096  SAME                               SAME                              
+fungus_d3        15 5.4667 60c5472204256c6c   SAME                               SAME                              
+hinata_d0        150 7.0333 c806361d7e37ca14  SAME                               SAME                              
+hinata_d3        15 5.6667 199794ae4a215dc5   SAME                               SAME                              

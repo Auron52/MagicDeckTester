@@ -1,0 +1,30 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast
+[exec-tap] T1 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth
+[exec-tap] T2 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T2 Trace of Abundance tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T3 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T3 Trace of Abundance tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T4 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T4 Fertile Ground tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Wild Growth Mariposa Military Base Fertile Ground
+[exec-tap] T4 Living Wish tapped: Mariposa Military Base  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base(T) Fertile Ground
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base(T) Fertile Ground
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Fertile Ground
+[exec-tap] T5 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base Fertile Ground
+[exec-tap] T5 Emiel the Blessed tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Fertile Ground
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Fertile Ground
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g985_d0_old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

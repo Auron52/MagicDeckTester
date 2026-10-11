@@ -1,0 +1,60 @@
+[flags] WARNING: MTG_NONE is set but is not a flag this binary reads -- a typo or a deleted flag? It will have NO effect (`mtg --list-flags` prints the known set).
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7000035 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Desperate Ritual|Seething Song|Desperate Ritual|Apex of Power|Seething Song|Sandstone Needle
+[uo-order] gs=7000035 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Desperate Ritual|Seething Song|Desperate Ritual|Apex of Power|Seething Song|Sandstone Needle
+[uo-order] gs=7000035 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Desperate Ritual|Seething Song|Desperate Ritual|Apex of Power|Seething Song|Sandstone Needle
+[uo-order] gs=7000035 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Desperate Ritual|Seething Song|Desperate Ritual|Apex of Power|Seething Song|Sandstone Needle
+[uo-order] gs=7000035 t=3 m=1 route=opaque pool=2 n=6 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Seething Song|Seething Song|Desperate Ritual:s1|Desperate Ritual|Apex of Power|Irencrag Feat
+[uo-state] gs=7000035 t=3 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Desperate Ritual|Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat
+[uo-cast] gs=7000035 t=3 m=1 d=0 card=Seething Song num=55 staged=0 splice=0 paid=0 pool=0
+[uo-cast] gs=7000035 t=3 m=1 d=0 card=Seething Song num=55 staged=0 splice=0 paid=0 pool=0
+[uo-cast] gs=7000035 t=3 m=1 d=0 card=Desperate Ritual num=6 staged=0 splice=1 paid=0 pool=0
+[uo-cast] gs=7000035 t=3 m=1 d=0 card=Desperate Ritual num=6 staged=0 splice=0 paid=1 pool=0
+[uo-cast] gs=7000035 t=3 m=1 d=0 card=Apex of Power num=3 staged=0 splice=0 paid=0 pool=3
+[uo-order] gs=7000035 t=3 m=1 route=cont pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=3 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat
+[uo-cast] gs=7000035 t=3 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=0 pool=3
+[uo-order] gs=7000035 t=3 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=3 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat
+[uo-order] gs=7000035 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat
+[uo-order] gs=7000035 t=4 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=4 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat
+[uo-order] gs=7000035 t=4 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=4 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat
+[uo-order] gs=7000035 t=5 m=1 route=opaque pool=6 n=6 pays=-1 ppays=4 mpos=0 mearl=0 seq=Ruby Medallion|Desperate Ritual|Seething Song|Seething Song|Apex of Power|Irencrag Feat
+[uo-state] gs=7000035 t=5 cap=-1 pool{w0 u0 b0 r6 g0 c0 *0} hand=Seething Song|Desperate Ritual|Apex of Power|Seething Song|Irencrag Feat|Ruby Medallion
+[uo-cast] gs=7000035 t=5 m=1 d=0 card=Ruby Medallion num=43 staged=0 splice=0 paid=1 pool=3
+[uo-cast] gs=7000035 t=5 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=0 paid=1 pool=4
+[uo-cast] gs=7000035 t=5 m=1 d=0 card=Seething Song num=55 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=7000035 t=5 m=1 d=0 card=Seething Song num=56 staged=0 splice=0 paid=1 pool=9
+[uo-cast] gs=7000035 t=5 m=1 d=0 card=Apex of Power num=3 staged=0 splice=0 paid=1 pool=12
+[uo-order] gs=7000035 t=5 m=1 route=cont-searched pool=13 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Irencrag Feat
+[uo-state] gs=7000035 t=5 cap=-1 pool{w0 u0 b0 r13 g0 c0 *0} hand=Irencrag Feat|Pyretic Ritual*|Sandstone Needle*|Mountain*|Mercadian Bazaar*|Mountain*|Seething Song*|Desperate Ritual*
+[uo-cast] gs=7000035 t=5 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=1 pool=13
+[uo-order] gs=7000035 t=5 m=1 route=clean pool=17 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=5 cap=1 pool{w0 u0 b0 r17 g0 c0 *0} hand=Pyretic Ritual*|Sandstone Needle*|Mountain*|Mercadian Bazaar*|Mountain*|Seething Song*|Desperate Ritual*
+[uo-order] gs=7000035 t=5 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=5 cap=1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Pyretic Ritual*|Sandstone Needle*|Mountain*|Mercadian Bazaar*|Mountain*|Seething Song*|Desperate Ritual*
+[uo-order] gs=7000035 t=6 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=6 cap=-1 pool{w0 u0 b0 r7 g0 c0 *0} hand=Apex of Power
+[uo-order] gs=7000035 t=6 m=2 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=6 cap=-1 pool{w0 u0 b0 r7 g0 c0 *0} hand=Apex of Power
+[uo-order] gs=7000035 t=7 m=1 route=clean pool=8 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-state] gs=7000035 t=7 cap=-1 pool{w0 u0 b0 r8 g0 c0 *0} hand=Apex of Power|Scourge of Valkas
+[uo-cast] gs=7000035 t=7 m=1 d=0 card=Scourge of Valkas num=52 staged=0 splice=0 paid=1 pool=3
+[uo-order] gs=7000035 t=7 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=7 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Apex of Power
+[uo-order] gs=7000035 t=8 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=8 cap=-1 pool{w0 u0 b0 r7 g0 c0 *0} hand=Apex of Power|Rite of Flame
+[uo-order] gs=7000035 t=8 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7000035 t=8 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Rite of Flame
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/tr/f35
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

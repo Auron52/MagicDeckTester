@@ -1,0 +1,5 @@
+ds d0: 300 paired; turns on 1563 off 1562 (delta +1); faster 1 slower 2; ms on/off 69/79 units 0/0
+   SLOWER ds d0 gi=73 seed=8500074: on 9 off 7
+   SLOWER ds d0 gi=147 seed=8500148: on 9 off 8
+   faster ds d0 gi=227 seed=8500228: on 6 off 8
+ds d3: 100 paired; turns on 455 off 455 (delta +0); faster 0 slower 0; ms on/off 20470/22170 units 413023/415038

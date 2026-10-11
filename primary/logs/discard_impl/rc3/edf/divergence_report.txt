@@ -1,0 +1,246 @@
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337376 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=76 seed=1650077 listed old=5 new=6
+result new={'turn': 6, 'winner': 'player'} old={'turn': 5, 'winner': 'player'}
+opening: ['Training Grounds', 'Aether Hub', 'Aether Hub', "Eladamri's Call", 'Overgrowth', 'Eldrazi Displacer', 'Emiel the Blessed'] mulls 0
+DIVERGE at T5 MAIN_1
+  board before: ['Aether Hub', 'Training Grounds', 'Aether Hub', 'Yavimaya Coast', 'Eldrazi Displacer', 'Conservatory', 'Overgrowth']
+  hand before : ["Eladamri's Call", 'Emiel the Blessed', 'Living Wish', 'Trace of Abundance', 'Overgrowth'] opp 17
+  NEW: CAST_SPELL:Trace of Abundance | CAST_SPELL:Overgrowth | CAST_SPELL:Eladamri's Call | REVEAL:Cloud of Faeries | CAST_SPELL:Living Wish | REVEAL:Dimensional Infiltrator
+  OLD: CAST_SPELL:Living Wish | REVEAL:Cloud of Faeries | CAST_SPELL:Cloud of Faeries | DRAW:Fertile Ground | DRAW:Emiel the Blessed | DRAW:Yavimaya Coast | DRAW:Wild Growth | DRAW:Fertile Ground | DRAW:Emiel the Blessed | DRAW:Brushland | DRAW:Cloud of Faeries | DRAW:Eldrazi Displacer | DRAW:Trace of Abundance | DRAW:Overgrowth | DRAW:Mariposa Military Base | DRAW:Brushland | DRAW:Wild Growth | DRAW:Fertile Ground | DRAW:Emiel the Blessed | DRAW:Living Wish | REVEAL:Essence Depleter | DRAW:Cloud of Faeries | DRAW:Adarkar Wastes | DRAW:Peregrine Drake | DRAW:Trace of Abundance | DRAW:Peregrine Drake | DRAW:Adarkar Wastes | DRAW:Conservatory | DRAW:Eldrazi Displacer | DRAW:Training Grounds | DRAW:Conservatory | DRAW:Conservatory | DRAW:Trace of Abundance | DRAW:Peregrine Drake | DRAW:Brushland | DRAW:Yavimaya Coast | DRAW:Peregrine Drake | DRAW:Fertile Ground | DRAW:Kitchen | DRAW:Yavimaya Coast | DRAW:Mariposa Military Base | DRAW:Cloud of Faeries | DRAW:Wild Growth | DRAW:Aether Hub | DRAW:Overgrowth | DRAW:Shivan Gorge | DRAW:Kitchen | DRAW:Brushland | DRAW:Living Wish | DRAW:Mariposa Military Base | DRAW:Wild Growth | ABILITY:Eldrazi Displacer(blink x108)
+   next NEW T5 COMBAT: ATTACK
+   next OLD T5 COMBAT: ATTACK
+  subsets scored in first T5 decision: new=76 old=80
+  ONLY OLD (rejected by the fix): ['Emiel the Blessed,', 'Emiel the Blessed,Living Wish,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337389 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337390 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=110 seed=1650111 listed old=4 new=6
+result new={'turn': 6, 'winner': 'player'} old={'turn': 4, 'winner': 'player'}
+opening: ['Training Grounds', 'Conservatory', 'Living Wish', 'Brushland', 'Overgrowth', 'Wild Growth'] mulls 1
+DIVERGE at T1 MAIN_1
+  board before: []
+  hand before : ['Training Grounds', 'Conservatory', 'Living Wish', 'Brushland', 'Overgrowth', 'Wild Growth', 'Trace of Abundance'] opp 20
+  NEW: PLAY_LAND:Brushland | CAST_SPELL:Wild Growth
+  OLD: PLAY_LAND:Brushland
+   next NEW T1 COMBAT: 
+   next OLD T1 COMBAT: 
+   next NEW T1 MAIN_2: 
+   next OLD T1 MAIN_2: 
+   next NEW T2 DRAW: DRAW:Yavimaya Coast
+   next OLD T2 DRAW: DRAW:Yavimaya Coast
+  subsets scored in first T1 decision: new=2 old=4
+  ONLY OLD (rejected by the fix): ['Training Grounds,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337412 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=354 seed=1650355 listed old=4 new=5
+result new={'turn': 5, 'winner': 'player'} old={'turn': 4, 'winner': 'player'}
+opening: ['Trace of Abundance', 'Eldrazi Displacer', 'Conservatory', 'Yavimaya Coast', 'Eldrazi Displacer', 'Wild Growth', 'Peregrine Drake'] mulls 0
+DIVERGE at T2 MAIN_1
+  board before: ['Yavimaya Coast', 'Wild Growth']
+  hand before : ['Trace of Abundance', 'Eldrazi Displacer', 'Conservatory', 'Eldrazi Displacer', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth'] opp 20
+  NEW: PLAY_LAND:Conservatory | CAST_SPELL:Wild Growth
+  OLD: PLAY_LAND:Conservatory
+   next NEW T2 COMBAT: 
+   next OLD T2 COMBAT: 
+   next NEW T2 MAIN_2: 
+   next OLD T2 MAIN_2: 
+   next NEW T3 DRAW: DRAW:Mariposa Military Base
+   next OLD T3 DRAW: DRAW:Mariposa Military Base
+  subsets scored in first T2 decision: new=4 old=12
+  ONLY OLD (rejected by the fix): ['Trace of Abundance,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337423 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337424 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=373 seed=1650374 listed old=4 new=5
+result new={'turn': 5, 'winner': 'player'} old={'turn': 4, 'winner': 'player'}
+opening: ['Wild Growth', 'Eldrazi Displacer', 'Peregrine Drake', 'Aether Hub', 'Living Wish', 'Wild Growth', 'Yavimaya Coast'] mulls 0
+DIVERGE at T2 MAIN_1
+  board before: ['Aether Hub', 'Wild Growth']
+  hand before : ['Eldrazi Displacer', 'Peregrine Drake', 'Living Wish', 'Wild Growth', 'Yavimaya Coast', 'Fertile Ground'] opp 20
+  NEW: PLAY_LAND:Yavimaya Coast | CAST_SPELL:Wild Growth | CAST_SPELL:Living Wish | REVEAL:Dimensional Infiltrator
+  OLD: PLAY_LAND:Yavimaya Coast
+   next NEW T2 COMBAT: 
+   next OLD T2 COMBAT: 
+   next NEW T2 MAIN_2: 
+   next OLD T2 MAIN_2: 
+   next NEW T3 DRAW: DRAW:Yavimaya Coast
+   next OLD T3 DRAW: DRAW:Yavimaya Coast
+  subsets scored in first T2 decision: new=24 old=26
+  ONLY OLD (rejected by the fix): ['Eldrazi Displacer,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337434 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337435 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=432 seed=1650433 listed old=7 new=8
+result new={'turn': 8, 'winner': 'player'} old={'turn': 7, 'winner': 'player'}
+opening: ['Adarkar Wastes', 'Wild Growth', 'Training Grounds', 'Aether Hub', 'Living Wish', 'Emiel the Blessed', 'Brushland'] mulls 0
+DIVERGE at T1 MAIN_1
+  board before: []
+  hand before : ['Adarkar Wastes', 'Wild Growth', 'Training Grounds', 'Aether Hub', 'Living Wish', 'Emiel the Blessed', 'Brushland', 'Wild Growth'] opp 20
+  NEW: PLAY_LAND:Adarkar Wastes | CAST_SPELL:Training Grounds
+  OLD: PLAY_LAND:Adarkar Wastes
+   next NEW T1 COMBAT: 
+   next OLD T1 COMBAT: 
+   next NEW T1 MAIN_2: 
+   next OLD T1 MAIN_2: 
+   next NEW T2 DRAW: DRAW:Aether Hub
+   next OLD T2 DRAW: DRAW:Aether Hub
+  subsets scored in first T1 decision: new=2 old=4
+  ONLY OLD (rejected by the fix): ['Wild Growth,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337450 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=547 seed=1650548 listed old=5 new=6
+result new={'turn': 6, 'winner': 'player'} old={'turn': 5, 'winner': 'player'}
+opening: ['Conservatory', 'Eldrazi Displacer', 'Trace of Abundance', 'Living Wish', 'Brushland', 'Cloud of Faeries', 'Brushland'] mulls 0
+DIVERGE at T2 MAIN_1
+  board before: ['Brushland']
+  hand before : ['Conservatory', 'Eldrazi Displacer', 'Trace of Abundance', 'Living Wish', 'Cloud of Faeries', 'Brushland', 'Mariposa Military Base'] opp 20
+  NEW: PLAY_LAND:Brushland | CAST_SPELL:Trace of Abundance
+  OLD: PLAY_LAND:Brushland
+   next NEW T2 COMBAT: 
+   next OLD T2 COMBAT: 
+   next NEW T2 MAIN_2: 
+   next OLD T2 MAIN_2: 
+   next NEW T3 DRAW: DRAW:Emiel the Blessed
+   next OLD T3 DRAW: DRAW:Emiel the Blessed
+  subsets scored in first T2 decision: new=6 old=8
+  ONLY OLD (rejected by the fix): ['Cloud of Faeries,']
+  ONLY NEW: []
+################ edf d0 gi=604 seed=1650605 listed old=6 new=7
+result new={'turn': 7, 'winner': 'player'} old={'turn': 6, 'winner': 'player'}
+opening: ['Yavimaya Coast', 'Emiel the Blessed', 'Brushland', 'Cloud of Faeries', 'Living Wish', 'Overgrowth', 'Emiel the Blessed'] mulls 0
+no divergence in common prefix
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337502 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=985 seed=1650986 listed old=6 new=7
+result new={'turn': 7, 'winner': 'player'} old={'turn': 6, 'winner': 'player'}
+opening: ['Trace of Abundance', 'Mariposa Military Base', 'Living Wish', 'Emiel the Blessed', 'Wild Growth', 'Emiel the Blessed', 'Yavimaya Coast'] mulls 0
+DIVERGE at T2 MAIN_1
+  board before: ['Yavimaya Coast', 'Wild Growth']
+  hand before : ['Trace of Abundance', 'Mariposa Military Base', 'Living Wish', 'Emiel the Blessed', 'Emiel the Blessed', 'Trace of Abundance'] opp 20
+  NEW: PLAY_LAND:Mariposa Military Base | CAST_SPELL:Living Wish | REVEAL:Cloud of Faeries
+  OLD: PLAY_LAND:Mariposa Military Base
+   next NEW T2 COMBAT: 
+   next OLD T2 COMBAT: 
+   next NEW T2 MAIN_2: 
+   next OLD T2 MAIN_2: 
+   next NEW T3 DRAW: DRAW:Living Wish
+   next OLD T3 DRAW: DRAW:Living Wish
+  subsets scored in first T2 decision: new=2 old=10
+  ONLY OLD (rejected by the fix): ['Trace of Abundance,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337513 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=1031 seed=1651032 listed old=6 new=7
+result new={'turn': 7, 'winner': 'player'} old={'turn': 6, 'winner': 'player'}
+opening: ['Adarkar Wastes', 'Fertile Ground', 'Wild Growth', 'Overgrowth', 'Overgrowth', 'Conservatory', 'Trace of Abundance'] mulls 0
+DIVERGE at T2 MAIN_1
+  board before: ['Adarkar Wastes']
+  hand before : ['Fertile Ground', 'Wild Growth', 'Overgrowth', 'Overgrowth', 'Conservatory', 'Trace of Abundance', 'Training Grounds'] opp 20
+  NEW: PLAY_LAND:Conservatory | CAST_SPELL:Training Grounds
+  OLD: PLAY_LAND:Conservatory
+   next NEW T2 COMBAT: 
+   next OLD T2 COMBAT: 
+   next NEW T2 MAIN_2: 
+   next OLD T2 MAIN_2: 
+   next NEW T3 DRAW: DRAW:Fertile Ground
+   next OLD T3 DRAW: DRAW:Fertile Ground
+  subsets scored in first T2 decision: new=2 old=6
+  ONLY OLD (rejected by the fix): ['Wild Growth,']
+  ONLY NEW: []
+################ edf d0 gi=1408 seed=1651409 listed old=4 new=5
+result new={'turn': 5, 'winner': 'player'} old={'turn': 4, 'winner': 'player'}
+opening: ['Conservatory', 'Living Wish', 'Mariposa Military Base', 'Eldrazi Displacer', 'Emiel the Blessed', 'Kitchen', 'Training Grounds'] mulls 0
+DIVERGE at T4 MAIN_1
+  board before: ['Mariposa Military Base', 'Brushland', 'Yavimaya Coast', 'Eldrazi Displacer']
+  hand before : ['Conservatory', 'Emiel the Blessed', 'Kitchen', 'Training Grounds', 'Fertile Ground', 200002, 'Conservatory'] opp 20
+  NEW: PLAY_LAND:Conservatory | CAST_SPELL:Fertile Ground | CAST_SPELL:Cloud of Faeries
+  OLD: PLAY_LAND:Conservatory | CAST_SPELL:Cloud of Faeries | CAST_SPELL:Training Grounds | DRAW:Adarkar Wastes | DRAW:Emiel the Blessed | DRAW:Trace of Abundance | DRAW:Yavimaya Coast | DRAW:Wild Growth | DRAW:Conservatory | DRAW:Shivan Gorge | DRAW:Overgrowth | DRAW:Eldrazi Displacer | DRAW:Living Wish | REVEAL:Essence Depleter
+   next NEW T4 COMBAT: ATTACK
+   next OLD T4 COMBAT: ATTACK
+  subsets scored in first T4 decision: new=16 old=18
+  ONLY OLD (rejected by the fix): ['Training Grounds,Cloud of Faeries,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337558 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337559 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=1475 seed=1651476 listed old=7 new=8
+result new={'turn': 8, 'winner': 'player'} old={'turn': 7, 'winner': 'player'}
+opening: ['Kitchen', 'Living Wish', 'Peregrine Drake', 'Trace of Abundance', "Eladamri's Call", 'Aether Hub', 'Overgrowth'] mulls 0
+DIVERGE at T4 MAIN_1
+  board before: ['Aether Hub', 'Shivan Gorge', 'Kitchen']
+  hand before : ['Peregrine Drake', 'Trace of Abundance', "Eladamri's Call", 'Overgrowth', 200003, 'Peregrine Drake', 'Mariposa Military Base'] opp 20
+  NEW: PLAY_LAND:Mariposa Military Base | CAST_SPELL:Overgrowth
+  OLD: PLAY_LAND:Mariposa Military Base
+   next NEW T4 COMBAT: 
+   next OLD T4 COMBAT: 
+   next NEW T4 MAIN_2: 
+   next OLD T4 MAIN_2: 
+   next NEW T5 DRAW: DRAW:Wild Growth
+   next OLD T5 DRAW: DRAW:Wild Growth
+  subsets scored in first T4 decision: new=6 old=10
+  ONLY OLD (rejected by the fix): ['Eldrazi Displacer,', 'Shivan Gorge,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337569 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=1620 seed=1651621 listed old=6 new=7
+result new={'turn': 7, 'winner': 'player'} old={'turn': 6, 'winner': 'player'}
+opening: ['Aether Hub', 'Yavimaya Coast', 'Overgrowth', 'Emiel the Blessed', 'Wild Growth', 'Peregrine Drake', 'Living Wish'] mulls 0
+DIVERGE at T5 MAIN_1
+  board before: ['Aether Hub', 'Wild Growth', 'Yavimaya Coast', 'Fertile Ground', 'Wild Growth', 'Dimensional Infiltrator', 'Peregrine Drake']
+  hand before : ['Overgrowth', 'Emiel the Blessed', 'Overgrowth', 'Cloud of Faeries', 'Trace of Abundance'] opp 18
+  NEW: CAST_SPELL:Overgrowth | CAST_SPELL:Cloud of Faeries
+  OLD: 
+   next NEW T5 COMBAT: ATTACK
+   next OLD T5 COMBAT: ATTACK
+   next NEW T5 MAIN_2: 
+   next OLD T5 MAIN_2: 
+   next NEW T6 DRAW: DRAW:Living Wish
+   next OLD T6 DRAW: DRAW:Living Wish
+  subsets scored in first T5 decision: new=70 old=72
+  ONLY OLD (rejected by the fix): ['Emiel the Blessed,']
+  ONLY NEW: []
+################ edf d0 gi=1676 seed=1651677 listed old=4 new=5
+result new={'turn': 5, 'winner': 'player'} old={'turn': 4, 'winner': 'player'}
+opening: ['Wild Growth', 'Conservatory', 'Fertile Ground', 'Yavimaya Coast', 'Eldrazi Displacer', 'Fertile Ground'] mulls 1
+DIVERGE at T4 MAIN_1
+  board before: ['Yavimaya Coast', 'Wild Growth', 'Conservatory', 'Cloud of Faeries', 'Wild Growth', 'Eldrazi Displacer']
+  hand before : ['Fertile Ground', 'Fertile Ground', 'Emiel the Blessed', 'Trace of Abundance'] opp 19
+  NEW: CAST_SPELL:Fertile Ground | CAST_SPELL:Fertile Ground
+  OLD: DRAW:Living Wish | REVEAL:Essence Depleter | DRAW:Wild Growth | DRAW:Mariposa Military Base | DRAW:Trace of Abundance | DRAW:Wild Growth | DRAW:Peregrine Drake
+   next NEW T4 COMBAT: ATTACK
+   next OLD T4 COMBAT: ATTACK
+  subsets scored in first T4 decision: new=0 old=0
+  ONLY OLD (rejected by the fix): []
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337594 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337593 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d0 gi=1985 seed=1651986 listed old=6 new=7
+result new={'turn': 7, 'winner': 'player'} old={'turn': 6, 'winner': 'player'}
+opening: ['Trace of Abundance', 'Trace of Abundance', 'Yavimaya Coast', 'Overgrowth', 'Wild Growth', 'Kitchen', 'Overgrowth'] mulls 0
+DIVERGE at T2 MAIN_1
+  board before: ['Yavimaya Coast', 'Wild Growth']
+  hand before : ['Trace of Abundance', 'Trace of Abundance', 'Overgrowth', 'Kitchen', 'Overgrowth', 'Living Wish'] opp 20
+  NEW: PLAY_LAND:Kitchen | CAST_SPELL:Living Wish | REVEAL:Eldrazi Displacer
+  OLD: PLAY_LAND:Kitchen
+   next NEW T2 COMBAT: 
+   next OLD T2 COMBAT: 
+   next NEW T2 MAIN_2: 
+   next OLD T2 MAIN_2: 
+   next NEW T3 DRAW: DRAW:Aether Hub
+   next OLD T3 DRAW: DRAW:Aether Hub
+  subsets scored in first T2 decision: new=2 old=10
+  ONLY OLD (rejected by the fix): ['Trace of Abundance,']
+  ONLY NEW: []
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337609 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+/workspaces/MagicDeckTester/logs/discard_impl/rc3/scripts/run1.sh: line 26: 1337610 Segmentation fault      env $OLDENV ${ENV_EXTRA:-} nice -n 15 "$BIN" "$D" --profile "$P" --seed "$seed" --game-index "$gi" --games 1 $CA --threads 1 --log-dir "$out" > "$out/stdout.txt" 2> "$out/stderr.txt"
+################ edf d3 gi=285 seed=1645286 listed old=4 new=5
+result new={'turn': 5, 'winner': 'player'} old={'turn': 4, 'winner': 'player'}
+opening: ['Trace of Abundance', 'Mariposa Military Base', 'Overgrowth', 'Training Grounds', 'Fertile Ground', 'Shivan Gorge', 'Kitchen'] mulls 0
+DIVERGE at T1 MAIN_1
+  NEW: PLAY_LAND:Kitchen
+  OLD: PLAY_LAND:Mariposa Military Base
+   next NEW T1 COMBAT: 
+   next OLD T1 COMBAT: 
+   next NEW T1 MAIN_2: 
+   next OLD T1 MAIN_2: 
+   next NEW T2 DRAW: DRAW:Conservatory
+   next OLD T2 DRAW: DRAW:Conservatory
+  subsets scored in first T1 decision: new=0 old=0
+  ONLY OLD (rejected by the fix): []
+  ONLY NEW: []

@@ -1,0 +1,49 @@
+{
+ "deck": "decks/FiveColour/FiveColour.cod",
+ "profile": "decks/FiveColour/FiveColour.profile.json",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "resume_at": "main1",
+ "active_life": 20,
+ "battlefield": [
+  {
+   "name": "Overgrown Tomb",
+   "controller": 0
+  },
+  {
+   "name": "Deathrite Shaman",
+   "controller": 0
+  },
+  {
+   "name": "Island",
+   "controller": 0
+  },
+  {
+   "name": "Faeburrow Elder",
+   "controller": 0
+  },
+  {
+   "name": "Steam Vents",
+   "controller": 0
+  },
+  {
+   "name": "Cosmic Spider-Man",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Nicol Bolas, Planeswalker",
+  "Maelstrom Archangel",
+  "Maelstrom Archangel",
+  "Mana Cannons"
+ ],
+ "graveyard": [],
+ "library_filler": "Island",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 6,
+ "env": {},
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/fivecolour/sc/o1817/new_L6.log.json"
+}

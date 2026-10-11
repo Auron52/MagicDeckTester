@@ -1,0 +1,100 @@
+1c1
+< result {'turn': None, 'winner': 'none'}
+---
+> result {'turn': 7, 'winner': 'player'}
+79,80c79,80
+< T5 CLEANUP: DISCARD Peregrine Drake
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+---
+> T5 CLEANUP: DISCARD Emiel the Blessed
+>     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+82c82
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Emiel the Blessed']
+85c85
+<     hand(8): ['Cloud of Faeries', 'Conservatory', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(8): ['Cloud of Faeries', 'Conservatory', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+87c87
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Emiel the Blessed']
+90c90
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+92c92
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Emiel the Blessed']
+95c95
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+97c97
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Emiel the Blessed']
+100c100
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+102c102
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Emiel the Blessed']
+105c105
+<     hand(8): ['Aether Hub', 'Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(8): ['Aether Hub', 'Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+107,112c107
+<     gy: ['Peregrine Drake']
+<     opp life 20
+< T7 MAIN_1: PLAY_LAND Aether Hub; CAST_SPELL Cloud of Faeries {"manaPaid":"{1}{U}"}; CAST_SPELL Eldrazi Displacer {"manaPaid":"{2}{W}"} [+1 UNTAP_SOURCES]
+<     hand(5): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Aether Hub', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast', 'Conservatory(T)', 'Aether Hub(T)', 'Cloud of Faeries', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Emiel the Blessed']
+113a109,113
+> T7 MAIN_1: PLAY_LAND Aether Hub; REVEAL {"bottomed":[],"kept":[200007],"lookedAt":[{"card":200007,"cardName":"Dimensional Infiltrator","to":"to hand"}],"source":"Living Wish (searched)"}; ABILITY Combo Off {"ability":"combo route: win"}; DRAW Training Grounds; DRAW Emiel the Blessed; DRAW Fertile Ground; DRAW Fertile Ground; DRAW Mariposa Military Base; DRAW Living Wish; REVEAL {"bottomed":[],"kept":[200006],"lookedAt":[{"card":200006,"cardName":"Essence Depleter","to":"to hand"}],"source":"Living Wish (searched)"}; DRAW Conservatory; DRAW Shivan Gorge; DRAW Conservatory; DRAW Trace of Abundance; DRAW Eladamri's Call; DRAW Overgrowth; DRAW Emiel the Blessed; DRAW Wild Growth; DRAW Aether Hub; DRAW Cloud of Faeries [+112 UNTAP_SOURCES]
+>     hand(16): ['Aether Hub', 'Cloud of Faeries', 'Conservatory', 'Conservatory', "Eladamri's Call", 'Eldrazi Displacer', 'Emiel the Blessed', 'Fertile Ground', 'Mariposa Military Base', 'Overgrowth', 'Overgrowth', 'Shivan Gorge', 'Trace of Abundance', 'Trace of Abundance', 'Training Grounds', 'Wild Growth']
+>     bf: ['Aether Hub(T)', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast(T)', 'Conservatory(T)', 'Aether Hub(T)', 'Cloud of Faeries', 'Eldrazi Displacer', 'Dimensional Infiltrator', 'Fertile Ground[attachedTo=4]', 'Emiel the Blessed', 'Essence Depleter', "Peregrine Drake[counters=[{'count': 1, 'kind': '+1/+1'}]]"]
+>     gy: ['Emiel the Blessed']
+>     opp life 0
+115,143c115,118
+<     hand(5): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Aether Hub', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast', 'Conservatory(T)', 'Aether Hub(T)', 'Cloud of Faeries', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+<     opp life 20
+< T7 MAIN_2: 
+<     hand(5): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Aether Hub', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast', 'Conservatory(T)', 'Aether Hub(T)', 'Cloud of Faeries', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+<     opp life 20
+< T8 DRAW: DRAW Training Grounds
+<     hand(6): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+<     bf: ['Aether Hub', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast', 'Conservatory', 'Aether Hub', 'Cloud of Faeries', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+<     opp life 20
+< T8 MAIN_1: CAST_SPELL Trace of Abundance {"manaPaid":"{R}{G}"}; CAST_SPELL Eldrazi Displacer {"manaPaid":"{2}{W}"}
+<     hand(4): ['Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Training Grounds']
+<     bf: ['Aether Hub(T)', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast(T)', 'Conservatory(T)', 'Aether Hub', 'Cloud of Faeries', 'Eldrazi Displacer', 'Trace of Abundance[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+<     opp life 20
+< T8 COMBAT: ATTACK {"damage":4,"oppLife":16}
+<     hand(4): ['Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Training Grounds']
+<     bf: ['Aether Hub(T)', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast(T)', 'Conservatory(T)', 'Aether Hub', 'Cloud of Faeries(T)', 'Eldrazi Displacer(T)', 'Trace of Abundance[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+<     opp life 16
+< T8 MAIN_2: 
+<     hand(4): ['Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Training Grounds']
+<     bf: ['Aether Hub(T)', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast(T)', 'Conservatory(T)', 'Aether Hub', 'Cloud of Faeries(T)', 'Eldrazi Displacer(T)', 'Trace of Abundance[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Peregrine Drake']
+<     opp life 16
+---
+>     hand(16): ['Aether Hub', 'Cloud of Faeries', 'Conservatory', 'Conservatory', "Eladamri's Call", 'Eldrazi Displacer', 'Emiel the Blessed', 'Fertile Ground', 'Mariposa Military Base', 'Overgrowth', 'Overgrowth', 'Shivan Gorge', 'Trace of Abundance', 'Trace of Abundance', 'Training Grounds', 'Wild Growth']
+>     bf: ['Aether Hub(T)', 'Wild Growth[attachedTo=3]', 'Yavimaya Coast(T)', 'Conservatory(T)', 'Aether Hub(T)', 'Cloud of Faeries', 'Eldrazi Displacer', 'Dimensional Infiltrator', 'Fertile Ground[attachedTo=4]', 'Emiel the Blessed', 'Essence Depleter', "Peregrine Drake[counters=[{'count': 1, 'kind': '+1/+1'}]]"]
+>     gy: ['Emiel the Blessed']
+>     opp life 0

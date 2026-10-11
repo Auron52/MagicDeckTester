@@ -1,0 +1,23 @@
+fix(hinata): "castable from hand" counts the board's real mana, not its sources (MTG_HINATA_CASTABLE_MANA)
+
+HinataCastableFromHand compared ManaSourceCount with her mana value. That under-counts every multi-mana
+source and ignores colours: 2HG gi 254's Sol Ring + Izzet Boilerworks + Forbidden Orchard is three
+sources and five mana, {1}{U}{R}{W} payable, read "not castable"; four Islands read "castable". It now
+asks AvailableManaPool (the accounting pool every payment gate uses) to pay her printed cost with the
+pool's own colour-aware CanPay. heurarm slot HINATA_CASTABLE_MANA appended; DEFAULT ON; =0 -> the source
+count.
+
+Consumers: Reality Spasm's emission and Crackle's X sizing under MTG_HINATA_SUBSET_CREDIT, and lever B's
+scope gate (MTG_HINATA_HOLD_NEEDS_HINATA) -- all default OFF, so shipped play is BYTE-IDENTICAL: the
+held-out batch (seeds 8300001+, 2HG d0 400 + d0 2000) matched every job digest on vs off. Where it is
+consumed it moves play: SUBSET_CREDIT=1 at d3 b10 (150 games) 2 of 6 digests move, 0 turn changes, units
+0.984; lever B at d0 (1000 games) +1 turn (1 faster / 2 slower -- both boards where she really is not
+castable that turn, so B's scope rule releases the lone Crackle a turn early). Under lever B it alone
+recovers the 2HG gi 254 stall (9 -> 4). Mechanism and numbers: the "d0-runner stall" section of
+docs/design/reality-spasm-crackle-classification.md (next commit).
+
+Unit: test_hinata_crackle_count.cpp -- on/off on the gi 254 board and four Islands, plus the untap-
+ritual gate under the subset credit; the HOLD_NEEDS_HINATA fixture's "castable" board now really can
+cast her (four Forbidden Orchards). Suite 932/932.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

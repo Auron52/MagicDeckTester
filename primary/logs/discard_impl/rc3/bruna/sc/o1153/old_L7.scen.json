@@ -1,0 +1,76 @@
+{
+ "deck": "decks/Bruna/Bruna.cod",
+ "profile": "decks/Bruna/Bruna.profile.json",
+ "turn": 8,
+ "on_the_play": true,
+ "max_turns": 8,
+ "resume_at": "main1",
+ "active_life": 20,
+ "battlefield": [
+  {
+   "name": "Botanical Sanctum",
+   "controller": 0
+  },
+  {
+   "name": "Razorverge Thicket",
+   "controller": 0
+  },
+  {
+   "name": "Lightning Greaves",
+   "controller": 0,
+   "equips": "Somberwald Sage"
+  },
+  {
+   "name": "Botanical Sanctum",
+   "controller": 0
+  },
+  {
+   "name": "Birds of Paradise",
+   "controller": 0
+  },
+  {
+   "name": "Somberwald Sage",
+   "controller": 0
+  },
+  {
+   "name": "Seaside Citadel",
+   "controller": 0
+  },
+  {
+   "name": "Arcanum Wings",
+   "controller": 0,
+   "equips": "Birds of Paradise"
+  },
+  {
+   "name": "Eldrazi Conscription",
+   "controller": 0,
+   "equips": "Birds of Paradise"
+  }
+ ],
+ "hand": [
+  "Colossification",
+  "Mythic Proportions",
+  "Arcanum Wings",
+  "Bruna, Light of Alabaster"
+ ],
+ "graveyard": [
+  "Remote Farm"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 7,
+ "env": {
+  "MTG_DRAGONSTORM_ORDER_OPAQUE": "0",
+  "MTG_PAYABLE_ORDER_RITUALS": "0",
+  "MTG_COLOR_EXACT_SCALED": "0",
+  "MTG_ATTACK_TAP_NEED_EXACT": "0",
+  "MTG_ATTACK_TAP_ABILITY_DISCOUNT": "0",
+  "MTG_ROLLOUT_LAND_ACT_COLOR": "0",
+  "MTG_SOLVE_VERIFIED_WIN": "0",
+  "MTG_EDF_GORGE_RED_SIZING": "0",
+  "MTG_SOLVE_PENDING_AURA_EXACT": "0"
+ },
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/bruna/sc/o1153/old_L7.log.json"
+}

@@ -1,0 +1,259 @@
+{
+ "jobs": [
+  {
+   "name": "edf_ship_on",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20
+  },
+  {
+   "name": "edf_ship_L1",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_SOLVE_UNTAP_CREDIT": false
+   }
+  },
+  {
+   "name": "edf_ship_L2a",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_PREPAY_ENERGY_RESTORE": false
+   }
+  },
+  {
+   "name": "edf_ship_L2b",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_SOLVE_AURA_PAYER_CHECK": false
+   }
+  },
+  {
+   "name": "edf_ship_L3",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_EDF_ROUTE_BOARD_DEPLOY": false
+   }
+  },
+  {
+   "name": "edf_ship_L4",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_EDF_GOFF_VERIFY_UNPROJECTED": false
+   }
+  },
+  {
+   "name": "edf_ship_off",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5320001,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_SOLVE_UNTAP_CREDIT": false,
+    "MTG_PREPAY_ENERGY_RESTORE": false,
+    "MTG_SOLVE_AURA_PAYER_CHECK": false,
+    "MTG_EDF_ROUTE_BOARD_DEPLOY": false,
+    "MTG_EDF_GOFF_VERIFY_UNPROJECTED": false
+   }
+  },
+  {
+   "name": "edf_d3_on",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "edf_d3_L1",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SOLVE_UNTAP_CREDIT": false
+   }
+  },
+  {
+   "name": "edf_d3_L2a",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_PREPAY_ENERGY_RESTORE": false
+   }
+  },
+  {
+   "name": "edf_d3_L2b",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SOLVE_AURA_PAYER_CHECK": false
+   }
+  },
+  {
+   "name": "edf_d3_L3",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_EDF_ROUTE_BOARD_DEPLOY": false
+   }
+  },
+  {
+   "name": "edf_d3_L4",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_EDF_GOFF_VERIFY_UNPROJECTED": false
+   }
+  },
+  {
+   "name": "edf_d3_off",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 300,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SOLVE_UNTAP_CREDIT": false,
+    "MTG_PREPAY_ENERGY_RESTORE": false,
+    "MTG_SOLVE_AURA_PAYER_CHECK": false,
+    "MTG_EDF_ROUTE_BOARD_DEPLOY": false,
+    "MTG_EDF_GOFF_VERIFY_UNPROJECTED": false
+   }
+  },
+  {
+   "name": "edf_d0_on",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "edf_d0_L1",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SOLVE_UNTAP_CREDIT": false
+   }
+  },
+  {
+   "name": "edf_d0_L2a",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_PREPAY_ENERGY_RESTORE": false
+   }
+  },
+  {
+   "name": "edf_d0_L2b",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SOLVE_AURA_PAYER_CHECK": false
+   }
+  },
+  {
+   "name": "edf_d0_L3",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_EDF_ROUTE_BOARD_DEPLOY": false
+   }
+  },
+  {
+   "name": "edf_d0_L4",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_EDF_GOFF_VERIFY_UNPROJECTED": false
+   }
+  },
+  {
+   "name": "edf_d0_off",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 3000,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SOLVE_UNTAP_CREDIT": false,
+    "MTG_PREPAY_ENERGY_RESTORE": false,
+    "MTG_SOLVE_AURA_PAYER_CHECK": false,
+    "MTG_EDF_ROUTE_BOARD_DEPLOY": false,
+    "MTG_EDF_GOFF_VERIFY_UNPROJECTED": false
+   }
+  }
+ ]
+}

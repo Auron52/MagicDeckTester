@@ -1,0 +1,54 @@
+[play] edf_ship_on depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_d3_on depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_on depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[batch] workers=6 (hw_concurrency=24, affinity=6, requested=6)
+[batch] mem: total=48171MB budget=24085MB workers=6 -> tt_cap=20557365/table fsl_pool=9034MB fsl_cap=2000000 plan_cache=600MB rss_cap=35.28G (MTG_MEM_BUDGET_MB / MTG_RSS_CAP_GB; each pool's own env var overrides)
+[win] job=edf_ship_on gi=3 wt=5
+[win] job=edf_ship_on gi=0 wt=3
+[win] job=edf_d3_on gi=1 wt=4
+[win] job=edf_ship_on gi=1 wt=4
+[win] job=edf_d3_on gi=5 wt=6
+[win] job=edf_d3_on gi=6 wt=4
+[win] job=edf_d3_on gi=3 wt=4
+[win] job=edf_d3_on gi=8 wt=4
+[win] job=edf_d3_on gi=9 wt=4
+[win] job=edf_d3_on gi=7 wt=4
+[win] job=edf_d0_on gi=0 wt=5
+[win] job=edf_d0_on gi=2 wt=7
+[win] job=edf_d0_on gi=1 wt=4
+[win] job=edf_d0_on gi=4 wt=8
+[win] job=edf_d0_on gi=5 wt=-1
+[win] job=edf_d0_on gi=6 wt=4
+[win] job=edf_d0_on gi=7 wt=6
+[win] job=edf_d0_on gi=8 wt=5
+[win] job=edf_d0_on gi=9 wt=6
+[win] job=edf_d0_on gi=10 wt=4
+[win] job=edf_d0_on gi=11 wt=5
+[win] job=edf_d0_on gi=12 wt=6
+[win] job=edf_d0_on gi=13 wt=6
+[win] job=edf_d0_on gi=14 wt=3
+[win] job=edf_d0_on gi=15 wt=7
+[win] job=edf_ship_on gi=2 wt=5
+[win] job=edf_d0_on gi=17 wt=-1
+[win] job=edf_d0_on gi=18 wt=6
+[win] job=edf_d0_on gi=19 wt=7
+[win] job=edf_d0_on gi=20 wt=8
+[win] job=edf_d0_on gi=21 wt=6
+[win] job=edf_d0_on gi=22 wt=6
+[win] job=edf_d0_on gi=3 wt=4
+[win] job=edf_d0_on gi=24 wt=7
+[win] job=edf_d0_on gi=25 wt=6
+[win] job=edf_d0_on gi=26 wt=8
+[win] job=edf_d0_on gi=27 wt=5
+[win] job=edf_d0_on gi=28 wt=5
+[win] job=edf_d0_on gi=29 wt=4
+[win] job=edf_d0_on gi=16 wt=6
+[win] job=edf_d0_on gi=23 wt=5
+[win] job=edf_d3_on gi=0 wt=4
+[win] job=edf_d3_on gi=4 wt=4
+[goldfish] SLOW-GAME 48205ms  job=edf_d3_on gi=2 wt=4 units=740482  repro: --seed 5310003 --game-index 2 --games 1
+[win] job=edf_d3_on gi=2 wt=4
+[batch] heartbeat: 0/6 workers busy (0%)  rss=0.2G fsl=0M/0M(of 9034M) plan=0M/208M(of 600M)  -> logs/batch/heartbeat.txt
+[enum-memo] hits=259 misses=15927 clears=0
+[solve-memo] hits=86351 misses=342956 clears=13
+[leaf-eval] published=12248 ties=2653 flips=187 life-equal-ties=463

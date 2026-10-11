@@ -1,0 +1,19 @@
+ds d0: 300 paired; turns on 1559 off 1559 (delta +0); faster 0 slower 0; ms on/off 123/7 units 0/0
+hin d0: 300 paired; turns on 2088 off 2089 (delta -1); faster 1 slower 0; ms on/off 2022/113 units 1/2
+   faster hin d0 gi=286 seed=8300287: on 6 off 7
+hin d3: 100 paired; turns on 564 off 564 (delta +0); faster 0 slower 0; ms on/off 304113/355894 units 6154735/6186127
+cyc d0: 300 paired; turns on 2700 off 2700 (delta +0); faster 0 slower 0; ms on/off 0/0 units 0/0
+cyc d3: 100 paired; turns on 900 off 900 (delta +0); faster 0 slower 0; ms on/off 35281/33825 units 5928453/5928453
+mw d0: 300 paired; turns on 1743 off 1743 (delta +0); faster 0 slower 0; ms on/off 1125/40 units 0/0
+mw d3: 100 paired; turns on 423 off 423 (delta +0); faster 0 slower 0; ms on/off 75135/49890 units 744174/744174
+dragons d0: 300 paired; turns on 1758 off 1758 (delta +0); faster 0 slower 0; ms on/off 2/0 units 0/0
+dragons d3: 100 paired; turns on 556 off 556 (delta +0); faster 0 slower 0; ms on/off 9662/9484 units 651876/651876
+giants d0: 300 paired; turns on 1819 off 1819 (delta +0); faster 0 slower 0; ms on/off 186/189 units 0/0
+giants d3: 100 paired; turns on 582 off 582 (delta +0); faster 0 slower 0; ms on/off 28875/29332 units 1833604/1833604
+snow d0: 300 paired; turns on 1954 off 1954 (delta +0); faster 0 slower 0; ms on/off 91/81 units 0/0
+wk d0: 300 paired; turns on 1393 off 1393 (delta +0); faster 0 slower 0; ms on/off 0/0 units 0/0
+angels d0: 300 paired; turns on 1579 off 1579 (delta +0); faster 0 slower 0; ms on/off 1/1 units 0/0
+bruna d0: 300 paired; turns on 1874 off 1874 (delta +0); faster 0 slower 0; ms on/off 12/18 units 0/0
+kitty d0: 300 paired; turns on 1518 off 1518 (delta +0); faster 0 slower 0; ms on/off 20/19 units 0/0
+stompy d0: 300 paired; turns on 1474 off 1474 (delta +0); faster 0 slower 0; ms on/off 42/0 units 0/0
+five d0: 300 paired; turns on 1708 off 1708 (delta +0); faster 0 slower 0; ms on/off 104/33 units 0/0

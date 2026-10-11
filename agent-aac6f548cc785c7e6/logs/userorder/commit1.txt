@@ -1,0 +1,40 @@
+feat(dragonstorm): cast in the USER's order everywhere it is decided (MTG_DRAGONSTORM_USER_ORDER)
+
+USER 2026-10-10: "We should do things in the order I said, once they become available, so after the
+breakpoint the cast order should follow my order. If it wasn't doing that it should be fixed." And on
+the Medallion: "It should be cast as early as possible while still maintaining the line. It has to be
+cast later if cost does not allow it to be earlier."
+
+One lever, heurarm slot DRAGONSTORM_USER_ORDER (appended), default ON; =0 is byte-identical to the
+parent commit (27 jobs / 540 games: Dragonstorm d0/d3/ship, Hinata2 d0/d3, Mirrorwing d0/d3).
+
+Provider (DragonstormProvider):
+ * CastOrderRank: Ruby Medallion < Rite < Pyretic < Desperate < Seething < Apex < Dragon < Irencrag
+   < Dragonstorm, read off card params (was: rituals 15, Medallion 16, Irencrag 18, payoff 20,
+   creatures 10 -- Medallion after the rituals, Irencrag before Apex, a Dragon before its rituals).
+ * CastOrderActionRank (new hook, read by CastOrderLess): a SPLICED Desperate after Seething, more
+   splices first.
+ * ArrangeCastOrder (new hook, shared entry ApplyDeckCastArrangement, called after the comparator sort
+   at every apply site -- executor main/continuation/pod/pe, ApplyPlanDirect, the sequential-payability
+   rescue, the canonical-order report): splice legality (a revealed copy stays in hand), Irencrag
+   second-to-last before a lone Dragon closer, each Ruby Medallion at its EARLIEST slot at which the
+   whole order still pays (exact walk), never past Irencrag.
+ * ExactOrderWalk (new hook): the payable-order fallback judges with ExactOrderFirstUnpayable, so it
+   does not permute away an arranged order its plainer walk misreads.
+ * CastOrderingCandidates (new hook): the depth>0 ordering search tries the canonical arranged order
+   plus the USER's splice fallback, instead of every Medallion slot earliest-first + a raw identity
+   (a Medallion-first slot that dropped the line won any score tie: ship s7200139 T3).
+ * CastUnderCastCap (new hook, CollectActions): after Irencrag resolves only Dragonstorm / a Dragon is
+   offered; a spent cap offers nothing (ended the d0 failed-cast re-solve spin on such turns).
+ * RestrictorSubsetRealisable (new hook, both subset evaluators): a subset whose Apex is payable only
+   after Irencrag (the trap) is not a line.
+
+ManaPayment: ExactOrderFirstUnpayable -- FirstUnpayablePos plus positional same-turn reducer discounts,
+Rite escalation, Apex's ten from hand, the Irencrag cap (and the Irencrag -> Apex trap), and a
+line-aware generic payment. MTG_USER_ORDER_TRACE (diagnostic, default off): [uo-order] / [uo-cast]
+audit lines.
+
+Unit: test/unit/test_dragonstorm_user_order.cpp (10 cases). Full suite 913+ passing.
+Docs: docs/design/dragonstorm-user-cast-order.md (audit before/after, readings, A/B).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

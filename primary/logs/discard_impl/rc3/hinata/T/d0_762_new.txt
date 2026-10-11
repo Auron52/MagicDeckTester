@@ -1,0 +1,104 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1330763 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Distorting Wake|Izzet Boilerworks|Preordain|Ornithopter of Paradise|Hinata, Dawn-Crowned|Soulfire Eruption|Ponder
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery(T)
+[uo-order] gs=1330763 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Distorting Wake|Izzet Boilerworks|Preordain|Ornithopter of Paradise|Hinata, Dawn-Crowned|Soulfire Eruption|Ponder
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Mystic Monastery
+[uo-order] gs=1330763 t=2 m=1 route=opaque pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain
+[uo-state] gs=1330763 t=2 cap=-1 pool{w0 u1 b0 r0 g0 c0 *0} hand=Distorting Wake|Preordain|Ornithopter of Paradise|Hinata, Dawn-Crowned|Soulfire Eruption|Ponder|Memory Lapse|Mystic Monastery
+[exec-tap] T2 before Preordain: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature
+[uo-cast] gs=1330763 t=2 m=1 d=0 card=Preordain num=43 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T2 Preordain tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T)
+[uo-order] gs=1330763 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Distorting Wake|Ornithopter of Paradise|Hinata, Dawn-Crowned|Soulfire Eruption|Ponder|Memory Lapse|Mystic Monastery|Island
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T)
+[uo-order] gs=1330763 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Distorting Wake|Ornithopter of Paradise|Hinata, Dawn-Crowned|Soulfire Eruption|Ponder|Memory Lapse|Mystic Monastery|Island
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks
+[uo-order] gs=1330763 t=3 m=1 route=opaque pool=3 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ornithopter of Paradise|Ponder
+[uo-state] gs=1330763 t=3 cap=-1 pool{w0 u1 b0 r0 g0 c0 *2} hand=Ornithopter of Paradise|Hinata, Dawn-Crowned|Soulfire Eruption|Ponder|Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned
+[exec-tap] T3 before Ornithopter of Paradise: float{w0 u1 b0 r0 g0 c0 *2} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature
+[uo-cast] gs=1330763 t=3 m=1 d=0 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T3 Ornithopter of Paradise tapped:  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Ponder: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Ornithopter of Paradise
+[uo-cast] gs=1330763 t=3 m=1 d=0 card=Ponder num=39 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T3 Ponder tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T) Island(T) Ornithopter of Paradise
+[uo-order] gs=1330763 t=3 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Hinata, Dawn-Crowned|Soulfire Eruption|Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Reflecting Pool
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T) Island(T) Ornithopter of Paradise
+[uo-order] gs=1330763 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Hinata, Dawn-Crowned|Soulfire Eruption|Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Reflecting Pool
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks Island Ornithopter of Paradise
+[uo-order] gs=1330763 t=4 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Hinata, Dawn-Crowned
+[uo-state] gs=1330763 t=4 cap=-1 pool{w0 u1 b0 r0 g0 c0 *4} hand=Hinata, Dawn-Crowned|Soulfire Eruption|Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Mountain
+[exec-tap] T4 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Izzet Boilerworks 1/1 Creature 1/1 Creature Island Ornithopter of Paradise Reflecting Pool
+[uo-cast] gs=1330763 t=4 m=1 d=0 card=Hinata, Dawn-Crowned num=15 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T4 Hinata, Dawn-Crowned tapped: Izzet Boilerworks Island Ornithopter of Paradise  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T) Island(T) Ornithopter of Paradise(T) Reflecting Pool Hinata, Dawn-Crowned
+[uo-order] gs=1330763 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Mountain
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned
+[uo-order] gs=1330763 t=5 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Soulfire Eruption
+[uo-state] gs=1330763 t=5 cap=-1 pool{w0 u1 b0 r1 g0 c0 *4} hand=Soulfire Eruption|Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand
+[exec-tap] T5 before Soulfire Eruption: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Izzet Boilerworks 1/1 Creature 1/1 Creature Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned Mountain
+[uo-cast] gs=1330763 t=5 m=1 d=0 card=Soulfire Eruption num=57 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T5 Soulfire Eruption tapped: Izzet Boilerworks Reflecting Pool Mountain  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u1 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T) Island Ornithopter of Paradise Reflecting Pool(T) Hinata, Dawn-Crowned Mountain(T)
+[uo-order] gs=1330763 t=5 m=1 route=opaque pool=3 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain|Reality Spasm|Crackle with Power
+[uo-state] gs=1330763 t=5 cap=-1 pool{w0 u2 b0 r0 g0 c0 *1} hand=Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand|Preordain*|Crackle with Power*|Icy Blast*|Mystic Monastery*|Reflecting Pool*|Forbidden Orchard*|Distorting Wake*|Reality Spasm*
+[exec-tap] T5 before Preordain: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature Island Ornithopter of Paradise Hinata, Dawn-Crowned
+[uo-cast] gs=1330763 t=5 m=1 d=0 card=Preordain num=44 staged=1 splice=0 paid=1 pool=3
+[exec-tap] T5 Preordain tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature Island Ornithopter of Paradise Hinata, Dawn-Crowned
+[exec-tap] T5 tap-ahead for Reality Spasm X=5 -> float{w0 u1 b0 r0 g0 c0 *1}
+[uo-cast] gs=1330763 t=5 m=1 d=0 card=Reality Spasm num=47 staged=1 splice=0 paid=1 pool=2
+[exec-tap] T5 Reality Spasm tapped: Island Ornithopter of Paradise  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Crackle with Power: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned Mountain
+[uo-cast] gs=1330763 t=5 m=1 d=0 card=Crackle with Power num=3 staged=1 splice=0 paid=1 pool=0
+[exec-tap] T5 Crackle with Power tapped: Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T) Island(T) Ornithopter of Paradise(T) Reflecting Pool(T) Hinata, Dawn-Crowned(T) Mountain(T)
+[uo-order] gs=1330763 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330763 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand|Reality Spasm|Icy Blast*|Mystic Monastery*|Reflecting Pool*|Forbidden Orchard*|Distorting Wake*
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned Mountain
+[uo-order] gs=1330763 t=6 m=1 route=clean pool=7 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Soulfire Eruption
+[uo-state] gs=1330763 t=6 cap=-1 pool{w0 u1 b0 r1 g0 c0 *5} hand=Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand|Reality Spasm|Soulfire Eruption|Icy Blast*|Mystic Monastery*|Forbidden Orchard*|Distorting Wake*
+[exec-tap] T6 before Soulfire Eruption: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 1/1 Creature 1/1 Creature 1/1 Creature Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned Mountain Reflecting Pool
+[uo-cast] gs=1330763 t=6 m=1 d=0 card=Soulfire Eruption num=58 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T6 Soulfire Eruption tapped: Izzet Boilerworks Reflecting Pool Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Izzet Boilerworks(T) Island Ornithopter of Paradise Reflecting Pool(T) Hinata, Dawn-Crowned Mountain(T) Reflecting Pool
+[uo-order] gs=1330763 t=6 m=1 route=opaque pool=3 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Reality Spasm|Gamble|Magma Opus|Preordain
+[uo-state] gs=1330763 t=6 cap=-1 pool{w0 u1 b0 r0 g0 c0 *2} hand=Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand|Reality Spasm|Icy Blast*|Mystic Monastery*|Forbidden Orchard*|Distorting Wake*|Soulfire Eruption*|Mystic Monastery*|Gamble*|Magma Opus*|Preordain*
+[exec-tap] T6 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Island Ornithopter of Paradise Hinata, Dawn-Crowned Reflecting Pool
+[exec-tap] T6 tap-ahead for Reality Spasm X=6 -> float{w0 u2 b0 r0 g0 c0 *1}
+[uo-cast] gs=1330763 t=6 m=1 d=0 card=Reality Spasm num=48 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T6 Reality Spasm tapped: Island Ornithopter of Paradise Reflecting Pool  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T6 before Gamble: float{w0 u0 b0 r0 g0 c0 *1} untapped: Opponent Land Opponent Land Opponent Land Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned Mountain Reflecting Pool
+[uo-cast] gs=1330763 t=6 m=1 d=0 card=Gamble num=14 staged=1 splice=0 paid=1 pool=8
+[exec-tap] T6 Gamble tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1330763 t=6 m=1 route=cont pool=7 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Magma Opus|Preordain|Sol Ring
+[uo-state] gs=1330763 t=6 cap=-1 pool{w0 u1 b0 r1 g0 c0 *5} hand=Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand|Icy Blast*|Forbidden Orchard*|Distorting Wake*|Soulfire Eruption*|Mystic Monastery*|Magma Opus*|Preordain*|Sol Ring
+[exec-tap] T6 before Magma Opus: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Izzet Boilerworks Island Ornithopter of Paradise Reflecting Pool Hinata, Dawn-Crowned Mountain Reflecting Pool
+[uo-cast] gs=1330763 t=6 m=1 d=0 card=Magma Opus num=26 staged=1 splice=0 paid=1 pool=2
+[exec-tap] T6 Magma Opus tapped: Izzet Boilerworks Island Reflecting Pool Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1330763 t=6 m=1 route=cont pool=2 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain|Sol Ring
+[uo-state] gs=1330763 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *2} hand=Memory Lapse|Mystic Monastery|Hinata, Dawn-Crowned|Remand|Icy Blast*|Forbidden Orchard*|Distorting Wake*|Soulfire Eruption*|Mystic Monastery*|Preordain*|Sol Ring|Memory Lapse|Hinata, Dawn-Crowned
+[exec-tap] T6 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Ornithopter of Paradise Hinata, Dawn-Crowned Reflecting Pool
+[uo-cast] gs=1330763 t=6 m=1 d=0 card=Preordain num=45 staged=1 splice=0 paid=1 pool=1
+[exec-tap] T6 Preordain tapped: Reflecting Pool  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Sol Ring: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Ornithopter of Paradise Hinata, Dawn-Crowned
+[uo-cast] gs=1330763 t=6 m=1 d=0 card=Sol Ring num=56 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T6 Sol Ring tapped: Ornithopter of Paradise  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=4 default_pays=3 bound_fail=0 hoist_rescue=0 perm_rescue=1 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1330763
+Games played  : 1
+avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

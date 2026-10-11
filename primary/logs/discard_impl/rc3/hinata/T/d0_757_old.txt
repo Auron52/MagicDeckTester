@@ -1,0 +1,135 @@
+Loaded 60 mainboard card(s) + 23 sideboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/Hinata2/Hinata2.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1330758 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Mystic Monastery|Preordain|Magma Opus|Hinata, Dawn-Crowned|Preordain
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool
+[uo-order] gs=1330758 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Mystic Monastery|Preordain|Magma Opus|Hinata, Dawn-Crowned|Preordain
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool
+[uo-order] gs=1330758 t=2 m=1 route=opaque pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain
+[uo-state] gs=1330758 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Preordain|Magma Opus|Hinata, Dawn-Crowned|Preordain|Preordain
+[exec-tap] T2 before Preordain: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool
+[uo-cast] gs=1330758 t=2 m=1 d=0 card=Preordain num=43 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T2 Preordain tapped: Reflecting Pool  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T)
+[uo-order] gs=1330758 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Magma Opus|Hinata, Dawn-Crowned|Preordain|Preordain|Island
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T)
+[uo-order] gs=1330758 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Magma Opus|Hinata, Dawn-Crowned|Preordain|Preordain|Island
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool Mystic Monastery
+[uo-order] gs=1330758 t=3 m=1 route=opaque pool=3 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Preordain|Preordain
+[uo-state] gs=1330758 t=3 cap=-1 pool{w0 u2 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Magma Opus|Hinata, Dawn-Crowned|Preordain|Preordain|Expressive Iteration
+[exec-tap] T3 before Preordain: float{w0 u2 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool 4/4 Creature
+[uo-cast] gs=1330758 t=3 m=1 d=0 card=Preordain num=44 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T3 Preordain tapped:  float{w0 u1 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Preordain: float{w0 u1 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool 4/4 Creature
+[uo-cast] gs=1330758 t=3 m=1 d=0 card=Preordain num=45 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T3 Preordain tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool Mystic Monastery(T) Island(T)
+[uo-order] gs=1330758 t=3 m=1 route=opaque pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ponder
+[uo-state] gs=1330758 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Magma Opus|Hinata, Dawn-Crowned|Expressive Iteration|Ornithopter of Paradise|Ponder
+[exec-tap] T3 before Ponder: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool 4/4 Creature
+[uo-cast] gs=1330758 t=3 m=1 d=0 card=Ponder num=39 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T3 Ponder tapped: Reflecting Pool  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T) Island(T)
+[uo-order] gs=1330758 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Magma Opus|Hinata, Dawn-Crowned|Expressive Iteration|Ornithopter of Paradise|Reality Spasm
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool Mystic Monastery Island
+[uo-order] gs=1330758 t=4 m=1 route=clean pool=4 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Hinata, Dawn-Crowned
+[uo-state] gs=1330758 t=4 cap=-1 pool{w0 u1 b0 r0 g0 c0 *3} hand=Soulfire Eruption|Magma Opus|Hinata, Dawn-Crowned|Expressive Iteration|Ornithopter of Paradise|Reality Spasm
+[exec-tap] T4 before Hinata, Dawn-Crowned: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool Mystic Monastery 4/4 Creature Island Forbidden Orchard 1/1 Spirit Token
+[uo-cast] gs=1330758 t=4 m=1 d=0 card=Hinata, Dawn-Crowned num=15 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T4 Hinata, Dawn-Crowned tapped: Reflecting Pool Mystic Monastery Island Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T) Island(T) Forbidden Orchard(T) Hinata, Dawn-Crowned
+[uo-order] gs=1330758 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Magma Opus|Expressive Iteration|Ornithopter of Paradise|Reality Spasm
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool Mystic Monastery Island Forbidden Orchard Hinata, Dawn-Crowned
+[uo-order] gs=1330758 t=5 m=1 route=opaque pool=5 n=4 pays=1 ppays=1 mpos=-1 mearl=-1 seq=Magma Opus|Expressive Iteration|Ornithopter of Paradise|Reality Spasm
+[uo-state] gs=1330758 t=5 cap=-1 pool{w0 u1 b0 r1 g0 c0 *3} hand=Soulfire Eruption|Magma Opus|Expressive Iteration|Ornithopter of Paradise|Reality Spasm
+[exec-tap] T5 before Magma Opus: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool Mystic Monastery 4/4 Creature Island Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token Mountain
+[uo-cast] gs=1330758 t=5 m=1 d=0 card=Magma Opus num=26 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T5 Magma Opus tapped: Reflecting Pool Mystic Monastery Island Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1330758 t=5 m=1 route=cont pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Expressive Iteration|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption
+[exec-tap] T5 before Expressive Iteration: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token
+[uo-cast] gs=1330758 t=5 m=1 d=0 card=Expressive Iteration num=9 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T5 Expressive Iteration tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[uo-order] gs=1330758 t=5 m=1 route=cont pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Expressive Iteration|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption
+[exec-tap] T5 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token
+[uo-cast] gs=1330758 t=5 m=1 d=0 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T5 Ornithopter of Paradise tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token
+[exec-tap] T5 tap-ahead for Reality Spasm X=5 -> float{w0 u0 b0 r0 g0 c0 *1}
+[uo-cast] gs=1330758 t=5 m=1 d=0 card=Reality Spasm num=47 staged=0 splice=0 paid=0 pool=1
+[exec-tap] T5 Reality Spasm tapped: Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *1} own: Reflecting Pool(T) Mystic Monastery(T) Island(T) Forbidden Orchard(T) Hinata, Dawn-Crowned Mountain(T)
+[uo-order] gs=1330758 t=5 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Soulfire Eruption|Expressive Iteration|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T) Island(T) Forbidden Orchard(T) Hinata, Dawn-Crowned(T) Mountain(T)
+[uo-order] gs=1330758 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Expressive Iteration|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool Mystic Monastery Island Forbidden Orchard Hinata, Dawn-Crowned Mountain
+[uo-order] gs=1330758 t=6 m=1 route=opaque pool=5 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Expressive Iteration|Ornithopter of Paradise
+[uo-state] gs=1330758 t=6 cap=-1 pool{w0 u1 b0 r1 g0 c0 *3} hand=Soulfire Eruption|Expressive Iteration|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption|Remand
+[exec-tap] T6 before Expressive Iteration: float{w0 u1 b0 r1 g0 c0 *2} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token
+[uo-cast] gs=1330758 t=6 m=1 d=0 card=Expressive Iteration num=9 staged=0 splice=0 paid=1 pool=5
+[exec-tap] T6 Expressive Iteration tapped:  float{w0 u0 b0 r0 g0 c0 *2}
+[uo-order] gs=1330758 t=6 m=1 route=cont pool=3 n=3 pays=1 ppays=1 mpos=-1 mearl=-1 seq=Ornithopter of Paradise|Ornithopter of Paradise|Reality Spasm
+[uo-state] gs=1330758 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *3} hand=Soulfire Eruption|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption|Remand|Reality Spasm|Ornithopter of Paradise*
+[exec-tap] T6 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *2} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token
+[uo-cast] gs=1330758 t=6 m=1 d=0 card=Ornithopter of Paradise num=37 staged=1 splice=0 paid=1 pool=3
+[exec-tap] T6 Ornithopter of Paradise tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token Ornithopter of Paradise
+[uo-cast] gs=1330758 t=6 m=1 d=0 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=0 pool=0
+[exec-tap] T6 Ornithopter of Paradise tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token Ornithopter of Paradise
+[exec-tap] T6 tap-ahead for Reality Spasm X=5 -> float{w0 u0 b0 r0 g0 c0 *1}
+[uo-cast] gs=1330758 t=6 m=1 d=0 card=Reality Spasm num=47 staged=0 splice=0 paid=0 pool=1
+[exec-tap] T6 Reality Spasm tapped: Forbidden Orchard  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T6 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *1} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token Ornithopter of Paradise
+[uo-cast] gs=1330758 t=6 m=1 d=0 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=0 pool=1
+[exec-tap] T6 Ornithopter of Paradise tapped:  float{w0 u0 b0 r0 g0 c0 *1}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T) Island(T) Forbidden Orchard(T) Hinata, Dawn-Crowned(T) Mountain(T) Ornithopter of Paradise
+[uo-order] gs=1330758 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1330758 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Soulfire Eruption|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption|Remand|Reality Spasm
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool Mystic Monastery Island Forbidden Orchard Hinata, Dawn-Crowned Mountain Ornithopter of Paradise
+[uo-order] gs=1330758 t=7 m=1 route=clean pool=6 n=5 pays=2 ppays=2 mpos=-1 mearl=-1 seq=Ornithopter of Paradise|Ornithopter of Paradise|Reality Spasm|Soulfire Eruption|Soulfire Eruption
+[uo-state] gs=1330758 t=7 cap=-1 pool{w0 u1 b0 r1 g0 c0 *4} hand=Soulfire Eruption|Ornithopter of Paradise|Reality Spasm|Distorting Wake|Soulfire Eruption|Remand|Reality Spasm|Ornithopter of Paradise
+[exec-tap] T7 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool Mystic Monastery 4/4 Creature Island Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token Mountain 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Ornithopter of Paradise num=36 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T7 Ornithopter of Paradise tapped: Island Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Ornithopter of Paradise: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool Mystic Monastery 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token Ornithopter of Paradise
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Ornithopter of Paradise num=38 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T7 Ornithopter of Paradise tapped: Reflecting Pool Mystic Monastery  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token Ornithopter of Paradise Ornithopter of Paradise
+[exec-tap] T7 tap-ahead for Reality Spasm X=6 -> float{w0 u0 b0 r0 g0 c0 *2}
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Reality Spasm num=47 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T7 Reality Spasm tapped: Forbidden Orchard Ornithopter of Paradise  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Soulfire Eruption: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool Mystic Monastery 4/4 Creature Island Forbidden Orchard 1/1 Spirit Token Hinata, Dawn-Crowned 1/1 Spirit Token Mountain 1/1 Spirit Token Ornithopter of Paradise 1/1 Spirit Token Ornithopter of Paradise Ornithopter of Paradise
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Soulfire Eruption num=57 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T7 Soulfire Eruption tapped: Reflecting Pool Mystic Monastery Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Soulfire Eruption: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Island Forbidden Orchard Hinata, Dawn-Crowned Ornithopter of Paradise Ornithopter of Paradise Ornithopter of Paradise
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Soulfire Eruption num=59 staged=1 splice=0 paid=0 pool=1
+[exec-tap] T7 Soulfire Eruption tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Reflecting Pool(T) Mystic Monastery(T) Island Forbidden Orchard Hinata, Dawn-Crowned Mountain(T) Ornithopter of Paradise Ornithopter of Paradise Ornithopter of Paradise
+[uo-order] gs=1330758 t=7 m=1 route=clean pool=4 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Reality Spasm|Crackle with Power
+[uo-state] gs=1330758 t=7 cap=-1 pool{w0 u1 b0 r1 g0 c0 *2} hand=Distorting Wake|Soulfire Eruption|Remand|Reality Spasm|Hinata, Dawn-Crowned*|Gamble*|Soulfire Eruption*|Remand*|Crackle with Power*|Hinata, Dawn-Crowned*
+[exec-tap] T7 before Reality Spasm: float{w0 u0 b0 r0 g0 c0 *0} untapped: Opponent Land Opponent Land Opponent Land 4/4 Creature Island Forbidden Orchard Hinata, Dawn-Crowned Ornithopter of Paradise Ornithopter of Paradise Ornithopter of Paradise Mountain
+[exec-tap] T7 tap-ahead for Reality Spasm X=7 -> float{w0 u1 b0 r1 g0 c0 *2}
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Reality Spasm num=48 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T7 Reality Spasm tapped: Island Forbidden Orchard Ornithopter of Paradise Mountain  float{w0 u0 b0 r1 g0 c0 *1}
+[exec-tap] T7 before Crackle with Power: float{w0 u0 b0 r1 g0 c0 *1} untapped: Opponent Land Opponent Land Opponent Land Reflecting Pool Mystic Monastery 4/4 Creature Island Forbidden Orchard Hinata, Dawn-Crowned Mountain Ornithopter of Paradise Ornithopter of Paradise Ornithopter of Paradise Mountain
+[uo-cast] gs=1330758 t=7 m=1 d=0 card=Crackle with Power num=3 staged=1 splice=0 paid=1 pool=3
+[exec-tap] T7 Crackle with Power tapped: Reflecting Pool Mystic Monastery Island Forbidden Orchard Mountain Mountain  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1330758
+Games played  : 1
+avg (turns)   : 7.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

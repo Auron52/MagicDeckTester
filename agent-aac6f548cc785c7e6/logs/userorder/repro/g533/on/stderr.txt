@@ -1,0 +1,24 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=1534 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=2 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=2 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=3 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=3 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=4 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=4 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=1534 t=5 m=1 route=opaque pool=5 n=5 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Pyretic Ritual|Desperate Ritual|Seething Song|Apex of Power
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Rite of Flame num=39 staged=0 splice=0 paid=1 pool=4
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Pyretic Ritual num=35 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=6
+[uo-order] gs=1534 t=5 m=1 route=cont pool=10 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Dragonstorm
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Rite of Flame num=40 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=1534 t=5 m=1 d=0 card=Dragonstorm num=10 staged=1 splice=0 paid=1 pool=12
+[uo-order] gs=1534 t=5 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g533/on
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

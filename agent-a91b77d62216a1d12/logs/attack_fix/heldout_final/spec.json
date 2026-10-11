@@ -1,0 +1,262 @@
+{
+ "decks": {
+  "fivecolour": {
+   "seed_d0": 5100001,
+   "seed_d3": 5600001
+  },
+  "stompy": {
+   "seed_d0": 5120001,
+   "seed_d3": 5620001
+  },
+  "selesnya": {
+   "seed_d0": 5140001,
+   "seed_d3": 5640001
+  },
+  "bruna": {
+   "seed_d0": 5160001,
+   "seed_d3": 5660001
+  },
+  "snow": {
+   "seed_d0": 5180001,
+   "seed_d3": 5680001
+  },
+  "critter": {
+   "seed_d0": 5200001,
+   "seed_d3": 5700001
+  },
+  "angels": {
+   "seed_d0": 5220001,
+   "seed_d3": 5720001
+  },
+  "goblins": {
+   "seed_d0": 5240001,
+   "seed_d3": 5740001
+  }
+ },
+ "cells": {
+  "d0": {
+   "games": 3000,
+   "chunk": 250
+  },
+  "d3": {
+   "games": 300,
+   "chunk": 25
+  }
+ },
+ "arms": {
+  "on": [],
+  "off": [
+   "MTG_ATTACK_DOMAIN_DORK_YIELD",
+   "MTG_ATTACK_TAP_ASTROLABE_CREDIT",
+   "MTG_ATTACK_CANNONS_TRIGGER",
+   "MTG_ATTACK_TAP_REPROJECT",
+   "MTG_ATTACK_TEAM_PUMP_ETB",
+   "MTG_ATTACK_PLAN_LIFEGAIN",
+   "MTG_BRUNA_LETHAL_SHORTCIRCUIT",
+   "MTG_ATTACK_AURA_HOST_TAP",
+   "MTG_LAND_BOUNCE_GUARD",
+   "MTG_ATTACK_TAP_CREATURE_ONLY",
+   "MTG_SOLVE_ATTACK_ONLY_WIN",
+   "MTG_ATTACK_TAP_ABILITY_KINDS",
+   "MTG_ATTACK_TAP_PAYER_ORDER"
+  ],
+  "noDOMAIN": [
+   "MTG_ATTACK_DOMAIN_DORK_YIELD"
+  ],
+  "noASTRO": [
+   "MTG_ATTACK_TAP_ASTROLABE_CREDIT"
+  ],
+  "noCANNONS": [
+   "MTG_ATTACK_CANNONS_TRIGGER"
+  ],
+  "noREPROJ": [
+   "MTG_ATTACK_TAP_REPROJECT"
+  ],
+  "noHOOF": [
+   "MTG_ATTACK_TEAM_PUMP_ETB"
+  ],
+  "noLIFE": [
+   "MTG_ATTACK_PLAN_LIFEGAIN"
+  ],
+  "noBRUNASC": [
+   "MTG_BRUNA_LETHAL_SHORTCIRCUIT"
+  ],
+  "noAURAHOST": [
+   "MTG_ATTACK_AURA_HOST_TAP"
+  ],
+  "noBOUNCE": [
+   "MTG_LAND_BOUNCE_GUARD"
+  ],
+  "noCRONLY": [
+   "MTG_ATTACK_TAP_CREATURE_ONLY"
+  ],
+  "noAOW": [
+   "MTG_SOLVE_ATTACK_ONLY_WIN"
+  ],
+  "noKINDS": [
+   "MTG_ATTACK_TAP_ABILITY_KINDS"
+  ],
+  "noPAYER": [
+   "MTG_ATTACK_TAP_PAYER_ORDER"
+  ]
+ },
+ "deck_arms": {
+  "fivecolour": [
+   "on",
+   "off",
+   "noDOMAIN",
+   "noCANNONS",
+   "noREPROJ",
+   "noKINDS",
+   "noPAYER",
+   "noAOW"
+  ],
+  "stompy": [
+   "on",
+   "off",
+   "noHOOF",
+   "noPAYER",
+   "noREPROJ",
+   "noAOW"
+  ],
+  "selesnya": [
+   "on",
+   "off",
+   "noLIFE",
+   "noHOOF",
+   "noREPROJ",
+   "noPAYER",
+   "noAOW",
+   "noBOUNCE"
+  ],
+  "bruna": [
+   "on",
+   "off",
+   "noBRUNASC",
+   "noBOUNCE",
+   "noAURAHOST",
+   "noCRONLY",
+   "noREPROJ",
+   "noPAYER",
+   "noAOW"
+  ],
+  "snow": [
+   "on",
+   "off",
+   "noASTRO",
+   "noAOW",
+   "noREPROJ",
+   "noPAYER",
+   "noKINDS"
+  ],
+  "critter": [
+   "on",
+   "off",
+   "noLIFE",
+   "noAOW"
+  ],
+  "angels": [
+   "on",
+   "off",
+   "noLIFE",
+   "noAOW"
+  ],
+  "goblins": [
+   "on",
+   "off",
+   "noKINDS"
+  ]
+ },
+ "deck_cells": {
+  "fivecolour": [
+   "d0",
+   "d3"
+  ],
+  "stompy": [
+   "d0",
+   "d3"
+  ],
+  "selesnya": [
+   "d0",
+   "d3"
+  ],
+  "bruna": [
+   "d0",
+   "d3"
+  ],
+  "snow": [
+   "d0",
+   "d3"
+  ],
+  "critter": [
+   "d0",
+   "d3"
+  ],
+  "angels": [
+   "d0",
+   "d3"
+  ],
+  "goblins": [
+   "d0"
+  ]
+ },
+ "cell_arms": {
+  "fivecolour": {
+   "d3": [
+    "on",
+    "off",
+    "noDOMAIN",
+    "noCANNONS",
+    "noKINDS",
+    "noPAYER"
+   ]
+  },
+  "stompy": {
+   "d3": [
+    "on",
+    "off",
+    "noHOOF",
+    "noPAYER"
+   ]
+  },
+  "selesnya": {
+   "d3": [
+    "on",
+    "off",
+    "noLIFE",
+    "noHOOF",
+    "noPAYER"
+   ]
+  },
+  "bruna": {
+   "d3": [
+    "on",
+    "off",
+    "noBRUNASC",
+    "noBOUNCE"
+   ]
+  },
+  "snow": {
+   "d3": [
+    "on",
+    "off",
+    "noASTRO",
+    "noAOW"
+   ]
+  },
+  "critter": {
+   "d3": [
+    "on",
+    "off",
+    "noLIFE"
+   ]
+  },
+  "angels": {
+   "d3": [
+    "on",
+    "off",
+    "noLIFE"
+   ]
+  }
+ }
+}

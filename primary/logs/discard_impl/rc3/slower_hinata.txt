@@ -1,0 +1,15 @@
+  hinata           d0   gi=702   old=5 new=6 seed=1330703
+  hinata           d0   gi=757   old=7 new=8 seed=1330758
+  hinata           d0   gi=762   old=5 new=6 seed=1330763
+  hinata           d0   gi=779   old=7 new=8 seed=1330780
+  hinata           d0   gi=873   old=6 new=8 seed=1330874
+  hinata           d0   gi=1154  old=5 new=6 seed=1331155
+  hinata           d0   gi=1325  old=5 new=6 seed=1331326
+  hinata           d0   gi=1427  old=8 new=9 seed=1331428
+  hinata           d0   gi=1549  old=6 new=7 seed=1331550
+  hinata           d0   gi=1680  old=8 new=9 seed=1331681
+  hinata           d0   gi=1741  old=7 new=9 seed=1331742
+  hinata           d3   gi=315   old=5 new=7 seed=1325316
+  hinata           ship gi=42    old=5 new=6 seed=1320043
+  hinata           ship gi=58    old=8 new=9 seed=1320059
+  hinata           ship gi=191   old=5 new=9 seed=1320192

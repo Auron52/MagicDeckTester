@@ -1,0 +1,4 @@
+  stompy           d0   gi=496   old=4 new=5 seed=1590497
+  stompy           d0   gi=588   old=5 new=6 seed=1590589
+  stompy           d0   gi=724   old=5 new=6 seed=1590725
+  stompy           d0   gi=1714  old=5 new=6 seed=1591715

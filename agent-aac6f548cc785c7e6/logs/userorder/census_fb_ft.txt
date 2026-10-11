@@ -1,0 +1,46 @@
+== MTG_FB_HOLD_BANKED (on vs off, paired, d0; loss = 9)
+deck                       games       on      off  delta faster slower
+Angels                       300     1578     1578     +0      0      0
+Dragons                      300     1763     1763     +0      0      0
+Dragonstorm                  300     1508     1509     -1      1      1
+     SLOWER gi=237: on 8 off 7
+Giants                       300     1859     1859     +0      0      0
+Knights                      300     1350     1350     +0      0      0
+Minotaur                     300     1602     1602     +0      0      0
+Prevent Damage               300     2313     2313     +0      0      0
+TOTAL                       2100    11973    11974     -1      1      1
+== MTG_LINE_FLOAT_TAP_FIRST (on vs off, paired, d0; loss = 9)
+deck                       games       on      off  delta faster slower
+Angels                       300     1585     1585     +0      0      0
+Anti-Lifegain                300     1447     1447     +0      0      0
+Auras                        300     1304     1304     +0      0      0
+BreachingDragonstorm         300     1452     1452     +0      0      0
+Bruna                        300     1860     1860     +0      0      0
+Creature Giving              300     1658     1658     +0      0      0
+CritterLifegain              300     1399     1399     +0      0      0
+Dragons                      300     1791     1791     +0      0      0
+Dragonstorm                  300     1493     1493     +0      0      0
+EldraziDisplacerFlicker      300     1762     1762     +0      0      0
+FiveColour                   300     1733     1733     +0      0      0
+Fluctuator                   300     1534     1534     +0      0      0
+Fungus                       300     1693     1693     +0      0      0
+Giants                       300     1805     1805     +0      0      0
+Goblins                      300     1230     1230     +0      0      0
+Hinata2                      300     2034     2034     +0      0      0
+KittyEquipment               300     1493     1493     +0      0      0
+Knights                      300     1354     1354     +0      0      0
+Melira Pod                   300     1879     1879     +0      0      0
+Mill                         300     2700     2700     +0      0      0
+Minotaur                     300     1601     1601     +0      0      0
+Mirrorwing Dragon            300     1757     1757     +0      0      0
+Pirates                      300     1412     1412     +0      0      0
+Prevent Damage               300     2259     2259     +0      0      0
+SelesnyaLifegain             300     1755     1755     +0      0      0
+Snow                         300     1913     1913     +0      0      0
+StompySurprise               300     1482     1482     +0      0      0
+Unpredictable Cyclone        300     2700     2700     +0      0      0
+WhiteKnights                 300     1365     1365     +0      0      0
+burn                         300     1331     1331     +0      0      0
+slivers_vial                 300     1412     1412     +0      0      0
+treasure_hunt                300     1693     1693     +0      0      0
+TOTAL                       9600    53886    53886     +0      0      0

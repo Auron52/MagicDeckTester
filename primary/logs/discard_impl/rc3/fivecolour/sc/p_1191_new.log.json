@@ -1,0 +1,363 @@
+{
+  "cardNumbering": {
+    "Ancient Cornucopia": [
+      1
+    ],
+    "Birds of Paradise": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "Blood Crypt": [
+      6
+    ],
+    "Bloom Tender": [
+      7,
+      8
+    ],
+    "Breeding Pool": [
+      9
+    ],
+    "Cosmic Spider-Man": [
+      10,
+      11
+    ],
+    "Deathrite Shaman": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "Faeburrow Elder": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "Garth One-Eye": [
+      20
+    ],
+    "Godless Shrine": [
+      21
+    ],
+    "Island": [
+      22
+    ],
+    "Jared Carthalion": [
+      23,
+      24
+    ],
+    "Jetmir's Garden": [
+      25
+    ],
+    "Lightning Greaves": [
+      26
+    ],
+    "Maelstrom Archangel": [
+      27,
+      28,
+      29,
+      30
+    ],
+    "Mana Cannons": [
+      31,
+      32,
+      33
+    ],
+    "Misty Rainforest": [
+      34,
+      35
+    ],
+    "Mountain": [
+      36
+    ],
+    "Nicol Bolas, Planeswalker": [
+      37,
+      38
+    ],
+    "Oko, Thief of Crowns": [
+      39
+    ],
+    "Overgrown Tomb": [
+      40
+    ],
+    "Progenitus": [
+      41
+    ],
+    "Scalding Tarn": [
+      42,
+      43,
+      44
+    ],
+    "Steam Vents": [
+      45
+    ],
+    "Stomping Ground": [
+      46
+    ],
+    "Two-Headed Hellkite": [
+      47,
+      48,
+      49
+    ],
+    "Unite the Coalition": [
+      50,
+      51
+    ],
+    "Verdant Catacombs": [
+      52,
+      53
+    ],
+    "Windswept Heath": [
+      54,
+      55
+    ],
+    "Wooded Foothills": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Zagoth Triome": [
+      60
+    ]
+  },
+  "deckId": "FiveColour",
+  "gameNumber": 0,
+  "mulliganSequence": [],
+  "openingHand": [],
+  "result": {
+    "turn": null,
+    "winner": "none"
+  },
+  "runId": "scenario",
+  "seed": 1,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 10,
+          "cardName": "Misty Rainforest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 8,
+          "cardName": "Unite the Coalition",
+          "manaPaid": "{2}{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 47,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          42,
+          10,
+          8
+        ],
+        "hand": [
+          7,
+          9
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 10,
+        "playerLife": 11,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 5,
+          "oppLife": 5,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 47,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          42,
+          10,
+          8
+        ],
+        "hand": [
+          7,
+          9
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 5,
+        "playerLife": 11,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 7,
+          "cardName": "Mana Cannons",
+          "manaPaid": "{2}{R}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Blood Crypt",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 47,
+            "cardName": "Breeding Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          42,
+          10,
+          8
+        ],
+        "hand": [
+          9
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 5,
+        "playerLife": 11,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+d0: 300 paired games; turn sum on 1502 vs off 1530 (delta -28, mean -0.0933); faster 18, slower 2
+   SLOWER d0 gi=10 seed=7600011: on 9 off 6
+   SLOWER d0 gi=232 seed=7600233: on 7 off 6
+d3: 100 paired games; turn sum on 451 vs off 453 (delta -2, mean -0.0200); faster 1, slower 0

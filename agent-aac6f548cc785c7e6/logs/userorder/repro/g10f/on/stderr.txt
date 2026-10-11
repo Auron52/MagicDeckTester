@@ -1,0 +1,24 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7600011 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=3 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=4 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=4 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=5 m=1 route=opaque pool=12 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Seething Song|Apex of Power|Irencrag Feat|Scourge of Valkas
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Seething Song num=54 staged=0 splice=0 paid=1 pool=12
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Apex of Power num=2 staged=0 splice=0 paid=1 pool=10
+[uo-order] gs=7600011 t=5 m=1 route=cont pool=14 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas|Utvara Hellkite
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Scourge of Valkas num=50 staged=0 splice=0 paid=1 pool=14
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Utvara Hellkite num=60 staged=1 splice=0 paid=1 pool=7
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=0 pool=1
+[uo-order] gs=7600011 t=5 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=6 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g10f/on
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

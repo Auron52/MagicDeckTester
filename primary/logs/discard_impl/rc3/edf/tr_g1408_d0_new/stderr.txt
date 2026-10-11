@@ -1,0 +1,601 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t1 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t1 tap Mariposa Military Base -> Colorless
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t1 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t1 skip outlet Emiel the Blessed: avail < cost
+[combo-route]     t1 tap Mariposa Military Base -> Colorless
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order A (auras first) leaves no loop
+[combo-route]     t1 tap Mariposa Military Base -> Colorless
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t1 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t1 skip outlet Emiel the Blessed: avail < cost
+[combo-route]     t1 tap Mariposa Military Base -> Colorless
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order B (auras last) leaves no loop
+[combo-route] t1 no loop: neither deploy order reaches a finish
+[combo-route] t1 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t1 no goff cand
+[edf-turn] t2 lands=1 auras=0 untapper=0 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t2 tap Brushland -> Green
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t2 tap Mariposa Military Base -> Colorless
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t2 tap Mariposa Military Base -> Colorless
+[combo-route]     t2 tap Brushland -> Green
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]     t2 tap Mariposa Military Base -> Colorless
+[combo-route]     t2 tap Brushland -> Green
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=19 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-turn] t2 lands=2 auras=0 untapper=0 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=19 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-turn] t3 lands=2 auras=0 untapper=0 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Brushland -> Green
+[combo-route]     t3 tap Yavimaya Coast -> Blue
+[combo-route] t3 cast Fertile Ground -> land
+[combo-route]     t3 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t3 cast Cloud of Faeries
+[combo-route]     t3 tap Mariposa Military Base -> Colorless +aura White,
+[combo-route]     t3 tap Brushland -> White
+[combo-route] t3 cast Eldrazi Displacer
+[combo-route]   t3 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 pay {2}{C} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 blink: cannot pay {2}{C}
+[combo-route] t3 blink unpayable
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route]     t3 tap Brushland -> White
+[combo-route]     t3 tap Yavimaya Coast -> Blue
+[combo-route] t3 cast Cloud of Faeries
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route]     t3 tap Brushland -> White
+[combo-route] t3 cast Eldrazi Displacer
+[combo-route]   t3 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 pay {2}{C} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 blink: cannot pay {2}{C}
+[combo-route] t3 blink unpayable
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=16 opp=20 | cast Cloud of Faeries; cast Eldrazi Displacer; blink unpayable; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=1 payloads=0 casting=[Eldrazi Displacer,]
+[edf-prosp] t3 outlets=1 payloads=0 casting=[Eldrazi Displacer,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-turn] t4 lands=3 auras=0 untapper=0 outlet=1 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Blue
+[combo-route] t4 cast Fertile Ground -> land
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t4 cast Cloud of Faeries
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t4 cast Training Grounds
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *1(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *1(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c3 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c3 *2(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c4 *3(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c3 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c3 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c3 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c3 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c2 *4(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c3 *5(c0)
+[combo-route] t4 Mariposa Military Base -> draw
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=12 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t4 bank: float=3 target=8 ready=0 income=3 per_iter=0 n_untap=2
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 pay {C} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *3 lands available=0
+[combo-route]   t4 blink: cannot pay {C}
+[combo-route] t4 blink unpayable
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Brushland -> White
+[combo-route]     t4 tap Yavimaya Coast -> Blue
+[combo-route] t4 cast Cloud of Faeries
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 pay {U} FAILED (rolled back); float w1 u0 b0 r0 g1 c1 *0 lands available=2
+[combo-route]   t4 cast Training Grounds: cannot pay {U}
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w1 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w1 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Brushland -> Colorless
+[combo-route]   t4 pay {2}{C} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=0
+[combo-route]   t4 blink: cannot pay {2}{C}
+[combo-route] t4 blink unpayable
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=1 iters=1 draws=0 acts=0 life=16 opp=20 | cast Cloud of Faeries; Eldrazi Displacer: blink Cloud of Faeries x1; blink unpayable; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t4 no goff cand
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Training Grounds,Fertile Ground,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Fertile Ground,Cloud of Faeries,]
+[edf-turn] t5 lands=4 auras=1 untapper=1 outlet=1 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=5 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route]   t5 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Brushland -> Colorless +aura *,
+[combo-route] t5 stalled: 61 blinks without a step firing
+[combo-route] t5 TRIAL no: deploys=0 iters=61 draws=0 acts=0 life=17 opp=17 | Eldrazi Displacer: blink Cloud of Faeries x61; stalled: 61 blinks without a step firing; 
+[edf-goff-cut] t5 no goff cand
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Emiel the Blessed,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Emiel the Blessed,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Training Grounds,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Training Grounds,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Emiel the Blessed,Training Grounds,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Emiel the Blessed,Training Grounds,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Mariposa Military Base,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Mariposa Military Base,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Eldrazi Displacer,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Eldrazi Displacer,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Training Grounds,Eldrazi Displacer,]
+[edf-prosp] t5 outlets=2 payloads=1 casting=[Training Grounds,Eldrazi Displacer,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Conservatory,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Conservatory,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Training Grounds,Conservatory,]
+[edf-prosp] t5 outlets=1 payloads=1 casting=[Training Grounds,Conservatory,]
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/tr_g1408_d0_new
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

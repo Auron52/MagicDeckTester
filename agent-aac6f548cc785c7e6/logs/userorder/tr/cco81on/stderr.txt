@@ -1,0 +1,42 @@
+[flags] WARNING: MTG_NONE is set but is not a flag this binary reads -- a typo or a deleted flag? It will have NO effect (`mtg --list-flags` prints the known set).
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7100081 t=1 m=1 route=searched pool=1 n=5 pays=0 ppays=0 mpos=0 mearl=-1 seq=Ruby Medallion|Rite of Flame|Pyretic Ritual|Seething Song|Lathliss, Dragon Queen
+[uo-state] gs=7100081 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Lathliss, Dragon Queen|Ruby Medallion|Seething Song|Mountain|Apex of Power|Rite of Flame|Pyretic Ritual
+[uo-cast] gs=7100081 t=1 m=1 d=3 card=Ruby Medallion num=43 staged=0 splice=0 paid=0 pool=0
+[uo-cast] gs=7100081 t=1 m=1 d=3 card=Rite of Flame num=39 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100081 t=1 m=1 d=3 card=Pyretic Ritual num=35 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100081 t=1 m=1 d=3 card=Seething Song num=53 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100081 t=1 m=1 d=3 card=Lathliss, Dragon Queen num=17 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=7100081 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100081 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Lathliss, Dragon Queen|Ruby Medallion|Seething Song|Mountain|Apex of Power|Rite of Flame|Pyretic Ritual
+[uo-order] gs=7100081 t=2 m=1 route=searched pool=2 n=5 pays=-1 ppays=2 mpos=1 mearl=1 seq=Rite of Flame|Ruby Medallion|Pyretic Ritual|Seething Song|Lathliss, Dragon Queen
+[uo-state] gs=7100081 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Lathliss, Dragon Queen|Ruby Medallion|Seething Song|Apex of Power|Rite of Flame|Pyretic Ritual|Dwarven Hold
+[uo-cast] gs=7100081 t=2 m=1 d=3 card=Rite of Flame num=39 staged=0 splice=0 paid=1 pool=1
+[uo-cast] gs=7100081 t=2 m=1 d=3 card=Ruby Medallion num=43 staged=0 splice=0 paid=1 pool=3
+[uo-cast] gs=7100081 t=2 m=1 d=3 card=Pyretic Ritual num=35 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100081 t=2 m=1 d=3 card=Seething Song num=53 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100081 t=2 m=1 d=3 card=Lathliss, Dragon Queen num=17 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=7100081 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100081 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Lathliss, Dragon Queen|Seething Song|Apex of Power|Pyretic Ritual|Dwarven Hold
+[uo-order] gs=7100081 t=3 m=1 route=searched pool=2 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Pyretic Ritual|Seething Song|Apex of Power
+[uo-state] gs=7100081 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Lathliss, Dragon Queen|Seething Song|Apex of Power|Pyretic Ritual|Pyretic Ritual
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Pyretic Ritual num=35 staged=0 splice=0 paid=1 pool=1
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Pyretic Ritual num=36 staged=0 splice=0 paid=1 pool=4
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=6
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=8
+[uo-order] gs=7100081 t=3 m=1 route=replay pool=10 n=4 pays=3 ppays=3 mpos=-1 mearl=-1 seq=Pyretic Ritual|Desperate Ritual|Lathliss, Dragon Queen|Utvara Hellkite
+[uo-state] gs=7100081 t=3 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Lathliss, Dragon Queen|Mountain*|Pyretic Ritual*|Mercadian Bazaar*|Utvara Hellkite*|Sandstone Needle*|Desperate Ritual*|Mercadian Bazaar*
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Pyretic Ritual num=37 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Desperate Ritual num=5 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Lathliss, Dragon Queen num=17 staged=0 splice=0 paid=1 pool=14
+[uo-cast] gs=7100081 t=3 m=1 d=3 card=Utvara Hellkite num=59 staged=1 splice=0 paid=1 pool=9
+[uo-order] gs=7100081 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100081 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Mountain*|Mercadian Bazaar*|Sandstone Needle*|Mercadian Bazaar*
+[uo-order] gs=7100081 t=4 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100081 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *1} hand=
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/tr/cco81on
+[enum-memo] hits=2 misses=105 clears=0
+[solve-memo] hits=416 misses=500 clears=0
+[leaf-eval] published=99 ties=67 flips=0 life-equal-ties=67

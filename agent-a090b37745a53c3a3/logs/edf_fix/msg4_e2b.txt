@@ -1,0 +1,21 @@
+fix(solve): a land-Aura subset the board gates pass still meets the real payer (MTG_SOLVE_AURA_PAYER_CHECK)
+
+EDF gi 1475 (seed 1651476, d0) t7: Aether Hub with no {E} carrying Overgrowth, Wild Growth and Fertile
+Ground; Kitchen, Mariposa and Shivan Gorge beside it; hand Trace of Abundance + Eldrazi Displacer. Trace's
+{R/W} can only come off the Fertile Ground on the Hub, so the Hub pays for Trace -- and the walk picked
+Trace ON the Hub, whose bonus then arrives already tapped. Displacer's {W} had no source; the executor cast
+Trace and dropped Displacer. The board-only gates passed it: they cannot see which land carries the Aura,
+and they credit the Hub its whole colour set (the PARTIAL disclosed on the card). Trace on Kitchen is
+payable (Kitchen taps for its {G} plus Trace's {W}).
+
+One lever, heurarm slot SOLVE_AURA_PAYER_CHECK (appended), default ON; =0 byte-identical. In the PAE block
+of SolveUncached, a subset that casts a land Aura and PASSES the board-only gates must also pass
+SubsetPayableWithFilters (the executor's TapForCostDirect on a copy, host reserved, Aura attached where
+the plan declared it). It can only reject. Same gate as the PAE block (a land Aura pending in hand), so
+decks without one are unaffected. Measured on the game with the other new levers off: t7 rejects
+{Trace->Hub, Displacer}, keeps {Trace->Kitchen, Displacer}, and the game is won t7 (tip 8).
+
+Unit: test/unit/test_edf_aura_payer.cpp (the gi 1475 t7 board with the game's own card numbers: off picks
+Trace onto the Hub with Displacer, on never does, and the plan it keeps is cast in full).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,28 @@
+##### HELD-OUT (seeds 8300001+)
+
+== M  HINATA_CASTABLE_MANA on vs off
+cell      n   sum_on  sum_off  d_mean      t faster slower    units
+2hg     400     2643     2643 +0.0000   0.00      0      0      n/a
+d0     2000    13499    13499 +0.0000   0.00      0      0      n/a
+deck net: n=2400  sum(on-off)=+0  faster=0 slower=0
+SLOWER (on > off): cell gi off on seed
+
+== R  RESTRICTOR_ORDER_EXACT on vs off
+cell      n   sum_on  sum_off  d_mean      t faster slower    units
+ship    200     1129     1129 +0.0000   0.00      1      1   1.0128
+d3      200     1116     1116 +0.0000   0.00      0      0   0.9965
+2hg     400     2643     2645 -0.0050  -1.42      2      0      n/a
+d0     2000    13499    13502 -0.0015  -1.73      3      0      n/a
+deck net: n=2800  sum(on-off)=-5  faster=6 slower=1
+SLOWER (on > off): cell gi off on seed
+  ship  gi=68    off=5 on=6 seed=8320069
+
+##### CONTROL: CASTABLE_MANA on vs off where it is consumed (d0, seeds 8340001+)
+MTG_HINATA_SUBSET_CREDIT=1       n=1000 on-off=+0 mean=+0.0000 t=0.00 faster=0 slower=0
+   slower (gi off on seed): []
+MTG_HINATA_HOLD_NEEDS_HINATA=1   n=1000 on-off=+1 mean=+0.0010 t=0.58 faster=1 slower=2
+   slower (gi off on seed): [(322, 4, 5, 8340323), (779, 8, 9, 8340780)]
+
+##### IDENTITY: Hinata, both levers =0 vs 3d64d9a6 -- jobs 32, games -, mismatches 0 []
+
+##### IDENTITY: burn/dragonstorm/stompy, levers ON vs 3d64d9a6 -- jobs 6, games -, mismatches 0 []

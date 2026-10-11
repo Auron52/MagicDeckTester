@@ -1,0 +1,54 @@
+Loaded 60 mainboard card(s)
+Loaded profile from decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[ord] turn=1 searched=0 opaque=0 casts: Llanowar Elves
+[exec-tap] T1 before Llanowar Elves: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Branchloft Pathway
+[exec-tap] T1 Llanowar Elves tapped: Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Llanowar Elves
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Llanowar Elves
+[ord] turn=2 searched=0 opaque=0 casts: Wellwisher
+[exec-tap] T2 before Wellwisher: float{w0 u0 b0 r0 g1 c0 *0} untapped: 1/1 Creature Llanowar Elves
+[exec-tap] T2 Wellwisher tapped: Llanowar Elves  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Wellwisher
+[ord] turn=2 searched=0 opaque=0 casts: (none)
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Wellwisher
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Wellwisher
+[ord] turn=3 searched=0 opaque=0 casts: Elvish Archdruid
+[exec-tap] T3 before Elvish Archdruid: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway
+[exec-tap] T3 Elvish Archdruid tapped: Selesnya Sanctuary Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Wellwisher(T) Branchloft Pathway(T) Elvish Archdruid
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[ord] turn=4 searched=0 opaque=0 casts: Nykthos Paragon
+[exec-tap] T4 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[exec-tap] T4 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary Wellwisher(T) Branchloft Pathway Elvish Archdruid(T)
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[ord] turn=5 searched=0 opaque=0 casts: Nykthos Paragon
+[exec-tap] T5 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[exec-tap] T5 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary Wellwisher(T) Branchloft Pathway Elvish Archdruid(T)
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[ord] turn=6 searched=0 opaque=0 casts: Nykthos Paragon
+[exec-tap] T6 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[exec-tap] T6 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary Wellwisher(T) Branchloft Pathway Elvish Archdruid(T)
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[ord] turn=7 searched=0 opaque=0 casts: Nykthos Paragon
+[exec-tap] T7 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[exec-tap] T7 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary Wellwisher(T) Branchloft Pathway Elvish Archdruid(T)
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[ord] turn=8 searched=0 opaque=0 casts: Genesis Wave
+[exec-tap] T8 before Genesis Wave: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Llanowar Elves Selesnya Sanctuary Wellwisher Branchloft Pathway Elvish Archdruid
+[exec-tap] T8 Genesis Wave tapped: Llanowar Elves Selesnya Sanctuary Branchloft Pathway Elvish Archdruid  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T8 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Wellwisher(T) Branchloft Pathway(T) Elvish Archdruid(T) Blossoming Sands(T) Llanowar Elves Elvish Mystic
+Seed          : 2346
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 344  seed 2346
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/selesnya/tr344_on
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

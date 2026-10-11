@@ -1,0 +1,34 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[edf-goff-cut] t1 no goff cand
+[tmp-edbg] T1 d0 plan pre=1 land= val=100 win=0: Wild Growth(k0,x0,h57) 
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast
+[exec-tap] T1 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth
+[edf-goff-cut] t2 no goff cand
+[tmp-edbg] T2 d0 plan pre=1 land= val=100 win=0: Living Wish(k0,x0,h0) 
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth
+[exec-tap] T2 Living Wish tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T)
+[tmp-edbg] T2 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen
+[edf-goff-cut] t3 no goff cand
+[tmp-edbg] T3 d0 plan pre=1 land= val=400 win=0: Trace of Abundance(k0,x0,h57) Eldrazi Displacer(k0,x0,h0) 
+[exec-tap] T3 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Kitchen Aether Hub
+[exec-tap] T3 Trace of Abundance tapped: Kitchen Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Trace of Abundance
+[exec-tap] T3 Eldrazi Displacer tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T) Aether Hub(T) Trace of Abundance Eldrazi Displacer
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Trace of Abundance Eldrazi Displacer
+[edf-goff-cut] t4 no goff cand
+[tmp-edbg] T4 d0 plan pre=1 land= val=999 win=1: Combo Off(k29,x999,h0) 
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g38 c0 *19} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Trace of Abundance Eldrazi Displacer Training Grounds Essence Depleter Peregrine Drake(T)
+[edf-goff-cut] t4 k=26 projected=1 verified=1 opp_life=0 decked=0
+[tmp-edbg] T4 d0 plan pre=1 land= val=26 win=1: Eldrazi Displacer(k25,x26,h0) 
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/rec_dev1_new_g1985_d0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

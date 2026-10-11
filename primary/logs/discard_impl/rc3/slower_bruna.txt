@@ -1,0 +1,9 @@
+  bruna            d0   gi=652   old=7 new=8 seed=1090653
+  bruna            d0   gi=960   old=7 new=9 seed=1090961
+  bruna            d0   gi=1153  old=8 new=9 seed=1091154
+  bruna            d0   gi=1238  old=8 new=9 seed=1091239
+  bruna            d0   gi=1247  old=8 new=9 seed=1091248
+  bruna            d0   gi=1461  old=8 new=9 seed=1091462
+  bruna            d0   gi=1909  old=7 new=9 seed=1091910
+  bruna            d0   gi=1933  old=7 new=9 seed=1091934
+  bruna            ship gi=198   old=5 new=6 seed=1080199

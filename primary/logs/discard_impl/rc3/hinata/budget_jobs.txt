@@ -1,0 +1,16 @@
+hinata d3 315 1325316 new - 40
+hinata d3 315 1325316 old - 40
+hinata d3 315 1325316 new - 160
+hinata d3 315 1325316 old - 160
+hinata ship 42 1320043 new - 80
+hinata ship 42 1320043 old - 80
+hinata ship 42 1320043 new - 320
+hinata ship 42 1320043 old - 320
+hinata ship 58 1320059 new - 80
+hinata ship 58 1320059 old - 80
+hinata ship 58 1320059 new - 320
+hinata ship 58 1320059 old - 320
+hinata ship 191 1320192 new - 80
+hinata ship 191 1320192 old - 80
+hinata ship 191 1320192 new - 320
+hinata ship 191 1320192 old - 320

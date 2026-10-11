@@ -1,0 +1,2 @@
+ds d0: 300 paired; turns on 1490 off 1497 (delta -7); faster 5 slower 0; ms on/off 6/2 units 0/0
+ds d3: 100 paired; turns on 452 off 453 (delta -1); faster 1 slower 0; ms on/off 3938/3838 units 381212/381137

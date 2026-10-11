@@ -1,0 +1,369 @@
+{
+ "jobs": [
+  {
+   "name": "ship.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200001,
+   "game_index": 0,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c20",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200021,
+   "game_index": 20,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c40",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200041,
+   "game_index": 40,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c60",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200061,
+   "game_index": 60,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c80",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200081,
+   "game_index": 80,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200101,
+   "game_index": 100,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c120",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200121,
+   "game_index": 120,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c140",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200141,
+   "game_index": 140,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c160",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200161,
+   "game_index": 160,
+   "budget_ms": 20
+  },
+  {
+   "name": "ship.c180",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7200181,
+   "game_index": 180,
+   "budget_ms": 20
+  },
+  {
+   "name": "d3b10.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c20",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100021,
+   "game_index": 20,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c40",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100041,
+   "game_index": 40,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c60",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100061,
+   "game_index": 60,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c80",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100081,
+   "game_index": 80,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100101,
+   "game_index": 100,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c120",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100121,
+   "game_index": 120,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c140",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100141,
+   "game_index": 140,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c160",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100161,
+   "game_index": 160,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3b10.c180",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7100181,
+   "game_index": 180,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c20",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000021,
+   "game_index": 20,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c40",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000041,
+   "game_index": 40,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c60",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000061,
+   "game_index": 60,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c80",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000081,
+   "game_index": 80,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000101,
+   "game_index": 100,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c120",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000121,
+   "game_index": 120,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c140",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000141,
+   "game_index": 140,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c160",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000161,
+   "game_index": 160,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c180",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000181,
+   "game_index": 180,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c200",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000201,
+   "game_index": 200,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c220",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000221,
+   "game_index": 220,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c240",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000241,
+   "game_index": 240,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c260",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000261,
+   "game_index": 260,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0.c280",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7000281,
+   "game_index": 280,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  }
+ ]
+}

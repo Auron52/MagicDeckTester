@@ -1,0 +1,71 @@
+Loaded 60 mainboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1511897 t=1 m=1 route=clean pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Llanowar Elves
+[uo-state] gs=1511897 t=1 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Genesis Wave|Elvish Archdruid|Llanowar Elves|Elvish Archdruid|Selesnya Sanctuary|Elvish Mystic
+[exec-tap] T1 before Llanowar Elves: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Forest
+[uo-cast] gs=1511897 t=1 m=1 d=0 card=Llanowar Elves num=42 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T1 Llanowar Elves tapped: Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forest(T) Llanowar Elves
+[uo-order] gs=1511897 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511897 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Genesis Wave|Elvish Archdruid|Elvish Archdruid|Selesnya Sanctuary|Elvish Mystic
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forest Llanowar Elves
+[uo-order] gs=1511897 t=2 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Elvish Mystic
+[uo-state] gs=1511897 t=2 cap=-1 pool{w0 u0 b0 r0 g2 c0 *0} hand=Genesis Wave|Elvish Archdruid|Elvish Archdruid|Elvish Mystic|Nykthos Paragon|Forest
+[exec-tap] T2 before Elvish Mystic: float{w0 u0 b0 r0 g1 c0 *0} untapped: 3/3 Creature Llanowar Elves
+[uo-cast] gs=1511897 t=2 m=1 d=0 card=Elvish Mystic num=26 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T2 Elvish Mystic tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary(T) Elvish Mystic
+[uo-order] gs=1511897 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511897 t=2 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Genesis Wave|Elvish Archdruid|Elvish Archdruid|Nykthos Paragon|Forest
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Elvish Mystic
+[uo-order] gs=1511897 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511897 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Genesis Wave|Elvish Archdruid|Elvish Archdruid|Nykthos Paragon|Forest
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Elvish Mystic
+[uo-order] gs=1511897 t=3 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Elvish Archdruid
+[uo-state] gs=1511897 t=3 cap=-1 pool{w0 u0 b0 r0 g3 c0 *2} hand=Genesis Wave|Elvish Archdruid|Elvish Archdruid|Nykthos Paragon|Forest
+[exec-tap] T3 before Elvish Archdruid: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest
+[uo-cast] gs=1511897 t=3 m=1 d=0 card=Elvish Archdruid num=24 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T3 Elvish Archdruid tapped: Selesnya Sanctuary Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Elvish Mystic(T) Forest(T) Elvish Archdruid
+[uo-order] gs=1511897 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511897 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Genesis Wave|Elvish Archdruid|Nykthos Paragon|Forest
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest Elvish Archdruid
+[uo-order] gs=1511897 t=4 m=1 route=clean pool=9 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Genesis Wave
+[uo-state] gs=1511897 t=4 cap=-1 pool{w0 u0 b0 r0 g7 c0 *2} hand=Genesis Wave|Elvish Archdruid|Nykthos Paragon|Genesis Wave
+[exec-tap] T4 before Genesis Wave: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest Elvish Archdruid Forest
+[uo-cast] gs=1511897 t=4 m=1 d=0 card=Genesis Wave num=37 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T4 Genesis Wave tapped: Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest Elvish Archdruid Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Elvish Mystic(T) Forest(T) Elvish Archdruid(T) Forest(T) Priest of Titania Branchloft Pathway Blossoming Sands(T)
+[uo-order] gs=1511897 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511897 t=4 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Elvish Archdruid|Nykthos Paragon|Genesis Wave
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest Elvish Archdruid Forest Priest of Titania Branchloft Pathway Blossoming Sands
+[uo-order] gs=1511897 t=5 m=1 route=clean pool=16 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Genesis Wave
+[uo-state] gs=1511897 t=5 cap=-1 pool{w0 u0 b0 r0 g13 c0 *3} hand=Elvish Archdruid|Nykthos Paragon|Genesis Wave|Wellwisher
+[exec-tap] T5 before Genesis Wave: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest Elvish Archdruid Forest Priest of Titania Branchloft Pathway Blossoming Sands
+[uo-cast] gs=1511897 t=5 m=1 d=0 card=Genesis Wave num=39 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T5 Genesis Wave tapped: Llanowar Elves Selesnya Sanctuary Elvish Mystic Forest Elvish Archdruid Forest Priest of Titania Branchloft Pathway Blossoming Sands  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Elvish Mystic(T) Elvish Archdruid(T) Forest(T) Priest of Titania(T) Branchloft Pathway(T) Blossoming Sands(T) Nykthos Paragon Ageless Entity Branchloft Pathway Accomplished Alchemist Elvish Archdruid Nykthos Paragon Forest Accomplished Alchemist Nykthos Paragon Verdant Sun's Avatar Selesnya Sanctuary(T) Forest
+[uo-order] gs=1511897 t=5 m=1 route=clean pool=4 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Elvish Archdruid
+[uo-state] gs=1511897 t=5 cap=-1 pool{w0 u0 b0 r0 g4 c0 *0} hand=Elvish Archdruid|Nykthos Paragon|Wellwisher
+[exec-tap] T5 before Elvish Archdruid: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Nykthos Paragon Ageless Entity Branchloft Pathway Accomplished Alchemist Elvish Archdruid Nykthos Paragon Forest Accomplished Alchemist Nykthos Paragon Verdant Sun's Avatar Forest Forest
+[uo-cast] gs=1511897 t=5 m=1 d=0 card=Elvish Archdruid num=22 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T5 Elvish Archdruid tapped: Branchloft Pathway Forest Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves(T) Selesnya Sanctuary(T) Elvish Mystic(T) Elvish Archdruid(T) Forest(T) Priest of Titania(T) Branchloft Pathway(T) Blossoming Sands(T) Nykthos Paragon Ageless Entity Branchloft Pathway(T) Accomplished Alchemist Elvish Archdruid Nykthos Paragon Forest(T) Accomplished Alchemist Nykthos Paragon Verdant Sun's Avatar Selesnya Sanctuary(T) Forest(T) Forest Elvish Archdruid
+[uo-order] gs=1511897 t=5 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511897 t=5 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Wellwisher
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Llanowar Elves Selesnya Sanctuary Elvish Mystic Elvish Archdruid Forest Priest of Titania Branchloft Pathway Blossoming Sands Nykthos Paragon Ageless Entity Branchloft Pathway Accomplished Alchemist Elvish Archdruid Nykthos Paragon Forest Accomplished Alchemist Nykthos Paragon Verdant Sun's Avatar Selesnya Sanctuary Forest Forest Elvish Archdruid
+[uo-order] gs=1511897 t=6 m=1 route=clean pool=47 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Nykthos Paragon
+[uo-state] gs=1511897 t=6 cap=-1 pool{w0 u0 b0 r0 g40 c0 *7} hand=Nykthos Paragon|Wellwisher|Genesis Wave
+[exec-tap] T6 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Llanowar Elves Selesnya Sanctuary Elvish Mystic Elvish Archdruid Forest Priest of Titania Branchloft Pathway Blossoming Sands Nykthos Paragon Ageless Entity Branchloft Pathway Accomplished Alchemist Elvish Archdruid Nykthos Paragon Forest Accomplished Alchemist Nykthos Paragon Verdant Sun's Avatar Selesnya Sanctuary Forest Forest Elvish Archdruid
+[uo-cast] gs=1511897 t=6 m=1 d=0 card=Nykthos Paragon num=44 staged=0 splice=0 paid=1 pool=41
+[exec-tap] T6 Nykthos Paragon tapped: Selesnya Sanctuary Forest Branchloft Pathway Selesnya Sanctuary  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1511897
+Games played  : 1
+avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

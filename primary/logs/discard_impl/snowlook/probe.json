@@ -1,0 +1,104 @@
+{
+ "jobs": [
+  {
+   "name": "snow_d3_b0_on",
+   "deck": "decks/Snow/Snow.cod",
+   "profile": "decks/Snow/Snow.profile.json",
+   "games": 12,
+   "seed": 5600001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "snow_d3_b0_off",
+   "deck": "decks/Snow/Snow.cod",
+   "profile": "decks/Snow/Snow.profile.json",
+   "games": 12,
+   "seed": 5600001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SNOW_LOOK_COLOR": false
+   }
+  },
+  {
+   "name": "snow_d0_b0_on",
+   "deck": "decks/Snow/Snow.cod",
+   "profile": "decks/Snow/Snow.profile.json",
+   "games": 40,
+   "seed": 5610001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "snow_d0_b0_off",
+   "deck": "decks/Snow/Snow.cod",
+   "profile": "decks/Snow/Snow.profile.json",
+   "games": 40,
+   "seed": 5610001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SNOW_LOOK_COLOR": false
+   }
+  },
+  {
+   "name": "hinata_d3_b10_on",
+   "deck": "decks/Hinata2/Hinata2.cod",
+   "profile": "decks/Hinata2/Hinata2.profile.json",
+   "games": 30,
+   "seed": 5620001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "hinata_d3_b10_off",
+   "deck": "decks/Hinata2/Hinata2.cod",
+   "profile": "decks/Hinata2/Hinata2.profile.json",
+   "games": 30,
+   "seed": 5620001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SNOW_LOOK_COLOR": false
+   }
+  },
+  {
+   "name": "fivecolour_d0_b0_on",
+   "deck": "decks/FiveColour/FiveColour.cod",
+   "profile": "decks/FiveColour/FiveColour.profile.json",
+   "games": 30,
+   "seed": 5630001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "fivecolour_d0_b0_off",
+   "deck": "decks/FiveColour/FiveColour.cod",
+   "profile": "decks/FiveColour/FiveColour.profile.json",
+   "games": 30,
+   "seed": 5630001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_SNOW_LOOK_COLOR": false
+   }
+  }
+ ]
+}

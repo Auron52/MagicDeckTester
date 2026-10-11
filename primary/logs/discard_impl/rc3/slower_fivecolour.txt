@@ -1,0 +1,14 @@
+  fivecolour       d0   gi=275   old=4 new=5 seed=1210276
+  fivecolour       d0   gi=374   old=5 new=6 seed=1210375
+  fivecolour       d0   gi=400   old=5 new=6 seed=1210401
+  fivecolour       d0   gi=500   old=4 new=5 seed=1210501
+  fivecolour       d0   gi=839   old=4 new=5 seed=1210840
+  fivecolour       d0   gi=912   old=4 new=5 seed=1210913
+  fivecolour       d0   gi=1054  old=5 new=6 seed=1211055
+  fivecolour       d0   gi=1063  old=4 new=5 seed=1211064
+  fivecolour       d0   gi=1191  old=6 new=7 seed=1211192
+  fivecolour       d0   gi=1665  old=4 new=5 seed=1211666
+  fivecolour       d0   gi=1700  old=5 new=6 seed=1211701
+  fivecolour       d0   gi=1760  old=5 new=6 seed=1211761
+  fivecolour       d0   gi=1817  old=5 new=6 seed=1211818
+  fivecolour       d0   gi=1882  old=4 new=5 seed=1211883

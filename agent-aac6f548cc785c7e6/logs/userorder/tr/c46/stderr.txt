@@ -1,0 +1,39 @@
+[flags] WARNING: MTG_NONE is set but is not a flag this binary reads -- a typo or a deleted flag? It will have NO effect (`mtg --list-flags` prints the known set).
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7100046 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Unclaimed Territory|Scourge of Valkas|Karrthus, Tyrant of Jund|Lotus Bloom
+[uo-order] gs=7100046 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Unclaimed Territory|Scourge of Valkas|Karrthus, Tyrant of Jund|Lotus Bloom
+[uo-order] gs=7100046 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Ruby Medallion
+[uo-order] gs=7100046 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Ruby Medallion
+[uo-order] gs=7100046 t=3 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion
+[uo-state] gs=7100046 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Ruby Medallion|Rite of Flame
+[uo-cast] gs=7100046 t=3 m=1 d=3 card=Ruby Medallion num=45 staged=0 splice=0 paid=1 pool=0
+[uo-order] gs=7100046 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Rite of Flame
+[uo-order] gs=7100046 t=4 m=1 route=searched pool=1 n=3 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Pyretic Ritual|Scourge of Valkas
+[uo-state] gs=7100046 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Rite of Flame|Pyretic Ritual
+[uo-cast] gs=7100046 t=4 m=1 d=3 card=Rite of Flame num=41 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100046 t=4 m=1 d=3 card=Pyretic Ritual num=37 staged=0 splice=0 paid=0 pool=1
+[uo-cast] gs=7100046 t=4 m=1 d=3 card=Scourge of Valkas num=52 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=7100046 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Rite of Flame|Pyretic Ritual
+[uo-order] gs=7100046 t=5 m=1 route=searched pool=5 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Karrthus, Tyrant of Jund
+[uo-state] gs=7100046 t=5 cap=-1 pool{w0 u0 b3 r1 g0 c0 *1} hand=Scourge of Valkas|Karrthus, Tyrant of Jund|Rite of Flame|Pyretic Ritual|Seething Song
+[uo-cast] gs=7100046 t=5 m=1 d=3 card=Rite of Flame num=41 staged=0 splice=0 paid=1 pool=4
+[uo-cast] gs=7100046 t=5 m=1 d=3 card=Karrthus, Tyrant of Jund num=16 staged=0 splice=0 paid=1 pool=5
+[uo-order] gs=7100046 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7100046 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Scourge of Valkas|Pyretic Ritual|Seething Song
+[uo-order] gs=7100046 t=6 m=1 route=searched pool=2 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-state] gs=7100046 t=6 cap=-1 pool{w0 u0 b0 r1 g0 c0 *1} hand=Scourge of Valkas|Pyretic Ritual|Seething Song
+[uo-cast] gs=7100046 t=6 m=1 d=3 card=Pyretic Ritual num=37 staged=0 splice=0 paid=1 pool=1
+[uo-cast] gs=7100046 t=6 m=1 d=3 card=Seething Song num=54 staged=0 splice=0 paid=1 pool=4
+[uo-cast] gs=7100046 t=6 m=1 d=3 card=Scourge of Valkas num=52 staged=0 splice=0 paid=1 pool=7
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/tr/c46
+[enum-memo] hits=6 misses=408 clears=0
+[solve-memo] hits=941 misses=1683 clears=0
+[leaf-eval] published=337 ties=108 flips=23 life-equal-ties=20

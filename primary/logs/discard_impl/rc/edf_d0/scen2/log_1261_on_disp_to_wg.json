@@ -1,0 +1,1133 @@
+{
+  "cardNumbering": {
+    "Adarkar Wastes": [
+      1,
+      2
+    ],
+    "Aether Hub": [
+      3,
+      4,
+      5
+    ],
+    "Brushland": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "Cloud of Faeries": [
+      10,
+      11,
+      12
+    ],
+    "Conservatory": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Eladamri's Call": [
+      17
+    ],
+    "Eldrazi Displacer": [
+      18,
+      19,
+      20
+    ],
+    "Emiel the Blessed": [
+      21,
+      22,
+      23,
+      24
+    ],
+    "Fertile Ground": [
+      25,
+      26,
+      27,
+      28
+    ],
+    "Kitchen": [
+      29,
+      30
+    ],
+    "Living Wish": [
+      31,
+      32,
+      33,
+      34
+    ],
+    "Mariposa Military Base": [
+      35,
+      36,
+      37
+    ],
+    "Overgrowth": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Peregrine Drake": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Shivan Gorge": [
+      46
+    ],
+    "Trace of Abundance": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Training Grounds": [
+      51,
+      52
+    ],
+    "Wild Growth": [
+      53,
+      54,
+      55,
+      56
+    ],
+    "Yavimaya Coast": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "EldraziDisplacerFlicker",
+  "gameNumber": 0,
+  "mulliganSequence": [],
+  "openingHand": [],
+  "result": {
+    "turn": 8,
+    "winner": "player"
+  },
+  "runId": "scenario",
+  "seed": 1,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 11,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 6,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 7,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 4,
+          "cardName": "Cloud of Faeries",
+          "manaPaid": "{1}{U}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          5,
+          8,
+          9,
+          10,
+          11
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          5,
+          8,
+          9,
+          10,
+          11
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          5,
+          8,
+          9,
+          10,
+          11
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 12,
+          "cardName": "Wild Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          5,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 10,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 11,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 8,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 5,
+          "cardName": "Eldrazi Displacer",
+          "manaPaid": "{2}{W}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 10,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 11,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 8,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          12
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 19,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 1,
+            "card": 10,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 11,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 8,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          12
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "attachedTo": 1,
+            "card": 10,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 11,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 8,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          12
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 10,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 11,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 8,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          12,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "ability": "combo route: win",
+          "card": 0,
+          "cardName": "Combo Off",
+          "type": "ABILITY"
+        },
+        {
+          "card": 12,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 9,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 13,
+          "cardName": "Trace of Abundance",
+          "manaPaid": "{R}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 15,
+          "cardName": "Overgrowth",
+          "manaPaid": "{2}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 18,
+          "cardName": "Peregrine Drake",
+          "manaPaid": "{4}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "ability": "draw a card",
+          "card": 2,
+          "cardName": "Mariposa Military Base",
+          "type": "ABILITY"
+        },
+        {
+          "ability": "investigate",
+          "card": 3,
+          "cardName": "Kitchen",
+          "type": "ABILITY"
+        },
+        {
+          "ability": "blink x3",
+          "card": 5,
+          "cardName": "Eldrazi Displacer",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 10,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 11,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 8,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 1,
+            "card": 12,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 9,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 13,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 15,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": -4,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "damage": 3,
+          "oppLife": -7,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Aether Hub",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 2,
+            "card": 6,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 7,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 10,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 11,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 8,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 1,
+            "card": 12,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 1,
+            "card": 9,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 2,
+            "card": 13,
+            "cardName": "Trace of Abundance",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "attachedTo": 3,
+            "card": 15,
+            "cardName": "Overgrowth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": -7,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 8
+    }
+  ]
+}

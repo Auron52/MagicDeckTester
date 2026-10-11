@@ -1,0 +1,43 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=1190446 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=1 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Sandstone Needle|Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power
+[uo-order] gs=1190446 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=1 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Sandstone Needle|Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power
+[uo-order] gs=1190446 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power|Desperate Ritual
+[uo-order] gs=1190446 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power|Desperate Ritual
+[uo-order] gs=1190446 t=3 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=3 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power|Desperate Ritual|Desperate Ritual
+[uo-order] gs=1190446 t=3 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=3 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power|Desperate Ritual|Desperate Ritual
+[uo-order] gs=1190446 t=4 m=1 route=opaque pool=3 n=6 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Seething Song|Pyretic Ritual|Desperate Ritual:s1|Desperate Ritual|Pyretic Ritual|Apex of Power
+[uo-state] gs=1190446 t=4 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Lathliss, Dragon Queen|Seething Song|Pyretic Ritual|Apex of Power|Desperate Ritual|Desperate Ritual|Pyretic Ritual
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=0
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Pyretic Ritual num=35 staged=0 splice=0 paid=1 pool=5
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=1 paid=1 pool=6
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Desperate Ritual num=6 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Pyretic Ritual num=36 staged=0 splice=0 paid=1 pool=9
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=10
+[uo-order] gs=1190446 t=4 m=1 route=cont pool=10 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Lathliss, Dragon Queen
+[uo-state] gs=1190446 t=4 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Lathliss, Dragon Queen|Sandstone Needle*|Desperate Ritual*|Scourge of Valkas*|Lotus Bloom*|Utvara Hellkite*|Apex of Power*|Utvara Hellkite*
+[uo-cast] gs=1190446 t=4 m=1 d=0 card=Lathliss, Dragon Queen num=17 staged=0 splice=0 paid=1 pool=10
+[uo-order] gs=1190446 t=4 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=4 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Sandstone Needle*|Desperate Ritual*|Scourge of Valkas*|Lotus Bloom*|Utvara Hellkite*|Apex of Power*|Utvara Hellkite*
+[uo-order] gs=1190446 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Sandstone Needle*|Desperate Ritual*|Scourge of Valkas*|Lotus Bloom*|Utvara Hellkite*|Apex of Power*|Utvara Hellkite*
+[uo-order] gs=1190446 t=5 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=5 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Rite of Flame
+[uo-order] gs=1190446 t=5 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Rite of Flame
+[uo-order] gs=1190446 t=6 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=6 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Rite of Flame
+[uo-order] gs=1190446 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Rite of Flame
+[uo-order] gs=1190446 t=7 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1190446 t=7 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Rite of Flame|Dragonstorm
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/g6/g445/oldrit
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

@@ -1,0 +1,518 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t1 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]   t1 skip Cloud of Faeries: avail 1 < cost
+[combo-route]   t1 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order A (auras first) leaves no loop
+[combo-route]   t1 skip Cloud of Faeries: avail 1 < cost
+[combo-route]   t1 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order B (auras last) leaves no loop
+[combo-route] t1 no loop: neither deploy order reaches a finish
+[combo-route] t1 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t1 no goff cand
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-turn] t2 lands=1 auras=1 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t2 tap Yavimaya Coast -> Green
+[combo-route] t2 cast Fertile Ground -> land
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]     t2 tap Yavimaya Coast -> Blue
+[combo-route] t2 cast Cloud of Faeries
+[combo-route]     t2 tap Yavimaya Coast -> Green
+[combo-route]     t2 tap Conservatory -> White
+[combo-route] t2 cast Eldrazi Displacer
+[combo-route]   t2 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t2 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t2 pay {2}{C} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 blink: cannot pay {2}{C}
+[combo-route] t2 blink unpayable
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=17 opp=20 | cast Cloud of Faeries; cast Eldrazi Displacer; blink unpayable; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t2 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t2 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-turn] t3 lands=2 auras=1 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Conservatory -> Green
+[combo-route]   t3 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t3 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t3 tap Yavimaya Coast -> Green
+[combo-route] t3 cast Fertile Ground -> land
+[combo-route]   t3 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t3 tap Conservatory -> Green +aura Green,
+[combo-route] t3 cast Fertile Ground -> land
+[combo-route]   t3 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 cast Wild Growth: cannot pay {G}
+[combo-route]   t3 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 cast Wild Growth: cannot pay {G}
+[combo-route]   t3 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t3 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy order A (auras first) leaves no loop
+[combo-route]     t3 tap Yavimaya Coast -> Green
+[combo-route]     t3 tap Conservatory -> White
+[combo-route] t3 cast Eldrazi Displacer
+[combo-route]   t3 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 pay {2}{C} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 blink: cannot pay {2}{C}
+[combo-route] t3 blink unpayable
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=17 opp=20 | cast Eldrazi Displacer; blink unpayable; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=1 payloads=1 casting=[Eldrazi Displacer,]
+[edf-prosp] t3 outlets=1 payloads=1 casting=[Eldrazi Displacer,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=1 payloads=1 casting=[Eldrazi Displacer,Wild Growth,]
+[edf-prosp] t3 outlets=1 payloads=1 casting=[Eldrazi Displacer,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Fertile Ground,Wild Growth,]
+[edf-turn] t4 lands=2 auras=2 untapper=1 outlet=1 drawland=1 wish=0 | ok=1 untaps=2 refund=4 cost=3 net=1 pool=4 gorge=0/0 drain=1/2 exile=0 setup=13 needgorge=3 needdrain=18
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g2 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g2 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g5 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g5 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g6 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g7 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g8 c0 *0(c0)
+[combo-route]   t4 dig: float below blink+6 float w0 u0 b0 r0 g8 c0 *0(c0)
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Yavimaya Coast -> Colorless
+[combo-route]   t4 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g9 c0 *0(c0)
+[combo-route] t4 Conservatory -> investigate -> draw
+[combo-route]   t4 fin k=2 id=0 hand=-1 wish=4 -> Dimensional Infiltrator act={1}{C} x50 switch=1 demand={54}{W}{W}{U}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {2}{U}{G} float w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]   t4 bank: float=3 target=63 ready=0 income=4 per_iter=1 n_untap=2
+[combo-route]     t4 tap Yavimaya Coast -> Blue
+[combo-route]   t4 pay {2}{C} FAILED (rolled back); float w0 u1 b0 r0 g4 c0 *0 lands available=0
+[combo-route]   t4 blink: cannot pay {2}{C}
+[combo-route] t4 blink unpayable
+[combo-route] t4 TRIAL no: deploys=0 iters=9 draws=1 acts=0 life=17 opp=19 | Eldrazi Displacer: blink Cloud of Faeries x9; Conservatory -> investigate -> draw; blink unpayable; 
+[edf-goff-cut] t4 k=53 projected=0
+[edf-turn] t5 lands=2 auras=4 untapper=1 outlet=1 drawland=1 wish=1 | ok=1 untaps=2 refund=6 cost=3 net=3 pool=6 gorge=0/0 drain=1/2 exile=0 setup=5 needgorge=3 needdrain=10
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=14 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> White +aura White,White,
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w2 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w2 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t5 bank: float=3 target=14 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura Black,Black,
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w2 u0 b1 r0 g3 c0 *0(c0)
+[combo-route] t5 cast Emiel the Blessed
+[combo-route] t5 outlet switch
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x15 switch=0 demand={18}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b1 r0 g1 c0 *0(c0)
+[combo-route]   t5 bank: float=2 target=10 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x15 switch=0 demand={18}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c1 *2(c0)
+[combo-route] t5 combo finish: Living Wish → Essence Depleter
+[combo-route]   t5 fin k=1 id=0 hand=1 wish=-1 act={1}{C} x15 switch=0 demand={17}{B}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route] t5 cast Essence Depleter
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x14 switch=0 demand={14}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 bank: float=1 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x14 switch=0 demand={14}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x13 switch=0 demand={13}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 bank: float=2 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x13 switch=0 demand={13}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x12 switch=0 demand={12}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 bank: float=3 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x12 switch=0 demand={12}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *5(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 bank: float=4 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *6(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x10 switch=0 demand={10}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 bank: float=5 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x10 switch=0 demand={10}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *7(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x9 switch=0 demand={9}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 bank: float=6 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x9 switch=0 demand={9}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *8(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x8 switch=0 demand={8}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 bank: float=7 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x8 switch=0 demand={8}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *9(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 bank: float=8 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *10(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x6 switch=0 demand={6}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 bank: float=9 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x6 switch=0 demand={6}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *11(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x5 switch=0 demand={5}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 bank: float=10 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x5 switch=0 demand={5}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *12(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x4 switch=0 demand={4}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 bank: float=11 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x4 switch=0 demand={4}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *13(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 bank: float=12 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *14(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x2 switch=0 demand={2}{C}{C} float=w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 bank: float=13 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x2 switch=0 demand={2}{C}{C} float=w0 u0 b0 r0 g0 c1 *15(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x1 switch=0 demand={1}{C} float=w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 bank: float=14 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x1 switch=0 demand={1}{C} float=w0 u0 b0 r0 g0 c1 *16(c0)
+[combo-route] t5 finisher x15 -- the opponent is dead
+[combo-route] t5 TRIAL WIN: deploys=3 iters=18 draws=0 acts=15 life=32 opp=0 | Eldrazi Displacer: blink Cloud of Faeries x2; cast Emiel the Blessed; outlet switch; Emiel the Blessed: blink Cloud of Faeries x1; combo finish: Living Wish → Essence Depleter; cast Essence Depleter; Emiel the Blessed: blink Cloud of Faeries x15; finisher x15 -- the opponent is dead; 
+[edf-goff-cut] t5 k=27 projected=0
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=14 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> White +aura White,White,
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w2 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w2 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t5 bank: float=3 target=14 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura Black,Black,
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w2 u0 b1 r0 g3 c0 *0(c0)
+[combo-route] t5 cast Emiel the Blessed
+[combo-route] t5 outlet switch
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x15 switch=0 demand={18}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b1 r0 g1 c0 *0(c0)
+[combo-route]   t5 bank: float=2 target=10 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x15 switch=0 demand={18}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c1 *2(c0)
+[combo-route] t5 combo finish: Living Wish → Essence Depleter
+[combo-route]   t5 fin k=1 id=0 hand=1 wish=-1 act={1}{C} x15 switch=0 demand={17}{B}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route] t5 cast Essence Depleter
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x14 switch=0 demand={14}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 bank: float=1 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x14 switch=0 demand={14}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x13 switch=0 demand={13}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 bank: float=2 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x13 switch=0 demand={13}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x12 switch=0 demand={12}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 bank: float=3 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x12 switch=0 demand={12}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *5(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 bank: float=4 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *6(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x10 switch=0 demand={10}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 bank: float=5 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x10 switch=0 demand={10}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *7(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x9 switch=0 demand={9}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 bank: float=6 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x9 switch=0 demand={9}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *8(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x8 switch=0 demand={8}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 bank: float=7 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x8 switch=0 demand={8}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *9(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 bank: float=8 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *10(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x6 switch=0 demand={6}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 bank: float=9 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x6 switch=0 demand={6}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *11(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x5 switch=0 demand={5}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 bank: float=10 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x5 switch=0 demand={5}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *12(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x4 switch=0 demand={4}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 bank: float=11 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x4 switch=0 demand={4}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *13(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 bank: float=12 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *14(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x2 switch=0 demand={2}{C}{C} float=w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 bank: float=13 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x2 switch=0 demand={2}{C}{C} float=w0 u0 b0 r0 g0 c1 *15(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x1 switch=0 demand={1}{C} float=w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 bank: float=14 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x1 switch=0 demand={1}{C} float=w0 u0 b0 r0 g0 c1 *16(c0)
+[combo-route] t5 finisher x15 -- the opponent is dead
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=14 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> White +aura White,White,
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w2 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w2 u0 b0 r0 g1 c0 *0(c0)
+[combo-route]   t5 bank: float=3 target=14 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura Black,Black,
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=2 -> Essence Depleter act={1}{C} x15 switch=1 demand={20}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w2 u0 b1 r0 g3 c0 *0(c0)
+[combo-route] t5 cast Emiel the Blessed
+[combo-route] t5 outlet switch
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x15 switch=0 demand={18}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c0 *0(c0)
+[combo-route]   t5 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b1 r0 g1 c0 *0(c0)
+[combo-route]   t5 bank: float=2 target=10 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x15 switch=0 demand={18}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b1 r0 g1 c1 *2(c0)
+[combo-route] t5 combo finish: Living Wish → Essence Depleter
+[combo-route]   t5 fin k=1 id=0 hand=1 wish=-1 act={1}{C} x15 switch=0 demand={17}{B}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route] t5 cast Essence Depleter
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x15 switch=0 demand={15}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x14 switch=0 demand={14}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 bank: float=1 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x14 switch=0 demand={14}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x13 switch=0 demand={13}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 bank: float=2 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x13 switch=0 demand={13}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x12 switch=0 demand={12}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 bank: float=3 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x12 switch=0 demand={12}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *5(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 bank: float=4 target=5 ready=0 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x11 switch=0 demand={11}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *6(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x10 switch=0 demand={10}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 bank: float=5 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x10 switch=0 demand={10}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *7(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x9 switch=0 demand={9}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 bank: float=6 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x9 switch=0 demand={9}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *8(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x8 switch=0 demand={8}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 bank: float=7 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x8 switch=0 demand={8}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *9(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 bank: float=8 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x7 switch=0 demand={7}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *10(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x6 switch=0 demand={6}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 bank: float=9 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x6 switch=0 demand={6}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *11(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x5 switch=0 demand={5}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 bank: float=10 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x5 switch=0 demand={5}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *12(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x4 switch=0 demand={4}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 bank: float=11 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x4 switch=0 demand={4}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *13(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 bank: float=12 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x3 switch=0 demand={3}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *14(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x2 switch=0 demand={2}{C}{C} float=w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 bank: float=13 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x2 switch=0 demand={2}{C}{C} float=w0 u0 b0 r0 g0 c1 *15(c0)
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x1 switch=0 demand={1}{C} float=w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 finish: {1}{C} not payable from float w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 bank: float=14 target=5 ready=1 income=6 per_iter=0 n_untap=2
+[combo-route]     t5 tap Yavimaya Coast -> Colorless
+[combo-route]     t5 tap Conservatory -> Green +aura *,*,
+[combo-route]   t5 fin k=1 id=200006 hand=-1 wish=-1 act={1}{C} x1 switch=0 demand={1}{C} float=w0 u0 b0 r0 g0 c1 *16(c0)
+[combo-route] t5 finisher x15 -- the opponent is dead
+[combo-route] t5 APPLY WIN: deploys=3 iters=18 draws=0 acts=15
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/tr_g1676_d0_new
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

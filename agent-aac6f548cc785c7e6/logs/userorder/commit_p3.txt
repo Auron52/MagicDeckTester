@@ -1,0 +1,19 @@
+fix(payable-order): keep an order with a live Hinata / Soulfire discount as given (MTG_PAYABLE_ORDER_DYNAMIC_DECLINE)
+
+LadderProjectable has always declined an order holding a cast with a live DYNAMIC per-target discount
+(Hinata, Dawn-Crowned's {1} per target; the Soulfire own-target discount): the stamped cost was priced
+for the board at the position the enumeration gave it, and the board changes as the line resolves, so
+walking the cast at another position judges a cost that is about to change underneath it.
+MTG_PAYABLE_ORDER (PayableCastOrderCore) had no such decline and permuted those orders like any other
+(latent; found reviewing P2). It now keeps them as given, at both sites -- the same as an order outside
+its domain. Only LadderProjectable's dynamic-cost test is shared (PoDynamicDiscount); its spectacle and
+missing-definition declines are not part of this lever.
+
+Lever: MTG_PAYABLE_ORDER_DYNAMIC_DECLINE (default ON) + heurarm slot PAYABLE_ORDER_DYNAMIC_DECLINE.
+Unit test: test_dragonstorm_followups.cpp "Payable order: a live Hinata discount keeps the order as
+given ..." (Magma Opus stamped at {U}{R} under Hinata; on -> kept, off -> permuted).
+=0 byte-identical vs 916002fc on the 45-job ident set.
+Paired sanity, seeds 8400001+: Hinata2 d0 300 0/0, d3 100 0/0 (search units -0.4%: it fires, no win
+turn moves); Dragonstorm, Cyclone, Mirrorwing d0 300: 0/0.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

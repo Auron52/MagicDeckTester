@@ -1,0 +1,16 @@
+{
+  "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+  "turn": 6, "on_the_play": true,
+  "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Aether Hub", "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Kitchen", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Eldrazi Displacer", "Eldrazi Displacer", "Fertile Ground", "Fertile Ground", "Cloud of Faeries" ],
+  "library_filler": "Brushland", "library_size": 20,
+  "energy_counters": 0,
+  "depth": 0, "budget_ms": 0, "max_turns": 6,
+  "log_out": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/scen_pae1261_out.json"
+}

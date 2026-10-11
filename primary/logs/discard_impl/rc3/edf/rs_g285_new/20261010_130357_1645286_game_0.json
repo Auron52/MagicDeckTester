@@ -1,0 +1,1808 @@
+{
+  "cardNumbering": {
+    "Adarkar Wastes": [
+      1,
+      2
+    ],
+    "Aether Hub": [
+      3,
+      4,
+      5
+    ],
+    "Brushland": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "Cloud of Faeries": [
+      10,
+      11,
+      12
+    ],
+    "Conservatory": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Eladamri's Call": [
+      17
+    ],
+    "Eldrazi Displacer": [
+      18,
+      19,
+      20
+    ],
+    "Emiel the Blessed": [
+      21,
+      22,
+      23,
+      24
+    ],
+    "Fertile Ground": [
+      25,
+      26,
+      27,
+      28
+    ],
+    "Kitchen": [
+      29,
+      30
+    ],
+    "Living Wish": [
+      31,
+      32,
+      33,
+      34
+    ],
+    "Mariposa Military Base": [
+      35,
+      36,
+      37
+    ],
+    "Overgrowth": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Peregrine Drake": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Shivan Gorge": [
+      46
+    ],
+    "Trace of Abundance": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Training Grounds": [
+      51,
+      52
+    ],
+    "Wild Growth": [
+      53,
+      54,
+      55,
+      56
+    ],
+    "Yavimaya Coast": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance"
+        },
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth"
+        },
+        {
+          "card": 51,
+          "cardName": "Training Grounds"
+        },
+        {
+          "card": 25,
+          "cardName": "Fertile Ground"
+        },
+        {
+          "card": 46,
+          "cardName": "Shivan Gorge"
+        },
+        {
+          "card": 29,
+          "cardName": "Kitchen"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 47,
+      "cardName": "Trace of Abundance"
+    },
+    {
+      "card": 35,
+      "cardName": "Mariposa Military Base"
+    },
+    {
+      "card": 38,
+      "cardName": "Overgrowth"
+    },
+    {
+      "card": 51,
+      "cardName": "Training Grounds"
+    },
+    {
+      "card": 25,
+      "cardName": "Fertile Ground"
+    },
+    {
+      "card": 46,
+      "cardName": "Shivan Gorge"
+    },
+    {
+      "card": 29,
+      "cardName": "Kitchen"
+    }
+  ],
+  "result": {
+    "turn": 5,
+    "winner": "player"
+  },
+  "runId": "20261010_130357_1645286",
+  "seed": 1645286,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 29,
+          "cardName": "Kitchen",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          35,
+          38,
+          51,
+          25,
+          46
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          35,
+          38,
+          51,
+          25,
+          46
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          35,
+          38,
+          51,
+          25,
+          46
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          35,
+          38,
+          51,
+          25,
+          46,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 51,
+          "cardName": "Training Grounds",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          46,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          46,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          46,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          46,
+          13,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Shivan Gorge",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          13,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          13,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          13,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 36,
+          "cardName": "Mariposa Military Base",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          25,
+          13,
+          18,
+          36
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 36,
+          "cardName": "Mariposa Military Base",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 25,
+          "cardName": "Fertile Ground",
+          "manaPaid": "{1}{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "manaPaid": "{2}{W}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 35,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 35,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 35,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 35,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38,
+          13,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Conservatory",
+          "type": "PLAY_LAND"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            200002
+          ],
+          "lookedAt": [
+            {
+              "card": 200002,
+              "cardName": "Cloud of Faeries",
+              "to": "to hand"
+            }
+          ],
+          "source": "Living Wish (searched)",
+          "type": "REVEAL"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "cards": [
+            {
+              "card": 46,
+              "cardName": "Shivan Gorge"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "ability": "combo route: win",
+          "card": 0,
+          "cardName": "Combo Off",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 35,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 0,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 3,
+          "oppLife": -3,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Training Grounds",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Shivan Gorge",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 35,
+            "card": 25,
+            "cardName": "Fertile Ground",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Eldrazi Displacer",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Conservatory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 200002,
+            "cardName": "Cloud of Faeries",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          47,
+          38
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -3,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    }
+  ]
+}

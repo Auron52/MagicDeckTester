@@ -1,0 +1,10 @@
+Loaded 60 mainboard card(s)
+Loaded profile from decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Seed          : 2177
+Games played  : 1
+avg (turns)   : 8.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/selesnya/g175_distoff
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

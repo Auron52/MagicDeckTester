@@ -1,0 +1,6 @@
+state 1 committed 4c37ec94 fix(edf): null-guard every read of the go-off projection's `casting` list (E5)
+state 2 committed 549356a2 fix(solve): the real payer credits an ETB-untap creature's land untap (MTG_SOLVE_UNTAP_CREDIT)
+state 3 committed 6cd39b43 fix(prepay): a declined batch prepay gives back the Aether Hub's {E} (MTG_PREPAY_ENERGY_RESTORE)
+state 4 committed 4255f340 fix(solve): a land-Aura subset the board gates pass still meets the real payer (MTG_SOLVE_AURA_PAYER_CHECK)
+state 5 committed 6b36a9f4 fix(edf): the COMBO OFF route deploys onto a loop already in play (MTG_EDF_ROUTE_BOARD_DEPLOY)
+state 6 committed 948dbb11 fix(solve): the EDF go-off cut verifies an unprojected kill by applying it (MTG_EDF_GOFF_VERIFY_UNPROJECTED)

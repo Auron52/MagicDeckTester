@@ -1,0 +1,591 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t1 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t1 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]   t1 skip Cloud of Faeries: avail 1 < cost
+[combo-route]     t1 tap Brushland -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]     t1 tap Brushland -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order A (auras first) leaves no loop
+[combo-route]   t1 skip Cloud of Faeries: avail 1 < cost
+[combo-route]     t1 tap Brushland -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]     t1 tap Brushland -> Green
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order B (auras last) leaves no loop
+[combo-route] t1 no loop: neither deploy order reaches a finish
+[combo-route] t1 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t1 no goff cand
+[edf-turn] t2 lands=1 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t2 tap Brushland -> Green
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t2 tap Brushland -> Green
+[combo-route]   t2 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t2 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t2 tap Brushland -> Green
+[combo-route]     t2 tap Brushland -> White
+[combo-route]   t2 pay {1}{U} FAILED (rolled back); float w1 u0 b0 r0 g1 c0 *0 lands available=0
+[combo-route]   t2 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]     t2 tap Brushland -> Green
+[combo-route]     t2 tap Brushland -> White
+[combo-route]   t2 pay {1}{U} FAILED (rolled back); float w1 u0 b0 r0 g1 c0 *0 lands available=0
+[combo-route]   t2 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Eldrazi Displacer: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t2 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-turn] t3 lands=2 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Brushland -> White
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route]   t3 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=2
+[combo-route]   t3 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t3 tap Brushland -> White
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route]   t3 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=2
+[combo-route]   t3 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t3 tap Brushland -> White
+[combo-route]     t3 tap Brushland -> Green
+[combo-route] t3 cast Trace of Abundance -> land
+[combo-route]     t3 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t3 cast Cloud of Faeries
+[combo-route]     t3 tap Mariposa Military Base -> Colorless +aura White,
+[combo-route]     t3 tap Brushland -> White
+[combo-route] t3 cast Eldrazi Displacer
+[combo-route]   t3 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t3 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]   t3 pay {2}{C} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t3 blink: cannot pay {2}{C}
+[combo-route] t3 blink unpayable
+[combo-route]     t3 tap Brushland -> White
+[combo-route]     t3 tap Brushland -> White
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route]   t3 pay {1}{U} FAILED (rolled back); float w2 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t3 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route]   t3 pay {1}{G} FAILED (rolled back); float w2 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]     t3 tap Mariposa Military Base -> Colorless
+[combo-route] t3 cast Eldrazi Displacer
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order B (auras last) leaves no loop
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=18 opp=20 | cast Eldrazi Displacer; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=1 payloads=0 casting=[Eldrazi Displacer,]
+[edf-prosp] t3 outlets=1 payloads=0 casting=[Eldrazi Displacer,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-turn] t4 lands=3 auras=0 untapper=0 outlet=1 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Brushland -> White
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c2 *0 lands available=3
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Brushland -> White
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c2 *0 lands available=3
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Brushland -> White
+[combo-route]     t4 tap Brushland -> Green
+[combo-route] t4 cast Trace of Abundance -> land
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t4 cast Cloud of Faeries
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]   t4 fin k=1 id=0 hand=-1 wish=1 -> Essence Depleter act={1}{C} x20 switch=0 demand={23}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t4 bank: float=0 target=50 ready=0 income=3 per_iter=2 n_untap=2
+[combo-route]     t4 tap Mariposa Military Base -> Colorless +aura Black,
+[combo-route]     t4 tap Brushland -> Green
+[combo-route] t4 route would kill us
+[combo-route]     t4 tap Brushland -> White
+[combo-route]     t4 tap Brushland -> Green
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {1}{U} FAILED (rolled back); float w1 u0 b0 r0 g1 c2 *0 lands available=2
+[combo-route]   t4 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route] t4 combo finish: Living Wish → Cloud of Faeries
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {1}{U} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t4 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]     t4 tap Mariposa Military Base -> Colorless
+[combo-route]   t4 pay {1}{U} FAILED (rolled back); float w0 u0 b0 r0 g0 c2 *0 lands available=2
+[combo-route]   t4 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order B (auras last) leaves no loop
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=17 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t4 no goff cand
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Living Wish,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Living Wish,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Living Wish,Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Living Wish,Cloud of Faeries,]
+[edf-prosp] t4 outlets=2 payloads=0 casting=[Emiel the Blessed,]
+[edf-prosp] t4 outlets=2 payloads=0 casting=[Emiel the Blessed,]
+[edf-turn] t4 lands=4 auras=0 untapper=0 outlet=1 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=0
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Brushland -> White
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Brushland -> White
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Brushland -> White
+[combo-route]   t4 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=1
+[combo-route]   t4 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t4 tap Brushland -> White
+[combo-route]   t4 pay {1}{U} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=0
+[combo-route]   t4 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order A (auras first) leaves no loop
+[combo-route]     t4 tap Brushland -> White
+[combo-route]   t4 pay {1}{U} FAILED (rolled back); float w1 u0 b0 r0 g0 c1 *0 lands available=0
+[combo-route]   t4 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order B (auras last) leaves no loop
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=17 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Dimensional Infiltrator,]
+[edf-prosp] t4 outlets=1 payloads=0 casting=[Dimensional Infiltrator,]
+[edf-turn] t5 lands=4 auras=0 untapper=0 outlet=1 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=4 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t5 tap Brushland -> White
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c2 *0 lands available=3
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Brushland -> White
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]     t5 tap Mariposa Military Base -> Colorless
+[combo-route]   t5 pay {R}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c2 *0 lands available=3
+[combo-route]   t5 cast Trace of Abundance: cannot pay {R}{G}
+[combo-route]     t5 tap Brushland -> White
+[combo-route]     t5 tap Brushland -> Green
+[combo-route] t5 cast Trace of Abundance -> land
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t5 cast Cloud of Faeries
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route] t5 cast Training Grounds
+[combo-route]   t5 fin k=2 id=0 hand=1 wish=-1 act={1}{C} x49 switch=0 demand={50}{U}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t5 bank: float=1 target=5 ready=0 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=0 hand=1 wish=-1 act={1}{C} x49 switch=0 demand={50}{U}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t5 bank: float=1 target=5 ready=0 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura Blue,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=0 hand=1 wish=-1 act={1}{C} x49 switch=0 demand={50}{U}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u1 b0 r0 g0 c2 *0(c0)
+[combo-route] t5 cast Dimensional Infiltrator
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x49 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *0(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x48 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *0(c0)
+[combo-route]   t5 bank: float=0 target=2 ready=0 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x48 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *1(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x47 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t5 bank: float=1 target=2 ready=0 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x47 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *2(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x46 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *2(c0)
+[combo-route]   t5 bank: float=2 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x46 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *3(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x45 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *3(c0)
+[combo-route]   t5 bank: float=3 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x45 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *4(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x44 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *4(c0)
+[combo-route]   t5 bank: float=4 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x44 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *5(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x43 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *5(c0)
+[combo-route]   t5 bank: float=5 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x43 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *6(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x42 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *6(c0)
+[combo-route]   t5 bank: float=6 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x42 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *7(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x41 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *7(c0)
+[combo-route]   t5 bank: float=7 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x41 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *8(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x40 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *8(c0)
+[combo-route]   t5 bank: float=8 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x40 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *9(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x39 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *9(c0)
+[combo-route]   t5 bank: float=9 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x39 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *10(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x38 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *10(c0)
+[combo-route]   t5 bank: float=10 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x38 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *11(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x37 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *11(c0)
+[combo-route]   t5 bank: float=11 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x37 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *12(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x36 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *12(c0)
+[combo-route]   t5 bank: float=12 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x36 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *13(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x35 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *13(c0)
+[combo-route]   t5 bank: float=13 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x35 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *14(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x34 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *14(c0)
+[combo-route]   t5 bank: float=14 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x34 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *15(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x33 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *15(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *15(c0)
+[combo-route]   t5 bank: float=15 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x33 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *16(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x32 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *16(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *16(c0)
+[combo-route]   t5 bank: float=16 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x32 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *17(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x31 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *17(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *17(c0)
+[combo-route]   t5 bank: float=17 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x31 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *18(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x30 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *18(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *18(c0)
+[combo-route]   t5 bank: float=18 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x30 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *19(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x29 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *19(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *19(c0)
+[combo-route]   t5 bank: float=19 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x29 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *20(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x28 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *20(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *20(c0)
+[combo-route]   t5 bank: float=20 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x28 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *21(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x27 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *21(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *21(c0)
+[combo-route]   t5 bank: float=21 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x27 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *22(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x26 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *22(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *22(c0)
+[combo-route]   t5 bank: float=22 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x26 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *23(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x25 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *23(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *23(c0)
+[combo-route]   t5 bank: float=23 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x25 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *24(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x24 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *24(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *24(c0)
+[combo-route]   t5 bank: float=24 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x24 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *25(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x23 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *25(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *25(c0)
+[combo-route]   t5 bank: float=25 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x23 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *26(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x22 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *26(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *26(c0)
+[combo-route]   t5 bank: float=26 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x22 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *27(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x21 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *27(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *27(c0)
+[combo-route]   t5 bank: float=27 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x21 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *28(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x20 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *28(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *28(c0)
+[combo-route]   t5 bank: float=28 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x20 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *29(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x19 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *29(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *29(c0)
+[combo-route]   t5 bank: float=29 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x19 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *30(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x18 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *30(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *30(c0)
+[combo-route]   t5 bank: float=30 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x18 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *31(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x17 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *31(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *31(c0)
+[combo-route]   t5 bank: float=31 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x17 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *32(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x16 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *32(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *32(c0)
+[combo-route]   t5 bank: float=32 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x16 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *33(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x15 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *33(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *33(c0)
+[combo-route]   t5 bank: float=33 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x15 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *34(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x14 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *34(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *34(c0)
+[combo-route]   t5 bank: float=34 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x14 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *35(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x13 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *35(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *35(c0)
+[combo-route]   t5 bank: float=35 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x13 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *36(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x12 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *36(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *36(c0)
+[combo-route]   t5 bank: float=36 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x12 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *37(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x11 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *37(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *37(c0)
+[combo-route]   t5 bank: float=37 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x11 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *38(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x10 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *38(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *38(c0)
+[combo-route]   t5 bank: float=38 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x10 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *39(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x9 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *39(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *39(c0)
+[combo-route]   t5 bank: float=39 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x9 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *40(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x8 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *40(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *40(c0)
+[combo-route]   t5 bank: float=40 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x8 switch=0 demand={C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *41(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x7 switch=0 demand={C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *41(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *41(c0)
+[combo-route]   t5 bank: float=41 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x7 switch=0 demand={C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *42(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x6 switch=0 demand={C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *42(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *42(c0)
+[combo-route]   t5 bank: float=42 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x6 switch=0 demand={C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *43(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x5 switch=0 demand={C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *43(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *43(c0)
+[combo-route]   t5 bank: float=43 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x5 switch=0 demand={C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *44(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x4 switch=0 demand={C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *44(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *44(c0)
+[combo-route]   t5 bank: float=44 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x4 switch=0 demand={C}{C}{C}{C} float=w0 u0 b0 r0 g0 c1 *45(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x3 switch=0 demand={C}{C}{C} float=w0 u0 b0 r0 g0 c0 *45(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *45(c0)
+[combo-route]   t5 bank: float=45 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x3 switch=0 demand={C}{C}{C} float=w0 u0 b0 r0 g0 c1 *46(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x2 switch=0 demand={C}{C} float=w0 u0 b0 r0 g0 c0 *46(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *46(c0)
+[combo-route]   t5 bank: float=46 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x2 switch=0 demand={C}{C} float=w0 u0 b0 r0 g0 c1 *47(c0)
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x1 switch=0 demand={C} float=w0 u0 b0 r0 g0 c0 *47(c0)
+[combo-route]   t5 finish: {C} not payable from float w0 u0 b0 r0 g0 c0 *47(c0)
+[combo-route]   t5 bank: float=47 target=2 ready=1 income=3 per_iter=0 n_untap=2
+[combo-route]     t5 tap Mariposa Military Base -> Colorless +aura *,
+[combo-route]     t5 tap Brushland -> Colorless
+[combo-route]   t5 fin k=2 id=200007 hand=-1 wish=-1 act={C} x1 switch=0 demand={C} float=w0 u0 b0 r0 g0 c1 *48(c0)
+[combo-route] t5 finisher x49 -- the opponent is dead
+[combo-route] t5 TRIAL WIN: deploys=4 iters=50 draws=0 acts=49 life=16 opp=17 | cast Trace of Abundance -> land; cast Cloud of Faeries; cast Training Grounds; Eldrazi Displacer: blink Cloud of Faeries x2; cast Dimensional Infiltrator; Eldrazi Displacer: blink Cloud of Faeries x48; finisher x49 -- the opponent is dead; 
+[edf-goff-cut] t5 no goff cand

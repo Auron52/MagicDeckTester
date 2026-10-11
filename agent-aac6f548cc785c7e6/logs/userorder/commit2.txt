@@ -1,0 +1,21 @@
+fix(dragonstorm): USER order -- splice legality in the exact walk, ordered-subset realisability, audit doc
+
+Same lever (MTG_DRAGONSTORM_USER_ORDER, default ON); =0 still byte-identical to d6a760e5 (27 jobs /
+540 games: Dragonstorm d0/d3/ship, Hinata2 d0/d3, Mirrorwing d0/d3).
+
+ * ExactOrderFirstUnpayable refuses a SPLICED cast whose revealed copies have left the hand, so the
+   payable-order fallback can no longer buy payability by moving the plain Desperate back in front
+   of the spliced one (the old comparator did exactly that: 21 illegal splices in 300 d0 games).
+ * RestrictorSubsetRealisable -> OrderedSubsetRealisable, asked once after the restrictor loop in both
+   subset evaluators (Solve's consider + EnumeratePlans, lockstep) for a subset holding a restrictor or
+   a spliced cast: refused when its realised order (comparator + ArrangeCastOrder + payable fallback)
+   fails at an Apex under Irencrag (the trap) or at a spliced cast (payable only illegally).
+ * MTG_USER_ORDER_TRACE=2: hand / pool / cast-cap line per decision (diagnostic).
+ * docs/design/dragonstorm-user-cast-order.md: the directive, every reading taken, the before/after
+   audit (d0 300 / d3b10 200 / shipped 200 games), the sanity A/B (d0 -27 turns / 300, d3 -2 / 100,
+   d3 wall 0.81x) with each slower game root-caused, and what was found but not fixed.
+   executor-ritual-payable-order.md points to it.
+
+Unit: test_dragonstorm_user_order.cpp now 11 cases; full suite 916/916.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

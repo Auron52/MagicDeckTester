@@ -1,0 +1,1 @@
+{"jobs": [{"name": "auras", "deck": "decks/Auras/Auras.cod", "profile": "decks/Auras/Auras.profile.json", "games": 10, "seed": 220001, "depth": 3, "budget_ms": 10, "ignore_play_profile": true}]}

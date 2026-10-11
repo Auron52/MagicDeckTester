@@ -1,0 +1,52 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "resume_at": "main1",
+ "active_life": 20,
+ "battlefield": [
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Fyndhorn Elves",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Elvish Archdruid",
+   "controller": 0
+  },
+  {
+   "name": "Llanowar Elves",
+   "controller": 0
+  },
+  {
+   "name": "Elvish Archdruid",
+   "controller": 0
+  },
+  {
+   "name": "Llanowar Elves",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Craterhoof Behemoth",
+  "Elvish Mystic",
+  "Apex Altisaur"
+ ],
+ "graveyard": [],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 33,
+ "env": {},
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/stompy/sc/o496/new_L33.log.json"
+}

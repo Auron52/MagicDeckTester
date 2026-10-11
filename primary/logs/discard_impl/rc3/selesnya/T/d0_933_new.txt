@@ -1,0 +1,68 @@
+Loaded 60 mainboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1510934 t=1 m=1 route=clean pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Llanowar Elves
+[uo-state] gs=1510934 t=1 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Llanowar Elves|Elvish Archdruid|Accomplished Alchemist|Forest|Forest|Nykthos Paragon
+[exec-tap] T1 before Llanowar Elves: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Branchloft Pathway
+[uo-cast] gs=1510934 t=1 m=1 d=0 card=Llanowar Elves num=40 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T1 Llanowar Elves tapped: Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Llanowar Elves
+[uo-order] gs=1510934 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510934 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Elvish Archdruid|Accomplished Alchemist|Forest|Forest|Nykthos Paragon
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Llanowar Elves
+[uo-order] gs=1510934 t=2 m=1 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Elvish Archdruid
+[uo-state] gs=1510934 t=2 cap=-1 pool{w0 u0 b0 r0 g3 c0 *0} hand=Elvish Archdruid|Accomplished Alchemist|Forest|Nykthos Paragon|Accomplished Alchemist
+[exec-tap] T2 before Elvish Archdruid: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Branchloft Pathway Llanowar Elves 2/2 Creature Forest
+[uo-cast] gs=1510934 t=2 m=1 d=0 card=Elvish Archdruid num=22 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T2 Elvish Archdruid tapped: Branchloft Pathway Llanowar Elves Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Llanowar Elves(T) Forest(T) Elvish Archdruid
+[uo-order] gs=1510934 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510934 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Accomplished Alchemist|Forest|Nykthos Paragon|Accomplished Alchemist
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Llanowar Elves Forest Elvish Archdruid
+[uo-order] gs=1510934 t=3 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Accomplished Alchemist
+[uo-state] gs=1510934 t=3 cap=-1 pool{w0 u0 b0 r0 g6 c0 *0} hand=Accomplished Alchemist|Nykthos Paragon|Accomplished Alchemist|Genesis Wave
+[exec-tap] T3 before Accomplished Alchemist: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Branchloft Pathway Llanowar Elves 2/2 Creature Forest Elvish Archdruid 2/2 Creature Forest
+[uo-cast] gs=1510934 t=3 m=1 d=0 card=Accomplished Alchemist num=1 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T3 Accomplished Alchemist tapped: Branchloft Pathway Llanowar Elves Forest Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Llanowar Elves(T) Forest(T) Elvish Archdruid(T) Forest(T) Accomplished Alchemist
+[uo-order] gs=1510934 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510934 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Nykthos Paragon|Accomplished Alchemist|Genesis Wave
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Llanowar Elves Forest Elvish Archdruid Forest Accomplished Alchemist
+[uo-order] gs=1510934 t=4 m=1 route=clean pool=9 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Genesis Wave
+[uo-state] gs=1510934 t=4 cap=-1 pool{w0 u0 b0 r0 g7 c1 *1} hand=Nykthos Paragon|Accomplished Alchemist|Genesis Wave
+[exec-tap] T4 before Genesis Wave: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Branchloft Pathway Llanowar Elves 2/2 Creature Forest Elvish Archdruid 2/2 Creature Forest Accomplished Alchemist Blighted Steppe
+[uo-cast] gs=1510934 t=4 m=1 d=0 card=Genesis Wave num=36 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T4 Genesis Wave tapped: Branchloft Pathway Llanowar Elves Forest Elvish Archdruid Forest Accomplished Alchemist Blighted Steppe  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Llanowar Elves(T) Forest(T) Elvish Archdruid(T) Forest(T) Accomplished Alchemist(T) Blighted Steppe(T) Accomplished Alchemist Wellwisher Blossoming Sands(T) Branchloft Pathway Nykthos Paragon Priest of Titania
+[uo-order] gs=1510934 t=4 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510934 t=4 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Accomplished Alchemist
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Llanowar Elves Forest Elvish Archdruid Forest Accomplished Alchemist Blighted Steppe Accomplished Alchemist Wellwisher Blossoming Sands Branchloft Pathway Nykthos Paragon Priest of Titania
+[uo-order] gs=1510934 t=5 m=1 route=clean pool=21 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Accomplished Alchemist|Elvish Mystic|Nykthos Paragon
+[uo-state] gs=1510934 t=5 cap=-1 pool{w2 u0 b0 r0 g11 c0 *8} hand=Nykthos Paragon|Accomplished Alchemist|Elvish Mystic
+[exec-tap] T5 before Accomplished Alchemist: float{w2 u0 b0 r0 g5 c0 *7} untapped: 2/2 Creature 2/2 Creature 2/2 Creature Accomplished Alchemist Wellwisher Nykthos Paragon Priest of Titania
+[uo-cast] gs=1510934 t=5 m=1 d=0 card=Accomplished Alchemist num=2 staged=0 splice=0 paid=1 pool=21
+[exec-tap] T5 Accomplished Alchemist tapped:  float{w2 u0 b0 r0 g4 c0 *4}
+[exec-tap] T5 before Elvish Mystic: float{w2 u0 b0 r0 g4 c0 *4} untapped: 2/2 Creature 2/2 Creature 2/2 Creature Accomplished Alchemist Wellwisher Nykthos Paragon Priest of Titania Accomplished Alchemist
+[uo-cast] gs=1510934 t=5 m=1 d=0 card=Elvish Mystic num=25 staged=0 splice=0 paid=1 pool=18
+[exec-tap] T5 Elvish Mystic tapped:  float{w2 u0 b0 r0 g3 c0 *4}
+[exec-tap] T5 before Nykthos Paragon: float{w2 u0 b0 r0 g3 c0 *4} untapped: 2/2 Creature 2/2 Creature 2/2 Creature Accomplished Alchemist Wellwisher Nykthos Paragon Priest of Titania Accomplished Alchemist Elvish Mystic
+[uo-cast] gs=1510934 t=5 m=1 d=0 card=Nykthos Paragon num=44 staged=0 splice=0 paid=1 pool=18
+[exec-tap] T5 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g3 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Llanowar Elves(T) Forest(T) Elvish Archdruid(T) Forest(T) Accomplished Alchemist(T) Blighted Steppe(T) Accomplished Alchemist(T) Wellwisher(T) Blossoming Sands(T) Branchloft Pathway(T) Nykthos Paragon(T) Priest of Titania(T) Accomplished Alchemist Elvish Mystic Nykthos Paragon
+[uo-order] gs=1510934 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510934 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Llanowar Elves Forest Elvish Archdruid Forest Accomplished Alchemist Blighted Steppe Accomplished Alchemist Wellwisher Blossoming Sands Branchloft Pathway Nykthos Paragon Priest of Titania Accomplished Alchemist Elvish Mystic Nykthos Paragon
+[uo-order] gs=1510934 t=6 m=1 route=clean pool=27 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Nykthos Paragon
+[uo-state] gs=1510934 t=6 cap=-1 pool{w0 u0 b0 r0 g22 c1 *4} hand=Nykthos Paragon
+[exec-tap] T6 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Branchloft Pathway Llanowar Elves 2/2 Creature Forest Elvish Archdruid 2/2 Creature Forest Accomplished Alchemist Blighted Steppe Accomplished Alchemist Wellwisher Blossoming Sands Branchloft Pathway Nykthos Paragon Priest of Titania Accomplished Alchemist Elvish Mystic Nykthos Paragon
+[uo-cast] gs=1510934 t=6 m=1 d=0 card=Nykthos Paragon num=46 staged=0 splice=0 paid=1 pool=21
+[exec-tap] T6 Nykthos Paragon tapped: Branchloft Pathway Forest Forest Accomplished Alchemist Accomplished Alchemist Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1510934
+Games played  : 1
+avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

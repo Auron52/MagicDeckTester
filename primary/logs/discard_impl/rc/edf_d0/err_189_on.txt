@@ -1,0 +1,6 @@
+[play] g189_on depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[batch] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[batch] mem: total=48171MB budget=24085MB workers=24 -> tt_cap=4115338/table fsl_pool=7234MB fsl_cap=2000000 plan_cache=2400MB rss_cap=35.28G (MTG_MEM_BUDGET_MB / MTG_RSS_CAP_GB; each pool's own env var overrides)
+[win] job=g189_on gi=189 wt=7
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

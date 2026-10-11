@@ -1,0 +1,1653 @@
+{
+  "cardNumbering": {
+    "Apex Altisaur": [
+      1
+    ],
+    "Call of the Wild": [
+      2,
+      3
+    ],
+    "Craterhoof Behemoth": [
+      4,
+      5
+    ],
+    "Elderscale Wurm": [
+      6
+    ],
+    "Elvish Archdruid": [
+      7,
+      8,
+      9,
+      10
+    ],
+    "Elvish Mystic": [
+      11,
+      12,
+      13,
+      14
+    ],
+    "Forest": [
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "Fyndhorn Elves": [
+      28,
+      29,
+      30,
+      31
+    ],
+    "Ghalta, Stampede Tyrant": [
+      32
+    ],
+    "Hornet Queen": [
+      33
+    ],
+    "Llanowar Elves": [
+      34,
+      35,
+      36,
+      37
+    ],
+    "Natural Order": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Priest of Titania": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Sol Ring": [
+      46
+    ],
+    "Terastodon": [
+      47,
+      48
+    ],
+    "Turntimber Symbiosis": [
+      49,
+      50,
+      51,
+      52
+    ],
+    "Vaultborn Tyrant": [
+      53
+    ],
+    "World War Hulk": [
+      54,
+      55
+    ],
+    "Worldly Tutor": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Worldspine Wurm": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 42,
+          "cardName": "Priest of Titania"
+        },
+        {
+          "card": 4,
+          "cardName": "Craterhoof Behemoth"
+        },
+        {
+          "card": 43,
+          "cardName": "Priest of Titania"
+        },
+        {
+          "card": 1,
+          "cardName": "Apex Altisaur"
+        },
+        {
+          "card": 38,
+          "cardName": "Natural Order"
+        },
+        {
+          "card": 49,
+          "cardName": "Turntimber Symbiosis"
+        },
+        {
+          "card": 2,
+          "cardName": "Call of the Wild"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 1,
+      "bottomed": [
+        {
+          "card": 53,
+          "cardName": "Vaultborn Tyrant"
+        }
+      ],
+      "hand": [
+        {
+          "card": 27,
+          "cardName": "Forest"
+        },
+        {
+          "card": 56,
+          "cardName": "Worldly Tutor"
+        },
+        {
+          "card": 53,
+          "cardName": "Vaultborn Tyrant"
+        },
+        {
+          "card": 15,
+          "cardName": "Forest"
+        },
+        {
+          "card": 25,
+          "cardName": "Forest"
+        },
+        {
+          "card": 37,
+          "cardName": "Llanowar Elves"
+        },
+        {
+          "card": 11,
+          "cardName": "Elvish Mystic"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 27,
+      "cardName": "Forest"
+    },
+    {
+      "card": 56,
+      "cardName": "Worldly Tutor"
+    },
+    {
+      "card": 15,
+      "cardName": "Forest"
+    },
+    {
+      "card": 25,
+      "cardName": "Forest"
+    },
+    {
+      "card": 37,
+      "cardName": "Llanowar Elves"
+    },
+    {
+      "card": 11,
+      "cardName": "Elvish Mystic"
+    }
+  ],
+  "result": {
+    "turn": 6,
+    "winner": "player"
+  },
+  "runId": "20261010_125829_9307961",
+  "seed": 9307961,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 51,
+          "cardName": "Turntimber Symbiosis",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          27,
+          56,
+          15,
+          25,
+          37,
+          11,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 27,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 37,
+          "cardName": "Llanowar Elves",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          56,
+          15,
+          25,
+          11,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          56,
+          15,
+          25,
+          11,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          56,
+          15,
+          25,
+          11,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 14,
+          "cardName": "Elvish Mystic",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          56,
+          15,
+          25,
+          11,
+          51,
+          14
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 15,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 11,
+          "cardName": "Elvish Mystic",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 14,
+          "cardName": "Elvish Mystic",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 56,
+          "cardName": "Worldly Tutor",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            4
+          ],
+          "lookedAt": [
+            {
+              "card": 4,
+              "cardName": "Craterhoof Behemoth",
+              "to": "to top"
+            }
+          ],
+          "source": "Worldly Tutor (searched)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          25,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          25,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          25,
+          51
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 4,
+          "cardName": "Craterhoof Behemoth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          25,
+          51,
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          51,
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "damage": 3,
+          "oppLife": 17,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          51,
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          51,
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 8,
+          "cardName": "Elvish Archdruid",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          51,
+          4,
+          8
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 51,
+          "cardName": "Turntimber Symbiosis",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 8,
+          "cardName": "Elvish Archdruid",
+          "manaPaid": "{1}{G}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 6,
+          "oppLife": 11,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 60,
+          "cardName": "Worldspine Wurm",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4,
+          60
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 60,
+          "cardName": "Worldspine Wurm",
+          "manaPaid": "{8}{G}{G}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 21,
+          "cardName": "Forest",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4,
+          21
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 21,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 11,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 23,
+          "oppLife": -12,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 27,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 15,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Elvish Mystic",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 8,
+            "cardName": "Elvish Archdruid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          4
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": -12,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    }
+  ]
+}

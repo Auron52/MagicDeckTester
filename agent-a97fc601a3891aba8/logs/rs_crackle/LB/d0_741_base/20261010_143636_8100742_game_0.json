@@ -1,0 +1,1895 @@
+{
+  "cardNumbering": {
+    "Cascade Bluffs": [
+      1,
+      2
+    ],
+    "Crackle with Power": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "Distorting Wake": [
+      7,
+      8
+    ],
+    "Expressive Iteration": [
+      9
+    ],
+    "Forbidden Orchard": [
+      10,
+      11,
+      12,
+      13
+    ],
+    "Gamble": [
+      14
+    ],
+    "Hinata, Dawn-Crowned": [
+      15,
+      16,
+      17,
+      18
+    ],
+    "Icy Blast": [
+      19
+    ],
+    "Irencrag Feat": [
+      20
+    ],
+    "Island": [
+      21,
+      22,
+      23
+    ],
+    "Izzet Boilerworks": [
+      24,
+      25
+    ],
+    "Magma Opus": [
+      26
+    ],
+    "Memory Lapse": [
+      27,
+      28
+    ],
+    "Mountain": [
+      29,
+      30,
+      31
+    ],
+    "Mystic Monastery": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "Ornithopter of Paradise": [
+      36,
+      37,
+      38
+    ],
+    "Ponder": [
+      39,
+      40,
+      41,
+      42
+    ],
+    "Preordain": [
+      43,
+      44,
+      45,
+      46
+    ],
+    "Reality Spasm": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Reflecting Pool": [
+      51,
+      52
+    ],
+    "Remand": [
+      53,
+      54,
+      55
+    ],
+    "Sol Ring": [
+      56
+    ],
+    "Soulfire Eruption": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 21,
+          "cardName": "Island"
+        },
+        {
+          "card": 36,
+          "cardName": "Ornithopter of Paradise"
+        },
+        {
+          "card": 51,
+          "cardName": "Reflecting Pool"
+        },
+        {
+          "card": 47,
+          "cardName": "Reality Spasm"
+        },
+        {
+          "card": 1,
+          "cardName": "Cascade Bluffs"
+        },
+        {
+          "card": 29,
+          "cardName": "Mountain"
+        },
+        {
+          "card": 39,
+          "cardName": "Ponder"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 1,
+      "bottomed": [
+        {
+          "card": 30,
+          "cardName": "Mountain"
+        }
+      ],
+      "hand": [
+        {
+          "card": 44,
+          "cardName": "Preordain"
+        },
+        {
+          "card": 5,
+          "cardName": "Crackle with Power"
+        },
+        {
+          "card": 35,
+          "cardName": "Mystic Monastery"
+        },
+        {
+          "card": 56,
+          "cardName": "Sol Ring"
+        },
+        {
+          "card": 30,
+          "cardName": "Mountain"
+        },
+        {
+          "card": 34,
+          "cardName": "Mystic Monastery"
+        },
+        {
+          "card": 28,
+          "cardName": "Memory Lapse"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 44,
+      "cardName": "Preordain"
+    },
+    {
+      "card": 5,
+      "cardName": "Crackle with Power"
+    },
+    {
+      "card": 35,
+      "cardName": "Mystic Monastery"
+    },
+    {
+      "card": 56,
+      "cardName": "Sol Ring"
+    },
+    {
+      "card": 34,
+      "cardName": "Mystic Monastery"
+    },
+    {
+      "card": 28,
+      "cardName": "Memory Lapse"
+    }
+  ],
+  "result": {
+    "turn": 6,
+    "winner": "player"
+  },
+  "runId": "20261010_143636_8100742",
+  "seed": 8100742,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 35,
+          "cardName": "Mystic Monastery",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          5,
+          56,
+          34,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          5,
+          56,
+          34,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          5,
+          56,
+          34,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Izzet Boilerworks",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          44,
+          5,
+          56,
+          34,
+          28,
+          25
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 34,
+          "cardName": "Mystic Monastery",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 44,
+          "cardName": "Preordain",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            51,
+            10
+          ],
+          "kept": [],
+          "lookedAt": [
+            {
+              "card": 51,
+              "cardName": "Reflecting Pool"
+            },
+            {
+              "card": 10,
+              "cardName": "Forbidden Orchard"
+            }
+          ],
+          "source": "Preordain",
+          "type": "REVEAL"
+        },
+        {
+          "card": 37,
+          "cardName": "Ornithopter of Paradise",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          56,
+          28,
+          25,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          56,
+          28,
+          25,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          56,
+          28,
+          25,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 20,
+          "cardName": "Irencrag Feat",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          56,
+          28,
+          25,
+          37,
+          20
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 25,
+          "cardName": "Izzet Boilerworks",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 56,
+          "cardName": "Sol Ring",
+          "manaPaid": "{1}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 37,
+          "cardName": "Ornithopter of Paradise",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          28,
+          20,
+          35
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          28,
+          20,
+          35
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          28,
+          20,
+          35
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 58,
+          "cardName": "Soulfire Eruption",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44
+        ],
+        "hand": [
+          5,
+          28,
+          20,
+          35,
+          58
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 35,
+          "cardName": "Mystic Monastery",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 20,
+          "cardName": "Irencrag Feat",
+          "manaPaid": "{1}{R}{R}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 58,
+          "cardName": "Soulfire Eruption",
+          "manaPaid": "{6}{R}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            }
+          ],
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            49,
+            46
+          ],
+          "lookedAt": [
+            {
+              "card": 49,
+              "cardName": "Reality Spasm",
+              "to": "→ opponent face (2)"
+            },
+            {
+              "card": 46,
+              "cardName": "Preordain",
+              "to": "→ you (1)"
+            }
+          ],
+          "source": "Soulfire Eruption (exiled)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58
+        ],
+        "hand": [
+          5,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58
+        ],
+        "hand": [
+          5,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58
+        ],
+        "hand": [
+          5,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Hinata, Dawn-Crowned",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58
+        ],
+        "hand": [
+          5,
+          28,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Hinata, Dawn-Crowned",
+          "manaPaid": "{1}{W}{U}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 46,
+          "cardName": "Preordain",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            40,
+            31
+          ],
+          "lookedAt": [
+            {
+              "card": 40,
+              "cardName": "Ponder"
+            },
+            {
+              "card": 31,
+              "cardName": "Mountain"
+            }
+          ],
+          "source": "Preordain",
+          "type": "REVEAL"
+        },
+        {
+          "card": 40,
+          "cardName": "Ponder",
+          "type": "DRAW"
+        },
+        {
+          "card": 40,
+          "cardName": "Ponder",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            59,
+            31,
+            4
+          ],
+          "lookedAt": [
+            {
+              "card": 31,
+              "cardName": "Mountain"
+            },
+            {
+              "card": 4,
+              "cardName": "Crackle with Power"
+            },
+            {
+              "card": 59,
+              "cardName": "Soulfire Eruption"
+            }
+          ],
+          "source": "Ponder",
+          "type": "REVEAL"
+        },
+        {
+          "card": 59,
+          "cardName": "Soulfire Eruption",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58,
+          46,
+          40
+        ],
+        "hand": [
+          5,
+          28,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58,
+          46,
+          40
+        ],
+        "hand": [
+          5,
+          28,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58,
+          46,
+          40
+        ],
+        "hand": [
+          5,
+          28,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Mountain",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 18,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58,
+          46,
+          40
+        ],
+        "hand": [
+          5,
+          28,
+          59,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 18,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Mountain",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 5,
+          "cardName": "Crackle with Power",
+          "chosenX": 3,
+          "manaPaid": "{6}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            }
+          ],
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58,
+          46,
+          40,
+          5
+        ],
+        "hand": [
+          28,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 3,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 4,
+          "oppLife": -1,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 34,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 25,
+            "cardName": "Izzet Boilerworks",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 56,
+            "cardName": "Sol Ring",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 35,
+            "cardName": "Mystic Monastery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 18,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          44,
+          20,
+          58,
+          46,
+          40,
+          5
+        ],
+        "hand": [
+          28,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -1,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    }
+  ]
+}

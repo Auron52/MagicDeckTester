@@ -1,0 +1,349 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-goff-cut] t1 no goff cand
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-turn] t2 lands=1 auras=0 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-turn] t3 lands=2 auras=0 untapper=0 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=2 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Trace of Abundance,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Training Grounds,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Fertile Ground,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Fertile Ground,]
+[edf-turn] t4 lands=2 auras=2 untapper=0 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=4 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Adarkar Wastes -> Blue +aura Green,
+[combo-route] t4 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t4 land Adarkar Wastes
+[combo-route]     t4 tap Adarkar Wastes -> Blue
+[combo-route] t4 cast Fertile Ground -> land
+[combo-route]   t4 pay {1}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t4 cast Fertile Ground: cannot pay {1}{G}
+[combo-route]     t4 tap Conservatory -> Green +aura Green,
+[combo-route] t4 cast Fertile Ground -> land
+[combo-route]   t4 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t4 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t4 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t4 cast Overgrowth: cannot pay {2}{G}
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order A (auras first) leaves no loop
+[combo-route]     t4 tap Adarkar Wastes -> Blue +aura Green,
+[combo-route] t4 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t4 land Adarkar Wastes
+[combo-route]     t4 tap Conservatory -> Green
+[combo-route]     t4 tap Adarkar Wastes -> Blue
+[combo-route] t4 cast Training Grounds
+[combo-route]   t4 deploy: no outlet on the battlefield
+[combo-route]   t4 deploy: no untapper on the battlefield
+[combo-route]   t4 deploy order B (auras last) leaves no loop
+[combo-route] t4 no loop: neither deploy order reaches a finish
+[combo-route] t4 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=17 opp=20 | combo finish: Living Wish → Adarkar Wastes; land Adarkar Wastes; cast Training Grounds; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t4 no goff cand
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Training Grounds,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Training Grounds,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Training Grounds,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Training Grounds,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Fertile Ground,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Fertile Ground,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Training Grounds,Fertile Ground,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Training Grounds,Fertile Ground,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Training Grounds,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Training Grounds,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Training Grounds,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Fertile Ground,Training Grounds,Living Wish,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Conservatory,]
+[edf-prosp] t4 outlets=0 payloads=0 casting=[Conservatory,]
+[edf-turn] t5 lands=2 auras=4 untapper=0 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=6 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t5 tap Adarkar Wastes -> Blue +aura Green,
+[combo-route] t5 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t5 land Adarkar Wastes
+[combo-route]     t5 tap Adarkar Wastes -> Blue
+[combo-route]   t5 pay {2}{G} FAILED (rolled back); float w0 u1 b0 r0 g1 c0 *0 lands available=1
+[combo-route]   t5 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t5 tap Conservatory -> Green +aura Blue,Blue,
+[combo-route] t5 cast Overgrowth -> land
+[combo-route]   t5 pay {2}{G} FAILED (rolled back); float w0 u0 b0 r0 g1 c0 *0 lands available=0
+[combo-route]   t5 cast Overgrowth: cannot pay {2}{G}
+[combo-route]     t5 tap Adarkar Wastes -> Blue
+[combo-route] t5 cast Overgrowth -> land
+[combo-route]   t5 skip Peregrine Drake: avail 1 < cost
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy: no untapper on the battlefield
+[combo-route]   t5 deploy order A (auras first) leaves no loop
+[combo-route]     t5 tap Adarkar Wastes -> Blue +aura Green,
+[combo-route] t5 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t5 land Adarkar Wastes
+[combo-route]     t5 tap Conservatory -> Green +aura Blue,Blue,
+[combo-route]     t5 tap Adarkar Wastes -> Colorless
+[combo-route] t5 cast Peregrine Drake
+[combo-route]   t5 deploy: no outlet on the battlefield
+[combo-route]   t5 deploy order B (auras last) leaves no loop
+[combo-route] t5 no loop: neither deploy order reaches a finish
+[combo-route] t5 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Adarkar Wastes; land Adarkar Wastes; cast Peregrine Drake; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t5 no goff cand
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Overgrowth,Living Wish,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Peregrine Drake,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Peregrine Drake,]
+[edf-prosp] t5 outlets=0 payloads=1 casting=[Overgrowth,Peregrine Drake,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Conservatory,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Conservatory,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Conservatory,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Overgrowth,Conservatory,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Living Wish,Conservatory,]
+[edf-prosp] t5 outlets=0 payloads=0 casting=[Living Wish,Conservatory,]
+[edf-turn] t6 lands=2 auras=5 untapper=1 outlet=0 drawland=1 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=8 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t6 tap Conservatory -> Green +aura Blue,Blue,
+[combo-route] t6 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t6 land Adarkar Wastes
+[combo-route] t6 cast Overgrowth -> land
+[combo-route]     t6 tap Adarkar Wastes -> Blue +aura Blue,
+[combo-route] t6 cast Cloud of Faeries
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order A (auras first) leaves no loop
+[combo-route]     t6 tap Conservatory -> Green +aura Blue,Blue,
+[combo-route] t6 combo finish: Living Wish → Adarkar Wastes
+[combo-route] t6 land Adarkar Wastes
+[combo-route]     t6 tap Adarkar Wastes -> Blue +aura *,
+[combo-route] t6 cast Cloud of Faeries
+[combo-route]   t6 deploy: no outlet on the battlefield
+[combo-route]   t6 deploy order B (auras last) leaves no loop
+[combo-route] t6 no loop: neither deploy order reaches a finish
+[combo-route] t6 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Adarkar Wastes; land Adarkar Wastes; cast Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t6 no goff cand
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Living Wish,Cloud of Faeries,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Living Wish,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Living Wish,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=1 casting=[Overgrowth,Living Wish,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Cloud of Faeries,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Cloud of Faeries,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Overgrowth,Cloud of Faeries,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,Cloud of Faeries,Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Living Wish,Cloud of Faeries,Conservatory,]
+[edf-turn] t6 lands=2 auras=6 untapper=1 outlet=0 drawland=1 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=16 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t6 tap Conservatory -> White +aura White,White,
+[combo-route] t6 cast Eldrazi Displacer
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w2 u0 b0 r0 g5 c0 *0(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w2 u0 b0 r0 g5 c0 *0(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w2 u0 b0 r0 g6 c0 *1(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *1(c0)
+[combo-route]     t6 tap Conservatory -> Green +aura *,*,
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g10 c0 *4(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *2(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w0 u0 b0 r0 g6 c0 *2(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *3(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]     t6 tap Conservatory -> Green +aura *,*,
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g10 c0 *5(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *4(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *2(c0)
+[combo-route] t6 cast Training Grounds
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]     t6 tap Conservatory -> Green +aura *,*,
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g10 c0 *5(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *4(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *2(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *3(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=1 id=0 hand=-1 wish=6 -> Essence Depleter act={1}{C} x20 switch=1 demand={25}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t6 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t6 bank: float=1 target=12 ready=0 income=10 per_iter=0 n_untap=2
+[combo-route]     t6 tap Adarkar Wastes -> White +aura White,
+[combo-route]   t6 pay {C} FAILED (rolled back); float w2 u0 b0 r0 g1 c0 *1 lands available=0
+[combo-route]   t6 blink: cannot pay {C}
+[combo-route] t6 blink unpayable
+[combo-route]     t6 tap Conservatory -> White +aura White,White,
+[combo-route] t6 cast Eldrazi Displacer
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w2 u0 b0 r0 g5 c0 *0(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w2 u0 b0 r0 g5 c0 *0(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w2 u0 b0 r0 g6 c0 *1(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *0(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *1(c0)
+[combo-route]     t6 tap Conservatory -> Green +aura *,*,
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g10 c0 *4(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *2(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w0 u0 b0 r0 g6 c0 *2(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *3(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]     t6 tap Conservatory -> Green +aura *,*,
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g10 c0 *5(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *4(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *2(c0)
+[combo-route] t6 cast Training Grounds
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *1(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g4 c0 *2(c0)
+[combo-route]     t6 tap Conservatory -> Green +aura *,*,
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g10 c0 *5(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]   t6 draw: no untapped draw source (or library too small)
+[combo-route]   t6 dig: Draw() failed float w0 u0 b0 r0 g6 c0 *3(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g7 c0 *4(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g3 c0 *2(c0)
+[combo-route]   t6 dig: float below blink+6 float w0 u0 b0 r0 g3 c0 *2(c0)
+[combo-route]     t6 tap Adarkar Wastes -> Colorless +aura *,
+[combo-route]   t6 fin k=4 id=0 hand=-1 wish=-1 act= x0 switch=0 demand= float=w0 u0 b0 r0 g4 c0 *3(c0)
+[combo-route] t6 Conservatory -> investigate -> draw
+[combo-route]   t6 fin k=1 id=0 hand=-1 wish=6 -> Essence Depleter act={1}{C} x20 switch=1 demand={25}{W}{W}{B}{G}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C}{C} float=w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t6 wish: float does not pay wish+cast {3}{B}{G} float w0 u0 b0 r0 g0 c0 *1(c0)
+[combo-route]   t6 bank: float=1 target=12 ready=0 income=10 per_iter=0 n_untap=2
+[combo-route]     t6 tap Adarkar Wastes -> White +aura White,
+[combo-route]   t6 pay {C} FAILED (rolled back); float w2 u0 b0 r0 g1 c0 *1 lands available=0
+[combo-route]   t6 blink: cannot pay {C}
+[combo-route] t6 blink unpayable
+[combo-route] t6 no loop: neither deploy order reaches a finish
+[combo-route] t6 TRIAL no: deploys=2 iters=11 draws=8 acts=0 life=19 opp=20 | cast Eldrazi Displacer; Eldrazi Displacer: blink Peregrine Drake x1; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x2; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x2; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Conservatory -> investigate -> draw; cast Training Grounds; Eldrazi Displacer: blink Peregrine Drake x2; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Conservatory -> investigate -> draw; Eldrazi Displacer: blink Peregrine Drake x1; Conservatory -> investigate -> draw; blink unpayable; no loop: neither deploy order reaches a finish; 
+[edf-prosp] t6 outlets=1 payloads=2 casting=[Eldrazi Displacer,]
+[edf-loop] t6 net=9 cost=1 refund=10 pool=16 avail=13 gorge=0/0 drain=1/2 exile=0 casting=[Eldrazi Displacer,]
+[edf-prosp] t6 outlets=1 payloads=2 casting=[Eldrazi Displacer,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Conservatory,]
+[edf-prosp] t6 outlets=0 payloads=2 casting=[Conservatory,]
+[edf-prosp] t6 outlets=2 payloads=2 casting=[Eldrazi Displacer,Eldrazi Displacer,]
+[edf-loop] t6 net=9 cost=1 refund=10 pool=16 avail=10 gorge=0/0 drain=1/2 exile=0 casting=[Eldrazi Displacer,Eldrazi Displacer,]
+[edf-prosp] t6 outlets=2 payloads=2 casting=[Eldrazi Displacer,Eldrazi Displacer,]
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/tr_g1031_d0_old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

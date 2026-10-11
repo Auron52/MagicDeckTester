@@ -1,0 +1,23 @@
+fix(enum): a fixed-colour ritual float is credited in its own colour, not wild (MTG_RITUAL_FLOAT_COLOR_EXACT)
+
+Both subset evaluators (Solve's consider and EnumeratePlans, lockstep) credited a ritual's float to the
+credited pool as WILD, so a subset could "pay" an off-colour pip with ritual red: Irencrag Feat ->
+Karrthus {4}{B}{R}{G} on a board whose only non-red source was one Unclaimed Territory (dragonstorm d0
+s7000051 T5: Irencrag cast, Karrthus unpaid, seven red wasted), Irencrag -> Kolaghan (d3 s7100151 T5).
+CreditCastOutput, the executor and the exact order walk already float the ritual's colour; the
+admission did not.
+
+Now each FIXED-colour ritual float (ritual_float_color; not Reality Spasm, not a chosen-colour float)
+moves out of the wild credit into its colour -- at most what the credit put there, so a sequenced
+correction that handed some back is respected -- and the flat CanPay is re-asked against that pool,
+which is also the credit handed to the colour-count gates. Only ever narrows: it can reject a subset,
+never admit one. Generic, reaching every deck with a coloured-float ritual: Dragonstorm (Irencrag and
+the four rituals), Hinata2 (Irencrag Feat), Unpredictable Cyclone (Seething Song).
+
+Lever MTG_RITUAL_FLOAT_COLOR_EXACT (heurarm slot appended), default ON; =0 byte-identical to 9d085568
+(27 jobs / 540 games: Dragonstorm d0/d3/ship, Hinata2 d0/d3, Mirrorwing d0/d3).
+Sanity A/B (paired, seeds 7800001+): Dragonstorm d0 300: -2 turns (1 faster, 0 slower); d3 100: 0;
+Hinata2 d0 300 / d3 100: 0 / 0; Unpredictable Cyclone d0 300 / d3 100: 0 / 0.
+Unit: test_dragonstorm_followups.cpp (Irencrag -> Karrthus refused off one City of Brass, admitted off two).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

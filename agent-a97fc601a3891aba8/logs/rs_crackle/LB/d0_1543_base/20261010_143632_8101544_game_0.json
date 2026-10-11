@@ -1,0 +1,2945 @@
+{
+  "cardNumbering": {
+    "Cascade Bluffs": [
+      1,
+      2
+    ],
+    "Crackle with Power": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "Distorting Wake": [
+      7,
+      8
+    ],
+    "Expressive Iteration": [
+      9
+    ],
+    "Forbidden Orchard": [
+      10,
+      11,
+      12,
+      13
+    ],
+    "Gamble": [
+      14
+    ],
+    "Hinata, Dawn-Crowned": [
+      15,
+      16,
+      17,
+      18
+    ],
+    "Icy Blast": [
+      19
+    ],
+    "Irencrag Feat": [
+      20
+    ],
+    "Island": [
+      21,
+      22,
+      23
+    ],
+    "Izzet Boilerworks": [
+      24,
+      25
+    ],
+    "Magma Opus": [
+      26
+    ],
+    "Memory Lapse": [
+      27,
+      28
+    ],
+    "Mountain": [
+      29,
+      30,
+      31
+    ],
+    "Mystic Monastery": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "Ornithopter of Paradise": [
+      36,
+      37,
+      38
+    ],
+    "Ponder": [
+      39,
+      40,
+      41,
+      42
+    ],
+    "Preordain": [
+      43,
+      44,
+      45,
+      46
+    ],
+    "Reality Spasm": [
+      47,
+      48,
+      49,
+      50
+    ],
+    "Reflecting Pool": [
+      51,
+      52
+    ],
+    "Remand": [
+      53,
+      54,
+      55
+    ],
+    "Sol Ring": [
+      56
+    ],
+    "Soulfire Eruption": [
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 21,
+          "cardName": "Island"
+        },
+        {
+          "card": 51,
+          "cardName": "Reflecting Pool"
+        },
+        {
+          "card": 36,
+          "cardName": "Ornithopter of Paradise"
+        },
+        {
+          "card": 9,
+          "cardName": "Expressive Iteration"
+        },
+        {
+          "card": 39,
+          "cardName": "Ponder"
+        },
+        {
+          "card": 43,
+          "cardName": "Preordain"
+        },
+        {
+          "card": 40,
+          "cardName": "Ponder"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 21,
+      "cardName": "Island"
+    },
+    {
+      "card": 51,
+      "cardName": "Reflecting Pool"
+    },
+    {
+      "card": 36,
+      "cardName": "Ornithopter of Paradise"
+    },
+    {
+      "card": 9,
+      "cardName": "Expressive Iteration"
+    },
+    {
+      "card": 39,
+      "cardName": "Ponder"
+    },
+    {
+      "card": 43,
+      "cardName": "Preordain"
+    },
+    {
+      "card": 40,
+      "cardName": "Ponder"
+    }
+  ],
+  "result": {
+    "turn": 7,
+    "winner": "player"
+  },
+  "runId": "20261010_143632_8101544",
+  "seed": 8101544,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 51,
+          "cardName": "Reflecting Pool",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          36,
+          9,
+          39,
+          43,
+          40
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          36,
+          9,
+          39,
+          43,
+          40
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          36,
+          9,
+          39,
+          43,
+          40
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 22,
+          "cardName": "Island",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          36,
+          9,
+          39,
+          43,
+          40,
+          22
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 21,
+          "cardName": "Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 36,
+          "cardName": "Ornithopter of Paradise",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          39,
+          43,
+          40,
+          22
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          39,
+          43,
+          40,
+          22
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          39,
+          43,
+          40,
+          22
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Soulfire Eruption",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          9,
+          39,
+          43,
+          40,
+          22,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 22,
+          "cardName": "Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 9,
+          "cardName": "Expressive Iteration",
+          "manaPaid": "{U}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            47
+          ],
+          "kept": [
+            37,
+            26
+          ],
+          "lookedAt": [
+            {
+              "card": 37,
+              "cardName": "Ornithopter of Paradise"
+            },
+            {
+              "card": 26,
+              "cardName": "Magma Opus"
+            },
+            {
+              "card": 47,
+              "cardName": "Reality Spasm"
+            }
+          ],
+          "source": "Expressive Iteration",
+          "type": "REVEAL"
+        },
+        {
+          "card": 37,
+          "cardName": "Ornithopter of Paradise",
+          "type": "DRAW"
+        },
+        {
+          "card": 26,
+          "cardName": "Magma Opus",
+          "type": "DRAW"
+        },
+        {
+          "card": 37,
+          "cardName": "Ornithopter of Paradise",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9
+        ],
+        "hand": [
+          39,
+          43,
+          40,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9
+        ],
+        "hand": [
+          39,
+          43,
+          40,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9
+        ],
+        "hand": [
+          39,
+          43,
+          40,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 3,
+          "cardName": "Crackle with Power",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9
+        ],
+        "hand": [
+          39,
+          43,
+          40,
+          57,
+          3
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 39,
+          "cardName": "Ponder",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            29,
+            38,
+            53
+          ],
+          "kept": [],
+          "lookedAt": [
+            {
+              "card": 29,
+              "cardName": "Mountain"
+            },
+            {
+              "card": 38,
+              "cardName": "Ornithopter of Paradise"
+            },
+            {
+              "card": 53,
+              "cardName": "Remand"
+            }
+          ],
+          "source": "Ponder (shuffle)",
+          "type": "REVEAL"
+        },
+        {
+          "card": 16,
+          "cardName": "Hinata, Dawn-Crowned",
+          "type": "DRAW"
+        },
+        {
+          "card": 43,
+          "cardName": "Preordain",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            4
+          ],
+          "kept": [
+            1
+          ],
+          "lookedAt": [
+            {
+              "card": 4,
+              "cardName": "Crackle with Power"
+            },
+            {
+              "card": 1,
+              "cardName": "Cascade Bluffs"
+            }
+          ],
+          "source": "Preordain",
+          "type": "REVEAL"
+        },
+        {
+          "card": 1,
+          "cardName": "Cascade Bluffs",
+          "type": "DRAW"
+        },
+        {
+          "card": 40,
+          "cardName": "Ponder",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            23,
+            59,
+            18
+          ],
+          "lookedAt": [
+            {
+              "card": 23,
+              "cardName": "Island"
+            },
+            {
+              "card": 59,
+              "cardName": "Soulfire Eruption"
+            },
+            {
+              "card": 18,
+              "cardName": "Hinata, Dawn-Crowned"
+            }
+          ],
+          "source": "Ponder",
+          "type": "REVEAL"
+        },
+        {
+          "card": 23,
+          "cardName": "Island",
+          "type": "DRAW"
+        },
+        {
+          "card": 1,
+          "cardName": "Cascade Bluffs",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40
+        ],
+        "hand": [
+          57,
+          3,
+          16,
+          23
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40
+        ],
+        "hand": [
+          57,
+          3,
+          16,
+          23
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40
+        ],
+        "hand": [
+          57,
+          3,
+          16,
+          23
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 59,
+          "cardName": "Soulfire Eruption",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40
+        ],
+        "hand": [
+          57,
+          3,
+          16,
+          23,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 23,
+          "cardName": "Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 16,
+          "cardName": "Hinata, Dawn-Crowned",
+          "manaPaid": "{1}{W}{U}{R}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40
+        ],
+        "hand": [
+          57,
+          3,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40
+        ],
+        "hand": [
+          57,
+          3,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Soulfire Eruption",
+          "manaPaid": "{R}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            },
+            {
+              "card": 36,
+              "cardName": "Ornithopter of Paradise",
+              "kind": "permanent",
+              "who": "you"
+            }
+          ],
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            18,
+            8,
+            31,
+            32,
+            7,
+            60
+          ],
+          "lookedAt": [
+            {
+              "card": 18,
+              "cardName": "Hinata, Dawn-Crowned",
+              "to": "→ opponent face (4)"
+            },
+            {
+              "card": 8,
+              "cardName": "Distorting Wake",
+              "to": "→ you (3)"
+            },
+            {
+              "card": 31,
+              "cardName": "Mountain",
+              "to": "→ opponent 2/2 Creature (0)"
+            },
+            {
+              "card": 32,
+              "cardName": "Mystic Monastery",
+              "to": "→ opponent 2/2 Creature (0)"
+            },
+            {
+              "card": 7,
+              "cardName": "Distorting Wake",
+              "to": "→ opponent 2/2 Creature (3)"
+            },
+            {
+              "card": 60,
+              "cardName": "Soulfire Eruption",
+              "to": "→ your Ornithopter of Paradise (9)"
+            }
+          ],
+          "source": "Soulfire Eruption (exiled)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57
+        ],
+        "hand": [
+          3,
+          59
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 16,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 11,
+          "cardName": "Forbidden Orchard",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57
+        ],
+        "hand": [
+          3,
+          59,
+          11
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 16,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 11,
+          "cardName": "Forbidden Orchard",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 60,
+          "cardName": "Soulfire Eruption",
+          "manaPaid": "{1}{R}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            }
+          ],
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            28,
+            42,
+            6,
+            44,
+            27
+          ],
+          "lookedAt": [
+            {
+              "card": 28,
+              "cardName": "Memory Lapse",
+              "to": "→ opponent face (2)"
+            },
+            {
+              "card": 42,
+              "cardName": "Ponder",
+              "to": "→ you (1)"
+            },
+            {
+              "card": 6,
+              "cardName": "Crackle with Power",
+              "to": "→ opponent 2/2 Creature (2)"
+            },
+            {
+              "card": 44,
+              "cardName": "Preordain",
+              "to": "→ opponent 2/2 Creature (1)"
+            },
+            {
+              "card": 27,
+              "cardName": "Memory Lapse",
+              "to": "→ opponent 1/1 Spirit Token (2)"
+            }
+          ],
+          "source": "Soulfire Eruption (exiled)",
+          "type": "REVEAL"
+        },
+        {
+          "card": 42,
+          "cardName": "Ponder",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            50,
+            24,
+            14
+          ],
+          "lookedAt": [
+            {
+              "card": 50,
+              "cardName": "Reality Spasm"
+            },
+            {
+              "card": 24,
+              "cardName": "Izzet Boilerworks"
+            },
+            {
+              "card": 14,
+              "cardName": "Gamble"
+            }
+          ],
+          "source": "Ponder",
+          "type": "REVEAL"
+        },
+        {
+          "card": 50,
+          "cardName": "Reality Spasm",
+          "type": "DRAW"
+        },
+        {
+          "card": 44,
+          "cardName": "Preordain",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            24,
+            14
+          ],
+          "kept": [],
+          "lookedAt": [
+            {
+              "card": 24,
+              "cardName": "Izzet Boilerworks"
+            },
+            {
+              "card": 14,
+              "cardName": "Gamble"
+            }
+          ],
+          "source": "Preordain",
+          "type": "REVEAL"
+        },
+        {
+          "card": 34,
+          "cardName": "Mystic Monastery",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57,
+          60,
+          42,
+          44
+        ],
+        "hand": [
+          3,
+          59,
+          50,
+          34
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 14,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 4,
+          "oppLife": 10,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57,
+          60,
+          42,
+          44
+        ],
+        "hand": [
+          3,
+          59,
+          50,
+          34
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 10,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57,
+          60,
+          42,
+          44
+        ],
+        "hand": [
+          3,
+          59,
+          50,
+          34
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 10,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 29,
+          "cardName": "Mountain",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Ornithopter of Paradise",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 16,
+            "cardName": "Hinata, Dawn-Crowned",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57,
+          60,
+          42,
+          44
+        ],
+        "hand": [
+          3,
+          59,
+          50,
+          34,
+          29
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 1001,
+            "cardName": "1/1 Spirit Token",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 10,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 29,
+          "cardName": "Mountain",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 50,
+          "cardName": "Reality Spasm",
+          "chosenX": 8,
+          "manaPaid": "{U}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 51,
+              "cardName": "Reflecting Pool"
+            },
+            {
+              "card": 21,
+              "cardName": "Island"
+            },
+            {
+              "card": 22,
+              "cardName": "Island"
+            },
+            {
+              "card": 37,
+              "cardName": "Ornithopter of Paradise"
+            },
+            {
+              "card": 1,
+              "cardName": "Cascade Bluffs"
+            },
+            {
+              "card": 23,
+              "cardName": "Island"
+            },
+            {
+              "card": 11,
+              "cardName": "Forbidden Orchard"
+            },
+            {
+              "card": 29,
+              "cardName": "Mountain"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        },
+        {
+          "card": 6,
+          "cardName": "Crackle with Power",
+          "chosenX": 5,
+          "manaPaid": "{10}{R}{R}",
+          "targets": [
+            {
+              "kind": "player",
+              "who": "opponent"
+            }
+          ],
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57,
+          60,
+          42,
+          44,
+          50,
+          16,
+          37,
+          6
+        ],
+        "hand": [
+          3,
+          59,
+          34
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -15,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 51,
+            "cardName": "Reflecting Pool",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 22,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Cascade Bluffs",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 23,
+            "cardName": "Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Forbidden Orchard",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Mountain",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          9,
+          39,
+          43,
+          40,
+          36,
+          57,
+          60,
+          42,
+          44,
+          50,
+          16,
+          37,
+          6
+        ],
+        "hand": [
+          3,
+          59,
+          34
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -15,
+        "playerLife": 16,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    }
+  ]
+}

@@ -1,0 +1,2032 @@
+{
+  "cardNumbering": {
+    "Apex of Power": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "Desperate Ritual": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "Dragonlord Kolaghan": [
+      9
+    ],
+    "Dragonstorm": [
+      10,
+      11,
+      12,
+      13
+    ],
+    "Dwarven Hold": [
+      14
+    ],
+    "Irencrag Feat": [
+      15
+    ],
+    "Karrthus, Tyrant of Jund": [
+      16
+    ],
+    "Lathliss, Dragon Queen": [
+      17
+    ],
+    "Lotus Bloom": [
+      18,
+      19,
+      20,
+      21
+    ],
+    "Mercadian Bazaar": [
+      22,
+      23,
+      24,
+      25
+    ],
+    "Mountain": [
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34
+    ],
+    "Pyretic Ritual": [
+      35,
+      36,
+      37,
+      38
+    ],
+    "Rite of Flame": [
+      39,
+      40,
+      41,
+      42
+    ],
+    "Ruby Medallion": [
+      43,
+      44,
+      45
+    ],
+    "Sandstone Needle": [
+      46,
+      47,
+      48,
+      49
+    ],
+    "Scourge of Valkas": [
+      50,
+      51,
+      52
+    ],
+    "Seething Song": [
+      53,
+      54,
+      55,
+      56
+    ],
+    "Unclaimed Territory": [
+      57,
+      58
+    ],
+    "Utvara Hellkite": [
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 35,
+          "cardName": "Pyretic Ritual"
+        },
+        {
+          "card": 18,
+          "cardName": "Lotus Bloom"
+        },
+        {
+          "card": 14,
+          "cardName": "Dwarven Hold"
+        },
+        {
+          "card": 16,
+          "cardName": "Karrthus, Tyrant of Jund"
+        },
+        {
+          "card": 5,
+          "cardName": "Desperate Ritual"
+        },
+        {
+          "card": 1,
+          "cardName": "Apex of Power"
+        },
+        {
+          "card": 2,
+          "cardName": "Apex of Power"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 1,
+      "hand": [
+        {
+          "card": 8,
+          "cardName": "Desperate Ritual"
+        },
+        {
+          "card": 25,
+          "cardName": "Mercadian Bazaar"
+        },
+        {
+          "card": 38,
+          "cardName": "Pyretic Ritual"
+        },
+        {
+          "card": 50,
+          "cardName": "Scourge of Valkas"
+        },
+        {
+          "card": 45,
+          "cardName": "Ruby Medallion"
+        },
+        {
+          "card": 24,
+          "cardName": "Mercadian Bazaar"
+        },
+        {
+          "card": 36,
+          "cardName": "Pyretic Ritual"
+        }
+      ],
+      "kept": false
+    },
+    {
+      "attempt": 2,
+      "bottomed": [
+        {
+          "card": 36,
+          "cardName": "Pyretic Ritual"
+        },
+        {
+          "card": 41,
+          "cardName": "Rite of Flame"
+        }
+      ],
+      "hand": [
+        {
+          "card": 1,
+          "cardName": "Apex of Power"
+        },
+        {
+          "card": 48,
+          "cardName": "Sandstone Needle"
+        },
+        {
+          "card": 57,
+          "cardName": "Unclaimed Territory"
+        },
+        {
+          "card": 15,
+          "cardName": "Irencrag Feat"
+        },
+        {
+          "card": 8,
+          "cardName": "Desperate Ritual"
+        },
+        {
+          "card": 36,
+          "cardName": "Pyretic Ritual"
+        },
+        {
+          "card": 41,
+          "cardName": "Rite of Flame"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 1,
+      "cardName": "Apex of Power"
+    },
+    {
+      "card": 48,
+      "cardName": "Sandstone Needle"
+    },
+    {
+      "card": 57,
+      "cardName": "Unclaimed Territory"
+    },
+    {
+      "card": 15,
+      "cardName": "Irencrag Feat"
+    },
+    {
+      "card": 8,
+      "cardName": "Desperate Ritual"
+    }
+  ],
+  "result": {
+    "turn": 7,
+    "winner": "player"
+  },
+  "runId": "20261010_142933_8500074",
+  "seed": 8500074,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Unclaimed Territory",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          48,
+          15,
+          8
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          48,
+          15,
+          8
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          48,
+          15,
+          8
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 52,
+          "cardName": "Scourge of Valkas",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          48,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 48,
+          "cardName": "Sandstone Needle",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 19,
+          "cardName": "Lotus Bloom",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 37,
+          "cardName": "Pyretic Ritual",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Sandstone Needle",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37,
+          46
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Sandstone Needle",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 2,
+          "cardName": "Apex of Power",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 19,
+            "cardName": "Lotus Bloom",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          1,
+          15,
+          8,
+          52,
+          37,
+          2
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 37,
+          "cardName": "Pyretic Ritual",
+          "manaPaid": "{1}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 8,
+          "cardName": "Desperate Ritual",
+          "manaPaid": "{1}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 1,
+          "cardName": "Apex of Power",
+          "manaPaid": "{7}{R}{R}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 2,
+          "cardName": "Apex of Power",
+          "manaPaid": "{7}{R}{R}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 43,
+          "cardName": "Ruby Medallion",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 44,
+          "cardName": "Ruby Medallion",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 42,
+          "cardName": "Rite of Flame",
+          "manaPaid": "{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 51,
+          "cardName": "Scourge of Valkas",
+          "manaPaid": "{R}{R}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 15,
+          "cardName": "Irencrag Feat",
+          "manaPaid": "{R}{R}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 50,
+          "cardName": "Scourge of Valkas",
+          "manaPaid": "{R}{R}{R}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 43,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          19,
+          37,
+          8,
+          1,
+          2,
+          42,
+          15
+        ],
+        "hand": [
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 43,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          19,
+          37,
+          8,
+          1,
+          2,
+          42,
+          15
+        ],
+        "hand": [
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 43,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          19,
+          37,
+          8,
+          1,
+          2,
+          42,
+          15
+        ],
+        "hand": [
+          52
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 5,
+          "cardName": "Desperate Ritual",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 48,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Sandstone Needle",
+            "counters": [
+              {
+                "count": 1,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 43,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          19,
+          37,
+          8,
+          1,
+          2,
+          42,
+          15
+        ],
+        "hand": [
+          52,
+          5
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 15,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 52,
+          "cardName": "Scourge of Valkas",
+          "manaPaid": "{R}{R}{R}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 43,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          19,
+          37,
+          8,
+          1,
+          2,
+          42,
+          15,
+          48,
+          46
+        ],
+        "hand": [
+          5
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 6,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "damage": 8,
+          "oppLife": -2,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 57,
+            "cardName": "Unclaimed Territory",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 43,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 44,
+            "cardName": "Ruby Medallion",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Scourge of Valkas",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          19,
+          37,
+          8,
+          1,
+          2,
+          42,
+          15,
+          48,
+          46
+        ],
+        "hand": [
+          5
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500001,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 500002,
+            "cardName": "2/2 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": -2,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+opening [{'card': 36, 'cardName': 'Genesis Wave'}, {'card': 52, 'cardName': 'Selesnya Sanctuary'}, {'card': 22, 'cardName': 'Elvish Archdruid'}, {'card': 58, 'cardName': 'Wellwisher'}, {'card': 54, 'cardName': "Verdant Sun's Avatar"}, {'card': 13, 'cardName': 'Branchloft Pathway'}, {'card': 40, 'cardName': 'Llanowar Elves'}]
+mull [{'attempt': 0, 'hand': [{'card': 36, 'cardName': 'Genesis Wave'}, {'card': 52, 'cardName': 'Selesnya Sanctuary'}, {'card': 22, 'cardName': 'Elvish Archdruid'}, {'card': 58, 'cardName': 'Wellwisher'}, {'card': 54, 'cardName': "Verdant Sun's Avatar"}, {'card': 13, 'cardName': 'Branchloft Pathway'}, {'card': 40, 'cardName': 'Llanowar Elves'}], 'kept': True}]
+result {'turn': 8, 'winner': 'player'}
+T1 MAIN_1: PLAY_LAND:Branchloft Pathway#13 | CAST_SPELL:Llanowar Elves#40 {"manaPaid": "{G}"}
+    hand: ['Genesis Wave#36', 'Selesnya Sanctuary#52', 'Elvish Archdruid#22', 'Wellwisher#58', "Verdant Sun's Avatar#54"]
+    bf  : ['Branchloft Pathway(T)', 'Llanowar Elves']
+    gy  : [] opp 20 me 20
+T1 COMBAT: 
+    hand: ['Genesis Wave#36', 'Selesnya Sanctuary#52', 'Elvish Archdruid#22', 'Wellwisher#58', "Verdant Sun's Avatar#54"]
+    bf  : ['Branchloft Pathway(T)', 'Llanowar Elves']
+    gy  : [] opp 20 me 20
+T1 MAIN_2: 
+    hand: ['Genesis Wave#36', 'Selesnya Sanctuary#52', 'Elvish Archdruid#22', 'Wellwisher#58', "Verdant Sun's Avatar#54"]
+    bf  : ['Branchloft Pathway(T)', 'Llanowar Elves']
+    gy  : [] opp 20 me 20
+T2 DRAW: DRAW:Verdant Sun's Avatar#55
+    hand: ['Genesis Wave#36', 'Selesnya Sanctuary#52', 'Elvish Archdruid#22', 'Wellwisher#58', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55"]
+    bf  : ['Branchloft Pathway', 'Llanowar Elves']
+    gy  : [] opp 20 me 20
+T2 MAIN_1: PLAY_LAND:Selesnya Sanctuary#52 | CAST_SPELL:Wellwisher#58 {"manaPaid": "{1}{G}"}
+    hand: ['Genesis Wave#36', 'Elvish Archdruid#22', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Branchloft Pathway#13']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary(T)', 'Wellwisher']
+    gy  : [] opp 20 me 20
+T2 COMBAT: 
+    hand: ['Genesis Wave#36', 'Elvish Archdruid#22', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Branchloft Pathway#13']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary(T)', 'Wellwisher']
+    gy  : [] opp 20 me 20
+T2 MAIN_2: 
+    hand: ['Genesis Wave#36', 'Elvish Archdruid#22', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Branchloft Pathway#13']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary(T)', 'Wellwisher']
+    gy  : [] opp 20 me 20
+T3 DRAW: DRAW:Priest of Titania#48
+    hand: ['Genesis Wave#36', 'Elvish Archdruid#22', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Branchloft Pathway#13', 'Priest of Titania#48']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher']
+    gy  : [] opp 20 me 20
+T3 MAIN_1: PLAY_LAND:Branchloft Pathway#13 | CAST_SPELL:Elvish Archdruid#22 {"manaPaid": "{1}{G}{G}"} | ABILITY:Wellwisher#58 {"ability": "gain 1 life for each Elf on the battlefield"}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary(T)', 'Wellwisher(T)', 'Branchloft Pathway(T)', 'Elvish Archdruid']
+    gy  : [] opp 20 me 23
+T3 COMBAT: ATTACK {"damage": 2, "oppLife": 18}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary(T)', 'Wellwisher(T)', 'Branchloft Pathway(T)', 'Elvish Archdruid']
+    gy  : [] opp 18 me 23
+T3 MAIN_2: 
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary(T)', 'Wellwisher(T)', 'Branchloft Pathway(T)', 'Elvish Archdruid']
+    gy  : [] opp 18 me 23
+T4 DRAW: DRAW:Nykthos Paragon#44
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 18 me 23
+T4 MAIN_1: ABILITY:Wellwisher#58 {"ability": "gain 1 life for each Elf on the battlefield"}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 18 me 26
+T4 COMBAT: ATTACK {"damage": 4, "oppLife": 14}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 14 me 26
+T4 MAIN_2: 
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 14 me 26
+T5 DRAW: DRAW:Genesis Wave#37
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 14 me 26
+T5 MAIN_1: ABILITY:Wellwisher#58 {"ability": "gain 1 life for each Elf on the battlefield"}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 14 me 29
+T5 COMBAT: ATTACK {"damage": 4, "oppLife": 10}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 10 me 29
+T5 MAIN_2: 
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 10 me 29
+T6 DRAW: DRAW:Ageless Entity#4
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 10 me 29
+T6 MAIN_1: ABILITY:Wellwisher#58 {"ability": "gain 1 life for each Elf on the battlefield"}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 10 me 32
+T6 COMBAT: ATTACK {"damage": 4, "oppLife": 6}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 6 me 32
+T6 MAIN_2: 
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 6 me 32
+T7 DRAW: DRAW:Blossoming Bogbeast#10
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 6 me 32
+T7 MAIN_1: ABILITY:Wellwisher#58 {"ability": "gain 1 life for each Elf on the battlefield"}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : [] opp 6 me 35
+T7 COMBAT: ATTACK {"damage": 4, "oppLife": 2}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 2 me 35
+T7 MAIN_2: 
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#54", "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : [] opp 2 me 35
+T7 CLEANUP: DISCARD:Verdant Sun's Avatar#54
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : ["Verdant Sun's Avatar#54"] opp 2 me 35
+T8 DRAW: DRAW:Feed the Clan#28
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10', 'Feed the Clan#28']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : ["Verdant Sun's Avatar#54"] opp 2 me 35
+T8 MAIN_1: ABILITY:Wellwisher#58 {"ability": "gain 1 life for each Elf on the battlefield"}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10', 'Feed the Clan#28']
+    bf  : ['Llanowar Elves', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid']
+    gy  : ["Verdant Sun's Avatar#54"] opp 2 me 38
+T8 COMBAT: ATTACK {"damage": 4, "oppLife": -2}
+    hand: ['Genesis Wave#36', "Verdant Sun's Avatar#55", 'Priest of Titania#48', 'Nykthos Paragon#44', 'Genesis Wave#37', 'Ageless Entity#4', 'Blossoming Bogbeast#10', 'Feed the Clan#28']
+    bf  : ['Llanowar Elves(T)', 'Selesnya Sanctuary', 'Wellwisher(T)', 'Branchloft Pathway', 'Elvish Archdruid(T)']
+    gy  : ["Verdant Sun's Avatar#54"] opp -2 me 38

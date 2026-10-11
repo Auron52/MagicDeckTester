@@ -1,0 +1,298 @@
+deck[arm-base]           cell      n     base  arm-base       t faster slower
+angels                   2hg     200   5.2200   +0.0000    0.00      0      0
+angels                   d0     2000   5.2815   +0.0000    0.00      0      0
+angels                   d3      400   4.7275   +0.0000    0.00      0      0
+angels                   ship    300   4.6533   +0.0000    0.00      0      0
+antilife                 2hg     200   4.2000   +0.0000    0.00      0      0
+antilife                 d0     2000   4.9625   +0.0000    0.00      0      0
+antilife                 d3      400   4.2100   +0.0000    0.00      0      0
+antilife                 ship    300   4.2467   +0.0000    0.00      0      0
+auras                    2hg     200   4.4700   +0.0000    0.00      0      0
+auras                    d0     2000   4.3450   +0.0000    0.00      0      0
+auras                    d3      400   4.0750   +0.0000    0.00      0      0
+auras                    ship    300   4.1267   +0.0000    0.00      0      0
+breaching                2hg     200   3.0650   +0.0000    0.00      0      0
+breaching                d0     2000   4.8425   +0.0000    0.00      0      0
+breaching                d3      400   3.1300   +0.0000    0.00      0      0
+breaching                ship    300   3.0567   +0.0000    0.00      0      0
+bruna                    2hg     200   5.5500   -0.0050   -1.00      1      0
+bruna                    d0     2000   6.2910   -0.0220   -4.47     45      8
+bruna                    d3      400   5.0875   -0.0025   -1.00      1      0
+bruna                    ship    300   5.0533   -0.0200   -1.91      6      1
+burn                     2hg     200   5.8050   +0.0000    0.00      0      0
+burn                     d0     2000   4.4350   +0.0000    0.00      0      0
+burn                     d3      400   4.2950   +0.0000    0.00      0      0
+burn                     ship    300   4.4400   +0.0000    0.00      0      0
+creature_giving          2hg     200   4.9700   +0.0000    0.00      0      0
+creature_giving          d0     2000   5.5925   +0.0000    0.00      0      0
+creature_giving          d3      400   4.6900   +0.0000    0.00      0      0
+creature_giving          ship    300   4.6233   +0.0000    0.00      0      0
+critter                  2hg     200   4.6850   +0.0000    0.00      0      0
+critter                  d0     2000   4.6220   +0.0000    0.00      0      0
+critter                  d3      400   4.3925   +0.0000    0.00      0      0
+critter                  ship    300   4.3333   +0.0000    0.00      0      0
+dragons                  2hg     200   6.0900   +0.0000    0.00      0      0
+dragons                  d0     2000   5.8800   +0.0000    0.00      0      0
+dragons                  d3      400   5.5275   +0.0000    0.00      0      0
+dragons                  ship    300   5.5833   +0.0000    0.00      0      0
+dragonstorm              2hg     200   4.6500   +0.0000    0.00      1      1
+dragonstorm[ko_dragonstorm_order_opaque-new] 2hg     200   4.6500   +0.0000    0.00      0      0
+dragonstorm[ko_payable_order_rituals-new] 2hg     200   4.6500   +0.0000    0.00      0      0
+dragonstorm[fc_on-new]   2hg     200   4.6500   +0.0000    0.00      0      0
+dragonstorm              d0     2000   5.5440   -0.2920  -14.59    284     21
+dragonstorm[ko_dragonstorm_order_opaque-new] d0     2000   5.2520   +0.0085    1.50      8     17
+dragonstorm[ko_payable_order_rituals-new] d0     2000   5.2520   +0.2370   13.76      2    218
+dragonstorm[fc_on-new]   d0     2000   5.2520   +0.0000    0.00      0      0
+dragonstorm              d3      400   4.2850   +0.0000    0.00      0      0
+dragonstorm[ko_dragonstorm_order_opaque-new] d3      400   4.2850   +0.0000    0.00      0      0
+dragonstorm[ko_payable_order_rituals-new] d3      400   4.2850   +0.0000    0.00      0      0
+dragonstorm[fc_on-new]   d3      400   4.2850   +0.0000    0.00      0      0
+dragonstorm              ship    300   4.4067   +0.0000    0.00      0      0
+dragonstorm[ko_dragonstorm_order_opaque-new] ship    300   4.4067   +0.0000    0.00      0      0
+dragonstorm[ko_payable_order_rituals-new] ship    300   4.4067   +0.0000    0.00      0      0
+dragonstorm[fc_on-new]   ship    300   4.4067   +0.0000    0.00      0      0
+edf                      d0     2000   5.9020   -0.1240  -10.92    168     14
+edf[ko_solve_verified_win-new] d0     2000   5.7780   +0.0110    4.51      0     21
+edf[ko_edf_gorge_red_sizing-new] d0     2000   5.7780   +0.0025    2.24      0      5
+edf[ko_solve_pending_aura_exact-new] d0     2000   5.7780   +0.1065    9.84     14    139
+edf                      d3      400   4.2550   +0.0025    1.00      0      1
+edf[ko_solve_verified_win-new] d3      400   4.2575   -0.0025   -1.00      1      0
+edf[ko_edf_gorge_red_sizing-new] d3      400   4.2575   +0.0000    0.00      0      0
+edf[ko_solve_pending_aura_exact-new] d3      400   4.2575   -0.0025   -1.00      1      0
+edf                      ship    300   4.2667   -0.0033   -1.00      1      0
+edf[ko_solve_verified_win-new] ship    300   4.2633   +0.0000    0.00      0      0
+edf[ko_edf_gorge_red_sizing-new] ship    300   4.2633   +0.0033    1.00      0      1
+edf[ko_solve_pending_aura_exact-new] ship    300   4.2633   +0.0000    0.00      0      0
+fivecolour               2hg     200   5.3900   +0.0000    0.00      0      0
+fivecolour               d0     2000   5.6500   +0.0035    1.53      7     14
+fivecolour               d3      400   4.8375   +0.0000    0.00      0      0
+fivecolour               ship    300   4.7967   +0.0000    0.00      0      0
+fluctuator               2hg     200   3.4750   +0.0000    0.00      0      0
+fluctuator               d0     2000   5.2010   +0.0000    0.00      0      0
+fluctuator               d3      400   3.5675   +0.0000    0.00      0      0
+fluctuator               ship    300   3.5433   +0.0000    0.00      0      0
+fungus                   d0     2000   5.6960   +0.0000    0.00      0      0
+fungus                   d3      400   5.3250   +0.0000    0.00      0      0
+fungus                   ship    300   5.2800   +0.0000    0.00      0      0
+fungusb                  d0     2000   6.2170   -0.0065   -3.37     12      0
+fungusb                  d3      400   5.1975   +0.0000    0.00      0      0
+fungusb                  ship    300   5.1767   +0.0000    0.00      0      0
+giants                   d0     2000   6.1415   +0.0005    1.00      0      1
+giants                   d3      400   5.6900   +0.0000    0.00      0      0
+giants                   ship    300   5.6733   +0.0000    0.00      0      0
+goblins                  2hg     200   4.1950   +0.0000    0.00      0      0
+goblins                  d0     2000   4.1090   +0.0000    0.00      0      0
+goblins                  d3      400   3.7175   +0.0000    0.00      0      0
+goblins                  ship    300   3.8367   +0.0000    0.00      0      0
+hinata                   2hg     200   5.3800   -0.0050   -1.00      1      0
+hinata                   d0     2000   6.9930   -0.0030   -0.95     17     11
+hinata                   d3      400   5.5700   +0.0000    0.00      2      1
+hinata                   ship    300   5.7133   +0.0200    1.42      0      3
+kitty                    2hg     200   4.8500   +0.0000    0.00      0      0
+kitty                    d0     2000   4.9560   +0.0000    0.00      0      0
+kitty                    d3      400   4.3425   +0.0000    0.00      0      0
+kitty                    ship    300   4.2800   +0.0000    0.00      0      0
+kittyv2                  d0     2000   5.0295   +0.0000    0.00      0      0
+kittyv2                  d3      400   4.0875   +0.0000    0.00      0      0
+kittyv2                  ship    300   4.0500   +0.0000    0.00      0      0
+knights                  2hg     200   5.0650   +0.0000    0.00      0      0
+knights                  d0     2000   4.5625   +0.0000    0.00      0      0
+knights                  d3      400   4.3375   +0.0000    0.00      0      0
+knights                  ship    300   4.3167   +0.0000    0.00      0      0
+melira                   2hg     200   4.8150   +0.0000    0.00      0      0
+melira                   d0     2000   6.3785   +0.0000    0.00      0      0
+melira                   d3      400   4.6825   +0.0000    0.00      0      0
+melira                   ship    300   4.6700   +0.0000    0.00      0      0
+minotaur                 2hg     200   5.3500   +0.0000    0.00      0      0
+minotaur                 d0     2000   5.3000   +0.0000    0.00      0      0
+minotaur                 d3      400   4.9400   +0.0000    0.00      0      0
+minotaur                 ship    300   4.8533   +0.0000    0.00      0      0
+mirrorwing               2hg     200   4.6550   +0.0000    0.00      0      0
+mirrorwing               d0     2000   5.8205   +0.0000    0.00      0      0
+mirrorwing               d3      400   4.2500   +0.0000    0.00      0      0
+mirrorwing               ship    300   4.1900   +0.0000    0.00      0      0
+pd                       2hg     200   5.7050   +0.0000    0.00      0      0
+pd                       d0     2000   7.5865   +0.0000    0.00      0      0
+pd                       d3      400   5.6375   +0.0000    0.00      0      0
+pd                       ship    300   5.7400   +0.0000    0.00      0      0
+pirates                  2hg     200   5.0500   +0.0000    0.00      0      0
+pirates                  d0     2000   4.7335   +0.0000    0.00      0      0
+pirates                  d3      400   4.3650   +0.0000    0.00      0      0
+pirates                  ship    300   4.3833   +0.0000    0.00      0      0
+selesnya                 d0     2000   5.9220   -0.0645   -8.64    112     10
+selesnya[ko_color_exact_scaled-new] d0     2000   5.8575   +0.0230    3.90      5     24
+selesnya[ko_attack_tap_need_exact-new] d0     2000   5.8575   +0.0345    7.78      6     75
+selesnya[ko_attack_tap_ability_discount-new] d0     2000   5.8575   +0.0090    3.69      3     21
+selesnya[alch_off-new]   d0     2000   5.8575   +0.0000    0.00      0      0
+selesnya                 d3      400   5.1575   -0.0075   -1.74      3      0
+selesnya[ko_color_exact_scaled-new] d3      400   5.1500   +0.0000    0.00      0      0
+selesnya[ko_attack_tap_need_exact-new] d3      400   5.1500   +0.0050    1.42      0      2
+selesnya[ko_attack_tap_ability_discount-new] d3      400   5.1500   +0.0025    1.00      0      1
+selesnya[alch_off-new]   d3      400   5.1500   +0.0000    0.00      0      0
+selesnya                 ship    300   5.1333   -0.0033   -1.00      1      0
+selesnya[ko_color_exact_scaled-new] ship    300   5.1300   +0.0000    0.00      0      0
+selesnya[ko_attack_tap_need_exact-new] ship    300   5.1300   +0.0033    1.00      0      1
+selesnya[ko_attack_tap_ability_discount-new] ship    300   5.1300   +0.0000    0.00      0      0
+selesnya[alch_off-new]   ship    300   5.1300   +0.0000    0.00      0      0
+slivers                  2hg     200   4.9250   +0.0000    0.00      0      0
+slivers                  d0     2000   4.6720   +0.0000    0.00      0      0
+slivers                  d3      400   4.2025   +0.0000    0.00      0      0
+slivers                  ship    300   4.2167   +0.0000    0.00      0      0
+snow                     d0     2000   6.4570   -0.0065   -3.37     14      1
+snow                     d3      400   5.8100   -0.0025   -0.58      2      1
+snow                     ship    299   5.9130   -0.0033   -1.00      1      0
+soldiers                 2hg     200   4.9350   +0.0000    0.00      0      0
+soldiers                 d0     2000   4.4705   +0.0000    0.00      0      0
+soldiers                 d3      400   4.2325   +0.0000    0.00      0      0
+soldiers                 ship    300   4.2733   +0.0000    0.00      0      0
+stompy                   2hg     200   4.3750   +0.0000    0.00      0      0
+stompy                   d0     2000   4.9505   +0.0020    2.00      0      4
+stompy                   d3      400   4.1100   +0.0000    0.00      0      0
+stompy                   ship    300   4.0800   +0.0000    0.00      0      0
+th                       2hg     200   4.6800   +0.0000    0.00      0      0
+th                       d0     2000   5.5530   +0.0000    0.00      0      0
+th                       d3      400   4.1675   +0.0000    0.00      0      0
+th                       ship    300   4.0600   +0.0000    0.00      0      0
+whiteknights             2hg     200   4.5600   +0.0000    0.00      0      0
+whiteknights             d0     2000   4.5875   +0.0000    0.00      0      0
+whiteknights             d3      400   4.1600   +0.0000    0.00      0      0
+whiteknights             ship    300   4.2033   +0.0000    0.00      0      0
+
+per deck, all cells pooled (n, sum(arm-base), faster, slower):
+  angels                       2900     +0     0     0
+  antilife                     2900     +0     0     0
+  auras                        2900     +0     0     0
+  breaching                    2900     +0     0     0
+  bruna                        2900    -52    53     9
+  burn                         2900     +0     0     0
+  creature_giving              2900     +0     0     0
+  critter                      2900     +0     0     0
+  dragons                      2900     +0     0     0
+  dragonstorm                  2900   -584   285    22
+  dragonstorm[fc_on-new]       2900     +0     0     0
+  dragonstorm[ko_dragonstorm_order_opaque-new]   2900    +17     8    17
+  dragonstorm[ko_payable_order_rituals-new]   2900   +474     2   218
+  edf                          2700   -248   169    15
+  edf[ko_edf_gorge_red_sizing-new]   2700     +6     0     6
+  edf[ko_solve_pending_aura_exact-new]   2700   +212    15   139
+  edf[ko_solve_verified_win-new]   2700    +21     1    21
+  fivecolour                   2900     +7     7    14
+  fluctuator                   2900     +0     0     0
+  fungus                       2700     +0     0     0
+  fungusb                      2700    -13    12     0
+  giants                       2700     +1     0     1
+  goblins                      2900     +0     0     0
+  hinata                       2900     -1    20    15
+  kitty                        2900     +0     0     0
+  kittyv2                      2700     +0     0     0
+  knights                      2900     +0     0     0
+  melira                       2900     +0     0     0
+  minotaur                     2900     +0     0     0
+  mirrorwing                   2900     +0     0     0
+  pd                           2900     +0     0     0
+  pirates                      2900     +0     0     0
+  selesnya                     2700   -133   116    10
+  selesnya[alch_off-new]       2700     +0     0     0
+  selesnya[ko_attack_tap_ability_discount-new]   2700    +19     3    22
+  selesnya[ko_attack_tap_need_exact-new]   2700    +72     6    78
+  selesnya[ko_color_exact_scaled-new]   2700    +46     5    24
+  slivers                      2900     +0     0     0
+  snow                         2699    -15    17     2
+  soldiers                     2900     +0     0     0
+  stompy                       2900     +4     0     4
+  th                           2900     +0     0     0
+  whiteknights                 2900     +0     0     0
+
+SLOWER games, new vs old (deck cell gi old new seed):
+  bruna            d0   gi=652   old=7 new=8 seed=1090653
+  bruna            d0   gi=960   old=7 new=9 seed=1090961
+  bruna            d0   gi=1153  old=8 new=9 seed=1091154
+  bruna            d0   gi=1238  old=8 new=9 seed=1091239
+  bruna            d0   gi=1247  old=8 new=9 seed=1091248
+  bruna            d0   gi=1461  old=8 new=9 seed=1091462
+  bruna            d0   gi=1909  old=7 new=9 seed=1091910
+  bruna            d0   gi=1933  old=7 new=9 seed=1091934
+  bruna            ship gi=198   old=5 new=6 seed=1080199
+  dragonstorm      2hg  gi=61    old=4 new=5 seed=1195062
+  dragonstorm      d0   gi=98    old=6 new=9 seed=1190099
+  dragonstorm      d0   gi=236   old=5 new=9 seed=1190237
+  dragonstorm      d0   gi=368   old=7 new=8 seed=1190369
+  dragonstorm      d0   gi=427   old=7 new=9 seed=1190428
+  dragonstorm      d0   gi=445   old=6 new=7 seed=1190446
+  dragonstorm      d0   gi=680   old=7 new=8 seed=1190681
+  dragonstorm      d0   gi=758   old=7 new=9 seed=1190759
+  dragonstorm      d0   gi=779   old=7 new=8 seed=1190780
+  dragonstorm      d0   gi=1011  old=5 new=7 seed=1191012
+  dragonstorm      d0   gi=1086  old=7 new=9 seed=1191087
+  dragonstorm      d0   gi=1146  old=6 new=9 seed=1191147
+  dragonstorm      d0   gi=1153  old=6 new=9 seed=1191154
+  dragonstorm      d0   gi=1296  old=7 new=9 seed=1191297
+  dragonstorm      d0   gi=1303  old=5 new=8 seed=1191304
+  dragonstorm      d0   gi=1412  old=4 new=6 seed=1191413
+  dragonstorm      d0   gi=1590  old=6 new=7 seed=1191591
+  dragonstorm      d0   gi=1664  old=5 new=8 seed=1191665
+  dragonstorm      d0   gi=1684  old=7 new=8 seed=1191685
+  dragonstorm      d0   gi=1686  old=6 new=7 seed=1191687
+  dragonstorm      d0   gi=1701  old=8 new=9 seed=1191702
+  dragonstorm      d0   gi=1929  old=7 new=9 seed=1191930
+  edf              d0   gi=76    old=5 new=6 seed=1650077
+  edf              d0   gi=110   old=4 new=6 seed=1650111
+  edf              d0   gi=354   old=4 new=5 seed=1650355
+  edf              d0   gi=373   old=4 new=5 seed=1650374
+  edf              d0   gi=432   old=7 new=8 seed=1650433
+  edf              d0   gi=547   old=5 new=6 seed=1650548
+  edf              d0   gi=604   old=6 new=7 seed=1650605
+  edf              d0   gi=985   old=6 new=7 seed=1650986
+  edf              d0   gi=1031  old=6 new=7 seed=1651032
+  edf              d0   gi=1408  old=4 new=5 seed=1651409
+  edf              d0   gi=1475  old=7 new=8 seed=1651476
+  edf              d0   gi=1620  old=6 new=7 seed=1651621
+  edf              d0   gi=1676  old=4 new=5 seed=1651677
+  edf              d0   gi=1985  old=6 new=7 seed=1651986
+  edf              d3   gi=285   old=4 new=5 seed=1645286
+  fivecolour       d0   gi=275   old=4 new=5 seed=1210276
+  fivecolour       d0   gi=374   old=5 new=6 seed=1210375
+  fivecolour       d0   gi=400   old=5 new=6 seed=1210401
+  fivecolour       d0   gi=500   old=4 new=5 seed=1210501
+  fivecolour       d0   gi=839   old=4 new=5 seed=1210840
+  fivecolour       d0   gi=912   old=4 new=5 seed=1210913
+  fivecolour       d0   gi=1054  old=5 new=6 seed=1211055
+  fivecolour       d0   gi=1063  old=4 new=5 seed=1211064
+  fivecolour       d0   gi=1191  old=6 new=7 seed=1211192
+  fivecolour       d0   gi=1665  old=4 new=5 seed=1211666
+  fivecolour       d0   gi=1700  old=5 new=6 seed=1211701
+  fivecolour       d0   gi=1760  old=5 new=6 seed=1211761
+  fivecolour       d0   gi=1817  old=5 new=6 seed=1211818
+  fivecolour       d0   gi=1882  old=4 new=5 seed=1211883
+  giants           d0   gi=991   old=5 new=6 seed=1290992
+  hinata           d0   gi=702   old=5 new=6 seed=1330703
+  hinata           d0   gi=757   old=7 new=8 seed=1330758
+  hinata           d0   gi=762   old=5 new=6 seed=1330763
+  hinata           d0   gi=779   old=7 new=8 seed=1330780
+  hinata           d0   gi=873   old=6 new=8 seed=1330874
+  hinata           d0   gi=1154  old=5 new=6 seed=1331155
+  hinata           d0   gi=1325  old=5 new=6 seed=1331326
+  hinata           d0   gi=1427  old=8 new=9 seed=1331428
+  hinata           d0   gi=1549  old=6 new=7 seed=1331550
+  hinata           d0   gi=1680  old=8 new=9 seed=1331681
+  hinata           d0   gi=1741  old=7 new=9 seed=1331742
+  hinata           d3   gi=315   old=5 new=7 seed=1325316
+  hinata           ship gi=42    old=5 new=6 seed=1320043
+  hinata           ship gi=58    old=8 new=9 seed=1320059
+  hinata           ship gi=191   old=5 new=9 seed=1320192
+  selesnya         d0   gi=392   old=8 new=9 seed=1510393
+  selesnya         d0   gi=882   old=5 new=6 seed=1510883
+  selesnya         d0   gi=933   old=5 new=6 seed=1510934
+  selesnya         d0   gi=979   old=6 new=7 seed=1510980
+  selesnya         d0   gi=1094  old=6 new=7 seed=1511095
+  selesnya         d0   gi=1344  old=6 new=7 seed=1511345
+  selesnya         d0   gi=1737  old=6 new=7 seed=1511738
+  selesnya         d0   gi=1861  old=5 new=6 seed=1511862
+  selesnya         d0   gi=1868  old=5 new=6 seed=1511869
+  selesnya         d0   gi=1896  old=5 new=6 seed=1511897
+  snow             d0   gi=1384  old=5 new=6 seed=1551385
+  snow             d3   gi=133   old=6 new=7 seed=1545134
+  stompy           d0   gi=496   old=4 new=5 seed=1590497
+  stompy           d0   gi=588   old=5 new=6 seed=1590589
+  stompy           d0   gi=724   old=5 new=6 seed=1590725
+  stompy           d0   gi=1714  old=5 new=6 seed=1591715

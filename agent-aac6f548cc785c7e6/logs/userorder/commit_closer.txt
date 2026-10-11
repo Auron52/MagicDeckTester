@@ -1,0 +1,31 @@
+fix(dragonstorm): Irencrag needs a closer after it -- subset and post-Apex leftovers (MTG_DRAGONSTORM_IRENCRAG_CLOSER)
+
+Found by this round's closing audit ("Irencrag last (no spell after)", d0 s7000035 T5): the d0 plan
+{Medallion, Desperate, Seething x2, Apex, Irencrag} -- admitted because the order-free credit lets
+Irencrag's seven red "fund" an Apex the USER order casts first; MTG_RITUAL_GUARD_APEX made the line
+selectable -- exiled no castable closer, and the leftover Irencrag was then cast alone after the empty
+continuation: four mana and the card for seven red nothing spends (the float empties before combat).
+
+USER order rule 7 (Irencrag second-to-last; after it only the closer, Dragonstorm or a Dragon), at
+two sites under one shared reader (DragonstormIrencragCloserOn, EngineFlags.h):
+  * subset (DragonstormProvider::OrderedSubsetRealisable): a subset holding the restrictor, NO closer
+    and NO Apex is refused;
+  * post-Apex merge (MergeBreakpointLeftovers, executor + ApplyPlanDirect -> lockstep): a LEFTOVER
+    restrictor that no closer follows and no Apex precedes is not cast; it stays in hand.
+A subset WITH an Apex stays admitted -- refusing it was tried first and measured wrong: s8500074 T6
+{Apex, Medallion, Irencrag} found two Scourges in the second exile (T7 win; refused, the d0 runner did
+not cast the second Apex at all -> unwon), and s8500148 T4 the same shape (8 -> 9).
+
+Lever: MTG_DRAGONSTORM_IRENCRAG_CLOSER (default ON) + heurarm slot DRAGONSTORM_IRENCRAG_CLOSER.
+Unit test: test_dragonstorm_followups.cpp "Irencrag needs a closer after it ..." (subset: refused
+without Apex / admitted with Apex or a Dragon; merge: dropped after an empty continuation, kept before a
+Dragon or after an Apex; both arms).
+=0 byte-identical vs ba2230bf on the 27-job ident set. Paired sanity, Dragonstorm: seeds 8600001+ d0
+300 0/0, d3 100 0/0; and the 8500001+ sample that refuted the first version, d0 300 0/0, d3 100 0/0.
+s7000035 T5 now keeps Irencrag in hand (still unwon on every arm: no Dragonstorm drawn). Closing audit
+(700 games): "Irencrag last (no spell after)" 1 -> 0. Unit binary: 923 / 923 pass.
+
+Docs: docs/design/dragonstorm-user-cast-order.md gains the follow-up round (every fix, the leftover
+design, the item-6 classification, the six ab3-slower games, the closing audit, what is still open).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

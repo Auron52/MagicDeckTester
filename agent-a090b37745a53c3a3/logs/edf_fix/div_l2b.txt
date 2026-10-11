@@ -1,0 +1,45 @@
+######## l2b gi=147 (A = all on, B = MTG_SOLVE_AURA_PAYER_CHECK=0)
+A: avg (turns)   : 7.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+B: avg (turns)   : 5.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+first divergence T4 MAIN_1
+  board before: [('Brushland', '', None), ('Kitchen', '', None), ('Wild Growth', '', 6), ('Eldrazi Displacer', '', None)]
+  hand before : ['Overgrowth', 'Cloud of Faeries', 'Living Wish', 'Overgrowth', 'Overgrowth', 'Wild Growth']
+  A: []
+  B: [('CAST_SPELL', 'Wild Growth'), ('CAST_SPELL', 'Cloud of Faeries'), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('REVEAL', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None)]
+result A {'turn': 7, 'winner': 'player'}  B {'turn': 5, 'winner': 'player'}
+######## l2b gi=836 (A = all on, B = MTG_SOLVE_AURA_PAYER_CHECK=0)
+A: avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+B: avg (turns)   : 8.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+first divergence T7 MAIN_1
+  board before: [('Brushland', '', None), ('Wild Growth', '', 6), ('Conservatory', '', None), ('Wild Growth', '', 6), ('Overgrowth', '', 13), ('Fertile Ground', '', 6), ('Training Grounds', '', None), ('Eldrazi Displacer', '', None), ('Adarkar Wastes', '', None), ('Fertile Ground', '', 13), ('Training Grounds', '', None), ('Emiel the Blessed', '', None), ('Eldrazi Displacer', '', None)]
+  hand before : ['Brushland']
+  A: [('PLAY_LAND', 'Brushland'), ('ABILITY', 'Eldrazi Displacer'), ('ABILITY', 'Emiel the Blessed')]
+  B: [('PLAY_LAND', 'Brushland'), ('DRAW', 'Overgrowth'), ('ABILITY', 'Conservatory'), ('ABILITY', 'Eldrazi Displacer')]
+result A {'turn': None, 'winner': 'none'}  B {'turn': 8, 'winner': 'player'}
+######## l2b gi=1011 (A = all on, B = MTG_SOLVE_AURA_PAYER_CHECK=0)
+A: avg (turns)   : 5.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+B: avg (turns)   : 4.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+first divergence T2 MAIN_1
+  board before: [('Yavimaya Coast', '', None), ('Wild Growth', '', 57)]
+  hand before : ['Aether Hub', 'Training Grounds', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance', 'Living Wish']
+  A: [('PLAY_LAND', 'Aether Hub'), ('CAST_SPELL', 'Training Grounds'), ('CAST_SPELL', 'Living Wish'), ('REVEAL', None)]
+  B: [('PLAY_LAND', 'Aether Hub'), ('CAST_SPELL', 'Trace of Abundance'), ('CAST_SPELL', 'Training Grounds')]
+result A {'turn': 5, 'winner': 'player'}  B {'turn': 4, 'winner': 'player'}
+######## l2b gi=1225 (A = all on, B = MTG_SOLVE_AURA_PAYER_CHECK=0)
+A: avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+B: avg (turns)   : 5.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+first divergence T5 MAIN_1
+  board before: [('Yavimaya Coast', '', None), ('Wild Growth', '', 57), ('Aether Hub', '', None), ('Eldrazi Displacer', '', None), ('Mariposa Military Base', '', None), ('Wild Growth', '', 57), ('Fertile Ground', '', 3), ('Wild Growth', '', 57)]
+  hand before : ['Emiel the Blessed', 'Trace of Abundance', 'Living Wish']
+  A: [('CAST_SPELL', 'Trace of Abundance'), ('CAST_SPELL', 'Living Wish'), ('REVEAL', None)]
+  B: [('CAST_SPELL', 'Living Wish'), ('REVEAL', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('DRAW', 'Overgrowth'), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('DRAW', 'Training Grounds'), ('UNTAP_SOURCES', None), ('DRAW', 'Living Wish'), ('UNTAP_SOURCES', None), ('REVEAL', None)]
+result A {'turn': 6, 'winner': 'player'}  B {'turn': 5, 'winner': 'player'}
+######## l2b gi=1390 (A = all on, B = MTG_SOLVE_AURA_PAYER_CHECK=0)
+A: avg (turns)   : 4.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+B: avg (turns)   : 3.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+first divergence T3 MAIN_1
+  board before: [('Yavimaya Coast', '', None), ('Wild Growth', '', 57), ('Mariposa Military Base', '', None), ('Wild Growth', '', 57), ('Fertile Ground', '', 35)]
+  hand before : ['Peregrine Drake', 'Conservatory', "Eladamri's Call", 'Trace of Abundance', 'Living Wish']
+  A: [('PLAY_LAND', 'Conservatory'), ('CAST_SPELL', 'Peregrine Drake'), ('UNTAP_SOURCES', None), ('CAST_SPELL', "Eladamri's Call"), ('REVEAL', None), ('CAST_SPELL', 'Eldrazi Displacer')]
+  B: [('PLAY_LAND', 'Conservatory'), ('REVEAL', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('REVEAL', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None), ('DRAW', 'Eldrazi Displacer'), ('UNTAP_SOURCES', None), ('DRAW', 'Aether Hub'), ('UNTAP_SOURCES', None), ('UNTAP_SOURCES', None)]
+result A {'turn': 4, 'winner': 'player'}  B {'turn': 3, 'winner': 'player'}

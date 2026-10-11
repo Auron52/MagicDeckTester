@@ -1,0 +1,16 @@
+fix(edf): null-guard every read of the go-off projection's `casting` list (E5)
+
+Solve's consider() pushes cands[j].def for EVERY selected action, so a non-cast pick (a land drop, an
+activation) arrives in `casting` as nullptr. The outlet / payload scans null-checked through
+DefIsBlinkOutlet / DefIsUntapPayload; five other reads did not:
+ * RecogniseFlickerLoopProspective: the MTG_EDF_PROSPECTIVE_DEBUG print (segfaulted every traced EDF
+   game in the ab3 rc3 kit) and the cast-sink scan;
+ * ExtraLethalDamage: the prospective "mana left after assembly" subtraction and the [edf-loop] print;
+ * ProjectsAlternateWin: the same subtraction.
+A null entry is skipped (a non-cast pick is neither a sink nor a cast to pay for). No lever: every site
+that changed dereferenced the pointer, so a run that did not crash is unaffected.
+
+Unit: test/unit/test_edf_prospective_null.cpp (a Cloud of Faeries cast onto a net-positive Displacer
+board beside a nullptr pick; SIGSEGV before, passes after).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

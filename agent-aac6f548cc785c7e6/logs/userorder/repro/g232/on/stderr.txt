@@ -1,0 +1,26 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7600233 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=3 m=1 route=clean pool=1 n=4 pays=-1 ppays=3 mpos=-1 mearl=-1 seq=Rite of Flame|Rite of Flame|Pyretic Ritual|Scourge of Valkas
+[uo-cast] gs=7600233 t=3 m=1 d=0 card=Rite of Flame num=39 staged=0 splice=0 paid=1 pool=0
+[uo-cast] gs=7600233 t=3 m=1 d=0 card=Rite of Flame num=40 staged=0 splice=0 paid=1 pool=2
+[uo-cast] gs=7600233 t=3 m=1 d=0 card=Pyretic Ritual num=35 staged=0 splice=0 paid=1 pool=4
+[uo-cast] gs=7600233 t=3 m=1 d=0 card=Scourge of Valkas num=50 staged=0 splice=0 paid=1 pool=5
+[uo-order] gs=7600233 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=4 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=5 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=6 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600233 t=7 m=1 route=clean pool=5 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Seething Song|Seething Song|Dragonstorm
+[uo-cast] gs=7600233 t=7 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=5
+[uo-cast] gs=7600233 t=7 m=1 d=0 card=Seething Song num=54 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=7600233 t=7 m=1 d=0 card=Dragonstorm num=10 staged=0 splice=0 paid=1 pool=7
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g232/on
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

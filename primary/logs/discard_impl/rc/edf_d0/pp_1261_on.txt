@@ -1,0 +1,158 @@
+result {'turn': None, 'winner': 'none'}
+mull 0 ['Eldrazi Displacer', 'Living Wish', 'Kitchen', 'Overgrowth', 'Mariposa Military Base', 'Aether Hub', 'Trace of Abundance'] kept
+T1 MAIN_1: PLAY_LAND Aether Hub
+    hand(6): ['Eldrazi Displacer', 'Kitchen', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub']
+    opp life 20
+T1 COMBAT: 
+    hand(6): ['Eldrazi Displacer', 'Kitchen', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub']
+    opp life 20
+T1 MAIN_2: 
+    hand(6): ['Eldrazi Displacer', 'Kitchen', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub']
+    opp life 20
+T2 DRAW: DRAW Fertile Ground
+    hand(7): ['Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub']
+    opp life 20
+T2 MAIN_1: PLAY_LAND Mariposa Military Base; CAST_SPELL Living Wish {"manaPaid":"{1}{G}"}; REVEAL {"bottomed":[],"kept":[200002],"lookedAt":[{"card":200002,"cardName":"Cloud of Faeries","to":"to hand"}],"source":"Living Wish (searched)"}
+    hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub(T)', 'Mariposa Military Base(T)']
+    opp life 20
+T2 COMBAT: 
+    hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub(T)', 'Mariposa Military Base(T)']
+    opp life 20
+T2 MAIN_2: 
+    hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub(T)', 'Mariposa Military Base(T)']
+    opp life 20
+T3 DRAW: DRAW Fertile Ground
+    hand(7): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base']
+    opp life 20
+T3 MAIN_1: PLAY_LAND Kitchen
+    hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen(T)']
+    opp life 20
+T3 COMBAT: 
+    hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen(T)']
+    opp life 20
+T3 MAIN_2: 
+    hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen(T)']
+    opp life 20
+T4 DRAW: DRAW Eldrazi Displacer
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T4 MAIN_1: 
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T4 COMBAT: 
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T4 MAIN_2: 
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T5 DRAW: DRAW Wild Growth
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T5 MAIN_1: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T5 COMBAT: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T5 MAIN_2: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    opp life 20
+T5 CLEANUP: DISCARD Overgrowth
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth']
+    opp life 20
+T6 DRAW: DRAW Wild Growth
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth']
+    opp life 20
+T6 MAIN_1: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth']
+    opp life 20
+T6 COMBAT: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth']
+    opp life 20
+T6 MAIN_2: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth']
+    opp life 20
+T6 CLEANUP: DISCARD Trace of Abundance
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance']
+    opp life 20
+T7 DRAW: DRAW Wild Growth
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance']
+    opp life 20
+T7 MAIN_1: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance']
+    opp life 20
+T7 COMBAT: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance']
+    opp life 20
+T7 MAIN_2: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance']
+    opp life 20
+T7 CLEANUP: DISCARD Fertile Ground
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+    opp life 20
+T8 DRAW: DRAW Trace of Abundance
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+    opp life 20
+T8 MAIN_1: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+    opp life 20
+T8 COMBAT: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+    opp life 20
+T8 MAIN_2: 
+    hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+    opp life 20
+T8 CLEANUP: DISCARD Trace of Abundance
+    hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+    bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+    gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground', 'Trace of Abundance']
+    opp life 20

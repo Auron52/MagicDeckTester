@@ -1,0 +1,28 @@
+Loaded profile from decks/Melira Pod/Melira Pod.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[search] T1 pass=1 done win=5 cost=13 used=13
+[search] T1 pass=2 done win=5 cost=77 used=90
+[search] T1 pass=3 done win=5 cost=225 used=315
+[search] T1 pass=1 done win=8 cost=83 used=398
+[search] T1 pass=2 done win=8 cost=353 used=751
+[search] T1 pass=3 done win=7 cost=758 used=1509
+[search] T2 pass=1 done win=5 cost=13 used=13
+[search] T2 pass=2 done win=5 cost=77 used=90
+[search] T2 pass=3 done win=6 cost=468 used=558
+[search] T2 pass=1 done win=8 cost=73 used=631
+[search] T2 pass=2 done win=7 cost=363 used=994
+[search] T2 pass=3 done win=7 cost=1369 used=2363
+[search] T3 pass=1 done win=6 cost=13 used=13
+[search] T3 pass=2 done win=6 cost=100 used=113
+[search] T3 pass=3 done win=6 cost=1445 used=1558
+[search] T3 pass=1 done win=7 cost=69 used=1627
+[search] T3 pass=2 done win=7 cost=332 used=1959
+[search] T3 pass=3 done win=6 cost=2647 used=4606
+[search] T4 pass=1 done win=6 cost=24 used=24
+[search] T4 pass=2 done win=6 cost=542 used=566
+[search] T4 pass=3 done win=6 cost=1073 used=1639
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/melira/ts1_off
+[enum-memo] hits=0 misses=1541 clears=0
+[solve-memo] hits=1001 misses=2520 clears=0
+[leaf-eval] published=154 ties=0 flips=0 life-equal-ties=0

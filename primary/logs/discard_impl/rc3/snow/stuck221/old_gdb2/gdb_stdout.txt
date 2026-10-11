@@ -1,0 +1,278 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+SIGINT is used by the debugger.
+Are you sure you want to change it? (y or n) [answered Y; input not from terminal]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff6dff6c0 (LWP 1345619)]
+Loaded 60 mainboard card(s) + 10 sideboard card(s)
+[New Thread 0x7ffff607e6c0 (LWP 1345623)]
+
+Thread 1 "mtg_ab3_d6a760e" received signal SIGINT, Interrupt.
+0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+==== SAMPLE 1
+
+Thread 3 (Thread 0x7ffff607e6c0 (LWP 1345623) "mtg_ab3_d6a760e"):
+#0  0x00005555555dc648 in std::vector<int, std::allocator<int> >::vector(unsigned long, int const&, std::allocator<int> const&) [clone .lto_priv.0] ()
+#1  0x00005555557b54ca in void EnumeratePlanPositions<EnumeratePlans(GameState const&, bool)::{lambda(std::vector<int, std::allocator<int> > const&)#4}, EnumeratePlans(GameState const&, bool)::{lambda(std::vector<int, std::allocator<int> > const&)#1}>(std::vector<Action, std::allocator<Action> > const&, std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > > const&, std::vector<int, std::allocator<int> > const&, ManaGateIndex const*, int, SpliceOdometerIndex const&, std::vector<int, std::allocator<int> > const&, bool, bool, bool, bool, FungibleEquipClasses const&, EquipPieceDeps const&, EnumeratePlans(GameState const&, bool)::{lambda(std::vector<int, std::allocator<int> > const&)#4} const&, EnumeratePlans(GameState const&, bool)::{lambda(std::vector<int, std::allocator<int> > const&)#1} const&) [clone .isra.0] ()
+#2  0x000055555562659b in EnumeratePlans(GameState const&, bool) [clone .lto_priv.0] ()
+#3  0x00005555556010c3 in EnumeratePlansWithLandUncached(GameState const&, bool) ()
+#4  0x00005555555ffb3f in EnumeratePlansWithLand(GameState const&, bool) [clone .lto_priv.0] ()
+#5  0x00005555557ab700 in BpDeriveContinuationList(GameState const&, bool, bool) ()
+#6  0x00005555557a8737 in BpEnumEntryFor(GameState const&, bool, TranspositionTable::Key const*) [clone .constprop.0] ()
+#7  0x00005555557a53e5 in ApplyPlanDirect(GameState&, TurnSolver::Plan const&, bool, std::vector<Action, std::allocator<Action> >*, BpPrefixSnap*, BpPrefixSnap const*, int)::{lambda(int, TurnSolver::Plan&)#1}::operator()(int, TurnSolver::Plan&) const [clone .lto_priv.0] ()
+#8  0x00005555556db781 in ApplyPlanDirect(GameState&, TurnSolver::Plan const&, bool, std::vector<Action, std::allocator<Action> >*, BpPrefixSnap*, BpPrefixSnap const*, int)::{lambda(std::vector<Action, std::allocator<Action> > const&)#1}::operator()(std::vector<Action, std::allocator<Action> > const&) const [clone .lto_priv.0] ()
+#9  0x00005555556bab72 in ApplyPlanDirect(GameState&, TurnSolver::Plan const&, bool, std::vector<Action, std::allocator<Action> >*, BpPrefixSnap*, BpPrefixSnap const*, int) [clone .lto_priv.0] ()
+#10 0x00005555557ebbd7 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#11 0x000055555581902b in SearchedSecondMainMemoized(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#12 0x00005555558172a7 in SolveSecondMainInSearch(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#13 0x0000555555815de2 in ApplySecondMainInSearch(GameState&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#14 0x00005555557ec163 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#15 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#16 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#17 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#18 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#19 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#20 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#21 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#22 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#23 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#24 0x00005555559c2ce3 in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#25 0x00005555559c265a in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#26 0x00005555559358cb in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(std::vector<Action, std::allocator<Action> > const&)#3}::operator()(std::vector<Action, std::allocator<Action> > const&) const ()
+#27 0x00005555558e8f6f in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&) [clone .constprop.0] ()
+#28 0x00005555558e6659 in GameEngine::MainPhase(GameState&, bool) ()
+#29 0x00005555558e0425 in GameEngine::RunTurnFrom(GameState&, GameEngine::ResumeAt) ()
+#30 0x00005555558e0250 in GameEngine::PlayOutFrom(GameState&, int, GameEngine::ResumeAt) ()
+#31 0x000055555596803f in AIEngine::RolloutWinTurnFrom(GameState, int, GameEngine::ResumeAt, int*) [clone .constprop.0] ()
+#32 0x0000555555967d93 in AIEngine::RolloutWinTurn(GameState, int, int*) [clone .constprop.0] ()
+#33 0x00005555559b0e8e in AIEngine::BottomCards(GameState&, int, int)::{lambda(unsigned int)#2}::operator()(unsigned int) const [clone .lto_priv.0] ()
+#34 0x000055555591e8f1 in AIEngine::BottomCards(GameState&, int, int) ()
+#35 0x00005555558dc99c in AIEngine::HandleMulligan(GameState&, int) ()
+#36 0x00005555558dbfd9 in GameEngine::RunGame(GameState&, int) ()
+#37 0x0000555555bc574b in GoldFishRunner::Run(Decklist const&, int, unsigned long, int, MulliganProfile const&, std::filesystem::__cxx11::path const&, int, int, int, int, int, std::vector<int, std::allocator<int> >)::{lambda()#1}::operator()() const ()
+#38 0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#39 0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#40 0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 2 (Thread 0x7ffff6dff6c0 (LWP 1345619) "mtg_ab3_d6a760e"):
+#0  0x00007ffff77f3adf in __GI___clock_nanosleep (clock_id=..., flags=..., req=..., rem=...) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:78
+#1  0x00007ffff7800a27 in __GI___nanosleep (req=..., rem=...) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+#2  0x000055555589bc31 in membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const ()
+#3  0x000055555589bba0 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}> > >::_M_run() ()
+#4  0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#6  0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 1 (Thread 0x7ffff7702c40 (LWP 1345616) "mtg_ab3_d6a760e"):
+#0  0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (cancel=..., private=..., abstime=..., clockid=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:87
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=..., expected=..., clockid=..., abstime=..., private=...) at ./nptl/futex-internal.c:139
+#3  0x00007ffff77a57a3 in __pthread_clockjoin_ex (threadid=..., thread_return=..., clockid=..., abstime=..., block=...) at ./nptl/pthread_join_common.c:102
+#4  0x00007ffff7b1ee33 in std::thread::join() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x0000555555897aab in main ()
+
+Thread 1 "mtg_ab3_d6a760e" received signal SIGINT, Interrupt.
+0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+57	in ./nptl/futex-internal.c
+==== SAMPLE 2
+
+Thread 3 (Thread 0x7ffff607e6c0 (LWP 1345623) "mtg_ab3_d6a760e"):
+#0  0x00007ffff77a7f14 in ___pthread_mutex_trylock (mutex=...) at ./nptl/pthread_mutex_trylock.c:33
+#1  0x00007ffff7d5df2f in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#2  0x00007ffff7cd379f in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#3  0x0000555555713ade in std::vector<Action, std::allocator<Action> >::push_back(Action const&) ()
+#4  0x000055555570991a in EnumeratePlans(GameState const&, bool)::{lambda(std::vector<int, std::allocator<int> > const&)#2}::operator()(std::vector<int, std::allocator<int> > const&) const [clone .lto_priv.0] ()
+#5  0x000055555562373a in EnumeratePlans(GameState const&, bool) [clone .lto_priv.0] ()
+#6  0x00005555556010c3 in EnumeratePlansWithLandUncached(GameState const&, bool) ()
+#7  0x00005555555ffb3f in EnumeratePlansWithLand(GameState const&, bool) [clone .lto_priv.0] ()
+#8  0x00005555557ab700 in BpDeriveContinuationList(GameState const&, bool, bool) ()
+#9  0x00005555557a8737 in BpEnumEntryFor(GameState const&, bool, TranspositionTable::Key const*) [clone .constprop.0] ()
+#10 0x00005555557a53e5 in ApplyPlanDirect(GameState&, TurnSolver::Plan const&, bool, std::vector<Action, std::allocator<Action> >*, BpPrefixSnap*, BpPrefixSnap const*, int)::{lambda(int, TurnSolver::Plan&)#1}::operator()(int, TurnSolver::Plan&) const [clone .lto_priv.0] ()
+#11 0x00005555556db781 in ApplyPlanDirect(GameState&, TurnSolver::Plan const&, bool, std::vector<Action, std::allocator<Action> >*, BpPrefixSnap*, BpPrefixSnap const*, int)::{lambda(std::vector<Action, std::allocator<Action> > const&)#1}::operator()(std::vector<Action, std::allocator<Action> > const&) const [clone .lto_priv.0] ()
+#12 0x00005555556bab72 in ApplyPlanDirect(GameState&, TurnSolver::Plan const&, bool, std::vector<Action, std::allocator<Action> >*, BpPrefixSnap*, BpPrefixSnap const*, int) [clone .lto_priv.0] ()
+#13 0x00005555557ebbd7 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#14 0x000055555581902b in SearchedSecondMainMemoized(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#15 0x00005555558172a7 in SolveSecondMainInSearch(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#16 0x0000555555815de2 in ApplySecondMainInSearch(GameState&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#17 0x00005555557ec163 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#18 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#19 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#20 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#21 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#22 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#23 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#24 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#25 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#26 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#27 0x00005555559c2ce3 in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#28 0x00005555559c265a in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#29 0x00005555559358cb in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(std::vector<Action, std::allocator<Action> > const&)#3}::operator()(std::vector<Action, std::allocator<Action> > const&) const ()
+#30 0x00005555558e8f6f in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&) [clone .constprop.0] ()
+#31 0x00005555558e6659 in GameEngine::MainPhase(GameState&, bool) ()
+#32 0x00005555558e0425 in GameEngine::RunTurnFrom(GameState&, GameEngine::ResumeAt) ()
+#33 0x00005555558e0250 in GameEngine::PlayOutFrom(GameState&, int, GameEngine::ResumeAt) ()
+#34 0x000055555596803f in AIEngine::RolloutWinTurnFrom(GameState, int, GameEngine::ResumeAt, int*) [clone .constprop.0] ()
+#35 0x0000555555967d93 in AIEngine::RolloutWinTurn(GameState, int, int*) [clone .constprop.0] ()
+#36 0x00005555559b0e8e in AIEngine::BottomCards(GameState&, int, int)::{lambda(unsigned int)#2}::operator()(unsigned int) const [clone .lto_priv.0] ()
+#37 0x000055555591e8f1 in AIEngine::BottomCards(GameState&, int, int) ()
+#38 0x00005555558dc99c in AIEngine::HandleMulligan(GameState&, int) ()
+#39 0x00005555558dbfd9 in GameEngine::RunGame(GameState&, int) ()
+#40 0x0000555555bc574b in GoldFishRunner::Run(Decklist const&, int, unsigned long, int, MulliganProfile const&, std::filesystem::__cxx11::path const&, int, int, int, int, int, std::vector<int, std::allocator<int> >)::{lambda()#1}::operator()() const ()
+#41 0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#42 0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#43 0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 2 (Thread 0x7ffff6dff6c0 (LWP 1345619) "mtg_ab3_d6a760e"):
+#0  0x00007ffff77f3adf in __GI___clock_nanosleep (clock_id=..., flags=..., req=..., rem=...) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:78
+#1  0x00007ffff7800a27 in __GI___nanosleep (req=..., rem=...) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+#2  0x000055555589bc31 in membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const ()
+#3  0x000055555589bba0 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}> > >::_M_run() ()
+#4  0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#6  0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 1 (Thread 0x7ffff7702c40 (LWP 1345616) "mtg_ab3_d6a760e"):
+#0  0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (cancel=..., private=..., abstime=..., clockid=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:87
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=..., expected=..., clockid=..., abstime=..., private=...) at ./nptl/futex-internal.c:139
+#3  0x00007ffff77a57a3 in __pthread_clockjoin_ex (threadid=..., thread_return=..., clockid=..., abstime=..., block=...) at ./nptl/pthread_join_common.c:102
+#4  0x00007ffff7b1ee33 in std::thread::join() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x0000555555897aab in main ()
+
+Thread 1 "mtg_ab3_d6a760e" received signal SIGINT, Interrupt.
+0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+57	in ./nptl/futex-internal.c
+==== SAMPLE 3
+
+Thread 3 (Thread 0x7ffff607e6c0 (LWP 1345623) "mtg_ab3_d6a760e"):
+#0  0x00007ffff77a7f4d in ___pthread_mutex_trylock (mutex=...) at ./nptl/pthread_mutex_trylock.c:74
+#1  0x00007ffff7d345da in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#2  0x00007ffff7d5a701 in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#3  0x00007ffff7d5ab04 in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#4  0x00007ffff7d5ac8a in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#5  0x00007ffff7d3d7bf in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#6  0x00007ffff7d43179 in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#7  0x00007ffff7d43844 in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#8  0x00007ffff7ce4dba in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#9  0x00007ffff7d5df1f in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#10 0x00007ffff7cd379f in ?? () from /lib/x86_64-linux-gnu/libjemalloc.so.2
+#11 0x00005555555d11e9 in operator new(unsigned long) ()
+#12 0x000055555576d09b in TurnSolver::Plan::Plan(TurnSolver::Plan const&) [clone .lto_priv.0] ()
+#13 0x0000555555697c55 in AppendBreakpointVariants(GameState const&, std::vector<TurnSolver::Plan, std::allocator<TurnSolver::Plan> >&) [clone .lto_priv.0] ()
+#14 0x0000555555601153 in EnumeratePlansWithLandUncached(GameState const&, bool) ()
+#15 0x00005555555ff7a8 in EnumeratePlansWithLand(GameState const&, bool) [clone .lto_priv.0] ()
+#16 0x00005555557e8c77 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#17 0x000055555581902b in SearchedSecondMainMemoized(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#18 0x00005555558172a7 in SolveSecondMainInSearch(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#19 0x0000555555815de2 in ApplySecondMainInSearch(GameState&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#20 0x00005555557ec163 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#21 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#22 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#23 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#24 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#25 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#26 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#27 0x00005555559c2ce3 in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#28 0x00005555559c265a in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#29 0x00005555559358cb in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(std::vector<Action, std::allocator<Action> > const&)#3}::operator()(std::vector<Action, std::allocator<Action> > const&) const ()
+#30 0x00005555558e8f6f in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&) [clone .constprop.0] ()
+#31 0x00005555558e6659 in GameEngine::MainPhase(GameState&, bool) ()
+#32 0x00005555558e0425 in GameEngine::RunTurnFrom(GameState&, GameEngine::ResumeAt) ()
+#33 0x00005555558e0250 in GameEngine::PlayOutFrom(GameState&, int, GameEngine::ResumeAt) ()
+#34 0x000055555596803f in AIEngine::RolloutWinTurnFrom(GameState, int, GameEngine::ResumeAt, int*) [clone .constprop.0] ()
+#35 0x0000555555967d93 in AIEngine::RolloutWinTurn(GameState, int, int*) [clone .constprop.0] ()
+#36 0x00005555559b0e8e in AIEngine::BottomCards(GameState&, int, int)::{lambda(unsigned int)#2}::operator()(unsigned int) const [clone .lto_priv.0] ()
+#37 0x000055555591e8f1 in AIEngine::BottomCards(GameState&, int, int) ()
+#38 0x00005555558dc99c in AIEngine::HandleMulligan(GameState&, int) ()
+#39 0x00005555558dbfd9 in GameEngine::RunGame(GameState&, int) ()
+#40 0x0000555555bc574b in GoldFishRunner::Run(Decklist const&, int, unsigned long, int, MulliganProfile const&, std::filesystem::__cxx11::path const&, int, int, int, int, int, std::vector<int, std::allocator<int> >)::{lambda()#1}::operator()() const ()
+#41 0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#42 0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#43 0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 2 (Thread 0x7ffff6dff6c0 (LWP 1345619) "mtg_ab3_d6a760e"):
+#0  0x00007ffff77f3adf in __GI___clock_nanosleep (clock_id=..., flags=..., req=..., rem=...) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:78
+#1  0x00007ffff7800a27 in __GI___nanosleep (req=..., rem=...) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+#2  0x000055555589bc31 in membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const ()
+#3  0x000055555589bba0 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}> > >::_M_run() ()
+#4  0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#6  0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 1 (Thread 0x7ffff7702c40 (LWP 1345616) "mtg_ab3_d6a760e"):
+#0  0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (cancel=..., private=..., abstime=..., clockid=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:87
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=..., expected=..., clockid=..., abstime=..., private=...) at ./nptl/futex-internal.c:139
+#3  0x00007ffff77a57a3 in __pthread_clockjoin_ex (threadid=..., thread_return=..., clockid=..., abstime=..., block=...) at ./nptl/pthread_join_common.c:102
+#4  0x00007ffff7b1ee33 in std::thread::join() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x0000555555897aab in main ()
+
+Thread 1 "mtg_ab3_d6a760e" received signal SIGTERM, Terminated.
+0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+57	in ./nptl/futex-internal.c
+==== SAMPLE 4
+
+Thread 3 (Thread 0x7ffff607e6c0 (LWP 1345623) "mtg_ab3_d6a760e"):
+#0  0x00005555557e11c8 in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#1  0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#2  0x000055555581902b in SearchedSecondMainMemoized(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#3  0x00005555558172a7 in SolveSecondMainInSearch(GameState const&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#4  0x0000555555815de2 in ApplySecondMainInSearch(GameState&, int, int, SearchBudget*, bool, TranspositionTable*, bool) [clone .lto_priv.0] ()
+#5  0x00005555557ec163 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#6  0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#7  0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#8  0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#9  0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#10 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#11 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#12 0x00005555557e4081 in SimulateToEndImpl(GameState&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#13 0x00005555557e126f in SimulateToEnd(GameState&&, int, int, SearchBudget*, int, bool, TranspositionTable*) [clone .lto_priv.0] ()
+#14 0x00005555557eb120 in TurnSolver::SolveWithLookahead(GameState const&, bool, int, int, SearchBudget*, bool, bool, TranspositionTable*, int*, int*) ()
+#15 0x00005555559c2ce3 in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#16 0x00005555559c265a in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(int)#1}::operator()(int) const ()
+#17 0x00005555559358cb in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&)::{lambda(std::vector<Action, std::allocator<Action> > const&)#3}::operator()(std::vector<Action, std::allocator<Action> > const&) const ()
+#18 0x00005555558e8f6f in AIEngine::TakeTurn(GameState&, bool, std::function<void (GameState&)> const&) [clone .constprop.0] ()
+#19 0x00005555558e6659 in GameEngine::MainPhase(GameState&, bool) ()
+#20 0x00005555558e0425 in GameEngine::RunTurnFrom(GameState&, GameEngine::ResumeAt) ()
+#21 0x00005555558e0250 in GameEngine::PlayOutFrom(GameState&, int, GameEngine::ResumeAt) ()
+#22 0x000055555596803f in AIEngine::RolloutWinTurnFrom(GameState, int, GameEngine::ResumeAt, int*) [clone .constprop.0] ()
+#23 0x0000555555967d93 in AIEngine::RolloutWinTurn(GameState, int, int*) [clone .constprop.0] ()
+#24 0x00005555559b0e8e in AIEngine::BottomCards(GameState&, int, int)::{lambda(unsigned int)#2}::operator()(unsigned int) const [clone .lto_priv.0] ()
+#25 0x000055555591e8f1 in AIEngine::BottomCards(GameState&, int, int) ()
+#26 0x00005555558dc99c in AIEngine::HandleMulligan(GameState&, int) ()
+#27 0x00005555558dbfd9 in GameEngine::RunGame(GameState&, int) ()
+#28 0x0000555555bc574b in GoldFishRunner::Run(Decklist const&, int, unsigned long, int, MulliganProfile const&, std::filesystem::__cxx11::path const&, int, int, int, int, int, std::vector<int, std::allocator<int> >)::{lambda()#1}::operator()() const ()
+#29 0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#30 0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#31 0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 2 (Thread 0x7ffff6dff6c0 (LWP 1345619) "mtg_ab3_d6a760e"):
+#0  0x00007ffff77f3adf in __GI___clock_nanosleep (clock_id=..., flags=..., req=..., rem=...) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:78
+#1  0x00007ffff7800a27 in __GI___nanosleep (req=..., rem=...) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+#2  0x000055555589bc31 in membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const ()
+#3  0x000055555589bba0 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<membudget::StartRssWatchdog(char const*)::{lambda()#1}::operator()() const::{lambda()#1}> > >::_M_run() ()
+#4  0x00007ffff7b1edb4 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x00007ffff77a3aa4 in start_thread (arg=...) at ./nptl/pthread_create.c:447
+#6  0x00007ffff7830c3c in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 1 (Thread 0x7ffff7702c40 (LWP 1345616) "mtg_ab3_d6a760e"):
+#0  0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (cancel=..., private=..., abstime=..., clockid=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:87
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=..., expected=..., clockid=..., abstime=..., private=...) at ./nptl/futex-internal.c:139
+#3  0x00007ffff77a57a3 in __pthread_clockjoin_ex (threadid=..., thread_return=..., clockid=..., abstime=..., block=...) at ./nptl/pthread_join_common.c:102
+#4  0x00007ffff7b1ee33 in std::thread::join() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x0000555555897aab in main ()
+[Thread 0x7ffff6dff6c0 (LWP 1345619) exited]
+[Thread 0x7ffff7702c40 (LWP 1345616) exited]
+[Thread 0x7ffff607e6c0 (LWP 1345623) exited]
+[New process 1345616]
+
+Program terminated with signal SIGTERM, Terminated.
+The program no longer exists.
+==== SAMPLE 5
+gdb exit=1

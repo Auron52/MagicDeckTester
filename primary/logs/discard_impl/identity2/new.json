@@ -1,0 +1,186 @@
+{
+ "jobs": [
+  {
+   "name": "hinata_d0",
+   "deck": "decks/Hinata2/Hinata2.cod",
+   "profile": "decks/Hinata2/Hinata2.profile.json",
+   "games": 60,
+   "seed": 4200001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "hinata_d3",
+   "deck": "decks/Hinata2/Hinata2.cod",
+   "profile": "decks/Hinata2/Hinata2.profile.json",
+   "games": 30,
+   "seed": 4201001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "breaching_d0",
+   "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+   "profile": "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json",
+   "games": 60,
+   "seed": 4202001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "breaching_d3",
+   "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+   "profile": "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json",
+   "games": 30,
+   "seed": 4203001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "mirrorwing_d0",
+   "deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+   "profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+   "games": 60,
+   "seed": 4204001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "mirrorwing_d3",
+   "deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+   "profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+   "games": 30,
+   "seed": 4205001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "burn_d0",
+   "deck": "decks/burn/burn.txt",
+   "profile": "decks/burn/burn.profile.json",
+   "games": 60,
+   "seed": 4206001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "burn_d3",
+   "deck": "decks/burn/burn.txt",
+   "profile": "decks/burn/burn.profile.json",
+   "games": 30,
+   "seed": 4207001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "fungus_d0",
+   "deck": "decks/Fungus/Fungus.cod",
+   "profile": "decks/Fungus/Fungus.profile.json",
+   "games": 60,
+   "seed": 4208001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "fungus_d3",
+   "deck": "decks/Fungus/Fungus.cod",
+   "profile": "decks/Fungus/Fungus.profile.json",
+   "games": 30,
+   "seed": 4209001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "angels_d0",
+   "deck": "decks/Angels/Angels.cod",
+   "profile": "decks/Angels/Angels.profile.json",
+   "games": 60,
+   "seed": 4210001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "angels_d3",
+   "deck": "decks/Angels/Angels.cod",
+   "profile": "decks/Angels/Angels.profile.json",
+   "games": 30,
+   "seed": 4211001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "edf_d0",
+   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 60,
+   "seed": 4212001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "edf_d3",
+   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 30,
+   "seed": 4213001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "ds_d0",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 120,
+   "seed": 4300001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_USER_ORDER": false
+   }
+  },
+  {
+   "name": "ds_d3",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 40,
+   "seed": 4310001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true,
+   "flags": {
+    "MTG_DRAGONSTORM_USER_ORDER": false
+   }
+  }
+ ]
+}

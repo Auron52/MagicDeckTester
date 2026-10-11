@@ -1,0 +1,80 @@
+Loaded 60 mainboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1511095 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=1 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Elvish Archdruid|Priest of Titania|Selesnya Sanctuary|Feed the Clan
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Forest
+[uo-order] gs=1511095 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=1 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Elvish Archdruid|Priest of Titania|Selesnya Sanctuary|Feed the Clan
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Forest
+[uo-order] gs=1511095 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=2 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Elvish Archdruid|Priest of Titania|Feed the Clan|Priest of Titania|Forest
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g1 c0 *0} own: Selesnya Sanctuary(T)
+[uo-order] gs=1511095 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=2 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Elvish Archdruid|Priest of Titania|Feed the Clan|Priest of Titania|Forest
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary(T)
+[uo-order] gs=1511095 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Nykthos Paragon|Elvish Archdruid|Priest of Titania|Feed the Clan|Priest of Titania|Forest
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary
+[uo-order] gs=1511095 t=3 m=1 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Elvish Archdruid
+[uo-state] gs=1511095 t=3 cap=-1 pool{w0 u0 b0 r0 g1 c0 *2} hand=Nykthos Paragon|Elvish Archdruid|Priest of Titania|Feed the Clan|Priest of Titania|Llanowar Elves
+[exec-tap] T3 before Elvish Archdruid: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Selesnya Sanctuary Forest
+[uo-cast] gs=1511095 t=3 m=1 d=0 card=Elvish Archdruid num=22 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T3 Elvish Archdruid tapped: Selesnya Sanctuary Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary(T) Forest(T) Elvish Archdruid
+[uo-order] gs=1511095 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Nykthos Paragon|Priest of Titania|Feed the Clan|Priest of Titania|Llanowar Elves
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary Forest Elvish Archdruid
+[uo-order] gs=1511095 t=4 m=1 route=clean pool=4 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Priest of Titania|Priest of Titania
+[uo-state] gs=1511095 t=4 cap=-1 pool{w0 u0 b0 r0 g2 c0 *2} hand=Nykthos Paragon|Priest of Titania|Feed the Clan|Priest of Titania|Llanowar Elves|Feed the Clan
+[exec-tap] T4 before Priest of Titania: float{w0 u0 b0 r0 g2 c0 *2} untapped: 1/1 Creature
+[uo-cast] gs=1511095 t=4 m=1 d=0 card=Priest of Titania num=50 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T4 Priest of Titania tapped:  float{w0 u0 b0 r0 g1 c0 *1}
+[exec-tap] T4 before Priest of Titania: float{w0 u0 b0 r0 g1 c0 *1} untapped: 1/1 Creature Priest of Titania
+[uo-cast] gs=1511095 t=4 m=1 d=0 card=Priest of Titania num=49 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T4 Priest of Titania tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary(T) Forest(T) Elvish Archdruid(T) Priest of Titania Priest of Titania
+[uo-order] gs=1511095 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Nykthos Paragon|Feed the Clan|Llanowar Elves|Feed the Clan
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary Forest Elvish Archdruid Priest of Titania Priest of Titania
+[uo-order] gs=1511095 t=5 m=1 route=clean pool=12 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Llanowar Elves|Blossoming Bogbeast|Feed the Clan|Feed the Clan
+[uo-state] gs=1511095 t=5 cap=-1 pool{w1 u0 b0 r0 g5 c0 *6} hand=Nykthos Paragon|Feed the Clan|Llanowar Elves|Feed the Clan|Blossoming Bogbeast
+[exec-tap] T5 before Llanowar Elves: float{w1 u0 b0 r0 g5 c0 *6} untapped: 1/1 Creature
+[uo-cast] gs=1511095 t=5 m=1 d=0 card=Llanowar Elves num=41 staged=0 splice=0 paid=1 pool=12
+[exec-tap] T5 Llanowar Elves tapped:  float{w1 u0 b0 r0 g4 c0 *6}
+[exec-tap] T5 before Blossoming Bogbeast: float{w1 u0 b0 r0 g4 c0 *6} untapped: 1/1 Creature Llanowar Elves
+[uo-cast] gs=1511095 t=5 m=1 d=0 card=Blossoming Bogbeast num=10 staged=0 splice=0 paid=1 pool=11
+[exec-tap] T5 Blossoming Bogbeast tapped:  float{w1 u0 b0 r0 g3 c0 *2}
+[exec-tap] T5 before Feed the Clan: float{w1 u0 b0 r0 g3 c0 *2} untapped: 1/1 Creature Llanowar Elves Blossoming Bogbeast
+[uo-cast] gs=1511095 t=5 m=1 d=0 card=Feed the Clan num=28 staged=0 splice=0 paid=1 pool=6
+[exec-tap] T5 Feed the Clan tapped:  float{w1 u0 b0 r0 g2 c0 *1}
+[exec-tap] T5 before Feed the Clan: float{w1 u0 b0 r0 g2 c0 *1} untapped: 1/1 Creature Llanowar Elves Blossoming Bogbeast
+[uo-cast] gs=1511095 t=5 m=1 d=0 card=Feed the Clan num=30 staged=0 splice=0 paid=1 pool=4
+[exec-tap] T5 Feed the Clan tapped:  float{w1 u0 b0 r0 g1 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary(T) Forest(T) Elvish Archdruid(T) Priest of Titania(T) Priest of Titania(T) Llanowar Elves Blossoming Bogbeast
+[uo-order] gs=1511095 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Nykthos Paragon
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary Forest Elvish Archdruid Priest of Titania Priest of Titania Llanowar Elves Blossoming Bogbeast
+[uo-order] gs=1511095 t=6 m=1 route=clean pool=16 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ageless Entity
+[uo-state] gs=1511095 t=6 cap=-1 pool{w0 u0 b0 r0 g14 c0 *2} hand=Nykthos Paragon|Ageless Entity
+[exec-tap] T6 before Ageless Entity: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Selesnya Sanctuary Forest Elvish Archdruid Priest of Titania Priest of Titania Llanowar Elves Blossoming Bogbeast
+[uo-cast] gs=1511095 t=6 m=1 d=0 card=Ageless Entity num=7 staged=0 splice=0 paid=1 pool=9
+[exec-tap] T6 Ageless Entity tapped: Selesnya Sanctuary Forest Elvish Archdruid  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary(T) Forest(T) Elvish Archdruid(T) Priest of Titania(T) Priest of Titania(T) Llanowar Elves(T) Blossoming Bogbeast(T) Ageless Entity
+[uo-order] gs=1511095 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511095 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Nykthos Paragon
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Selesnya Sanctuary Forest Elvish Archdruid Priest of Titania Priest of Titania Llanowar Elves Blossoming Bogbeast Ageless Entity
+[uo-order] gs=1511095 t=7 m=1 route=clean pool=16 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Verdant Sun's Avatar
+[uo-state] gs=1511095 t=7 cap=-1 pool{w0 u0 b0 r0 g14 c0 *2} hand=Nykthos Paragon|Verdant Sun's Avatar
+[exec-tap] T7 before Verdant Sun's Avatar: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Selesnya Sanctuary Forest Elvish Archdruid Priest of Titania Priest of Titania Llanowar Elves Blossoming Bogbeast Ageless Entity
+[uo-cast] gs=1511095 t=7 m=1 d=0 card=Verdant Sun's Avatar num=55 staged=0 splice=0 paid=1 pool=9
+[exec-tap] T7 Verdant Sun's Avatar tapped: Selesnya Sanctuary Forest Elvish Archdruid  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1511095
+Games played  : 1
+avg (turns)   : 7.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

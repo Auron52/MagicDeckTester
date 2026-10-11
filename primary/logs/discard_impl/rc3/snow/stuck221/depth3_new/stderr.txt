@@ -1,0 +1,247 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=3 budget=20ms source=cli
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[dprog] bot  t1 pre  ms=452 units=23518 work=23518 game_work=23518
+[dprog] bot  t2 pre  ms=64 units=4981 work=4981 game_work=28499
+[dprog] bot  t3 pre  ms=781 units=36722 work=36722 game_work=65221
+[dprog] bot  t4 pre  ms=123 units=6292 work=6292 game_work=71513
+[dprog] bot  t5 pre  ms=538 units=20409 work=20409 game_work=91922
+[dprog] bot  t6 pre  ms=6 units=74 work=74 game_work=91996
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=91996
+[dprog] bot  t1 pre  ms=155 units=9629 work=9629 game_work=101625
+[dprog] bot  t2 pre  ms=420 units=21598 work=21598 game_work=123223
+[dprog] bot  t3 pre  ms=454 units=23953 work=23953 game_work=147176
+[dprog] bot  t4 pre  ms=267 units=17766 work=17766 game_work=164942
+[dprog] bot  t5 pre  ms=7313 units=323564 work=323564 game_work=563658
+[dprog] bot  t6 pre  ms=40 units=1546 work=1546 game_work=565204
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=565204
+[dprog] bot  t1 pre  ms=608 units=20314 work=20314 game_work=585518
+[dprog] bot  t2 pre  ms=480 units=17009 work=17009 game_work=602527
+[dprog] bot  t3 pre  ms=643 units=25084 work=25084 game_work=627611
+[dprog] bot  t4 pre  ms=1272 units=50173 work=50173 game_work=677784
+[dprog] bot  t5 pre  ms=1314 units=55578 work=55578 game_work=733362
+[dprog] bot  t6 pre  ms=1058 units=34824 work=34824 game_work=794880
+[dprog] bot  t7 pre  ms=28 units=101 work=101 game_work=813135
+[dprog] bot  t1 pre  ms=406 units=18311 work=18311 game_work=831446
+[dprog] bot  t2 pre  ms=917 units=50846 work=50846 game_work=882292
+[dprog] bot  t3 pre  ms=821 units=39218 work=39218 game_work=921510
+[dprog] bot  t4 pre  ms=61 units=2818 work=2818 game_work=924328
+[dprog] bot  t5 pre  ms=2 units=19 work=19 game_work=929188
+[dprog] bot  t6 pre  ms=0 units=0 work=0 game_work=929188
+[dprog] bot  t1 pre  ms=91 units=3521 work=3521 game_work=932709
+[dprog] bot  t2 pre  ms=420 units=17949 work=17949 game_work=950658
+[dprog] bot  t3 pre  ms=2536 units=116738 work=116738 game_work=1067396
+[dprog] bot  t4 pre  ms=391 units=12540 work=12540 game_work=1079936
+[dprog] bot  t5 pre  ms=305 units=10714 work=10714 game_work=1090650
+[dprog] bot  t6 pre  ms=11 units=149 work=149 game_work=1091330
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=1091330
+[dprog] bot  t1 pre  ms=481 units=17151 work=17151 game_work=1108481
+[dprog] bot  t2 pre  ms=495 units=23525 work=23525 game_work=1132006
+[dprog] bot  t3 pre  ms=616 units=34283 work=34283 game_work=1166289
+[dprog] bot  t4 pre  ms=620 units=34200 work=34200 game_work=1200489
+[dprog] bot  t5 pre  ms=178 units=8254 work=8254 game_work=1314933
+[dprog] bot  t6 pre  ms=15520 units=453447 work=453447 game_work=1768380
+[dprog] bot  t7 pre  ms=1 units=1 work=1 game_work=1768385
+[dprog] bot  t1 pre  ms=122 units=5240 work=5240 game_work=1773625
+[dprog] bot  t2 pre  ms=290 units=15380 work=15380 game_work=1789005
+[dprog] bot  t3 pre  ms=268 units=12595 work=12595 game_work=1801600
+[dprog] bot  t4 pre  ms=730 units=29301 work=29301 game_work=1830901
+[dprog] bot  t5 pre  ms=3 units=76 work=76 game_work=1830977
+[dprog] bot  t6 pre  ms=0 units=0 work=0 game_work=1830977
+[dprog] bot  t1 pre  ms=270 units=9941 work=9941 game_work=1840918
+[dprog] bot  t2 pre  ms=164 units=7767 work=7767 game_work=1848685
+[dprog] bot  t3 pre  ms=448 units=18899 work=18899 game_work=1867584
+[dprog] bot  t4 pre  ms=757 units=37885 work=37885 game_work=1905469
+[dprog] bot  t5 pre  ms=628 units=25901 work=25901 game_work=1931370
+[dprog] bot  t6 pre  ms=5 units=132 work=132 game_work=1932117
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=1932117
+[dprog] bot  t1 pre  ms=540 units=23485 work=23485 game_work=1955602
+[dprog] bot  t2 pre  ms=943 units=47616 work=47616 game_work=2003218
+[dprog] bot  t3 pre  ms=939 units=50548 work=50548 game_work=2053766
+[dprog] bot  t4 pre  ms=2181 units=109774 work=109774 game_work=2163540
+[dprog] bot  t5 pre  ms=394 units=18013 work=18013 game_work=4282649
+[dprog] bot  t6 pre  ms=1 units=1 work=1 game_work=5382981
+[dprog] bot  t1 pre  ms=120 units=8146 work=8146 game_work=5391127
+[dprog] bot  t2 pre  ms=285 units=18564 work=18564 game_work=5409691
+[dprog] bot  t3 pre  ms=249 units=13664 work=13664 game_work=5423355
+[dprog] bot  t4 pre  ms=522 units=32393 work=32393 game_work=5455748
+[dprog] bot  t5 pre  ms=7 units=155 work=155 game_work=5455903
+[dprog] bot  t6 pre  ms=0 units=0 work=0 game_work=5455903
+[dprog] bot  t1 pre  ms=165 units=13520 work=13520 game_work=5469423
+[dprog] bot  t2 pre  ms=239 units=20373 work=20373 game_work=5489796
+[dprog] bot  t3 pre  ms=494 units=37121 work=37121 game_work=5526917
+[dprog] bot  t4 pre  ms=1032 units=69860 work=69860 game_work=5596777
+[dprog] bot  t5 pre  ms=50 units=3645 work=3645 game_work=5600422
+[dprog] bot  t6 pre  ms=8 units=122 work=122 game_work=5600544
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=5600544
+[dprog] bot  t1 pre  ms=48 units=3212 work=3212 game_work=5603756
+[dprog] bot  t2 pre  ms=175 units=9434 work=9434 game_work=5613190
+[dprog] bot  t3 pre  ms=145 units=8664 work=8664 game_work=5621854
+[dprog] bot  t4 pre  ms=75 units=5310 work=5310 game_work=5627164
+[dprog] bot  t5 pre  ms=2237 units=117919 work=117919 game_work=5770188
+[dprog] bot  t6 pre  ms=5 units=56 work=56 game_work=5801827
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=5801827
+[dprog] bot  t1 pre  ms=95 units=5085 work=5085 game_work=5806912
+[dprog] bot  t2 pre  ms=326 units=18547 work=18547 game_work=5825459
+[dprog] bot  t3 pre  ms=85 units=5004 work=5004 game_work=5830463
+[dprog] bot  t4 pre  ms=522 units=26195 work=26195 game_work=5856658
+[dprog] bot  t5 pre  ms=606 units=30826 work=30826 game_work=5887484
+[dprog] bot  t6 pre  ms=6 units=157 work=157 game_work=5887641
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=5887641
+[dprog] bot  t1 pre  ms=389 units=19425 work=19425 game_work=5907066
+[dprog] bot  t2 pre  ms=586 units=33681 work=33681 game_work=5940747
+[dprog] bot  t3 pre  ms=666 units=35273 work=35273 game_work=5976020
+[dprog] bot  t4 pre  ms=623 units=35890 work=35890 game_work=6011910
+[dprog] bot  t5 pre  ms=2141 units=105132 work=105132 game_work=6147351
+[dprog] bot  t6 pre  ms=1331 units=11739 work=11739 game_work=6159090
+[dprog] bot  t7 pre  ms=0 units=0 work=0 game_work=6159090
+[dprog] bot  t1 pre  ms=82 units=4651 work=4651 game_work=6163741
+[dprog] bot  t2 pre  ms=176 units=10723 work=10723 game_work=6174464
+[dprog] bot  t3 pre  ms=153 units=7130 work=7130 game_work=6181594
+[dprog] bot  t4 pre  ms=377 units=19541 work=19541 game_work=6201135
+[dprog] bot  t5 pre  ms=5 units=67 work=67 game_work=6201990
+[dprog] bot  t6 pre  ms=0 units=0 work=0 game_work=6201990
+[dprog] bot  t1 pre  ms=201 units=10164 work=10164 game_work=6212154
+[dprog] bot  t2 pre  ms=467 units=22703 work=22703 game_work=6234857
+[dprog] bot  t3 pre  ms=367 units=18992 work=18992 game_work=6253849
+[dprog] bot  t4 pre  ms=743 units=43193 work=43193 game_work=6297042
+[dprog] bot  t5 pre  ms=8 units=159 work=159 game_work=6297201
+[dprog] bot  t6 pre  ms=0 units=0 work=0 game_work=6297201
+[dprog] real t1 pre  ms=73 units=5257 work=5257 game_work=6302458
+[dprog] real t2 pre  ms=221 units=16198 work=16198 game_work=6318656
+[dprog] real t3 pre  ms=220 units=12813 work=12813 game_work=6331469
+[dprog] real t4 pre  ms=486 units=29795 work=29795 game_work=6361264
+[dprog] real t5 pre  ms=2 units=76 work=76 game_work=6361340
+[dprog] real t6 pre  ms=0 units=0 work=0 game_work=6361340
+[goldfish] SLOW-GAME 160753ms  gi=221 wt=6 units=6361340  repro: --seed 1540222 --game-index 221 --games 1
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/stuck221/depth3_new
+ACT_DROP_AUDIT  DEFECTS tapped=410377 unpaid=378187 | benign gone=0 noTap=0 | fired=6147470  <-- enumerated activations the trailing pass silently declined
+ACT_HOLD_COST   pay_calls=24308625 hold_mask=11072469 (45.55%) hold_solo=11072469 hold_retry=659974 solo_retry=659974 (2.71% of pay_calls = the EXTRA solves)
+[enum-memo] hits=292 misses=32566 clears=0
+[solve-memo] hits=433411 misses=1027046 clears=61
+[m2-search-memo] hits=10695 misses=20141 clears=1
+
+=== GREEDY consider() FUNNEL (cumulative PASS counts; each line's drop from the one above = rejections at that stage) ===
+entered                    : 20134580
+  passed subset rules      : 19373339
+  passed flat mana         : 16842425
+  passed SubsetPayable     : 16842368
+  passed ColorFeasibility  : 16841833
+  survivors (fully scored) : 16841833
+  [rescue] SubsetPayableWithFilters calls=2979814  rescued=450549  subset-casts-aura=0
+  [rescue] of those, TOTAL-short (unrescuable by a re-colouring filter): 113970
+  [rescue]   ...and rescued anyway (MUST BE 0 -- soundness self-check): 0
+  [rescue] per-clause: raw pool   short=113970  rescued-anyway=0
+  [rescue]             debited eff short=432789  rescued-anyway=8287
+  [rescue]             noncreature   short=14993  rescued-anyway=4492
+
+=== ENUM STATS ===
+enumeration calls          : 1814177   (with a mana side: 385075)
+odometer positions         : 106626197
+mana-side combos raw       : 808632
+mana-side combos KEPT      : 808632   (after the existing symmetry prunes)
+  distinct exact           : 789391   (collapse 1.02x)  [mana+storm+cards+colour]
+  distinct demand-bucketed : 789391   (collapse 1.02x)  [+ colours capped at demand]
+  distinct mana+storm      : 789391   (collapse 1.02x)  [cards-spent identity DROPPED]
+  distinct mana only       : 789391   (collapse 1.02x)  [storm DROPPED too]
+==================
+--- two-stage gating potential ---
+payoff-side lines          : 18934210   (unaffordable under EVERY mana line: 1713543 = 9.0%)
+(mana x payoff) pairs      : 38434424
+  pairs that are payable   : 33975118   (88.4%)
+  => two-stage visits      : 53717960   vs flat 38434424   (0.72x fewer)
+==================
+
+=== BRANCH SHAPE: per TURN (which turns the plans land on) ===
+ turn      calls        sum_odo        plans        dedup   avg_odo   avgGrp   avgInd  avgBoard
+    1         63            588           12           12       9.3     3.03     0.00       0.7
+    2        407           3414          241          241       8.4     2.80     0.00       1.9
+    3       2503          20672         2793         2793       8.3     2.78     0.00       3.8
+    4      13947         197873        36518        36518      14.2     3.40     0.00       6.5
+    5      57849         662942       173932       173932      11.5     2.86     0.00       9.1
+    6      90387        1000484       295050       295050      11.1     3.00     0.00      11.8
+    7     462452        8075579      2722979      2722979      17.5     3.44     0.00      17.5
+    8     159523        2615679       993573       993573      16.4     3.37     0.00      17.4
+TOTAL calls=787131 odo=12577231 plans=4225098 dedup=4225098
+INTERCHANGEABLE-COPY FOLD (priced, not applied): odo 12577231 -> 11150579 = 1.128x over the WHOLE search.
+  Collapses duplicate HAND COPIES of a card (today each copy is its own x2 group) and aura hosts of one
+  class, via C(s+k,k) instead of (1+s)^k. sac_victim_id is kept, so the Saproling-victim symmetry is NOT claimed.
+LAND-AURA HOST FOLD (priced, not applied): odo 12577231 -> 12577231 = 1.000x over the WHOLE search;
+  it touches 0 of 787131 calls (0.00%).  Per-turn rows above are unfolded.
+  WHY THE TOTAL IS SMALL: on the calls it DOES touch, odo 0 -> 0 = 0.00x.
+  That is the real effect; the 0.00% reach is the dilution. The axis is absent from most decisions.
+
+=== BRANCH SHAPE: option-GROUP SIZE histogram (odo is the product over ALL of these) ===
+ turn         1         2         3         4         5         6         7        8+
+    1       191         0         0         0         0         0         0         0
+    2      1139         0         0         0         0         0         0         0
+    3      6962         0         0         0         0         0         0         0
+    4     47489         0         0         0         0         0         0         0
+    5    165644         0         0         0         0         0         0         0
+    6    271055         0         0         0         0         0         0         0
+    7   1592072         0         0         0         0         0         0         0
+    8    537604         0         0         0         0         0         0         0
+
+=== BRANCH SHAPE: subset funnel -- what the SHARED-RESOURCE constraint rejects AFTER generating ===
+ turn        entered    dupSacSrc wasteSacMana   overFodder        other       PASSED
+    3            768            0            0            0            0          768
+    4          19689         1698            0            0            0        17991
+    5         284148        57836            0            0            0       226312
+    6        1157807       138380            0            0            0      1019427
+    7        3609235       108147            0            0            0      3501088
+    8       15062933       455180            0            0            0     14607753
+TOTAL entered=20134580  dupSacSrc=761241 (3.78%)  wasteSacMana=0 (0.00%)  overFodder=0 (0.00%)  other=0 (0.00%)  PASSED=19373339 (96.22%)
+
+=== BRANCH SHAPE: the TWO walks, measured apart ===
+WALK name=SolveUncached visits=20134580 rejectPct=3.78 passed=19373339
+WALK name=EnumeratePlans visits=6209719 rejectPct=5.34 passed=5878285 dupSacSrc=331434 wasteSacMana=0 overFodder=0
+  These are DIFFERENT enumerations. The odo/plans/dedup columns describe
+  EnumeratePlans only; dividing SolveUncached visits by EnumeratePlans plans
+  is not a ratio of anything.
+  SHARED-RESOURCE rejects (the three named) = 761241 = 3.78% of subsets visited.
+  That is the fraction of the walk a constraint-bounded enumeration could have
+  skipped BEFORE generating, not the fraction of TIME it would save.
+[bp-where] children: rollout=0 (0.0%) search=3769 (100.0%) | adopted: rollout=0 search=74
+[bp-ahead] turns ahead of ROOT: children / adopted
+[bp-ahead] +0:       823 /       40  ( 21.8% of children,  54.1% of adopted, adopt-rate  4.9%)
+[bp-ahead] +1:      2946 /       34  ( 78.2% of children,  45.9% of adopted, adopt-rate  1.2%)
+[bp-depth] d: pends / children / adopted
+[bp-depth] d1:     1237 /      3721 /       63   ( 98.7% of children,  85.1% of adopted, adopt-rate  1.7%)
+[bp-depth] d2:       29 /        48 /       11   (  1.3% of children,  14.9% of adopted, adopt-rate 22.9%)
+[bp-node] pends=1266 prefix_dupes=10 children=3769 child_dupes=656 adopted=74 empty_adopted=0
+[bp-node] dupes_innode=8 dupes_cross=648 dupes_empty=0 fp_predictable=0 empty_preskips=0
+[bp-cands] LIST FINGERPRINTS: lists=974585 entries=2767074 distinct=2767074 duplicate=0 (0.0%) mean len=2.8 -> 2.8
+[rollout-stats] calls=1169440 turn_steps=1137236 steps_per_call=0.972462
+[rollout-stats] interior_nodes=20786 interior_frac=0.0179496 (of interior+turn_steps)
+[rollout-stats] interior_esc=0 esc_share=0 (interior nodes re-traversed by the heuristic escalation)
+[rollout-stats] plan_axes etbcounter_variants=0 sweep_variants=0 axis_dup_skips=0 m2_variant_dup_skips=0 m2_stillborn_skips=0 armnew_declined_m1=1710 armnew_declined_m2=0 armnew_verify_match=0 armnew_verify_mismatch=0 le_variants=0
+[rollout-stats] nodrop_axes m1: enums=131657 axis_variants=0 | m2: enums=413692 axis_variants=0
+[rollout-stats] w0_nobp skipped=28455  (variants whose base plan's apply reached NO breakpoint, so they ARE that base plan)
+[rollout-stats] w0_unif_collapse skipped=277858  (uniform variants that ARE their rank sibling: the apply reached <= 1 enabled-class breakpoint)
+[rollout-stats] w0_unif_miss nomemo=0 multi=464124 nomemo_share=0  (nomemo = coverage, a lever; multi = 2+ class-on breakpoints, where uniform k is NOT rank k and declining it deletes a line)
+[rollout-stats] cand_scored=2750348 condemn_drops=0 (greedy=0 searched=0 greedy_frac=0)
+[rollout-stats] bp_condemn_seen=5025832 drops=67603 drop_rate=0.0134511 (searched=67603 exec=0 rollout=0 rollout_frac=0)
+[rollout-stats] bp_newonly lists=638404 seen=2913979 dropped=1682163 drop_rate=0.577274 kept_new=1179102 kept_act=10549 kept_unknown=0 kept_plan=42165
+[rollout-stats] bp_armnew measured=1207 empty=256 empty_rate=0.212096 variants_declined=1710
+[rollout-stats] bp_condemn_nowin_trunc=OFF spared_demotions=67603
+[rollout-stats] cont_taps ACTIVATED_same_source=604436 tapped_for_MANA=3001378 (16.7628% double-booking)
+  a source the BASE plan still owes a {T} to, taken by its own breakpoint continuation. ACTIVATED = the continuation re-solved and activated the same physical permanent (fix is enumeration-side); MANA = a continuation cast paid with it (a hold gap)
+[rollout-stats] tapped_why by_cont_ACTIVATION=349208 other=61164 (85.0955% of the `tapped` drop class is this plan's own continuation DOUBLE-BOOKING the source)
+[rollout-stats] snow_look_gate nonland_finds=3908006 mv_pass=3513467 (89.9043%)  COLOUR_would_reject=375937 (10.6999% of mv_pass) [gate off -- census only]
+  every mv_pass opens a nested Solve of the rest of the turn; COLOUR_would_reject is the share of those the found card's PIPS provably cannot use (MTG_SNOW_LOOK_COLOR)
+[rollout-stats] id_depth n=98 mean=1.31633 hist=1:68 2:29 3:1 
+[rollout-stats] committed_depth n=112 mean=0 hist=0:112 
+[rollout-stats] units_total=6361340
+FOLD_PREFIX_MAP armed=1161263 disarmed_by_auto_sel=0 disarmed_by_independent=0
+[rollout-stats] id_pass starts=130 aborted=1 rescuable=0 waste_units=451806 waste_share=0.0710237
+[rollout-stats] heuristic-ladder by committed depth (n, warm units, commit units, per-decision warm/commit): d1=68/0/1359295/0/19989 d2=29/23859/981469/822/33843 d3=1/6389/17129/6389/17129
+[rollout-stats]   heuristic-ladder leaf-TT by committed depth (commit pass: lookups/decision, hit rate; warm passes: lookups/decision, hit rate): d1=2682.19/0.183021 0/0 d2=7328.17/0.316968 185.931/0.625927 d3=2616/0.176223 1020/0.342157
+[rollout-stats]   heuristic-ladder totals: decisions=98 warm=30248 commit=2357893 warm_share_of_ladder=0.0126659
+[rollout-stats]   units.rollout_step=1137236 share=0.178773
+[rollout-stats]   units.fs_pre=10882 share=0.00171065
+[rollout-stats]   units.fs_bp_wave=6135 share=0.000964419
+[rollout-stats]   units.greedy_fallback=1124696 share=0.176802
+[rollout-stats]   units.la_cand=2750348 share=0.432354
+[rollout-stats]   units.la_bp_wave=209703 share=0.0329652
+[rollout-stats]   units.fs_bp_node=3769 share=0.000592485
+[rollout-stats]   units.greedy_walk=1118571 share=0.175839

@@ -1,0 +1,42 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[goldfish] SLOW-GAME 57431ms  gi=285 wt=4 units=62044  repro: --seed 1645286 --game-index 285 --games 1
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/rs_g285_old
+[enum-memo] hits=1 misses=277 clears=0
+[solve-memo] hits=6531 misses=17649 clears=0
+[bp-where] children: rollout=0 (0.0%) search=111 (100.0%) | adopted: rollout=0 search=3
+[bp-ahead] turns ahead of ROOT: children / adopted
+[bp-ahead] +0:        37 /        1  ( 33.3% of children,  33.3% of adopted, adopt-rate  2.7%)
+[bp-ahead] +1:        74 /        2  ( 66.7% of children,  66.7% of adopted, adopt-rate  2.7%)
+[bp-depth] d: pends / children / adopted
+[bp-depth] d1:       96 /       111 /        3   (100.0% of children, 100.0% of adopted, adopt-rate  2.7%)
+[bp-node] pends=96 prefix_dupes=0 children=111 child_dupes=0 adopted=3 empty_adopted=0
+[bp-node] dupes_innode=0 dupes_cross=0 dupes_empty=0 fp_predictable=0 empty_preskips=0
+[bp-cands] LIST FINGERPRINTS: lists=1097 entries=1258 distinct=1258 duplicate=0 (0.0%) mean len=1.1 -> 1.1
+[leaf-eval] published=3693 ties=3317 flips=76 life-equal-ties=263
+[rollout-stats] calls=11607 turn_steps=24449 steps_per_call=2.1064
+[rollout-stats] interior_nodes=298 interior_frac=0.0120419 (of interior+turn_steps)
+[rollout-stats] interior_esc=0 esc_share=0 (interior nodes re-traversed by the heuristic escalation)
+[rollout-stats] plan_axes etbcounter_variants=0 sweep_variants=0 axis_dup_skips=251 m2_variant_dup_skips=0 m2_stillborn_skips=0 armnew_declined_m1=0 armnew_declined_m2=0 armnew_verify_match=0 armnew_verify_mismatch=0 le_variants=0
+[rollout-stats] nodrop_axes m1: enums=715 axis_variants=0 | m2: enums=0 axis_variants=0
+[rollout-stats] w0_nobp skipped=2070  (variants whose base plan's apply reached NO breakpoint, so they ARE that base plan)
+[rollout-stats] cand_scored=11324 condemn_drops=0 (greedy=0 searched=0 greedy_frac=0)
+[rollout-stats] bp_condemn_seen=0 drops=0 drop_rate=0 (searched=0 exec=0 rollout=0 rollout_frac=0)
+[rollout-stats] bp_newonly lists=1105 seen=4147 dropped=2677 drop_rate=0.645527 kept_new=1292 kept_act=178 kept_unknown=0 kept_plan=0
+[rollout-stats] bp_condemn_nowin_trunc=OFF spared_demotions=0
+  NO POWER -- the watermark was never bumped at this site anyway; any work delta is NOT this lever.
+[rollout-stats] id_depth n=4 mean=1.5 hist=1:2 2:2 
+[rollout-stats] committed_depth n=4 mean=0 hist=0:4 
+[rollout-stats] units_total=62044
+FOLD_PREFIX_MAP armed=17602 disarmed_by_auto_sel=0 disarmed_by_independent=0
+[rollout-stats] id_pass starts=6 aborted=0 rescuable=0 waste_units=0 waste_share=0
+[rollout-stats] heuristic-ladder by committed depth (n, warm units, commit units, per-decision warm/commit): d1=2/0/15327/0/7663 d2=2/2455/44262/1227/22131
+[rollout-stats]   heuristic-ladder leaf-TT by committed depth (commit pass: lookups/decision, hit rate; warm passes: lookups/decision, hit rate): d1=1317.5/0.00379507 0/0 d2=4420.5/0.039249 255.5/0.0450098
+[rollout-stats]   heuristic-ladder totals: decisions=4 warm=2455 commit=59589 warm_share_of_ladder=0.0395687
+[rollout-stats]   units.rollout_step=24449 share=0.394059
+[rollout-stats]   units.fs_pre=187 share=0.00301399
+[rollout-stats]   units.greedy_fallback=24180 share=0.389723
+[rollout-stats]   units.la_cand=11324 share=0.182516
+[rollout-stats]   units.la_bp_wave=1793 share=0.0288988
+[rollout-stats]   units.fs_bp_node=111 share=0.00178905

@@ -1,0 +1,18 @@
+fix(solve): the EDF go-off cut verifies an unprojected kill by applying it (MTG_EDF_GOFF_VERIFY_UNPROJECTED)
+
+EDF gi 1676 (seed 1651677, d0) t4: Cloud of Faeries + Eldrazi Displacer live, Conservatory and Mariposa
+for draws, blink k=53 on the menu, "[edf-goff-cut] t4 k=53 projected=0". The blink apply would bank,
+investigate, draw Living Wish, wish for Essence Depleter and drain -- a kill ExtraLethalDamage /
+ProjectsAlternateWin do not model (the wish is in the library) -- so the cut never ran its verify and the
+walk spent the turn on two Fertile Grounds (win t5; the old arm reached the same apply by accident, t4).
+
+One lever, heurarm slot EDF_GOFF_VERIFY_UNPROJECTED (appended), default ON; =0 byte-identical. When the
+maximal blink candidate is scored by consider() but not projected lethal, apply it ONCE on a copy
+(ApplyPlanDirect); only a real kill (opponent lost, we alive) is returned, flagged wins_this_turn. That
+is the same execution check the projected branch already runs and the same sound dominance (a this-turn
+win beats every plan), not a greedy pick: every non-kill falls through to the walk unchanged.
+
+Unit: test/unit/test_edf_goff_verify.cpp (the gi 1676 t4 board: off does not win, on returns the blink
+go-off and replaying it ends the game; with no wish in the library the pick is unchanged).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

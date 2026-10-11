@@ -1,0 +1,35 @@
+{
+ "jobs": [
+  {
+   "name": "al_d3",
+   "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+   "profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+   "games": 60,
+   "seed": 4100001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "al_ship",
+   "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+   "profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+   "games": 40,
+   "seed": 4110001,
+   "game_index": 0,
+   "budget_ms": 20
+  },
+  {
+   "name": "gi_d0_off",
+   "deck": "decks/Giants/Giants.cod",
+   "profile": "decks/Giants/Giants.profile.json",
+   "games": 200,
+   "seed": 4120001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  }
+ ]
+}

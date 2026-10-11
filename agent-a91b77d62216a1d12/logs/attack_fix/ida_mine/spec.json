@@ -1,0 +1,71 @@
+{
+ "decks": {
+  "fivecolour": {
+   "seed_d0": 6100001,
+   "seed_d3": 6200001
+  },
+  "stompy": {
+   "seed_d0": 6110001,
+   "seed_d3": 6210001
+  },
+  "selesnya": {
+   "seed_d0": 6120001,
+   "seed_d3": 6220001
+  },
+  "bruna": {
+   "seed_d0": 6130001,
+   "seed_d3": 6230001
+  },
+  "snow": {
+   "seed_d0": 6140001,
+   "seed_d3": 6240001
+  },
+  "burn": {
+   "seed_d0": 6150001,
+   "seed_d3": 6250001
+  },
+  "dragonstorm": {
+   "seed_d0": 6160001,
+   "seed_d3": 6260001
+  },
+  "hinata": {
+   "seed_d0": 6170001,
+   "seed_d3": 6270001
+  },
+  "critter": {
+   "seed_d0": 6180001,
+   "seed_d3": 6280001
+  },
+  "goblins": {
+   "seed_d0": 6190001,
+   "seed_d3": 6290001
+  }
+ },
+ "cells": {
+  "d0": {
+   "games": 400,
+   "chunk": 100
+  },
+  "d3": {
+   "games": 40,
+   "chunk": 20
+  }
+ },
+ "arms": {
+  "x": [
+   "MTG_ATTACK_DOMAIN_DORK_YIELD",
+   "MTG_ATTACK_TAP_ASTROLABE_CREDIT",
+   "MTG_ATTACK_CANNONS_TRIGGER",
+   "MTG_ATTACK_TAP_REPROJECT",
+   "MTG_ATTACK_TEAM_PUMP_ETB",
+   "MTG_ATTACK_PLAN_LIFEGAIN",
+   "MTG_BRUNA_LETHAL_SHORTCIRCUIT",
+   "MTG_ATTACK_AURA_HOST_TAP",
+   "MTG_LAND_BOUNCE_GUARD",
+   "MTG_ATTACK_TAP_CREATURE_ONLY",
+   "MTG_SOLVE_ATTACK_ONLY_WIN",
+   "MTG_ATTACK_TAP_ABILITY_KINDS",
+   "MTG_ATTACK_TAP_PAYER_ORDER"
+  ]
+ }
+}

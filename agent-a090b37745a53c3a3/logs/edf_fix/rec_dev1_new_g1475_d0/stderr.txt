@@ -1,0 +1,57 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[edf-goff-cut] t1 no goff cand
+[tmp-edbg] T1 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub
+[edf-goff-cut] t2 no goff cand
+[tmp-edbg] T2 d0 plan pre=1 land= val=100 win=0: Living Wish(k0,x0,h0) 
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge
+[exec-tap] T2 Living Wish tapped: Aether Hub Shivan Gorge  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T)
+[tmp-edbg] T2 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge
+[edf-goff-cut] t3 no goff cand
+[tmp-edbg] T3 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen(T)
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen
+[edf-goff-cut] t4 no goff cand
+[tmp-edbg] T4 d0 plan pre=1 land= val=100 win=0: Overgrowth(k0,x0,h3) 
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base
+[exec-tap] T4 Overgrowth tapped: Shivan Gorge Kitchen Mariposa Military Base  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge(T) Kitchen(T) Mariposa Military Base(T) Overgrowth
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth
+[edf-goff-cut] t5 no goff cand
+[tmp-edbg] T5 d0 plan pre=1 land= val=500 win=0: Peregrine Drake(k0,x0,h0) 
+[exec-tap] T5 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth
+[exec-tap] T5 Peregrine Drake tapped: Aether Hub Shivan Gorge Kitchen Mariposa Military Base  float{w0 u0 b0 r0 g3 c3 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T) Kitchen(T) Mariposa Military Base(T) Overgrowth
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth
+[edf-goff-cut] t6 no goff cand
+[tmp-edbg] T6 d0 plan pre=1 land= val=1100 win=0: Peregrine Drake(k0,x0,h0) Peregrine Drake(k0,x0,h0) Fertile Ground(k0,x0,h3) 
+[exec-tap] T6 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth
+[exec-tap] T6 Fertile Ground tapped: Shivan Gorge Kitchen  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Mariposa Military Base Overgrowth Fertile Ground
+[exec-tap] T6 Peregrine Drake tapped: Aether Hub Mariposa Military Base  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Fertile Ground Peregrine Drake
+[exec-tap] T6 Peregrine Drake tapped: Aether Hub Shivan Gorge Kitchen Mariposa Military Base  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Fertile Ground Peregrine Drake Peregrine Drake
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Fertile Ground Peregrine Drake Peregrine Drake
+[edf-goff-cut] t7 k=20 projected=0
+[tmp-edbg] T7 d0 plan pre=1 land= val=520 win=0: Trace of Abundance(k0,x0,h29) Eldrazi Displacer(k0,x0,h0) Wild Growth(k0,x0,h29) Eldrazi Displacer(k25,x20,h0) 
+[exec-tap] T7 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Fertile Ground Peregrine Drake Peregrine Drake
+[exec-tap] T7 Wild Growth tapped: Aether Hub  float{w0 u0 b0 r0 g1 c1 *1}
+[exec-tap] T7 before Trace of Abundance: float{w0 u0 b0 r0 g1 c1 *1} untapped: 2/2 Creature Shivan Gorge Kitchen Mariposa Military Base Overgrowth Fertile Ground Peregrine Drake Peregrine Drake Wild Growth
+[exec-tap] T7 Trace of Abundance tapped:  float{w0 u0 b0 r0 g0 c1 *0}
+[exec-tap] T7 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c1 *0} untapped: 2/2 Creature Shivan Gorge Kitchen Mariposa Military Base Overgrowth Fertile Ground Peregrine Drake Peregrine Drake Wild Growth Trace of Abundance
+[exec-tap] T7 Eldrazi Displacer tapped: Shivan Gorge Kitchen  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T) Kitchen(T) Mariposa Military Base(T) Overgrowth Fertile Ground Peregrine Drake Wild Growth Trace of Abundance Eldrazi Displacer Peregrine Drake(T) Clue Token
+[tmp-edbg] T7 d0 plan pre=1 land= val=100 win=1: Training Grounds(k0,x0,h0) 
+[exec-tap] T7 before Training Grounds: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Overgrowth Fertile Ground Peregrine Drake Wild Growth Trace of Abundance Eldrazi Displacer Clue Token Aether Hub
+[exec-tap] T7 Training Grounds tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/rec_dev1_new_g1475_d0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

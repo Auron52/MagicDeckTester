@@ -1,0 +1,29 @@
+fix(hinata): Reality Spasm is not a Crackle -- IsCrackleCountSpell keys on the DirectDamage template (MTG_CRACKLE_COUNT_EXACT)
+
+IsCrackleCountSpell tested `discount_targets_scale_x && x_damage_multiplier > 0`, but CardDatabase
+defaults the multiplier to 1, so Reality Spasm (untap_x_mana_sources + scale_x) was classified as a
+Crackle despite the comment saying it was excluded. The one site where that moved play is
+HinataProvider::XCandidates' copy count: an RS in hand (often one staged by Soulfire Eruption) read as
+a second Crackle and switched the hold-a-lone-Crackle rule OFF exactly when the combo's other piece
+was in hand. The other 13 sites are unreachable for RS (its own untap enumeration branch, custom
+template, crackle_targets always -1), so RS's cost was and stays the rules-correct auto-max: exactly X
+targets -> Hinata's discount is X -> {U}{U}.
+
+The predicate now takes the CardDefinition and requires tmpl == DirectDamage -- the template the whole
+count model (declared-count enumeration + both resolvers) lives in. heurarm slot CRACKLE_COUNT_EXACT
+appended; DEFAULT ON; =0 is the legacy predicate, byte-identical to ccacda4e (750 Hinata games, 0
+digest mismatches). Non-Hinata decks are byte-identical by construction (burn/dragonstorm/stompy
+checked).
+
+Sanity A/B, Hinata, fix on vs off, paired, fresh seeds: d0 400 -0.183 t/g (50 faster / 8 slower),
+d3 b10 150 -0.027 (5/1, units 0.983), shipped b20 100 -0.040 (2/1, units 0.926), 2HG d0 100 -0.140
+(10/1). The five rc3 d0 games that PAYABLE_ORDER_RITUALS made slower all recover, and old/new arms
+become byte-identical on them. Slower-game mechanisms and deferred follow-ups (hold-rule lethal gate
+ignores co-cast burn; hold applies with no Hinata available) in
+docs/design/reality-spasm-crackle-classification.md. Hinata's value leaf / keep table are aged by this
+play change (not regenerated); its GT keys will move.
+
+Tests: test/unit/test_hinata_crackle_count.cpp (predicate, XCandidates hold with RS in hand, RS
+discount with Hinata). Unit suite 926/926.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,117 @@
+[play] edf_ship_on depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_ship_L1 depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_ship_L2a depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_ship_L2b depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_ship_L3 depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_ship_L4 depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_ship_off depth=5 budget=20ms source=default(depth)+cli(budget) provider=EldraziFlicker
+[play] edf_d3_on depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d3_L1 depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d3_L2a depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d3_L2b depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d3_L3 depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d3_L4 depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d3_off depth=3 budget=10ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_on depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_L1 depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_L2a depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_L2b depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_L3 depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_L4 depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[play] edf_d0_off depth=0 budget=0ms source=cli(--ignore-play-profile) provider=EldraziFlicker
+[batch] workers=6 (hw_concurrency=24, affinity=6, requested=6)
+[batch] mem: total=48171MB budget=24085MB workers=6 -> tt_cap=20557365/table fsl_pool=9034MB fsl_cap=2000000 plan_cache=600MB rss_cap=35.28G (MTG_MEM_BUDGET_MB / MTG_RSS_CAP_GB; each pool's own env var overrides)
+[win] job=edf_ship_on gi=0 wt=3
+[win] job=edf_ship_on gi=3 wt=5
+[win] job=edf_ship_on gi=1 wt=4
+[win] job=edf_ship_on gi=7 wt=4
+[win] job=edf_ship_on gi=6 wt=6
+[win] job=edf_ship_on gi=5 wt=4
+[win] job=edf_ship_on gi=4 wt=4
+[win] job=edf_ship_on gi=10 wt=4
+[win] job=edf_ship_on gi=9 wt=5
+[win] job=edf_ship_on gi=2 wt=5
+[win] job=edf_ship_on gi=15 wt=4
+[win] job=edf_ship_on gi=11 wt=4
+[win] job=edf_ship_on gi=13 wt=4
+[win] job=edf_ship_on gi=16 wt=4
+[win] job=edf_ship_on gi=19 wt=4
+[goldfish] SLOW-GAME 30476ms  job=edf_ship_on gi=14 wt=4 units=202861  repro: --seed 5320015 --game-index 14 --games 1
+[win] job=edf_ship_on gi=14 wt=4
+[win] job=edf_ship_on gi=18 wt=7
+[win] job=edf_ship_on gi=21 wt=4
+[goldfish] SLOW-GAME 35908ms  job=edf_ship_on gi=17 wt=4 units=158452  repro: --seed 5320018 --game-index 17 --games 1
+[win] job=edf_ship_on gi=17 wt=4
+[win] job=edf_ship_on gi=23 wt=4
+[win] job=edf_ship_on gi=22 wt=4
+[win] job=edf_ship_on gi=25 wt=4
+[goldfish] SLOW-GAME 65738ms  job=edf_ship_on gi=8 wt=4 units=320852  repro: --seed 5320009 --game-index 8 --games 1
+[win] job=edf_ship_on gi=8 wt=4
+[win] job=edf_ship_on gi=27 wt=4
+[win] job=edf_ship_on gi=29 wt=5
+[win] job=edf_ship_on gi=30 wt=3
+[win] job=edf_ship_on gi=31 wt=4
+[win] job=edf_ship_on gi=32 wt=3
+[win] job=edf_ship_on gi=33 wt=4
+[win] job=edf_ship_on gi=28 wt=4
+[goldfish] SLOW-GAME 39122ms  job=edf_ship_on gi=26 wt=7 units=71929  repro: --seed 5320027 --game-index 26 --games 1
+[win] job=edf_ship_on gi=26 wt=7
+[win] job=edf_ship_on gi=36 wt=4
+[win] job=edf_ship_on gi=37 wt=3
+[win] job=edf_ship_on gi=35 wt=4
+[win] job=edf_ship_on gi=34 wt=4
+[win] job=edf_ship_on gi=38 wt=4
+[goldfish] SLOW-GAME 126101ms  job=edf_ship_on gi=12 wt=4 units=330091  repro: --seed 5320013 --game-index 12 --games 1
+[win] job=edf_ship_on gi=12 wt=4
+[goldfish] SLOW-GAME 81351ms  job=edf_ship_on gi=24 wt=4 units=290476  repro: --seed 5320025 --game-index 24 --games 1
+[win] job=edf_ship_on gi=24 wt=4
+[win] job=edf_ship_on gi=43 wt=7
+[win] job=edf_ship_on gi=39 wt=5
+[win] job=edf_ship_on gi=41 wt=4
+[win] job=edf_ship_on gi=42 wt=4
+[win] job=edf_ship_on gi=47 wt=4
+[win] job=edf_ship_on gi=45 wt=7
+[goldfish] SLOW-GAME 31245ms  job=edf_ship_on gi=46 wt=4 units=123986  repro: --seed 5320047 --game-index 46 --games 1
+[win] job=edf_ship_on gi=46 wt=4
+[goldfish] SLOW-GAME 39401ms  job=edf_ship_on gi=44 wt=4 units=57081  repro: --seed 5320045 --game-index 44 --games 1
+[win] job=edf_ship_on gi=44 wt=4
+[win] job=edf_ship_on gi=50 wt=5
+[goldfish] SLOW-GAME 157113ms  job=edf_ship_on gi=20 wt=3 units=439432  repro: --seed 5320021 --game-index 20 --games 1
+[win] job=edf_ship_on gi=20 wt=3
+[win] job=edf_ship_on gi=51 wt=4
+[win] job=edf_ship_on gi=53 wt=4
+[win] job=edf_ship_on gi=52 wt=5
+[win] job=edf_ship_on gi=54 wt=4
+[goldfish] SLOW-GAME 53430ms  job=edf_ship_on gi=48 wt=3 units=339341  repro: --seed 5320049 --game-index 48 --games 1
+[win] job=edf_ship_on gi=48 wt=3
+[win] job=edf_ship_on gi=58 wt=3
+[goldfish] SLOW-GAME 48496ms  job=edf_ship_on gi=49 wt=4 units=348023  repro: --seed 5320050 --game-index 49 --games 1
+[win] job=edf_ship_on gi=49 wt=4
+[win] job=edf_ship_on gi=60 wt=3
+[win] job=edf_ship_on gi=56 wt=7
+[win] job=edf_ship_on gi=57 wt=4
+[win] job=edf_ship_on gi=61 wt=5
+[win] job=edf_ship_on gi=64 wt=3
+[goldfish] SLOW-GAME 35820ms  job=edf_ship_on gi=55 wt=4 units=411724  repro: --seed 5320056 --game-index 55 --games 1
+[win] job=edf_ship_on gi=55 wt=4
+[win] job=edf_ship_on gi=59 wt=4
+[win] job=edf_ship_on gi=66 wt=4
+[win] job=edf_ship_on gi=65 wt=5
+[win] job=edf_ship_on gi=67 wt=4
+[win] job=edf_ship_on gi=70 wt=3
+[win] job=edf_ship_on gi=68 wt=5
+[win] job=edf_ship_on gi=71 wt=4
+[win] job=edf_ship_on gi=72 wt=3
+[goldfish] SLOW-GAME 36647ms  job=edf_ship_on gi=62 wt=5 units=59835  repro: --seed 5320063 --game-index 62 --games 1
+[win] job=edf_ship_on gi=62 wt=5
+[win] job=edf_ship_on gi=74 wt=4
+[win] job=edf_ship_on gi=75 wt=4
+[win] job=edf_ship_on gi=76 wt=4
+[win] job=edf_ship_on gi=78 wt=3
+[win] job=edf_ship_on gi=79 wt=3
+[goldfish] SLOW-GAME 31302ms  job=edf_ship_on gi=69 wt=5 units=41036  repro: --seed 5320070 --game-index 69 --games 1
+[win] job=edf_ship_on gi=69 wt=5
+[win] job=edf_ship_on gi=81 wt=4
+[win] job=edf_ship_on gi=82 wt=4
+[goldfish] SLOW-GAME 33195ms  job=edf_ship_on gi=77 wt=7 units=377502  repro: --seed 5320078 --game-index 77 --games 1
+[win] job=edf_ship_on gi=77 wt=7

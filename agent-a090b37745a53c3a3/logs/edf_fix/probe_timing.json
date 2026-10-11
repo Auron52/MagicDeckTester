@@ -1,0 +1,31 @@
+{
+ "jobs": [
+  {
+   "name": "edf_ship_on",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 4,
+   "seed": 5320001,
+   "budget_ms": 20
+  },
+  {
+   "name": "edf_d3_on",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 10,
+   "seed": 5310001,
+   "depth": 3,
+   "budget_ms": 10,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "edf_d0_on",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 30,
+   "seed": 5300001,
+   "depth": 0,
+   "ignore_play_profile": true
+  }
+ ]
+}

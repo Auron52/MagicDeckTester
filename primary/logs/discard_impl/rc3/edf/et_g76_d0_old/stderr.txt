@@ -1,0 +1,33 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Training Grounds: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub
+[exec-tap] T1 Training Grounds tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Training Grounds
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Training Grounds
+[exec-tap] T2 before Eladamri's Call: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub Training Grounds Aether Hub
+[exec-tap] T2 Eladamri's Call tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Training Grounds Aether Hub
+[exec-tap] T2 before Eladamri's Call: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub Training Grounds Aether Hub
+[exec-tap] T2 Eladamri's Call tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Training Grounds Aether Hub
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Training Grounds Aether Hub
+[exec-tap] T3 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub Training Grounds Aether Hub Yavimaya Coast
+[exec-tap] T3 Eldrazi Displacer tapped: Aether Hub Aether Hub Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Training Grounds Aether Hub(T) Yavimaya Coast(T) Eldrazi Displacer
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer
+[exec-tap] T4 Overgrowth tapped: Aether Hub Aether Hub Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Training Grounds Aether Hub(T) Yavimaya Coast(T) Eldrazi Displacer(T) Conservatory(T) Overgrowth
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer Conservatory Overgrowth
+[exec-tap] T5 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer Conservatory Overgrowth
+[exec-tap] T5 Emiel the Blessed tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 3/3 Creature Aether Hub Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer Conservatory Overgrowth
+[exec-tap] T5 Living Wish tapped: Aether Hub Conservatory  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g2 c0 *0} own: Aether Hub(T) Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer Conservatory(T) Overgrowth
+[exec-tap] T5 before Cloud of Faeries: float{w0 u0 b0 r0 g2 c0 *0} untapped: 3/3 Creature Training Grounds Aether Hub Yavimaya Coast Eldrazi Displacer Overgrowth
+[exec-tap] T5 Cloud of Faeries tapped: Yavimaya Coast  float{w0 u0 b0 r0 g1 c0 *0}
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g76_d0_old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

@@ -1,0 +1,7 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/bisect/g285_d3_newm_SOLVE_VERIFIED_WIN
+[enum-memo] hits=1 misses=183 clears=0
+[solve-memo] hits=5722 misses=14841 clears=0
+[leaf-eval] published=3519 ties=3272 flips=74 life-equal-ties=250

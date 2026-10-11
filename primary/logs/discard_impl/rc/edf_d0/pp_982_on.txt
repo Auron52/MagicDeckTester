@@ -1,0 +1,126 @@
+result {'turn': 7, 'winner': 'player'}
+mull 0 ['Trace of Abundance', 'Emiel the Blessed', 'Adarkar Wastes', 'Fertile Ground', 'Emiel the Blessed', 'Living Wish', 'Mariposa Military Base'] kept
+T1 DRAW: DRAW Overgrowth
+    hand(8): ['Adarkar Wastes', 'Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: []
+    opp life 20
+T1 MAIN_1: PLAY_LAND Adarkar Wastes
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Adarkar Wastes']
+    opp life 20
+T1 COMBAT: 
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Adarkar Wastes']
+    opp life 20
+T1 MAIN_2: 
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance']
+    bf: ['Adarkar Wastes']
+    opp life 20
+T2 DRAW: DRAW Wild Growth
+    hand(8): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes']
+    opp life 20
+T2 MAIN_1: PLAY_LAND Mariposa Military Base
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base']
+    opp life 20
+T2 COMBAT: 
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base']
+    opp life 20
+T2 MAIN_2: 
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base']
+    opp life 20
+T3 DRAW: DRAW Mariposa Military Base
+    hand(8): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base']
+    opp life 20
+T3 MAIN_1: PLAY_LAND Mariposa Military Base
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T3 COMBAT: 
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T3 MAIN_2: 
+    hand(7): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T4 DRAW: DRAW Peregrine Drake
+    hand(8): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T4 MAIN_1: 
+    hand(8): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T4 COMBAT: 
+    hand(8): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T4 MAIN_2: 
+    hand(8): ['Emiel the Blessed', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    opp life 20
+T4 CLEANUP: DISCARD Emiel the Blessed
+    hand(7): ['Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T5 DRAW: DRAW Aether Hub
+    hand(8): ['Aether Hub', 'Emiel the Blessed', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T5 MAIN_1: PLAY_LAND Aether Hub; CAST_SPELL Emiel the Blessed {"manaPaid":"{2}{W}{W}"}
+    hand(6): ['Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes(T)', 'Mariposa Military Base(T)', 'Mariposa Military Base(T)', 'Aether Hub(T)', 'Emiel the Blessed']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T5 COMBAT: 
+    hand(6): ['Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes(T)', 'Mariposa Military Base(T)', 'Mariposa Military Base(T)', 'Aether Hub(T)', 'Emiel the Blessed']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T5 MAIN_2: 
+    hand(6): ['Fertile Ground', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes(T)', 'Mariposa Military Base(T)', 'Mariposa Military Base(T)', 'Aether Hub(T)', 'Emiel the Blessed']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T6 DRAW: DRAW Mariposa Military Base
+    hand(7): ['Fertile Ground', 'Living Wish', 'Mariposa Military Base', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base', 'Aether Hub', 'Emiel the Blessed']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T6 MAIN_1: PLAY_LAND Mariposa Military Base; CAST_SPELL Peregrine Drake {"manaPaid":"{4}{U}"} [+51 UNTAP_SOURCES]
+    hand(5): ['Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base', 'Aether Hub', 'Emiel the Blessed', 'Mariposa Military Base', 'Peregrine Drake']
+    gy: ['Emiel the Blessed']
+    opp life 20
+T6 COMBAT: ATTACK {"damage":4,"oppLife":16}
+    hand(5): ['Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base', 'Aether Hub', 'Emiel the Blessed(T)', 'Mariposa Military Base', 'Peregrine Drake']
+    gy: ['Emiel the Blessed']
+    opp life 16
+T6 MAIN_2:  [+50 UNTAP_SOURCES]
+    hand(5): ['Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base', 'Aether Hub', 'Emiel the Blessed(T)', 'Mariposa Military Base', 'Peregrine Drake']
+    gy: ['Emiel the Blessed']
+    opp life 16
+T7 DRAW: DRAW Aether Hub
+    hand(6): ['Aether Hub', 'Fertile Ground', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+    bf: ['Adarkar Wastes', 'Mariposa Military Base', 'Mariposa Military Base', 'Aether Hub', 'Emiel the Blessed', 'Mariposa Military Base', 'Peregrine Drake']
+    gy: ['Emiel the Blessed']
+    opp life 16
+T7 MAIN_1: PLAY_LAND Aether Hub; CAST_SPELL Wild Growth {"manaPaid":"{G}"}; CAST_SPELL Fertile Ground {"manaPaid":"{1}{G}"}; REVEAL {"bottomed":[],"kept":[200006],"lookedAt":[{"card":200006,"cardName":"Essence Depleter","to":"to hand"}],"source":"Living Wish (searched)"}; CAST_SPELL Trace of Abundance {"manaPaid":"{R}{G}"}; ABILITY Essence Depleter {"ability":"target opponent loses life"} [+10 UNTAP_SOURCES]
+    hand(1): ['Overgrowth']
+    bf: ['Adarkar Wastes(T)', 'Mariposa Military Base(T)', 'Mariposa Military Base(T)', 'Aether Hub(T)', 'Emiel the Blessed', 'Mariposa Military Base', 'Aether Hub(T)', 'Wild Growth[attachedTo=1]', 'Fertile Ground[attachedTo=3]', 'Essence Depleter', 'Peregrine Drake', 'Trace of Abundance[attachedTo=1]']
+    gy: ['Emiel the Blessed']
+    opp life -1
+T7 COMBAT: ATTACK {"damage":4,"oppLife":-5}
+    hand(1): ['Overgrowth']
+    bf: ['Adarkar Wastes(T)', 'Mariposa Military Base(T)', 'Mariposa Military Base(T)', 'Aether Hub(T)', 'Emiel the Blessed(T)', 'Mariposa Military Base', 'Aether Hub(T)', 'Wild Growth[attachedTo=1]', 'Fertile Ground[attachedTo=3]', 'Essence Depleter', 'Peregrine Drake', 'Trace of Abundance[attachedTo=1]']
+    gy: ['Emiel the Blessed']
+    opp life -5

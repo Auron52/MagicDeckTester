@@ -1,0 +1,55 @@
+{
+ "deck": "decks/FiveColour/FiveColour.cod",
+ "profile": "decks/FiveColour/FiveColour.profile.json",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "resume_at": "main1",
+ "active_life": 13,
+ "battlefield": [
+  {
+   "name": "Jetmir's Garden",
+   "controller": 0
+  },
+  {
+   "name": "Zagoth Triome",
+   "controller": 0
+  },
+  {
+   "name": "Godless Shrine",
+   "controller": 0
+  },
+  {
+   "name": "Faeburrow Elder",
+   "controller": 0
+  },
+  {
+   "name": "Steam Vents",
+   "controller": 0
+  },
+  {
+   "name": "Maelstrom Archangel",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Island",
+  "Unite the Coalition",
+  "Mana Cannons",
+  "Maelstrom Archangel",
+  "Ancient Cornucopia",
+  "Stomping Ground"
+ ],
+ "graveyard": [
+  "Wooded Foothills",
+  "Misty Rainforest",
+  "Windswept Heath"
+ ],
+ "library_filler": "Island",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 19,
+ "env": {},
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/fivecolour/sc/o400/new_L19.log.json"
+}

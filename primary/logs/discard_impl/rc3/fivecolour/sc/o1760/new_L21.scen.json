@@ -1,0 +1,57 @@
+{
+ "deck": "decks/FiveColour/FiveColour.cod",
+ "profile": "decks/FiveColour/FiveColour.profile.json",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "resume_at": "main1",
+ "active_life": 16,
+ "battlefield": [
+  {
+   "name": "Steam Vents",
+   "controller": 0
+  },
+  {
+   "name": "Zagoth Triome",
+   "controller": 0
+  },
+  {
+   "name": "Godless Shrine",
+   "controller": 0
+  },
+  {
+   "name": "Faeburrow Elder",
+   "controller": 0
+  },
+  {
+   "name": "Stomping Ground",
+   "controller": 0
+  },
+  {
+   "name": "Cosmic Spider-Man",
+   "controller": 0
+  },
+  {
+   "name": "Deathrite Shaman",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Mana Cannons",
+  "Two-Headed Hellkite",
+  "Two-Headed Hellkite",
+  "Birds of Paradise"
+ ],
+ "graveyard": [
+  "Wooded Foothills",
+  "Windswept Heath",
+  "Wooded Foothills"
+ ],
+ "library_filler": "Island",
+ "library_size": 30,
+ "depth": 0,
+ "budget_ms": 0,
+ "opponent_life": 21,
+ "env": {},
+ "log_out": "/workspaces/MagicDeckTester/logs/discard_impl/rc3/fivecolour/sc/o1760/new_L21.log.json"
+}

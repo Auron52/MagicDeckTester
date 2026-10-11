@@ -1,0 +1,164 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=1191702 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=1 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Mercadian Bazaar
+[uo-order] gs=1191702 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=1 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Mercadian Bazaar
+[uo-order] gs=1191702 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Mercadian Bazaar
+[uo-order] gs=1191702 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=2 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Mercadian Bazaar
+[uo-order] gs=1191702 t=3 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-order] gs=1191702 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas
+[uo-order] gs=1191702 t=4 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame
+[uo-order] gs=1191702 t=4 m=2 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=4 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame
+[uo-order] gs=1191702 t=5 m=1 route=opaque pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-order] gs=1191702 t=5 m=1 route=cont pool=4 n=5 pays=0 ppays=0 mpos=-1 mearl=-1 seq=Apex of Power|Pyretic Ritual|Seething Song|Rite of Flame|Seething Song
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Apex of Power|Pyretic Ritual|Seething Song|Scourge of Valkas|Rite of Flame|Seething Song
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Apex of Power num=4 staged=0 splice=0 paid=0 pool=0
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Pyretic Ritual num=37 staged=0 splice=0 paid=1 pool=1
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=5
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Rite of Flame num=42 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Seething Song num=54 staged=0 splice=0 paid=1 pool=8
+[uo-order] gs=1191702 t=5 m=1 route=clean pool=10 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Apex of Power|Scourge of Valkas
+[uo-cast] gs=1191702 t=5 m=1 d=0 card=Scourge of Valkas num=52 staged=0 splice=0 paid=1 pool=10
+[uo-order] gs=1191702 t=5 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=5 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Apex of Power
+[uo-order] gs=1191702 t=6 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=6 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Apex of Power
+[uo-order] gs=1191702 t=6 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power
+[uo-order] gs=1191702 t=7 m=1 route=clean pool=2 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=7 cap=-1 pool{w0 u0 b0 r2 g0 c0 *0} hand=Apex of Power|Pyretic Ritual
+[uo-order] gs=1191702 t=7 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=7 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Apex of Power|Pyretic Ritual
+[uo-order] gs=1191702 t=8 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1191702 t=8 cap=-1 pool{w0 u0 b0 r3 g0 c0 *0} hand=Apex of Power|Pyretic Ritual
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/g6/g1701/old
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

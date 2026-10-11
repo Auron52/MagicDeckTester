@@ -1,0 +1,45 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[tmp-edbg] T1 d0 plan pre=1 land= val=-1 win=0: 
+[tmp-edbg] T2 d0 plan pre=1 land= val=100 win=0: Living Wish(k0,x0,h0) 
+[tmp-edbg] T2 d0 plan pre=1 land= val=-1 win=0: 
+[tmp-edbg] T3 d0 plan pre=1 land= val=-1 win=0: 
+[tmp-edbg] T4 PAE board_ok aura subset: Overgrowth(h3)  payer=1
+[tmp-edbg] T4 PAE board_ok aura subset: Overgrowth(h29)  payer=1
+[tmp-edbg] T4 d0 plan pre=1 land= val=100 win=0: Overgrowth(k0,x0,h3) 
+[tmp-edbg] T5 PAE board_ok aura subset: Wild Growth(h3)  payer=1
+[tmp-edbg] T5 PAE board_ok aura subset: Peregrine Drake(h0) Wild Growth(h3)  payer=0
+[tmp-edbg] T5 PAE board_ok aura subset: Wild Growth(h29)  payer=1
+[tmp-edbg] T5 PAE board_ok aura subset: Peregrine Drake(h0) Wild Growth(h29)  payer=1
+[tmp-edbg] T5 PAE board_ok aura subset: Wild Growth(h3) Kitchen(h0)  payer=1
+[tmp-edbg] T5 PAE board_ok aura subset: Wild Growth(h29) Kitchen(h0)  payer=1
+[tmp-edbg] T5 d0 plan pre=1 land= val=600 win=0: Peregrine Drake(k0,x0,h0) Wild Growth(k0,x0,h29) 
+[tmp-edbg] T6 PAE board_ok aura subset: Fertile Ground(h3)  payer=1
+[tmp-edbg] T6 PAE board_ok aura subset: Peregrine Drake(h0) Fertile Ground(h3)  payer=1
+[tmp-edbg] T6 PAE board_ok aura subset: Fertile Ground(h29)  payer=1
+[tmp-edbg] T6 PAE board_ok aura subset: Peregrine Drake(h0) Fertile Ground(h29)  payer=1
+[tmp-edbg] T6 d0 plan pre=1 land= val=600 win=0: Peregrine Drake(k0,x0,h0) Fertile Ground(k0,x0,h3) 
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Eladamri's Call(h0)  payer=0
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Eladamri's Call(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Eldrazi Displacer(h0)  payer=0
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Eldrazi Displacer(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Training Grounds(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Training Grounds(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Shivan Gorge(h0)  payer=0
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Shivan Gorge(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Kitchen(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Kitchen(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Mariposa Military Base(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Mariposa Military Base(h0)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h3) Eldrazi Displacer(h0) Eldrazi Displacer(h0)  payer=0
+[tmp-edbg] T7 PAE board_ok aura subset: Trace of Abundance(h29) Eldrazi Displacer(h0) Eldrazi Displacer(h0)  payer=1
+[tmp-edbg] T7 d0 plan pre=1 land= val=418 win=0: Trace of Abundance(k0,x0,h29) Eldrazi Displacer(k0,x0,h0) Eldrazi Displacer(k25,x18,h0) 
+[tmp-edbg] T7 PAE board_ok aura subset: Fertile Ground(h3)  payer=1
+[tmp-edbg] T7 PAE board_ok aura subset: Fertile Ground(h4)  payer=1
+[tmp-edbg] T7 d0 plan pre=1 land= val=100 win=1: Training Grounds(k0,x0,h0) 
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/dev4_g1475_e2b
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

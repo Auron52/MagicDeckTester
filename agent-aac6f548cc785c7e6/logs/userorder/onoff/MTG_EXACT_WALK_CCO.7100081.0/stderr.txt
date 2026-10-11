@@ -1,0 +1,7 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/onoff/MTG_EXACT_WALK_CCO.7100081.0
+[enum-memo] hits=2 misses=105 clears=0
+[solve-memo] hits=416 misses=500 clears=0
+[leaf-eval] published=99 ties=67 flips=0 life-equal-ties=67

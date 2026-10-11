@@ -1,0 +1,1993 @@
+{
+  "cardNumbering": {
+    "Arcanum Wings": [
+      1,
+      2
+    ],
+    "Avacyn's Pilgrim": [
+      3,
+      4,
+      5
+    ],
+    "Azorius Chancery": [
+      6,
+      7,
+      8
+    ],
+    "Birds of Paradise": [
+      9,
+      10
+    ],
+    "Boseiju, Who Endures": [
+      11
+    ],
+    "Botanical Sanctum": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "Bruna, Light of Alabaster": [
+      16,
+      17,
+      18
+    ],
+    "Colossification": [
+      19,
+      20,
+      21,
+      22
+    ],
+    "Eldrazi Conscription": [
+      23,
+      24,
+      25,
+      26
+    ],
+    "Forest": [
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "Glittering Wish": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "Lightning Greaves": [
+      36,
+      37,
+      38
+    ],
+    "Mother of Runes": [
+      39,
+      40
+    ],
+    "Mythic Proportions": [
+      41,
+      42
+    ],
+    "Open the Armory": [
+      43,
+      44
+    ],
+    "Prodigious Growth": [
+      45
+    ],
+    "Razorverge Thicket": [
+      46,
+      47,
+      48
+    ],
+    "Remote Farm": [
+      49,
+      50,
+      51
+    ],
+    "Seaside Citadel": [
+      52,
+      53
+    ],
+    "Skycloud Expanse": [
+      54
+    ],
+    "Sol Ring": [
+      55
+    ],
+    "Somberwald Sage": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Wild Growth": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 23,
+          "cardName": "Eldrazi Conscription"
+        },
+        {
+          "card": 39,
+          "cardName": "Mother of Runes"
+        },
+        {
+          "card": 60,
+          "cardName": "Wild Growth"
+        },
+        {
+          "card": 54,
+          "cardName": "Skycloud Expanse"
+        },
+        {
+          "card": 6,
+          "cardName": "Azorius Chancery"
+        },
+        {
+          "card": 43,
+          "cardName": "Open the Armory"
+        },
+        {
+          "card": 41,
+          "cardName": "Mythic Proportions"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 23,
+      "cardName": "Eldrazi Conscription"
+    },
+    {
+      "card": 39,
+      "cardName": "Mother of Runes"
+    },
+    {
+      "card": 60,
+      "cardName": "Wild Growth"
+    },
+    {
+      "card": 54,
+      "cardName": "Skycloud Expanse"
+    },
+    {
+      "card": 6,
+      "cardName": "Azorius Chancery"
+    },
+    {
+      "card": 43,
+      "cardName": "Open the Armory"
+    },
+    {
+      "card": 41,
+      "cardName": "Mythic Proportions"
+    }
+  ],
+  "result": {
+    "turn": null,
+    "winner": "none"
+  },
+  "runId": "20261010_123425_1090961",
+  "seed": 1090961,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 24,
+          "cardName": "Eldrazi Conscription",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          54,
+          6,
+          43,
+          41,
+          24
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 54,
+          "cardName": "Skycloud Expanse",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          6,
+          43,
+          41,
+          24
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          6,
+          43,
+          41,
+          24
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          6,
+          43,
+          41,
+          24
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 7,
+          "cardName": "Azorius Chancery",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          6,
+          43,
+          41,
+          24,
+          7
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 6,
+          "cardName": "Azorius Chancery",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          43,
+          41,
+          24,
+          7,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          43,
+          41,
+          24,
+          7,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          23,
+          39,
+          60,
+          43,
+          41,
+          24,
+          7,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 41,
+          "cardName": "Mythic Proportions",
+          "type": "DISCARD"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41
+        ],
+        "hand": [
+          23,
+          39,
+          60,
+          43,
+          24,
+          7,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "CLEANUP",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 49,
+          "cardName": "Remote Farm",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41
+        ],
+        "hand": [
+          23,
+          39,
+          60,
+          43,
+          24,
+          7,
+          54,
+          49
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 54,
+          "cardName": "Skycloud Expanse",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 39,
+          "cardName": "Mother of Runes",
+          "manaPaid": "{W}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 43,
+          "cardName": "Open the Armory",
+          "manaPaid": "{1}{W}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [],
+          "kept": [
+            19
+          ],
+          "lookedAt": [
+            {
+              "card": 19,
+              "cardName": "Colossification",
+              "to": "to hand"
+            }
+          ],
+          "source": "Open the Armory (searched)",
+          "type": "REVEAL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          7,
+          49,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          7,
+          49,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          7,
+          49,
+          19
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 36,
+          "cardName": "Lightning Greaves",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          7,
+          49,
+          19,
+          36
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 7,
+          "cardName": "Azorius Chancery",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 36,
+          "cardName": "Lightning Greaves",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 19,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          54
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Somberwald Sage",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          54,
+          57
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 54,
+          "cardName": "Skycloud Expanse",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          57
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 19,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 18,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          57
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          57
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 5,
+          "cardName": "Avacyn's Pilgrim",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          49,
+          19,
+          57,
+          5
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 49,
+          "cardName": "Remote Farm",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 18,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 17,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 45,
+          "cardName": "Prodigious Growth",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 17,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 16,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 16,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 16,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Botanical Sanctum",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45,
+          13
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 16,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "card": 13,
+          "cardName": "Botanical Sanctum",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Botanical Sanctum",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 16,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "damage": 1,
+          "oppLife": 15,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Botanical Sanctum",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 15,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 8
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 6,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 39,
+            "cardName": "Mother of Runes",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Azorius Chancery",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 36,
+            "cardName": "Lightning Greaves",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 54,
+            "cardName": "Skycloud Expanse",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 49,
+            "cardName": "Remote Farm",
+            "counters": [
+              {
+                "count": 2,
+                "kind": "depletion"
+              }
+            ],
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Botanical Sanctum",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          41,
+          43
+        ],
+        "hand": [
+          23,
+          60,
+          24,
+          19,
+          57,
+          5,
+          45
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 15,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 8
+    }
+  ]
+}

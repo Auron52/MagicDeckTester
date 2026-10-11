@@ -1,0 +1,6 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/bisect/g133_d3_new
+[enum-memo] hits=7 misses=496 clears=0
+[solve-memo] hits=11726 misses=27194 clears=1

@@ -1,0 +1,198 @@
+1c1
+< result {'turn': 8, 'winner': 'player'}
+---
+> result {'turn': None, 'winner': 'none'}
+20c20
+<     hand(6): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+24c24
+<     hand(6): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+28c28
+<     hand(6): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+32c32
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Kitchen', 'Overgrowth', 'Trace of Abundance']
+36c36
+<     hand(6): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+40c40
+<     hand(6): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+44c44
+<     hand(6): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(6): ['200002', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+48c48
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+52c52
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+56c56
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+60c60
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+---
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance']
+64c64
+<     hand(8): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+68c68
+<     hand(8): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+72c72
+<     hand(8): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+76c76
+<     hand(8): ['Cloud of Faeries', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+79,80c79,80
+< T5 CLEANUP: DISCARD Eldrazi Displacer
+<     hand(7): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+---
+> T5 CLEANUP: DISCARD Overgrowth
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth']
+82c82
+<     gy: ['Eldrazi Displacer']
+---
+>     gy: ['Overgrowth']
+85c85
+<     hand(8): ['Cloud of Faeries', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+87c87
+<     gy: ['Eldrazi Displacer']
+---
+>     gy: ['Overgrowth']
+89,92c89,92
+< T6 MAIN_1: CAST_SPELL Fertile Ground {"manaPaid":"{1}{G}"}; CAST_SPELL Cloud of Faeries {"manaPaid":"{1}{U}"} [+1 UNTAP_SOURCES]
+<     hand(6): ['Eldrazi Displacer', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+<     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries']
+<     gy: ['Eldrazi Displacer']
+---
+> T6 MAIN_1: 
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth']
+95,97c95,97
+<     hand(6): ['Eldrazi Displacer', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+<     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries']
+<     gy: ['Eldrazi Displacer']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth']
+100,102c100,107
+<     hand(6): ['Eldrazi Displacer', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+<     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries']
+<     gy: ['Eldrazi Displacer']
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth']
+>     opp life 20
+> T6 CLEANUP: DISCARD Trace of Abundance
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance']
+105,118c110,123
+<     hand(7): ['Eldrazi Displacer', 'Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+<     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries']
+<     gy: ['Eldrazi Displacer']
+<     opp life 20
+< T7 MAIN_1: CAST_SPELL Wild Growth {"manaPaid":"{G}"}; CAST_SPELL Wild Growth {"manaPaid":"{G}"}; CAST_SPELL Eldrazi Displacer {"manaPaid":"{2}{W}"}
+<     hand(4): ['Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+<     bf: ['Aether Hub(T)', 'Mariposa Military Base(T)', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries', 'Wild Growth[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Eldrazi Displacer']
+<     opp life 20
+< T7 COMBAT: ATTACK {"damage":1,"oppLife":19}
+<     hand(4): ['Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+<     bf: ['Aether Hub(T)', 'Mariposa Military Base(T)', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries(T)', 'Wild Growth[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Eldrazi Displacer']
+<     opp life 19
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance']
+>     opp life 20
+> T7 MAIN_1: 
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance']
+>     opp life 20
+> T7 COMBAT: 
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance']
+>     opp life 20
+120,123c125,133
+<     hand(4): ['Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Wild Growth']
+<     bf: ['Aether Hub(T)', 'Mariposa Military Base(T)', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries(T)', 'Wild Growth[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Eldrazi Displacer']
+<     opp life 19
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance']
+>     opp life 20
+> T7 CLEANUP: DISCARD Fertile Ground
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+>     opp life 20
+125,138c135,158
+<     hand(5): ['Fertile Ground', 'Overgrowth', 'Trace of Abundance', 'Trace of Abundance', 'Wild Growth']
+<     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen', 'Fertile Ground[attachedTo=3]', 'Cloud of Faeries', 'Wild Growth[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Eldrazi Displacer']
+<     gy: ['Eldrazi Displacer']
+<     opp life 19
+< T8 MAIN_1: DRAW Peregrine Drake; DRAW Overgrowth; DRAW Kitchen; DRAW Yavimaya Coast; DRAW Peregrine Drake; DRAW Adarkar Wastes; DRAW Conservatory; DRAW Shivan Gorge; ABILITY Combo Off {"ability":"combo route: win"}; CAST_SPELL Wild Growth {"manaPaid":"{G}"}; CAST_SPELL Fertile Ground {"manaPaid":"{1}{G}"}; CAST_SPELL Trace of Abundance {"manaPaid":"{R}{G}"}; CAST_SPELL Overgrowth {"manaPaid":"{2}{G}"} [+38 UNTAP_SOURCES]
+<     hand(7): ['Adarkar Wastes', 'Conservatory', 'Kitchen', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Yavimaya Coast']
+<     bf: ['Aether Hub(T)', 'Mariposa Military Base(T)', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Eldrazi Displacer', 'Cloud of Faeries(T)', 'Shivan Gorge(T)', 'Peregrine Drake(T)', 'Wild Growth[attachedTo=29]', 'Fertile Ground[attachedTo=29]', 'Trace of Abundance[attachedTo=29]', 'Overgrowth[attachedTo=3]']
+<     gy: ['Eldrazi Displacer']
+<     opp life 0
+< T8 COMBAT: ATTACK {"damage":3,"oppLife":-3}
+<     hand(7): ['Adarkar Wastes', 'Conservatory', 'Kitchen', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Yavimaya Coast']
+<     bf: ['Aether Hub(T)', 'Mariposa Military Base(T)', 'Kitchen(T)', 'Fertile Ground[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Wild Growth[attachedTo=3]', 'Eldrazi Displacer(T)', 'Cloud of Faeries(T)', 'Shivan Gorge(T)', 'Peregrine Drake(T)', 'Wild Growth[attachedTo=29]', 'Fertile Ground[attachedTo=29]', 'Trace of Abundance[attachedTo=29]', 'Overgrowth[attachedTo=3]']
+<     gy: ['Eldrazi Displacer']
+<     opp life -3
+---
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+>     opp life 20
+> T8 MAIN_1: 
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+>     opp life 20
+> T8 COMBAT: 
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+>     opp life 20
+> T8 MAIN_2: 
+>     hand(8): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Trace of Abundance', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground']
+>     opp life 20
+> T8 CLEANUP: DISCARD Trace of Abundance
+>     hand(7): ['200002', 'Eldrazi Displacer', 'Eldrazi Displacer', 'Fertile Ground', 'Wild Growth', 'Wild Growth', 'Wild Growth']
+>     bf: ['Aether Hub', 'Mariposa Military Base', 'Kitchen']
+>     gy: ['Overgrowth', 'Trace of Abundance', 'Fertile Ground', 'Trace of Abundance']
+>     opp life 20

@@ -1,0 +1,11 @@
+fix(land): no Karoo-for-Karoo greedy land drop
+
+MTG_LAND_BOUNCE_GUARD (default ON; =0 any other land suffices). GreedyLandChoiceIndex only asked that
+SOME other land exist before playing a Karoo bounce land. When the land the bounce would return is
+itself a Karoo the drop gains nothing (one bounce land in play, entered tapped, the other back in
+hand) while a real land may wait. The returned land is predicted by the ranking BounceKarooLand takes
+its pick from (BounceLandCandidates' front, which already avoids a Karoo whenever anything else is
+there), so this refuses exactly the Karoo-for-Karoo swap. Bruna d0 gi1933 (seed 1091934) replayed
+Azorius Chancery over its twin every turn with Remote Farm in hand: 9 -> 6 (old 7).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

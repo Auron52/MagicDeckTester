@@ -1,0 +1,78 @@
+fivecolour  d0   on: n=3000 avg=5.5413
+    on vs off                    n= 3000  net(on-off)= -275  on faster= 273 slower=   3   slower: 490:6->7 2025:4->5 2663:5->6
+    on vs noDOMAIN               n= 3000  net(on-noDOMAIN)= -152  on faster= 155 slower=   3   slower: 2025:4->5 2663:5->6 2713:5->6
+    on vs noCANNONS              n= 3000  net(on-noCANNONS)=  -75  on faster=  77 slower=   2   slower: 490:6->7 540:5->6
+    on vs noREPROJ               n= 3000  net(on-noREPROJ)=   +1  on faster=   0 slower=   1   slower: 1924:5->6
+    on vs noKINDS                n= 3000  net(on-noKINDS)=  -92  on faster=  88 slower=   0   slower: 
+    on vs noPAYER                n= 3000  net(on-noPAYER)=  -10  on faster=  12 slower=   2   slower: 1778:5->6 1949:5->6
+    on vs noAOW                  n= 3000  net(on-noAOW)=  -16  on faster=  16 slower=   0   slower: 
+fivecolour  d3   on: n=300 avg=4.8767
+    on vs off                    n=  300  net(on-off)=   -3  on faster=   3 slower=   0   slower: 
+    on vs noDOMAIN               n=  300  net(on-noDOMAIN)=   -2  on faster=   2 slower=   0   slower: 
+    on vs noCANNONS              n=  300  net(on-noCANNONS)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noKINDS                n=  300  net(on-noKINDS)=   -1  on faster=   1 slower=   0   slower: 
+    on vs noPAYER                n=  300  net(on-noPAYER)=   +0  on faster=   0 slower=   0   slower: 
+stompy      d0   on: n=3000 avg=4.9067
+    on vs off                    n= 3000  net(on-off)= -150  on faster= 152 slower=   2   slower: 740:5->6 2748:4->5
+    on vs noHOOF                 n= 3000  net(on-noHOOF)= -150  on faster= 152 slower=   2   slower: 740:5->6 2748:4->5
+    on vs noPAYER                n= 3000  net(on-noPAYER)=  -63  on faster=  81 slower=  18   slower: 71:5->6 146:5->6 420:5->6 527:4->5 626:5->6 638:5->6 740:5->6 801:4->5 904:4->5 936:4->5 1686:4->5 2027:5->6
+    on vs noREPROJ               n= 3000  net(on-noREPROJ)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noAOW                  n= 3000  net(on-noAOW)=   +0  on faster=   0 slower=   0   slower: 
+stompy      d3   on: n=300 avg=4.1133
+    on vs off                    n=  300  net(on-off)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noHOOF                 n=  300  net(on-noHOOF)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noPAYER                n=  300  net(on-noPAYER)=   +0  on faster=   0 slower=   0   slower: 
+selesnya    d0   on: n=3000 avg=5.6907
+    on vs off                    n= 3000  net(on-off)= -534  on faster= 521 slower=   7   slower: 23:4->5 1467:6->7 2643:6->7 2662:5->6 2737:6->7 2804:5->6 2955:5->6
+    on vs noLIFE                 n= 3000  net(on-noLIFE)= -380  on faster= 370 slower=   8   slower: 23:4->5 789:4->5 1453:5->6 1467:6->7 1949:5->6 2643:6->7 2662:5->6 2737:6->7
+    on vs noHOOF                 n= 3000  net(on-noHOOF)=  -77  on faster=  76 slower=   1   slower: 1726:5->6
+    on vs noREPROJ               n= 3000  net(on-noREPROJ)=  -19  on faster=  19 slower=   0   slower: 
+    on vs noPAYER                n= 3000  net(on-noPAYER)=  -27  on faster=  41 slower=  15   slower: 23:4->5 102:4->5 919:5->6 1088:5->6 1594:4->5 1713:6->7 1852:5->6 1942:4->5 1949:5->6 2168:6->7 2662:5->6 2737:6->7
+    on vs noAOW                  n= 3000  net(on-noAOW)=  -54  on faster=  54 slower=   0   slower: 
+    on vs noBOUNCE               n= 3000  net(on-noBOUNCE)=   +0  on faster=   0 slower=   0   slower: 
+selesnya    d3   on: n=300 avg=5.0733
+    on vs off                    n=  300  net(on-off)=   +1  on faster=   0 slower=   1   slower: 91:5->6
+    on vs noLIFE                 n=  300  net(on-noLIFE)=   +1  on faster=   0 slower=   1   slower: 91:5->6
+    on vs noHOOF                 n=  300  net(on-noHOOF)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noPAYER                n=  300  net(on-noPAYER)=   +1  on faster=   0 slower=   1   slower: 126:5->6
+bruna       d0   on: n=3000 avg=6.1463
+    on vs off                    n= 3000  net(on-off)= -257  on faster= 230 slower=   4   slower: 83:7->8 484:5->6 1323:7->8 2353:6->7
+    on vs noBRUNASC              n= 3000  net(on-noBRUNASC)= -174  on faster= 164 slower=   3   slower: 83:7->8 1323:7->8 2353:6->7
+    on vs noBOUNCE               n= 3000  net(on-noBOUNCE)=  -12  on faster=   8 slower=   0   slower: 
+    on vs noAURAHOST             n= 3000  net(on-noAURAHOST)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noCRONLY               n= 3000  net(on-noCRONLY)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noREPROJ               n= 3000  net(on-noREPROJ)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noPAYER                n= 3000  net(on-noPAYER)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noAOW                  n= 3000  net(on-noAOW)=   +0  on faster=   0 slower=   0   slower: 
+bruna       d3   on: n=300 avg=4.9167
+    on vs off                    n=  300  net(on-off)=   -2  on faster=   3 slower=   1   slower: 170:6->7
+    on vs noBRUNASC              n=  300  net(on-noBRUNASC)=   -1  on faster=   2 slower=   1   slower: 170:6->7
+    on vs noBOUNCE               n=  300  net(on-noBOUNCE)=   +0  on faster=   0 slower=   0   slower: 
+snow        d0   on: n=3000 avg=6.4230
+    on vs off                    n= 3000  net(on-off)=  -10  on faster=  10 slower=   0   slower: 
+    on vs noASTRO                n= 3000  net(on-noASTRO)=   -6  on faster=   6 slower=   0   slower: 
+    on vs noAOW                  n= 3000  net(on-noAOW)=   -7  on faster=   7 slower=   0   slower: 
+    on vs noREPROJ               n= 3000  net(on-noREPROJ)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noPAYER                n= 3000  net(on-noPAYER)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noKINDS                n= 3000  net(on-noKINDS)=   +0  on faster=   0 slower=   0   slower: 
+snow        d3   on: n=300 avg=5.9033
+    on vs off                    n=  300  net(on-off)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noASTRO                n=  300  net(on-noASTRO)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noAOW                  n=  300  net(on-noAOW)=   +0  on faster=   0 slower=   0   slower: 
+critter     d0   on: n=3000 avg=4.6027
+    on vs off                    n= 3000  net(on-off)=  -56  on faster=  56 slower=   0   slower: 
+    on vs noLIFE                 n= 3000  net(on-noLIFE)=  -56  on faster=  56 slower=   0   slower: 
+    on vs noAOW                  n= 3000  net(on-noAOW)=   +0  on faster=   0 slower=   0   slower: 
+critter     d3   on: n=300 avg=4.3600
+    on vs off                    n=  300  net(on-off)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noLIFE                 n=  300  net(on-noLIFE)=   +0  on faster=   0 slower=   0   slower: 
+angels      d0   on: n=3000 avg=5.2683
+    on vs off                    n= 3000  net(on-off)=  -45  on faster=  47 slower=   2   slower: 657:5->6 1381:5->6
+    on vs noLIFE                 n= 3000  net(on-noLIFE)=  -41  on faster=  43 slower=   2   slower: 657:5->6 1381:5->6
+    on vs noAOW                  n= 3000  net(on-noAOW)=   -4  on faster=   4 slower=   0   slower: 
+angels      d3   on: n=300 avg=4.6700
+    on vs off                    n=  300  net(on-off)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noLIFE                 n=  300  net(on-noLIFE)=   +0  on faster=   0 slower=   0   slower: 
+goblins     d0   on: n=3000 avg=4.0817
+    on vs off                    n= 3000  net(on-off)=   +0  on faster=   0 slower=   0   slower: 
+    on vs noKINDS                n= 3000  net(on-noKINDS)=   +0  on faster=   0 slower=   0   slower: 

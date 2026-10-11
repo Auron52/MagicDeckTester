@@ -1,0 +1,356 @@
+{
+  "cardNumbering": {
+    "Apex Altisaur": [
+      1
+    ],
+    "Call of the Wild": [
+      2,
+      3
+    ],
+    "Craterhoof Behemoth": [
+      4,
+      5
+    ],
+    "Elderscale Wurm": [
+      6
+    ],
+    "Elvish Archdruid": [
+      7,
+      8,
+      9,
+      10
+    ],
+    "Elvish Mystic": [
+      11,
+      12,
+      13,
+      14
+    ],
+    "Forest": [
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "Fyndhorn Elves": [
+      28,
+      29,
+      30,
+      31
+    ],
+    "Ghalta, Stampede Tyrant": [
+      32
+    ],
+    "Hornet Queen": [
+      33
+    ],
+    "Llanowar Elves": [
+      34,
+      35,
+      36,
+      37
+    ],
+    "Natural Order": [
+      38,
+      39,
+      40,
+      41
+    ],
+    "Priest of Titania": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "Sol Ring": [
+      46
+    ],
+    "Terastodon": [
+      47,
+      48
+    ],
+    "Turntimber Symbiosis": [
+      49,
+      50,
+      51,
+      52
+    ],
+    "Vaultborn Tyrant": [
+      53
+    ],
+    "World War Hulk": [
+      54,
+      55
+    ],
+    "Worldly Tutor": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Worldspine Wurm": [
+      60
+    ]
+  },
+  "deckId": "StompySurprise",
+  "gameNumber": 0,
+  "mulliganSequence": [],
+  "openingHand": [],
+  "result": {
+    "turn": null,
+    "winner": "none"
+  },
+  "runId": "scenario",
+  "seed": 1,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 11,
+          "cardName": "Forest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 8,
+          "cardName": "Worldspine Wurm",
+          "manaPaid": "{8}{G}{G}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Apex Altisaur",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 11,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          42
+        ],
+        "hand": [
+          9,
+          10
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 23,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 10,
+          "oppLife": 13,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Apex Altisaur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          42
+        ],
+        "hand": [
+          9,
+          10
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 13,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 1,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 2,
+            "cardName": "Llanowar Elves",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 3,
+            "cardName": "Turntimber, Serpentine Wood",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 4,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 6,
+            "cardName": "Priest of Titania",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 7,
+            "cardName": "Apex Altisaur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 11,
+            "cardName": "Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 8,
+            "cardName": "Worldspine Wurm",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          42
+        ],
+        "hand": [
+          9,
+          10
+        ],
+        "opponentBattlefield": [],
+        "opponentLife": 13,
+        "playerLife": 17,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    }
+  ]
+}

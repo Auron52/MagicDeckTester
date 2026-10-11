@@ -1,0 +1,1544 @@
+{
+  "cardNumbering": {
+    "Ancient Cornucopia": [
+      1
+    ],
+    "Birds of Paradise": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "Blood Crypt": [
+      6
+    ],
+    "Bloom Tender": [
+      7,
+      8
+    ],
+    "Breeding Pool": [
+      9
+    ],
+    "Cosmic Spider-Man": [
+      10,
+      11
+    ],
+    "Deathrite Shaman": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "Faeburrow Elder": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "Garth One-Eye": [
+      20
+    ],
+    "Godless Shrine": [
+      21
+    ],
+    "Island": [
+      22
+    ],
+    "Jared Carthalion": [
+      23,
+      24
+    ],
+    "Jetmir's Garden": [
+      25
+    ],
+    "Lightning Greaves": [
+      26
+    ],
+    "Maelstrom Archangel": [
+      27,
+      28,
+      29,
+      30
+    ],
+    "Mana Cannons": [
+      31,
+      32,
+      33
+    ],
+    "Misty Rainforest": [
+      34,
+      35
+    ],
+    "Mountain": [
+      36
+    ],
+    "Nicol Bolas, Planeswalker": [
+      37,
+      38
+    ],
+    "Oko, Thief of Crowns": [
+      39
+    ],
+    "Overgrown Tomb": [
+      40
+    ],
+    "Progenitus": [
+      41
+    ],
+    "Scalding Tarn": [
+      42,
+      43,
+      44
+    ],
+    "Steam Vents": [
+      45
+    ],
+    "Stomping Ground": [
+      46
+    ],
+    "Two-Headed Hellkite": [
+      47,
+      48,
+      49
+    ],
+    "Unite the Coalition": [
+      50,
+      51
+    ],
+    "Verdant Catacombs": [
+      52,
+      53
+    ],
+    "Windswept Heath": [
+      54,
+      55
+    ],
+    "Wooded Foothills": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "Zagoth Triome": [
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 56,
+          "cardName": "Wooded Foothills"
+        },
+        {
+          "card": 34,
+          "cardName": "Misty Rainforest"
+        },
+        {
+          "card": 22,
+          "cardName": "Island"
+        },
+        {
+          "card": 16,
+          "cardName": "Faeburrow Elder"
+        },
+        {
+          "card": 27,
+          "cardName": "Maelstrom Archangel"
+        },
+        {
+          "card": 50,
+          "cardName": "Unite the Coalition"
+        },
+        {
+          "card": 31,
+          "cardName": "Mana Cannons"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 56,
+      "cardName": "Wooded Foothills"
+    },
+    {
+      "card": 34,
+      "cardName": "Misty Rainforest"
+    },
+    {
+      "card": 22,
+      "cardName": "Island"
+    },
+    {
+      "card": 16,
+      "cardName": "Faeburrow Elder"
+    },
+    {
+      "card": 27,
+      "cardName": "Maelstrom Archangel"
+    },
+    {
+      "card": 50,
+      "cardName": "Unite the Coalition"
+    },
+    {
+      "card": 31,
+      "cardName": "Mana Cannons"
+    }
+  ],
+  "result": {
+    "turn": 5,
+    "winner": "player"
+  },
+  "runId": "20261010_123424_1210401",
+  "seed": 1210401,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 28,
+          "cardName": "Maelstrom Archangel",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          56,
+          34,
+          22,
+          16,
+          27,
+          50,
+          31,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 56,
+          "cardName": "Wooded Foothills",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          34,
+          22,
+          16,
+          27,
+          50,
+          31,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          34,
+          22,
+          16,
+          27,
+          50,
+          31,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          34,
+          22,
+          16,
+          27,
+          50,
+          31,
+          28
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 55,
+          "cardName": "Windswept Heath",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56
+        ],
+        "hand": [
+          34,
+          22,
+          16,
+          27,
+          50,
+          31,
+          28,
+          55
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 34,
+          "cardName": "Misty Rainforest",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          56,
+          34
+        ],
+        "hand": [
+          22,
+          16,
+          27,
+          50,
+          31,
+          28,
+          55
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          56,
+          34
+        ],
+        "hand": [
+          22,
+          16,
+          27,
+          50,
+          31,
+          28,
+          55
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [
+          56,
+          34
+        ],
+        "hand": [
+          22,
+          16,
+          27,
+          50,
+          31,
+          28,
+          55
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 45,
+          "cardName": "Steam Vents",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34
+        ],
+        "hand": [
+          22,
+          16,
+          27,
+          50,
+          31,
+          28,
+          55,
+          45
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 18,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 55,
+          "cardName": "Windswept Heath",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 16,
+          "cardName": "Faeburrow Elder",
+          "manaPaid": "{1}{W}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          27,
+          50,
+          31,
+          28,
+          45
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          27,
+          50,
+          31,
+          28,
+          45
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          27,
+          50,
+          31,
+          28,
+          45
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 1,
+          "cardName": "Ancient Cornucopia",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          27,
+          50,
+          31,
+          28,
+          45,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 15,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 45,
+          "cardName": "Steam Vents",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 27,
+          "cardName": "Maelstrom Archangel",
+          "manaPaid": "{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          50,
+          31,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          50,
+          31,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          50,
+          31,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Stomping Ground",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 27,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55
+        ],
+        "hand": [
+          22,
+          50,
+          31,
+          28,
+          1,
+          46
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 13,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 46,
+          "cardName": "Stomping Ground",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 31,
+          "cardName": "Mana Cannons",
+          "manaPaid": "{2}{R}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 50,
+          "cardName": "Unite the Coalition",
+          "manaPaid": "{2}{W}{U}{B}{R}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 46,
+            "cardName": "Stomping Ground",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55,
+          50
+        ],
+        "hand": [
+          22,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 5,
+        "playerLife": 11,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 5,
+          "oppLife": 0,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 25,
+            "cardName": "Jetmir's Garden",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 60,
+            "cardName": "Zagoth Triome",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 21,
+            "cardName": "Godless Shrine",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 16,
+            "cardName": "Faeburrow Elder",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 45,
+            "cardName": "Steam Vents",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Maelstrom Archangel",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 46,
+            "cardName": "Stomping Ground",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 31,
+            "cardName": "Mana Cannons",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          56,
+          34,
+          55,
+          50
+        ],
+        "hand": [
+          22,
+          28,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 0,
+            "cardName": "Opponent Land",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 0,
+        "playerLife": 11,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    }
+  ]
+}

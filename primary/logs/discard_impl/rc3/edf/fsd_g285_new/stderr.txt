@@ -1,0 +1,17 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Kitchen: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Kitchen: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Mariposa Military Base: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Mariposa Military Base: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Shivan Gorge: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Shivan Gorge: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Mariposa Military Base[rad]: 
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Mariposa Military Base[rad]: 
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/fsd_g285_new
+[enum-memo] hits=4 misses=94 clears=0
+[solve-memo] hits=2020 misses=3811 clears=0
+[leaf-eval] published=70 ties=0 flips=0 life-equal-ties=0

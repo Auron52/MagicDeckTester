@@ -1,0 +1,159 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[edf-turn] t1 lands=0 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t1 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t1 cast Wild Growth: cannot pay {G}
+[combo-route]     t1 tap Adarkar Wastes -> White
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c0 *0 lands available=1
+[combo-route]   t1 skip outlet Emiel the Blessed: avail < cost
+[combo-route]     t1 tap Adarkar Wastes -> White
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order A (auras first) leaves no loop
+[combo-route]     t1 tap Adarkar Wastes -> White
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c0 *0 lands available=1
+[combo-route]   t1 skip outlet Emiel the Blessed: avail < cost
+[combo-route]     t1 tap Adarkar Wastes -> White
+[combo-route]   t1 pay {1}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c0 *0 lands available=1
+[combo-route]   t1 deploy: no outlet on the battlefield
+[combo-route]   t1 deploy: no untapper on the battlefield
+[combo-route]   t1 deploy order B (auras last) leaves no loop
+[combo-route] t1 no loop: neither deploy order reaches a finish
+[combo-route] t1 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=20 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t1 no goff cand
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-prosp] t1 outlets=0 payloads=0 casting=[Training Grounds,]
+[edf-turn] t2 lands=1 auras=0 untapper=0 outlet=0 drawland=0 wish=1 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=1 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t2 tap Aether Hub -> Green
+[combo-route] t2 cast Wild Growth -> land
+[combo-route]   t2 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Wild Growth: cannot pay {G}
+[combo-route]     t2 tap Adarkar Wastes -> White
+[combo-route] t2 cast Wild Growth -> land
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 pay {1}{G} FAILED (rolled back); float w1 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]     t2 tap Adarkar Wastes -> White
+[combo-route]     t2 tap Aether Hub -> Green
+[combo-route] t2 combo finish: Living Wish → Cloud of Faeries
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=1 iters=0 draws=0 acts=0 life=18 opp=20 | combo finish: Living Wish → Cloud of Faeries; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t2 no goff cand
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,Living Wish,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Living Wish,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t2 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-turn] t2 lands=2 auras=1 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=0 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]   t2 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Wild Growth: cannot pay {G}
+[combo-route]   t2 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c0 *0 lands available=0
+[combo-route]   t2 cast Wild Growth: cannot pay {G}
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order A (auras first) leaves no loop
+[combo-route]   t2 skip Cloud of Faeries: avail 0 < cost
+[combo-route]   t2 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t2 deploy: no outlet on the battlefield
+[combo-route]   t2 deploy: no untapper on the battlefield
+[combo-route]   t2 deploy order B (auras last) leaves no loop
+[combo-route] t2 no loop: neither deploy order reaches a finish
+[combo-route] t2 TRIAL no: deploys=0 iters=0 draws=0 acts=0 life=19 opp=20 | no loop: neither deploy order reaches a finish; 
+[edf-turn] t3 lands=2 auras=1 untapper=0 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=3 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Brushland -> Green
+[combo-route] t3 cast Wild Growth -> land
+[combo-route]   t3 pay {G} FAILED (rolled back); float w0 u0 b0 r0 g0 c1 *0 lands available=0
+[combo-route]   t3 cast Wild Growth: cannot pay {G}
+[combo-route]     t3 tap Adarkar Wastes -> White
+[combo-route] t3 cast Wild Growth -> land
+[combo-route]   t3 pay {1}{U} FAILED (rolled back); float w1 u0 b0 r0 g1 c1 *0 lands available=0
+[combo-route]   t3 cast Cloud of Faeries: cannot pay {1}{U}
+[combo-route]   t3 skip outlet Emiel the Blessed: avail < cost
+[combo-route]   t3 deploy: no outlet on the battlefield
+[combo-route]   t3 deploy: no untapper on the battlefield
+[combo-route]   t3 deploy order A (auras first) leaves no loop
+[combo-route]     t3 tap Adarkar Wastes -> Blue
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route] t3 cast Cloud of Faeries
+[combo-route]     t3 tap Adarkar Wastes -> White
+[combo-route]     t3 tap Aether Hub -> Colorless
+[combo-route]     t3 tap Brushland -> White
+[combo-route] t3 cast Emiel the Blessed
+[combo-route] t3 no finisher route
+[combo-route] t3 no loop: neither deploy order reaches a finish
+[combo-route] t3 TRIAL no: deploys=2 iters=0 draws=0 acts=0 life=16 opp=20 | cast Cloud of Faeries; cast Emiel the Blessed; no finisher route; no loop: neither deploy order reaches a finish; 
+[edf-goff-cut] t3 no goff cand
+[edf-prosp] t3 outlets=1 payloads=0 casting=[Emiel the Blessed,]
+[edf-prosp] t3 outlets=1 payloads=0 casting=[Emiel the Blessed,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=0 casting=[Wild Growth,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-prosp] t3 outlets=0 payloads=1 casting=[Wild Growth,Cloud of Faeries,Wild Growth,]
+[edf-turn] t4 lands=3 auras=3 untapper=1 outlet=0 drawland=0 wish=0 | ok=0 untaps=0 refund=0 cost=0 net=0 pool=6 gorge=0/0 drain=0/0 exile=0 setup=0 needgorge=0 needdrain=1
+[combo-route]     t4 tap Adarkar Wastes -> White
+[combo-route]     t4 tap Aether Hub -> White
+[combo-route] t4 cast Emiel the Blessed
+[combo-route]     t4 tap Adarkar Wastes -> White
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route]     t4 tap Adarkar Wastes -> White
+[combo-route]     t4 tap Aether Hub -> Colorless
+[combo-route] t4 cast Emiel the Blessed
+[combo-route] t4 developed: 1 creature(s) cast off the loop
+[combo-route] t4 TRIAL DEVELOP: deploys=2 iters=3 draws=0 acts=0 life=14 opp=20 | cast Emiel the Blessed; Emiel the Blessed: blink Cloud of Faeries x3; cast Emiel the Blessed; developed: 1 creature(s) cast off the loop; 
+[edf-goff-cut] t4 no goff cand

@@ -1,0 +1,844 @@
+{
+ "jobs": [
+  {
+   "name": "ship_on.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920001,
+   "game_index": 0,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   }
+  },
+  {
+   "name": "ship_off.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920001,
+   "game_index": 0,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   }
+  },
+  {
+   "name": "ship_on.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920026,
+   "game_index": 25,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   }
+  },
+  {
+   "name": "ship_off.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920026,
+   "game_index": 25,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   }
+  },
+  {
+   "name": "ship_on.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920051,
+   "game_index": 50,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   }
+  },
+  {
+   "name": "ship_off.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920051,
+   "game_index": 50,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   }
+  },
+  {
+   "name": "ship_on.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920076,
+   "game_index": 75,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   }
+  },
+  {
+   "name": "ship_off.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7920076,
+   "game_index": 75,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   }
+  },
+  {
+   "name": "d3_on.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_off.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_on.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910026,
+   "game_index": 25,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_off.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910026,
+   "game_index": 25,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_on.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910051,
+   "game_index": 50,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_off.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910051,
+   "game_index": 50,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_on.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910076,
+   "game_index": 75,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_off.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910076,
+   "game_index": 75,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_on.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910101,
+   "game_index": 100,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_off.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910101,
+   "game_index": 100,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_on.c125",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910126,
+   "game_index": 125,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d3_off.c125",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7910126,
+   "game_index": 125,
+   "budget_ms": 10,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "2hg_on.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_off.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_on.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930026,
+   "game_index": 25,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_off.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930026,
+   "game_index": 25,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_on.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930051,
+   "game_index": 50,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_off.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930051,
+   "game_index": 50,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_on.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930076,
+   "game_index": 75,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "2hg_off.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7930076,
+   "game_index": 75,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "d0_on.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900026,
+   "game_index": 25,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c25",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900026,
+   "game_index": 25,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900051,
+   "game_index": 50,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c50",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900051,
+   "game_index": 50,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900076,
+   "game_index": 75,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c75",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900076,
+   "game_index": 75,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900101,
+   "game_index": 100,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c100",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900101,
+   "game_index": 100,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c125",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900126,
+   "game_index": 125,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c125",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900126,
+   "game_index": 125,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c150",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900151,
+   "game_index": 150,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c150",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900151,
+   "game_index": 150,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c175",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900176,
+   "game_index": 175,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c175",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900176,
+   "game_index": 175,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c200",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900201,
+   "game_index": 200,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c200",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900201,
+   "game_index": 200,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c225",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900226,
+   "game_index": 225,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c225",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900226,
+   "game_index": 225,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c250",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900251,
+   "game_index": 250,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c250",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900251,
+   "game_index": 250,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c275",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900276,
+   "game_index": 275,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c275",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900276,
+   "game_index": 275,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c300",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900301,
+   "game_index": 300,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c300",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900301,
+   "game_index": 300,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c325",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900326,
+   "game_index": 325,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c325",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900326,
+   "game_index": 325,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c350",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900351,
+   "game_index": 350,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c350",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900351,
+   "game_index": 350,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_on.c375",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900376,
+   "game_index": 375,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": true
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "d0_off.c375",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Hinata2/Hinata2.profile.json",
+   "games": 25,
+   "seed": 7900376,
+   "game_index": 375,
+   "budget_ms": 0,
+   "flags": {
+    "MTG_CRACKLE_COUNT_EXACT": false
+   },
+   "depth": 0,
+   "ignore_play_profile": true
+  }
+ ]
+}

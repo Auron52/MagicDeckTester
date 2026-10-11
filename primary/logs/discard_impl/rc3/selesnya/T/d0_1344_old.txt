@@ -1,0 +1,68 @@
+Loaded 60 mainboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1511345 t=1 m=1 route=clean pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Llanowar Elves
+[uo-state] gs=1511345 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Accomplished Alchemist|Selesnya Sanctuary|Llanowar Elves|Accomplished Alchemist|Ageless Entity|Feed the Clan|Branchloft Pathway
+[exec-tap] T1 before Llanowar Elves: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Brushland
+[uo-cast] gs=1511345 t=1 m=1 d=0 card=Llanowar Elves num=40 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T1 Llanowar Elves tapped: Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves
+[uo-order] gs=1511345 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511345 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Accomplished Alchemist|Selesnya Sanctuary|Accomplished Alchemist|Ageless Entity|Feed the Clan|Branchloft Pathway
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves
+[uo-order] gs=1511345 t=2 m=1 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Feed the Clan
+[uo-state] gs=1511345 t=2 cap=-1 pool{w0 u0 b0 r0 g1 c0 *2} hand=Accomplished Alchemist|Selesnya Sanctuary|Accomplished Alchemist|Ageless Entity|Feed the Clan|Branchloft Pathway
+[exec-tap] T2 before Feed the Clan: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Brushland Llanowar Elves Brushland
+[uo-cast] gs=1511345 t=2 m=1 d=0 card=Feed the Clan num=28 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T2 Feed the Clan tapped: Brushland Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Brushland(T)
+[uo-order] gs=1511345 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511345 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Accomplished Alchemist|Selesnya Sanctuary|Accomplished Alchemist|Ageless Entity|Branchloft Pathway
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Brushland
+[uo-order] gs=1511345 t=3 m=1 route=clean pool=4 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Accomplished Alchemist
+[uo-state] gs=1511345 t=3 cap=-1 pool{w0 u0 b0 r0 g2 c0 *2} hand=Accomplished Alchemist|Selesnya Sanctuary|Accomplished Alchemist|Ageless Entity|Genesis Wave
+[exec-tap] T3 before Accomplished Alchemist: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Brushland Llanowar Elves Brushland Branchloft Pathway
+[uo-cast] gs=1511345 t=3 m=1 d=0 card=Accomplished Alchemist num=1 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T3 Accomplished Alchemist tapped: Brushland Llanowar Elves Brushland Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Brushland(T) Branchloft Pathway(T) Accomplished Alchemist
+[uo-order] gs=1511345 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511345 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Selesnya Sanctuary|Accomplished Alchemist|Ageless Entity|Genesis Wave
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Brushland Branchloft Pathway Accomplished Alchemist
+[uo-order] gs=1511345 t=4 m=1 route=clean pool=5 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Ageless Entity
+[uo-state] gs=1511345 t=4 cap=-1 pool{w0 u0 b0 r0 g2 c0 *3} hand=Accomplished Alchemist|Ageless Entity|Genesis Wave|Llanowar Elves|Branchloft Pathway
+[exec-tap] T4 before Ageless Entity: float{w0 u0 b0 r0 g1 c0 *0} untapped: 1/1 Creature Brushland Llanowar Elves Brushland Accomplished Alchemist
+[uo-cast] gs=1511345 t=4 m=1 d=0 card=Ageless Entity num=4 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T4 Ageless Entity tapped: Brushland Llanowar Elves Brushland Accomplished Alchemist  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Brushland(T) Accomplished Alchemist(T) Selesnya Sanctuary(T) Ageless Entity
+[uo-order] gs=1511345 t=4 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511345 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Accomplished Alchemist|Genesis Wave|Llanowar Elves|Branchloft Pathway
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Brushland(T) Accomplished Alchemist(T) Selesnya Sanctuary(T) Ageless Entity
+[uo-order] gs=1511345 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511345 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Accomplished Alchemist|Genesis Wave|Llanowar Elves|Branchloft Pathway
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Brushland Accomplished Alchemist Selesnya Sanctuary Ageless Entity
+[uo-order] gs=1511345 t=5 m=1 route=clean pool=7 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Accomplished Alchemist|Llanowar Elves
+[uo-state] gs=1511345 t=5 cap=-1 pool{w0 u0 b0 r0 g3 c0 *4} hand=Accomplished Alchemist|Genesis Wave|Llanowar Elves|Craterhoof Behemoth
+[exec-tap] T5 before Accomplished Alchemist: float{w0 u0 b0 r0 g2 c0 *3} untapped: 1/1 Creature Llanowar Elves Accomplished Alchemist Ageless Entity
+[uo-cast] gs=1511345 t=5 m=1 d=0 card=Accomplished Alchemist num=2 staged=0 splice=0 paid=1 pool=7
+[exec-tap] T5 Accomplished Alchemist tapped:  float{w0 u0 b0 r0 g1 c0 *0}
+[exec-tap] T5 before Llanowar Elves: float{w0 u0 b0 r0 g1 c0 *0} untapped: 1/1 Creature Llanowar Elves Accomplished Alchemist Ageless Entity Accomplished Alchemist
+[uo-cast] gs=1511345 t=5 m=1 d=0 card=Llanowar Elves num=41 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T5 Llanowar Elves tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Brushland(T) Accomplished Alchemist(T) Selesnya Sanctuary(T) Ageless Entity(T) Branchloft Pathway(T) Accomplished Alchemist Llanowar Elves
+[uo-order] gs=1511345 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1511345 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Genesis Wave|Craterhoof Behemoth
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Brushland Accomplished Alchemist Selesnya Sanctuary Ageless Entity Branchloft Pathway Accomplished Alchemist Llanowar Elves
+[uo-order] gs=1511345 t=6 m=1 route=clean pool=9 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Craterhoof Behemoth
+[uo-state] gs=1511345 t=6 cap=-1 pool{w0 u0 b0 r0 g3 c0 *6} hand=Genesis Wave|Craterhoof Behemoth|Verdant Sun's Avatar
+[exec-tap] T6 before Craterhoof Behemoth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature Brushland Llanowar Elves Brushland Accomplished Alchemist Selesnya Sanctuary Ageless Entity Branchloft Pathway Accomplished Alchemist Llanowar Elves
+[uo-cast] gs=1511345 t=6 m=1 d=0 card=Craterhoof Behemoth num=21 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T6 Craterhoof Behemoth tapped: Brushland Llanowar Elves Brushland Accomplished Alchemist Selesnya Sanctuary Branchloft Pathway Accomplished Alchemist  float{w0 u0 b0 r0 g0 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1511345
+Games played  : 1
+avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

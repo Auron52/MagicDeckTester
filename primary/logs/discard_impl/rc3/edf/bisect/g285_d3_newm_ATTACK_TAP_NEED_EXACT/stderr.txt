@@ -1,0 +1,7 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/bisect/g285_d3_newm_ATTACK_TAP_NEED_EXACT
+[enum-memo] hits=4 misses=94 clears=0
+[solve-memo] hits=2020 misses=3811 clears=0
+[leaf-eval] published=70 ties=0 flips=0 life-equal-ties=0

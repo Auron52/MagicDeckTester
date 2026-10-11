@@ -1,0 +1,16 @@
+{
+ "jobs": [
+  {
+   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+   "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "games": 1,
+   "seed": 217164,
+   "game_index": 163,
+   "budget_ms": 20,
+   "flags": {
+    "MTG_EDF_BUCKET_DISCARD": false
+   },
+   "name": "g163_off"
+  }
+ ]
+}

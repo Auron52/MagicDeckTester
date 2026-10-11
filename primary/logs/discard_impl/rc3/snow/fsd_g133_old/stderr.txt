@@ -1,0 +1,16 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/Snow/Snow.profile.json
+[play] depth=3 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Frost Augur
+[fs-root] tail win=7 bp=-1 pc=-1 val=400 land=Snow-Covered Island: Frost Augur
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Rimewood Falls: 
+[fs-root] tail win=7 bp=-1 pc=-1 val=0 land=Rimewood Falls: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Snow-Covered Island: 
+[fs-root] tail win=7 bp=-1 pc=-1 val=0 land=Snow-Covered Island: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Scrying Sheets: 
+[fs-root] tail win=7 bp=-1 pc=-1 val=0 land=Scrying Sheets: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fs-root] tail win=7 bp=-1 pc=-1 val=0 land=(defer): 
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/snow/fsd_g133_old
+[enum-memo] hits=1 misses=580 clears=0
+[solve-memo] hits=16403 misses=36900 clears=2

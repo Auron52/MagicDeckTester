@@ -1,0 +1,5 @@
+Loaded 60 mainboard card(s)
+Seed          : 2035
+Games played  : 1
+avg (turns)   : 7.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+went infinite : 1 of 1 games, avg turn 7.0000   [not a win; of those, 1 converted the kill, avg kill turn 7.0000]

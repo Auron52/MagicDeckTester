@@ -1,0 +1,7 @@
+Loaded profile from decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[discard] g1534 T4 hand=8 cands=8 lip=2 landsinhand=0 tower=0 dropopen=1 -> Apex of Power
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/dragonstorm/cli_off
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

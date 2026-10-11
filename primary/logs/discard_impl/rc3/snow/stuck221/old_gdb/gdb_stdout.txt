@@ -1,0 +1,36 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+SIGINT is used by the debugger.
+Are you sure you want to change it? (y or n) [answered Y; input not from terminal]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff6dff6c0 (LWP 1342433)]
+Loaded 60 mainboard card(s) + 10 sideboard card(s)
+[New Thread 0x7ffff607e6c0 (LWP 1342438)]
+
+Thread 1 "mtg_ab3_d6a760e" received signal SIGINT, Interrupt.
+0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+==== SAMPLE 1
+#0  0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (cancel=..., private=..., abstime=..., clockid=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:87
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=..., expected=..., clockid=..., abstime=..., private=...) at ./nptl/futex-internal.c:139
+#3  0x00007ffff77a57a3 in __pthread_clockjoin_ex (threadid=..., thread_return=..., clockid=..., abstime=..., block=...) at ./nptl/pthread_join_common.c:102
+#4  0x00007ffff7b1ee33 in std::thread::join() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x0000555555897aab in main ()
+
+Thread 1 "mtg_ab3_d6a760e" received signal SIGTERM, Terminated.
+0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+57	in ./nptl/futex-internal.c
+==== SAMPLE 2
+#0  0x00007ffff779fd71 in __futex_abstimed_wait_common64 (private=..., cancel=..., abstime=..., op=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (cancel=..., private=..., abstime=..., clockid=..., expected=..., futex_word=...) at ./nptl/futex-internal.c:87
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=..., expected=..., clockid=..., abstime=..., private=...) at ./nptl/futex-internal.c:139
+#3  0x00007ffff77a57a3 in __pthread_clockjoin_ex (threadid=..., thread_return=..., clockid=..., abstime=..., block=...) at ./nptl/pthread_join_common.c:102
+#4  0x00007ffff7b1ee33 in std::thread::join() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x0000555555897aab in main ()
+[Thread 0x7ffff7702c40 (LWP 1342416) exited]
+gdb exit=1

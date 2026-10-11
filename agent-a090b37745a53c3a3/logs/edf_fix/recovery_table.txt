@@ -1,0 +1,16 @@
+cell  gi     allon  L1     L2a    L2b    L3     L4    
+d0    76     6      6      6      6      6      6      alloff=6
+d0    110    6      6      6      6      6      6      alloff=6
+d0    354    4      4      5      5      5      5      alloff=5
+d0    373    5      5      5      5      5      5      alloff=5
+d0    432    7      7      8      8      8      8      alloff=8
+d0    547    5      6      6      6      5      6      alloff=6
+d0    604    6      7      7      7      7      7      alloff=7
+d0    985    7      7      7      7      7      7      alloff=7
+d0    1031   5      5      7      7      7      7      alloff=7
+d0    1408   5      5      5      5      5      5      alloff=5
+d0    1475   7      6      8      7      8      8      alloff=8
+d0    1620   5      5      7      7      7      7      alloff=7
+d0    1676   4      4      5      5      5      4      alloff=5
+d0    1985   4      6      4      7      7      7      alloff=7
+d3    285    4      4      5      5      5      5      alloff=5

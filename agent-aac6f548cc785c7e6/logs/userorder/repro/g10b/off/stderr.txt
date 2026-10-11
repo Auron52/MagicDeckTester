@@ -1,0 +1,53 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7600011 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Mercadian Bazaar
+[uo-order] gs=7600011 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Mercadian Bazaar
+[uo-order] gs=7600011 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power
+[uo-order] gs=7600011 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power
+[uo-order] gs=7600011 t=3 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Apex of Power
+[uo-order] gs=7600011 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=3 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Apex of Power
+[uo-order] gs=7600011 t=4 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=4 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Apex of Power
+[uo-order] gs=7600011 t=4 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=4 cap=-1 pool{w0 u0 b0 r4 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Apex of Power
+[uo-order] gs=7600011 t=5 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-state] gs=7600011 t=5 cap=-1 pool{w0 u0 b0 r6 g0 c0 *0} hand=Irencrag Feat|Scourge of Valkas|Apex of Power|Apex of Power|Seething Song
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Scourge of Valkas num=50 staged=0 splice=0 paid=1 pool=0
+[uo-order] gs=7600011 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=7600011 t=5 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Irencrag Feat|Apex of Power|Apex of Power|Seething Song
+[uo-order] gs=7600011 t=6 m=1 route=opaque pool=7 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Seething Song|Apex of Power
+[uo-state] gs=7600011 t=6 cap=-1 pool{w0 u0 b0 r7 g0 c0 *0} hand=Irencrag Feat|Apex of Power|Apex of Power|Seething Song|Pyretic Ritual
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Pyretic Ritual num=37 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Seething Song num=54 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Apex of Power num=2 staged=0 splice=0 paid=1 pool=9
+[uo-order] gs=7600011 t=6 m=1 route=cont pool=10 n=3 pays=-1 ppays=-1 mpos=1 mearl=0 seq=Seething Song|Ruby Medallion|Apex of Power
+[uo-state] gs=7600011 t=6 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Irencrag Feat|Apex of Power|Apex of Power*|Utvara Hellkite*|Mercadian Bazaar*|Ruby Medallion*|Mountain*|Mercadian Bazaar*|Seething Song*
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Seething Song num=53 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Ruby Medallion num=44 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Apex of Power num=4 staged=1 splice=0 paid=1 pool=10
+[uo-order] gs=7600011 t=6 m=1 route=cont pool=1 n=5 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Desperate Ritual|Desperate Ritual|Seething Song|Apex of Power
+[uo-state] gs=7600011 t=6 cap=-1 pool{w0 u0 b0 r1 g0 c0 *0} hand=Irencrag Feat|Apex of Power|Utvara Hellkite*|Mercadian Bazaar*|Mountain*|Mercadian Bazaar*|Rite of Flame*|Mountain*|Sandstone Needle*|Seething Song*|Mountain*|Desperate Ritual*|Desperate Ritual*
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Rite of Flame num=42 staged=1 splice=0 paid=1 pool=1
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Desperate Ritual num=6 staged=1 splice=0 paid=1 pool=2
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Desperate Ritual num=7 staged=1 splice=0 paid=1 pool=4
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Seething Song num=56 staged=1 splice=0 paid=1 pool=6
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=9
+[uo-order] gs=7600011 t=6 m=1 route=cont pool=10 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Desperate Ritual|Pyretic Ritual|Irencrag Feat|Dragonstorm
+[uo-state] gs=7600011 t=6 cap=-1 pool{w0 u0 b0 r10 g0 c0 *0} hand=Irencrag Feat|Utvara Hellkite*|Mercadian Bazaar*|Mountain*|Mercadian Bazaar*|Mountain*|Sandstone Needle*|Mountain*|Desperate Ritual*|Mountain*|Unclaimed Territory*|Dragonstorm*|Dragonlord Kolaghan*|Pyretic Ritual*|Dragonstorm*
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Desperate Ritual num=5 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Pyretic Ritual num=35 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=1 pool=14
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Dragonstorm num=13 staged=1 splice=0 paid=1 pool=18
+[uo-order] gs=7600011 t=6 m=1 route=clean pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Utvara Hellkite
+[uo-state] gs=7600011 t=6 cap=0 pool{w0 u0 b0 r10 g0 c0 *0} hand=Utvara Hellkite*|Mercadian Bazaar*|Mountain*|Mercadian Bazaar*|Mountain*|Sandstone Needle*|Mountain*|Mountain*|Unclaimed Territory*|Dragonlord Kolaghan*|Dragonstorm*
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Utvara Hellkite num=60 staged=1 splice=0 paid=0 pool=10
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g10b/off
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

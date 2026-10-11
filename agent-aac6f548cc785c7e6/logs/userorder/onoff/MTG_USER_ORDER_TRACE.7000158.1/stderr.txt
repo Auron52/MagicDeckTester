@@ -1,0 +1,35 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7000158 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=2 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=2 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=3 m=1 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=0 mearl=0 seq=Ruby Medallion
+[uo-cast] gs=7000158 t=3 m=1 d=0 card=Ruby Medallion num=43 staged=0 splice=0 paid=1 pool=0
+[uo-order] gs=7000158 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=4 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=4 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=5 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=5 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=6 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=6 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=7 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=7 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7000158 t=8 m=1 route=opaque pool=7 n=5 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Desperate Ritual|Seething Song|Apex of Power|Scourge of Valkas
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Rite of Flame num=39 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Desperate Ritual num=5 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Seething Song num=53 staged=0 splice=0 paid=1 pool=10
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=13
+[uo-order] gs=7000158 t=8 m=1 route=cont pool=14 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Pyretic Ritual|Apex of Power|Dragonstorm
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Rite of Flame num=40 staged=1 splice=0 paid=1 pool=14
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Pyretic Ritual num=35 staged=1 splice=0 paid=1 pool=16
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Apex of Power num=3 staged=1 splice=0 paid=1 pool=18
+[uo-order] gs=7000158 t=8 m=1 route=cont pool=9 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Seething Song|Dragonstorm
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Seething Song num=54 staged=1 splice=0 paid=1 pool=9
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Dragonstorm num=10 staged=1 splice=0 paid=1 pool=12
+[uo-order] gs=7000158 t=8 m=1 route=clean pool=4 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-cast] gs=7000158 t=8 m=1 d=0 card=Scourge of Valkas num=50 staged=0 splice=0 paid=1 pool=0
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/onoff/MTG_USER_ORDER_TRACE.7000158.1
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

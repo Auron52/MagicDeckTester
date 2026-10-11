@@ -1,0 +1,23 @@
+fix(attack-proj): every {T}-source activation kind + the executor's payer order
+
+Two gaps found while root-causing games the earlier fixes did not recover. Both default ON; =0
+restores the previous number exactly.
+
+MTG_ATTACK_TAP_ABILITY_KINDS -- the ability discount covered ActivatePermAbility only, but five more
+kinds tap their creature source: Garth One-Eye's conjure (GarthActivate), Krenko (TapForTokens),
+Deathrite (GraveyardExileAbility), Stoneforge (PutFromHandAbility), Kaldring (GraveyardPlayAbility).
+FiveColour d0 gi123 (seed 1210124) T5, opponent at 19: {Unite the Coalition, Garth -> Black Lotus}
+read 10 direct + 10 attack with Garth's own 5 still swinging (real 15). It surfaced because the domain
+yield fix made the competing {Unite, Garth -> Regrowth} line read honestly. gi123: 7 -> 6 (old 6).
+
+MTG_ATTACK_TAP_PAYER_ORDER -- WHICH dorks pay. The discount spent lowest power first, ties in board
+order; the executor's payment spends its creature band in the provider's ManaSourceRank order under
+the plan's traits (an attack turn taps a subtype scaler first: one big tap instead of N bodies). The
+projection now asks the provider the same question (ManaSourceRank, then ManaSourceHoldValue, under
+attack_matters / casts_scaler_food set for the subset). Stompy d0 held-out gi1118 (seed 9301119) T4:
+Craterhoof's 8 off three Forests left 5 to four 2-power Elves; projected 10 (all four tapped), the
+payment tapped Archdruid + one Llanowar and swung for 24. Recovers 1118 / 3746 / 416 / 4847 / 7960 /
+9287. Known miss: Stompy gi724, where the executor's whole-turn prepay over-taps two flat Elves
+beyond the 19 it needs (an executor waste, reported separately).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

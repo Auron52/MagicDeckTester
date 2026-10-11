@@ -1,0 +1,1997 @@
+{
+  "cardNumbering": {},
+  "deckId": "g1424_on",
+  "gameNumber": 1424,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 21,
+          "cardName": "Emiel the Blessed"
+        },
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base"
+        },
+        {
+          "card": 53,
+          "cardName": "Wild Growth"
+        },
+        {
+          "card": 38,
+          "cardName": "Overgrowth"
+        },
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake"
+        },
+        {
+          "card": 29,
+          "cardName": "Kitchen"
+        },
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 21,
+      "cardName": "Emiel the Blessed"
+    },
+    {
+      "card": 35,
+      "cardName": "Mariposa Military Base"
+    },
+    {
+      "card": 53,
+      "cardName": "Wild Growth"
+    },
+    {
+      "card": 38,
+      "cardName": "Overgrowth"
+    },
+    {
+      "card": 42,
+      "cardName": "Peregrine Drake"
+    },
+    {
+      "card": 29,
+      "cardName": "Kitchen"
+    },
+    {
+      "card": 18,
+      "cardName": "Eldrazi Displacer"
+    }
+  ],
+  "result": {
+    "turn": null,
+    "winner": "none"
+  },
+  "runId": "",
+  "seed": 218625,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 47,
+          "cardName": "Trace of Abundance",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          21,
+          35,
+          53,
+          38,
+          42,
+          29,
+          18,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 35,
+          "cardName": "Mariposa Military Base",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          29,
+          18,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          29,
+          18,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          29,
+          18,
+          47
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 19,
+          "cardName": "Eldrazi Displacer",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          29,
+          18,
+          47,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 29,
+          "cardName": "Kitchen",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          18,
+          47,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          18,
+          47,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          18,
+          47,
+          19
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 51,
+          "cardName": "Training Grounds",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          53,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 53,
+          "cardName": "Wild Growth",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          21,
+          38,
+          42,
+          18,
+          47,
+          19,
+          51,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Eldrazi Displacer",
+          "type": "DISCARD"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          19,
+          51,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "CLEANUP",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 32,
+          "cardName": "Living Wish",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          19,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          19,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          19,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          19,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 19,
+          "cardName": "Eldrazi Displacer",
+          "type": "DISCARD"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "CLEANUP",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Yavimaya Coast",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32,
+          57
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 57,
+          "cardName": "Yavimaya Coast",
+          "type": "PLAY_LAND"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 17,
+          "cardName": "Eladamri's Call",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 7
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 17,
+          "cardName": "Eladamri's Call",
+          "type": "DISCARD"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19,
+          17
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "CLEANUP",
+      "turn": 7
+    },
+    {
+      "actions": [
+        {
+          "card": 6,
+          "cardName": "Brushland",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19,
+          17
+        ],
+        "hand": [
+          21,
+          38,
+          42,
+          47,
+          51,
+          31,
+          32,
+          6
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 8
+    },
+    {
+      "actions": [
+        {
+          "card": 6,
+          "cardName": "Brushland",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 42,
+          "cardName": "Peregrine Drake",
+          "manaPaid": "{4}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "cards": [
+            {
+              "card": 29,
+              "cardName": "Kitchen"
+            },
+            {
+              "card": 35,
+              "cardName": "Mariposa Military Base"
+            },
+            {
+              "card": 57,
+              "cardName": "Yavimaya Coast"
+            },
+            {
+              "card": 6,
+              "cardName": "Brushland"
+            }
+          ],
+          "type": "UNTAP_SOURCES"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19,
+          17
+        ],
+        "hand": [
+          21,
+          38,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 8
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19,
+          17
+        ],
+        "hand": [
+          21,
+          38,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 8
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 35,
+            "cardName": "Mariposa Military Base",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 29,
+            "cardName": "Kitchen",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "attachedTo": 29,
+            "card": 53,
+            "cardName": "Wild Growth",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 57,
+            "cardName": "Yavimaya Coast",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 6,
+            "cardName": "Brushland",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 42,
+            "cardName": "Peregrine Drake",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [
+          18,
+          19,
+          17
+        ],
+        "hand": [
+          21,
+          38,
+          47,
+          51,
+          31,
+          32
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 19,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 8
+    }
+  ]
+}

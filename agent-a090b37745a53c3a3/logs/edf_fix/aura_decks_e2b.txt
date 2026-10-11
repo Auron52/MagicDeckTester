@@ -1,0 +1,8 @@
+== cell fungusd3: on-arm games=100  avg=5.2700
+   L2b  MTG_SOLVE_AURA_PAYER_CHECK         n=  100  net(ON-OFF)=   +0  faster=   0 slower=   0  mean=+0.0000 se=0.0000 t=+0.00
+== cell brunad3: on-arm games=100  avg=5.0600
+   L2b  MTG_SOLVE_AURA_PAYER_CHECK         n=  100  net(ON-OFF)=   +0  faster=   0 slower=   0  mean=+0.0000 se=0.0000 t=+0.00
+== cell fungusd0: on-arm games=2000  avg=5.6695
+   L2b  MTG_SOLVE_AURA_PAYER_CHECK         n= 2000  net(ON-OFF)=   +0  faster=   0 slower=   0  mean=+0.0000 se=0.0000 t=+0.00
+== cell brunad0: on-arm games=2000  avg=6.2560
+   L2b  MTG_SOLVE_AURA_PAYER_CHECK         n= 2000  net(ON-OFF)=   +0  faster=   0 slower=   0  mean=+0.0000 se=0.0000 t=+0.00

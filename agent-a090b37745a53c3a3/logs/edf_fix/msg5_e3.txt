@@ -1,0 +1,23 @@
+fix(edf): the COMBO OFF route deploys onto a loop already in play (MTG_EDF_ROUTE_BOARD_DEPLOY)
+
+With an outlet and a payload on the battlefield, comboroute::Run went straight to Loop, which casts only
+from the float -- so the reducer, the land Auras or a land drop in hand, the cards that turn a
+mana-neutral loop into a net-positive one, were never paid for off the lands. A Displacer blinking a
+Cloud of Faeries pays {2}{C} against a two-land refund, banks nothing and stalls ("0 deploys, 61 blinks
+without a step firing", EDF gi 1408 t5 with Training Grounds in hand; gi 547 t5 the same shape).
+
+One lever, heurarm slot EDF_ROUTE_BOARD_DEPLOY (appended), default ON; =0 byte-identical.
+ * Run: when the loop as it stands does not kill, retry after DeployPieces (land drop, Auras on the best
+   host, a refund-covered untapper, the reducer) in both Aura orders; keep a deploy only when that trial
+   KILLS. A trial-verified win, so it can turn a stalled route into a kill and never displaces one; the
+   attempt index (-1 the board loop, 0/1 a deploy order) is what the live apply replays.
+ * Ctx::protect_blink (deploy attempts only): the finish step no longer spends the float the next blink
+   needs when every land is tapped, unless the float finishes the kill outright -- a deploy pays from the
+   lands, so the loop can start with all of them tapped.
+ * The trial memo key folds the lever (thread_local, outlives a batch job switch: without it a pooled
+   A/B replays one arm's verdict in the other's paired games).
+
+Unit: test/unit/test_edf_route_board_deploy.cpp (Displacer + Cloud + Essence Depleter in play, Training
+Grounds in hand: off stalls, on kills and the live apply realises it; nothing to deploy -> unchanged).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,158 @@
+1c1
+< result {'turn': 8, 'winner': 'player'}
+---
+> result {'turn': None, 'winner': 'none'}
+67,68c67,68
+< T4 CLEANUP: DISCARD Peregrine Drake
+<     hand(7): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+---
+> T4 CLEANUP: DISCARD Eldrazi Displacer
+>     hand(7): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+70c70
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Eldrazi Displacer']
+73c73
+<     hand(8): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+---
+>     hand(8): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+75c75
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Eldrazi Displacer']
+78c78
+<     hand(8): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+---
+>     hand(8): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+80c80
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Eldrazi Displacer']
+83c83
+<     hand(8): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+---
+>     hand(8): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+85c85
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Eldrazi Displacer']
+88c88
+<     hand(8): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+---
+>     hand(8): ['Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+90c90
+<     gy: ['Peregrine Drake']
+---
+>     gy: ['Eldrazi Displacer']
+92,93c92,93
+< T5 CLEANUP: DISCARD Emiel the Blessed
+<     hand(7): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+---
+> T5 CLEANUP: DISCARD Eldrazi Displacer
+>     hand(7): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+95c95
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+98c98
+<     hand(8): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds', 'Yavimaya Coast']
+---
+>     hand(8): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds', 'Yavimaya Coast']
+100c100
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+102,105c102,105
+< T6 MAIN_1: PLAY_LAND Yavimaya Coast; CAST_SPELL Training Grounds {"manaPaid":"{U}"}
+<     hand(6): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen(T)', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+> T6 MAIN_1: PLAY_LAND Yavimaya Coast
+>     hand(7): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+108,110c108,110
+<     hand(6): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen(T)', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(7): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+113,115c113,115
+<     hand(6): ['Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen(T)', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(7): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+118,120c118,120
+<     hand(7): ["Eladamri's Call", 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(8): ["Eladamri's Call", 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+123,125c123,125
+<     hand(7): ["Eladamri's Call", 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(8): ["Eladamri's Call", 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+128,130c128,130
+<     hand(7): ["Eladamri's Call", 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(8): ["Eladamri's Call", 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+133,135c133,140
+<     hand(7): ["Eladamri's Call", 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(8): ["Eladamri's Call", 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer']
+>     opp life 20
+> T7 CLEANUP: DISCARD Eladamri's Call
+>     hand(7): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer', "Eladamri's Call"]
+138,145c143,150
+<     hand(8): ['Brushland', "Eladamri's Call", 'Eldrazi Displacer', 'Eldrazi Displacer', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+<     opp life 20
+< T8 MAIN_1: PLAY_LAND Brushland; REVEAL {"bottomed":[],"kept":[200002],"lookedAt":[{"card":200002,"cardName":"Cloud of Faeries","to":"to hand"}],"source":"Living Wish (searched)"}; REVEAL {"bottomed":[],"kept":[200007],"lookedAt":[{"card":200007,"cardName":"Dimensional Infiltrator","to":"to hand"}],"source":"Living Wish (searched)"}; ABILITY Combo Off {"ability":"combo route: win"}; DRAW Overgrowth; DRAW Conservatory; DRAW Cloud of Faeries; DRAW Peregrine Drake; DRAW Aether Hub; DRAW Conservatory; DRAW Emiel the Blessed; DRAW Living Wish [+112 UNTAP_SOURCES]
+<     hand(12): ['Aether Hub', 'Cloud of Faeries', 'Conservatory', 'Conservatory', "Eladamri's Call", 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds', 'Brushland(T)', 'Eldrazi Displacer', 'Dimensional Infiltrator', 'Cloud of Faeries(T)']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(8): ['Brushland', 'Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer', "Eladamri's Call"]
+>     opp life 20
+> T8 MAIN_1: PLAY_LAND Brushland; CAST_SPELL Peregrine Drake {"manaPaid":"{4}{U}"} [+1 UNTAP_SOURCES]
+>     hand(6): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Brushland', 'Peregrine Drake']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer', "Eladamri's Call"]
+148,150c153,160
+<     hand(12): ['Aether Hub', 'Cloud of Faeries', 'Conservatory', 'Conservatory', "Eladamri's Call", 'Eldrazi Displacer', 'Emiel the Blessed', 'Living Wish', 'Overgrowth', 'Overgrowth', 'Peregrine Drake', 'Trace of Abundance']
+<     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Training Grounds', 'Brushland(T)', 'Eldrazi Displacer', 'Dimensional Infiltrator', 'Cloud of Faeries(T)']
+<     gy: ['Peregrine Drake', 'Emiel the Blessed']
+---
+>     hand(6): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Brushland', 'Peregrine Drake']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer', "Eladamri's Call"]
+>     opp life 20
+> T8 MAIN_2: 
+>     hand(6): ['Emiel the Blessed', 'Living Wish', 'Living Wish', 'Overgrowth', 'Trace of Abundance', 'Training Grounds']
+>     bf: ['Mariposa Military Base', 'Kitchen', 'Wild Growth[attachedTo=29]', 'Yavimaya Coast', 'Brushland', 'Peregrine Drake']
+>     gy: ['Eldrazi Displacer', 'Eldrazi Displacer', "Eladamri's Call"]

@@ -1,0 +1,1900 @@
+{
+  "cardNumbering": {
+    "Abominable Treefolk": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "Arcum's Astrolabe": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "Boreal Druid": [
+      9,
+      10,
+      11,
+      12
+    ],
+    "Coldsteel Heart": [
+      13,
+      14,
+      15,
+      16
+    ],
+    "Frost Augur": [
+      17,
+      18,
+      19,
+      20
+    ],
+    "Highland Weald": [
+      21
+    ],
+    "Ice-Fang Coatl": [
+      22,
+      23,
+      24,
+      25
+    ],
+    "Jorn, God of Winter": [
+      26
+    ],
+    "Marit Lage's Slumber": [
+      27,
+      28,
+      29,
+      30
+    ],
+    "Rimefeather Owl": [
+      31,
+      32
+    ],
+    "Rimescale Dragon": [
+      33
+    ],
+    "Rimewood Falls": [
+      34,
+      35
+    ],
+    "Scrying Sheets": [
+      36,
+      37,
+      38,
+      39
+    ],
+    "Skred": [
+      40,
+      41,
+      42,
+      43
+    ],
+    "Snow-Covered Forest": [
+      44,
+      45,
+      46,
+      47,
+      48,
+      49
+    ],
+    "Snow-Covered Island": [
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57
+    ],
+    "Snow-Covered Mountain": [
+      58,
+      59,
+      60
+    ]
+  },
+  "deckId": "d1",
+  "gameNumber": 0,
+  "mulliganSequence": [
+    {
+      "attempt": 0,
+      "hand": [
+        {
+          "card": 33,
+          "cardName": "Rimescale Dragon"
+        },
+        {
+          "card": 21,
+          "cardName": "Highland Weald"
+        },
+        {
+          "card": 36,
+          "cardName": "Scrying Sheets"
+        },
+        {
+          "card": 50,
+          "cardName": "Snow-Covered Island"
+        },
+        {
+          "card": 51,
+          "cardName": "Snow-Covered Island"
+        },
+        {
+          "card": 52,
+          "cardName": "Snow-Covered Island"
+        },
+        {
+          "card": 9,
+          "cardName": "Boreal Druid"
+        }
+      ],
+      "kept": true
+    }
+  ],
+  "openingHand": [
+    {
+      "card": 33,
+      "cardName": "Rimescale Dragon"
+    },
+    {
+      "card": 21,
+      "cardName": "Highland Weald"
+    },
+    {
+      "card": 36,
+      "cardName": "Scrying Sheets"
+    },
+    {
+      "card": 50,
+      "cardName": "Snow-Covered Island"
+    },
+    {
+      "card": 51,
+      "cardName": "Snow-Covered Island"
+    },
+    {
+      "card": 52,
+      "cardName": "Snow-Covered Island"
+    },
+    {
+      "card": 9,
+      "cardName": "Boreal Druid"
+    }
+  ],
+  "result": {
+    "turn": 6,
+    "winner": "player"
+  },
+  "runId": "20261010_124652_1551385",
+  "seed": 1551385,
+  "turns": [
+    {
+      "actions": [
+        {
+          "card": 5,
+          "cardName": "Arcum's Astrolabe",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          36,
+          50,
+          51,
+          52,
+          9,
+          5
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 36,
+          "cardName": "Scrying Sheets",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 5,
+          "cardName": "Arcum's Astrolabe",
+          "manaPaid": "{1}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "card": 1,
+          "cardName": "Abominable Treefolk",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          50,
+          51,
+          52,
+          9,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          50,
+          51,
+          52,
+          9,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 1
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          50,
+          51,
+          52,
+          9,
+          1
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 1
+    },
+    {
+      "actions": [
+        {
+          "card": 31,
+          "cardName": "Rimefeather Owl",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          50,
+          51,
+          52,
+          9,
+          1,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 50,
+          "cardName": "Snow-Covered Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 9,
+          "cardName": "Boreal Druid",
+          "manaPaid": "{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          51,
+          52,
+          1,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          51,
+          52,
+          1,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 2
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          51,
+          52,
+          1,
+          31
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 2
+    },
+    {
+      "actions": [
+        {
+          "card": 17,
+          "cardName": "Frost Augur",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          51,
+          52,
+          1,
+          31,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 51,
+          "cardName": "Snow-Covered Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 1,
+          "cardName": "Abominable Treefolk",
+          "manaPaid": "{2}{U}{G}",
+          "type": "CAST_SPELL"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          52,
+          31,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          52,
+          31,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 3
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          52,
+          31,
+          17
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 3
+    },
+    {
+      "actions": [
+        {
+          "card": 37,
+          "cardName": "Scrying Sheets",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          52,
+          31,
+          17,
+          37
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 52,
+          "cardName": "Snow-Covered Island",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 17,
+          "cardName": "Frost Augur",
+          "manaPaid": "{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "ability": "look at top; put a snow card into hand",
+          "card": 36,
+          "cardName": "Scrying Sheets",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          37,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 20,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "damage": 9,
+          "oppLife": 11,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          37,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 11,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 4
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          37,
+          13
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 11,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 4
+    },
+    {
+      "actions": [
+        {
+          "card": 44,
+          "cardName": "Snow-Covered Forest",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          37,
+          13,
+          44
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 11,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 37,
+          "cardName": "Scrying Sheets",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 13,
+          "cardName": "Coldsteel Heart",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "ability": "look at top; put a snow card into hand",
+          "card": 36,
+          "cardName": "Scrying Sheets",
+          "type": "ABILITY"
+        },
+        {
+          "ability": "look at top; put a snow card into hand",
+          "card": 17,
+          "cardName": "Frost Augur",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          44,
+          26,
+          14
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 11,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "damage": 10,
+          "oppLife": 1,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          44,
+          26,
+          14
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 1,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 5
+    },
+    {
+      "actions": [],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          44,
+          26,
+          14
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 1,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_2",
+      "turn": 5
+    },
+    {
+      "actions": [
+        {
+          "card": 18,
+          "cardName": "Frost Augur",
+          "type": "DRAW"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 37,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": false
+          },
+          {
+            "card": 13,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          44,
+          26,
+          14,
+          18
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 1,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "DRAW",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "card": 44,
+          "cardName": "Snow-Covered Forest",
+          "type": "PLAY_LAND"
+        },
+        {
+          "card": 14,
+          "cardName": "Coldsteel Heart",
+          "manaPaid": "{2}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "ability": "look at top; put a snow card into hand",
+          "card": 17,
+          "cardName": "Frost Augur",
+          "type": "ABILITY"
+        },
+        {
+          "card": 27,
+          "cardName": "Marit Lage's Slumber",
+          "manaPaid": "{1}{U}",
+          "type": "CAST_SPELL"
+        },
+        {
+          "bottomed": [
+            40
+          ],
+          "kept": [],
+          "lookedAt": [
+            {
+              "card": 40,
+              "cardName": "Skred"
+            }
+          ],
+          "source": "Marit Lage's Slumber",
+          "type": "REVEAL"
+        },
+        {
+          "ability": "look at top; put a snow card into hand",
+          "card": 37,
+          "cardName": "Scrying Sheets",
+          "type": "ABILITY"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 44,
+            "cardName": "Snow-Covered Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Marit Lage's Slumber",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          26,
+          18,
+          58
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": 1,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "MAIN_1",
+      "turn": 6
+    },
+    {
+      "actions": [
+        {
+          "damage": 13,
+          "oppLife": -12,
+          "type": "ATTACK"
+        }
+      ],
+      "boardAfter": {
+        "battlefield": [
+          {
+            "card": 36,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 5,
+            "cardName": "Arcum's Astrolabe",
+            "isLand": false,
+            "tapped": false
+          },
+          {
+            "card": 50,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 9,
+            "cardName": "Boreal Druid",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 51,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 1,
+            "cardName": "Abominable Treefolk",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 52,
+            "cardName": "Snow-Covered Island",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 17,
+            "cardName": "Frost Augur",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 37,
+            "cardName": "Scrying Sheets",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 13,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 44,
+            "cardName": "Snow-Covered Forest",
+            "isLand": true,
+            "tapped": true
+          },
+          {
+            "card": 14,
+            "cardName": "Coldsteel Heart",
+            "isLand": false,
+            "tapped": true
+          },
+          {
+            "card": 27,
+            "cardName": "Marit Lage's Slumber",
+            "isLand": false,
+            "tapped": false
+          }
+        ],
+        "graveyard": [],
+        "hand": [
+          33,
+          21,
+          31,
+          26,
+          18,
+          58
+        ],
+        "opponentBattlefield": [
+          {
+            "card": 500000,
+            "cardName": "1/1 Creature",
+            "isLand": false,
+            "tapped": true
+          }
+        ],
+        "opponentLife": -12,
+        "playerLife": 20,
+        "staged": []
+      },
+      "phase": "COMBAT",
+      "turn": 6
+    }
+  ]
+}

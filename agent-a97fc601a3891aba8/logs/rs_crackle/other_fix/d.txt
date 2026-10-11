@@ -1,0 +1,6 @@
+burn_d0_x.c0: played=50 avg=4.4400 digest=77c59a6ae84c2f34 ms=0 units=0
+burn_d3_x.c0: played=20 avg=4.2500 digest=c450b2426abc4b03 ms=1378 units=133534
+dragonstorm_d0_x.c0: played=50 avg=4.9000 digest=547a7b42df4be44a ms=0 units=0
+dragonstorm_d3_x.c0: played=20 avg=3.8500 digest=c2aa0315a5bbc17f ms=919 units=47452
+stompy_d0_x.c0: played=50 avg=4.9000 digest=af021b225a022517 ms=0 units=0
+stompy_d3_x.c0: played=20 avg=4.0500 digest=9abb140d2999fd7b ms=1160 units=101166

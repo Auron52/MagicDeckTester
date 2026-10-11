@@ -1,0 +1,70 @@
+{
+ "jobs": [
+  {
+   "name": "burn_d0_x.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/burn/burn.txt",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/burn/burn.profile.json",
+   "games": 50,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "burn_d3_x.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/burn/burn.txt",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/burn/burn.profile.json",
+   "games": 20,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "dragonstorm_d0_x.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 50,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "dragonstorm_d3_x.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 20,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "stompy_d0_x.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/StompySurprise/StompySurprise.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/StompySurprise/StompySurprise.profile.json",
+   "games": 50,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 0,
+   "depth": 0,
+   "ignore_play_profile": true
+  },
+  {
+   "name": "stompy_d3_x.c0",
+   "deck": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/StompySurprise/StompySurprise.cod",
+   "profile": "/workspaces/MagicDeckTester/.claude/worktrees/agent-a97fc601a3891aba8/decks/StompySurprise/StompySurprise.profile.json",
+   "games": 20,
+   "seed": 7950001,
+   "game_index": 0,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  }
+ ]
+}

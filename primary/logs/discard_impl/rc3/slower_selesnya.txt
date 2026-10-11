@@ -1,0 +1,10 @@
+  selesnya         d0   gi=392   old=8 new=9 seed=1510393
+  selesnya         d0   gi=882   old=5 new=6 seed=1510883
+  selesnya         d0   gi=933   old=5 new=6 seed=1510934
+  selesnya         d0   gi=979   old=6 new=7 seed=1510980
+  selesnya         d0   gi=1094  old=6 new=7 seed=1511095
+  selesnya         d0   gi=1344  old=6 new=7 seed=1511345
+  selesnya         d0   gi=1737  old=6 new=7 seed=1511738
+  selesnya         d0   gi=1861  old=5 new=6 seed=1511862
+  selesnya         d0   gi=1868  old=5 new=6 seed=1511869
+  selesnya         d0   gi=1896  old=5 new=6 seed=1511897

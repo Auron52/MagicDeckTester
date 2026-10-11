@@ -1,0 +1,77 @@
+{
+ "base": {
+  "deck": "decks/FiveColour/FiveColour.cod",
+  "profile": "decks/FiveColour/FiveColour.profile.json",
+  "turn": 5,
+  "on_the_play": true,
+  "max_turns": 5,
+  "resume_at": "main1",
+  "active_life": 13,
+  "battlefield": [
+   {
+    "name": "Jetmir's Garden",
+    "controller": 0
+   },
+   {
+    "name": "Zagoth Triome",
+    "controller": 0
+   },
+   {
+    "name": "Godless Shrine",
+    "controller": 0
+   },
+   {
+    "name": "Faeburrow Elder",
+    "controller": 0
+   },
+   {
+    "name": "Steam Vents",
+    "controller": 0
+   },
+   {
+    "name": "Maelstrom Archangel",
+    "controller": 0
+   }
+  ],
+  "hand": [
+   "Unite the Coalition",
+   "Mana Cannons",
+   "Wooded Foothills",
+   "Nicol Bolas, Planeswalker"
+  ],
+  "graveyard": [
+   "Wooded Foothills",
+   "Wooded Foothills",
+   "Wooded Foothills"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "library": [
+   "Blood Crypt",
+   "Stomping Ground",
+   "Overgrown Tomb"
+  ]
+ },
+ "lives": [
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28
+ ],
+ "real_opp_life": 20
+}

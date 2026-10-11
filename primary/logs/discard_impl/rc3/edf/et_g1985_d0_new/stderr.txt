@@ -1,0 +1,38 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast
+[exec-tap] T1 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth
+[exec-tap] T2 Living Wish tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T)
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen
+[exec-tap] T3 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Kitchen Aether Hub
+[exec-tap] T3 Trace of Abundance tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 before Eldrazi Displacer: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Kitchen Aether Hub
+[exec-tap] T3 Eldrazi Displacer tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Kitchen Aether Hub
+[exec-tap] T4 Overgrowth tapped: Yavimaya Coast Kitchen  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Wild Growth Aether Hub Overgrowth
+[exec-tap] T4 Overgrowth tapped: Aether Hub  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T) Aether Hub(T) Overgrowth Overgrowth
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Overgrowth Overgrowth
+[exec-tap] T5 before Peregrine Drake: float{w0 u2 b0 r0 g2 c0 *4} untapped: 2/2 Creature Wild Growth Overgrowth Overgrowth
+[exec-tap] T5 Peregrine Drake tapped:  float{w0 u1 b0 r0 g2 c0 *0}
+[exec-tap] T5 before Training Grounds: float{w0 u1 b0 r0 g2 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Kitchen Aether Hub Overgrowth Overgrowth Peregrine Drake
+[exec-tap] T5 Training Grounds tapped:  float{w0 u0 b0 r0 g2 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Overgrowth Overgrowth Peregrine Drake Training Grounds
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Overgrowth Overgrowth Peregrine Drake Training Grounds
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g1 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T) Aether Hub(T) Overgrowth Overgrowth Peregrine Drake Training Grounds Conservatory(T)
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Kitchen(T) Aether Hub(T) Overgrowth Overgrowth Peregrine Drake(T) Training Grounds Conservatory(T)
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Overgrowth Overgrowth Peregrine Drake Training Grounds Conservatory
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g40 c0 *11} own: Yavimaya Coast Wild Growth Kitchen Aether Hub Overgrowth Overgrowth Training Grounds Conservatory Brushland Trace of Abundance Trace of Abundance Eldrazi Displacer Essence Depleter Peregrine Drake(T) Peregrine Drake(T)
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc3/edf/et_g1985_d0_new
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

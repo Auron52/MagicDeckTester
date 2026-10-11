@@ -1,0 +1,35 @@
+feat(hinata): the lone-Crackle hold judges lethality with the subset walks (MTG_HINATA_HOLD_LETHAL_BURN, ON) + a measured scope lever (MTG_HINATA_HOLD_NEEDS_HINATA, OFF)
+
+A. MTG_HINATA_HOLD_LETHAL_BURN (heurarm HINATA_HOLD_LETHAL_BURN), DEFAULT ON, =0 -> 2cec6ec4.
+HinataProvider::XCandidates held a lone Crackle unless `max_x*5*face_hits + every creature's power`
+reached the opponent's life -- an estimate blind to co-cast burn, so d0 gi 157 / 196 held a Crackle that
+was part of an exact-20 RS + Crackle + Magma Opus kill. The "wins THIS turn" half now uses the engine's
+own machinery: a new provider hook, DecisionProvider::HoldCastUnlessLethal (base false), flags the lone
+Crackle once per candidate, and BOTH subset walks (Solve's consider, EnumeratePlans' consider -- the only
+CollectActions consumers) drop a subset that casts it unless their own `wins` projection (every cast's
+direct damage + the attack, on a subset past payability) says lethal. The HoldSacLandBurn shape; no
+second estimator. 157 / 196 recover (7 -> 6, the pre-fix exact-20 lines).
+
+B. MTG_HINATA_HOLD_NEEDS_HINATA (heurarm HINATA_HOLD_NEEDS_HINATA), DEFAULT OFF -- it narrows the scope of
+a USER-approved heuristic, so the USER decides: hold only while Hinata is in play or castable from hand.
+Recovers d0 8 / 212 / 324 and shipped 36 (2HG 90 does not: a d0-runner stall, see the doc). Measured
+WORSE held-out; recommendation: keep OFF.
+
+Held-out pooled batch (seeds 8100001+, paired by gi, unwon 9; base = defaults):
+  A on vs off: shipped 400 0 (0/0, units 1.0058), d3 b10 400 +1 (0/1, 1.0007), 2HG d0 400 0, d0 3000 -2
+  (3/1). Slower: d0 1683 (the estimate called a 19-damage chip "lethal"; the walks hold it), d3 25
+  (T2 cantrip near-tie moved by rollout futures).
+  B on vs off: shipped +3 (8/10), d3 -5 (5/0), 2HG +32 (2/20), d0 +161 (15/117, t=8.75). Every slower
+  game classified (logs/rs_crackle/classifyB.py): 78 chip spent before Hinata (base fires the held
+  Crackle as the combo finisher), 54 chip spent (base fires it later at a bigger X), 1 never needed, 10
+  shipped cantrip-timing moves, 4 expose a pre-existing d0-runner stall/Irencrag mis-realisation the
+  hold had masked (reproduces with MTG_NO_HINATA_HOLD_CRACKLE=1).
+Byte-identity: both levers =0 vs 2cec6ec4, 1600 Hinata games (36 jobs), 0 digest mismatches; burn /
+dragonstorm / stompy identical at defaults.
+
+Unit: test_hinata_crackle_count.cpp gains the provider/XCandidates split, a Solve + EnumerateMainPlans
+board where only Crackle + Magma Opus is lethal (on: cast; off: held; 26 life: held both), and B on/off
+with Hinata absent / castable / in play. Suite 929/929. The Soulfire-staged-copy question is left to the
+USER (doc).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

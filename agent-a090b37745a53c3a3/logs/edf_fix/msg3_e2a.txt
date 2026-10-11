@@ -1,0 +1,20 @@
+fix(prepay): a declined batch prepay gives back the Aether Hub's {E} (MTG_PREPAY_ENERGY_RESTORE)
+
+EDF gi 1985 (seed 1651986, d0) t3: Aether Hub dropped this turn ({E} 1), plan {Trace of Abundance ->
+Yavimaya Coast, Eldrazi Displacer}, legal (the Hub's energy pays Trace's {R/W}; Trace's own bonus on the
+Coast then makes Displacer's {W}). The executor cast nothing. The cause was not a hold on the single
+flexible source: BatchPrepayMainCasts' joint solve tapped the Hub coloured (spending the {E}), produced
+`wild` and declined -- and its rollback restored the battlefield, the float and both lives but not the
+player's energy. The per-cast payer then found a spent-out Hub. With the prepay disabled the same game
+casts both and wins t4.
+
+A cost a payment rolls back was never paid (CR 601.2h). One lever, heurarm slot PREPAY_ENERGY_RESTORE
+(appended), default ON; =0 byte-identical: every rollback in BatchPrepayMainCasts (a failed hold rung,
+the big-spell and mixed two-stage restores, the wild / unpayable decline, each shrink trial and the
+shrink's chosen state) restores energy_counters with the battlefield. Shared by the executor and the
+rollout apply, so lockstep holds. Only Aether Hub carries energy, so only EDF can move.
+
+Unit: test/unit/test_edf_prepay_energy.cpp (the gi 1985 board: the prepay declines and the {E} is still
+there; Trace then pays off the Hub; lever off reproduces the leak).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

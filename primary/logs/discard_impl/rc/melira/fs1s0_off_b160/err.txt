@@ -1,0 +1,183 @@
+Loaded profile from decks/Melira Pod/Melira Pod.profile.json
+[play] depth=3 budget=160ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Darkbore Pathway;Carrion Feeder, fresh=0 after=20 tail=5 best=9 cutoff=9
+[fsw-line] T1 d1 p=land=Darkbore Pathway;Carrion Feeder, tail=5 | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1048576@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=2097152@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Razorverge Thicket; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d1 p=land=Razorverge Thicket; tail=5 | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d1 p=land=Darkbore Pathway; tail=5 | m2:Carrion Feeder,
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d1 p=land=Darkbore Pathway; tail=5 | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d1 p=land=; tail=5 | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=(defer): 
+[search] T1 pass=1 done win=5 cost=13 used=13
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Darkbore Pathway;Carrion Feeder, fresh=0 after=20 tail=5 best=9 cutoff=9
+[fsw-line] T1 d2 p=land=Darkbore Pathway;Carrion Feeder, tail=5 | m2: | m1:land=Razorverge Thicket; | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1048576@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=2097152@0 cont=[] after=20 tail=-1 best=5 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Razorverge Thicket; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d2 p=land=Razorverge Thicket; tail=5 | m2: | m1:land=Darkbore Pathway;Carrion Feeder, | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d2 p=land=Darkbore Pathway; tail=5 | m2:Carrion Feeder, | m1:land=Razorverge Thicket; | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=6 best=5 cutoff=9
+[fsw-line] T1 d2 p=land=Darkbore Pathway; tail=6 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:
+[fs-root] tail win=6 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d2 p=land=; tail=5 | m2: | m1:land=Darkbore Pathway;Carrion Feeder, | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=(defer): 
+[search] T1 pass=2 done win=5 cost=77 used=90
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway;Carrion Feeder, fresh=0 after=20 tail=6 best=9 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway;Carrion Feeder, tail=6 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2: | m1: | m2:
+[fs-root] tail win=6 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=6 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=6 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1048576@0 cont=[] after=20 tail=-1 best=6 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=6 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=6 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=2097152@0 cont=[] after=20 tail=-1 best=6 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Razorverge Thicket; fresh=0 after=20 tail=5 best=6 cutoff=9
+[fsw-line] T1 d3 p=land=Razorverge Thicket; tail=5 | m2: | m1:land=Darkbore Pathway;Carrion Feeder, | m2: | m1:Melira, Sylvok Outcast, | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway; tail=5 | m2: | m1:land=Razorverge Thicket;Carrion Feeder, | m2: | m1:Melira, Sylvok Outcast, | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=6 best=5 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway; tail=6 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2: | m1: | m2:
+[fs-root] tail win=6 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=; fresh=0 after=20 tail=5 best=5 cutoff=9
+[fsw-line] T1 d3 p=land=; tail=5 | m2: | m1:land=Darkbore Pathway;Carrion Feeder, | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:
+[fs-root] tail win=5 bp=-1 pc=-1 val=0 land=(defer): 
+[search] T1 pass=3 done win=5 cost=327 used=417
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Darkbore Pathway;Carrion Feeder, fresh=0 after=20 tail=8 best=9 cutoff=9
+[fsw-line] T1 d1 p=land=Darkbore Pathway;Carrion Feeder, tail=8 | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1048576@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d1 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=2097152@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Razorverge Thicket; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d1 p=land=Razorverge Thicket; tail=8 | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d1 p=land=Darkbore Pathway; tail=8 | m2:Carrion Feeder,
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d1 p=land=Darkbore Pathway; tail=8 | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fsw]  T1 d1 oppL=20 tc=-1 p=land=; fresh=0 after=20 tail=9 best=8 cutoff=9
+[fs-root] tail win=9 bp=-1 pc=-1 val=0 land=(defer): 
+[search] T1 pass=1 done win=8 cost=83 used=500
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Darkbore Pathway;Carrion Feeder, fresh=0 after=20 tail=8 best=9 cutoff=9
+[fsw-line] T1 d2 p=land=Darkbore Pathway;Carrion Feeder, tail=8 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:Carrion Feeder,
+[fs-root] tail win=8 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1048576@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d2 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=2097152@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Razorverge Thicket; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d2 p=land=Razorverge Thicket; tail=8 | m2: | m1:land=Darkbore Pathway;Melira, Sylvok Outcast, | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d2 p=land=Darkbore Pathway; tail=8 | m2:Carrion Feeder, | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:Carrion Feeder,
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d2 p=land=Darkbore Pathway; tail=8 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fsw]  T1 d2 oppL=20 tc=-1 p=land=; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d2 p=land=; tail=8 | m2: | m1:land=Darkbore Pathway;Carrion Feeder, | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=(defer): 
+[search] T1 pass=2 done win=8 cost=353 used=853
+[fs-root] scan win=-1 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway;Carrion Feeder, fresh=0 after=20 tail=8 best=9 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway;Carrion Feeder, tail=8 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:Carrion Feeder, | m1: | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=400 land=Darkbore Pathway/front: Carrion Feeder
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1048576@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=0@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=1@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fsw-skip] T1 d3 oppL=20 p=land=Darkbore Pathway;Carrion Feeder, stillborn bp=2097152@0 cont=[] after=20 tail=-1 best=8 hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Darkbore Pathway,Kitchen Finks,]
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Razorverge Thicket; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d3 p=land=Razorverge Thicket; tail=8 | m2: | m1:land=Darkbore Pathway;Melira, Sylvok Outcast, | m2: | m1:Carrion Feeder, | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Razorverge Thicket: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway; tail=8 | m2:Carrion Feeder, | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2:Carrion Feeder, | m1: | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Darkbore Pathway/front: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=8 best=8 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway; tail=8 | m2: | m1:land=Razorverge Thicket;Melira, Sylvok Outcast, | m2: | m1: | m2:
+[fs-root] tail win=8 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=(defer): 
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=; fresh=0 after=20 tail=7 best=8 cutoff=9
+[fsw-line] T1 d3 p=land=; tail=7 | m2: | m1: | m2: | m1:land=Darkbore Pathway; | m2:
+[fs-root] tail win=7 bp=-1 pc=-1 val=0 land=(defer): 
+[search] T1 pass=3 done win=7 cost=987 used=1840
+[search] T2 pass=1 done win=5 cost=13 used=13
+[search] T2 pass=2 done win=5 cost=77 used=90
+[search] T2 pass=3 done win=6 cost=562 used=652
+[search] T2 pass=1 done win=8 cost=73 used=725
+[search] T2 pass=2 done win=7 cost=363 used=1088
+[search] T2 pass=3 done win=7 cost=1403 used=2491
+[search] T3 pass=1 done win=6 cost=13 used=13
+[search] T3 pass=2 done win=6 cost=100 used=113
+[search] T3 pass=3 done win=6 cost=1513 used=1626
+[search] T3 pass=1 done win=7 cost=69 used=1695
+[search] T3 pass=2 done win=7 cost=332 used=2027
+[search] T3 pass=3 done win=6 cost=2647 used=4674
+[search] T4 pass=1 done win=6 cost=24 used=24
+[search] T4 pass=2 done win=6 cost=542 used=566
+[search] T4 pass=3 done win=6 cost=1115 used=1681
+Game logs written to /workspaces/MagicDeckTester/logs/discard_impl/rc/melira/fs1s0_off
+[enum-memo] hits=0 misses=1654 clears=0
+[solve-memo] hits=1009 misses=2691 clears=0
+[leaf-eval] published=159 ties=0 flips=0 life-equal-ties=0

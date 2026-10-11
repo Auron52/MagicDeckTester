@@ -1,0 +1,30 @@
+fix(payable-order): judge the producer domain with the exact walk for every deck (MTG_PAYABLE_ORDER_EXACT)
+
+MTG_PAYABLE_ORDER's apply site (MTG_PAYABLE_ORDER_RITUALS: an order holding a ritual float, a same-turn
+rock or a Treasure mint, and no maker / reveal cast) judged payability with the exact order walk only
+when the provider opted in (DragonstormProvider::ExactOrderWalk). Every other deck got the plain walk,
+which permuted payable orders away:
+
+  * it ignores a cast cap -- hinata d0 gi1427 (seed 1331428) T6, {Ornithopter, Irencrag Feat, Crackle}:
+    it took "Irencrag, Ornithopter, Crackle", where Irencrag's "only one more spell" strands Crackle;
+  * it pays a generic pip off wild before a colour (PayFromPool), spending a land a LATER cast needs --
+    gi1680 (seed 1331681) T7, Island + Orchard + floating {U}: "Sol Ring, Gamble" read unpayable (the
+    Orchard paid Sol Ring's {1}) and was swapped to "Gamble, Sol Ring", tutoring with the Sol Ring still
+    in hand for Gamble's random discard.
+
+The exact walk is the plain walk plus those terms (cast cap, line-aware generic, positional reducers /
+escalation / impulse float, creature-only land colour) over the same pool and the same output credit,
+so the domain and the site are unchanged. Both games are restored: gi1427 9 (unwon) -> 8 and gi1680
+9 -> 8, each equal to MTG_PAYABLE_ORDER_RITUALS=0.
+
+Lever: MTG_PAYABLE_ORDER_EXACT (default ON) + heurarm slot PAYABLE_ORDER_EXACT.
+Unit test: test_dragonstorm_followups.cpp "Payable order, every deck: ..." (both shapes, GenericProvider,
+both arms pinned).
+=0 byte-identical vs bde3bff6 on 45 jobs (the 27-job ident set + d0/d3 jobs for Dragons, Giants, Snow,
+WhiteKnights, Cyclone, Angels, Bruna, KittyEquipment, StompySurprise, FiveColour).
+Paired sanity, seeds 8200001+ (deck i at +100000*i; d3 at +50000), every deck that holds a producer:
+  Hinata2 d0 300: -1 turn (1 faster, 0 slower); d3 100: 0/0
+  Dragonstorm d0 300, Cyclone d0 300 + d3 100, Mirrorwing d0 + d3, Dragons d0 + d3, Giants d0 + d3,
+  Snow / WhiteKnights / Angels / Bruna / KittyEquipment / StompySurprise / FiveColour d0 300: all 0/0.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

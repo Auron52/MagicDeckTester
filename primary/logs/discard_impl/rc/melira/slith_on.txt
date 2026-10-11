@@ -1,0 +1,36 @@
+[fs-root] scan win=-1 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 
+[fs-sim] >> rollout from t4 d0 cutoff=8  bf=[Slitherbore Pathway,Razorverge Thicket,Melira, Sylvok Outcast] hand=[Carrion Feeder,Chord of Calling,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire]
+[fs-sim]    t4 m1 land=(heuristic):  | after: bf=[Slitherbore Pathway,Razorverge Thicket,Melira, Sylvok Outcast] hand=[Carrion Feeder,Chord of Calling,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=20
+[fs-sim]    t4 m2 land=(heuristic):  | opp=18
+[fs-sim]    t5 m1 land=(heuristic):  | after: bf=[Slitherbore Pathway,Razorverge Thicket,Melira, Sylvok Outcast,Branchloft Pathway] hand=[Carrion Feeder,Chord of Calling,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=18
+[fs-sim]    t5 m2 land=(heuristic): Kitchen Finks | opp=16
+[fs-sim]    t6 m1 land=(heuristic): Chord of Calling(x1)>Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket,Melira, Sylvok Outcast(T),Branchloft Pathway(T),Kitchen Finks(T),Blooming Marsh(T),Carrion Feeder] hand=[Carrion Feeder,Chord of Calling,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=16
+[fs-sim]    t6 m2 land=(heuristic): Carrion Feeder + Carrion Feeder | opp=16
+[fs-sim]    t7 m1 land=(heuristic): Chord of Calling(x3)>Recruiter of the Guard + Ignoble Hierarch + Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket(T),Melira, Sylvok Outcast(T),Branchloft Pathway(T),Blooming Marsh(T),Carrion Feeder(T),Ignoble Hierarch,Recruiter of the Guard,Kitchen Finks] hand=[Carrion Feeder,Kitchen Finks,Birthing Pod,Bloodthrone Vampire,Birds of Paradise] opp=16
+[fs-sim]    t7 m2 land=(heuristic): Carrion Feeder | opp=16
+[fs-sim]    t8 m1 land=(heuristic): Birthing Pod + Birds of Paradise + Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket(T),Melira, Sylvok Outcast,Branchloft Pathway(T),Blooming Marsh(T),Carrion Feeder,Ignoble Hierarch(T),Recruiter of the Guard,Birds of Paradise,Birthing Pod,Kitchen Finks] hand=[Carrion Feeder,Kitchen Finks,Bloodthrone Vampire,Murderous Redcap] opp=16
+[fs-sim] << win=8
+[fs-sim] tt-hit from t4 d0 -> win=8  bf=[Slitherbore Pathway,Razorverge Thicket,Melira, Sylvok Outcast] hand=[Carrion Feeder,Chord of Calling,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire]
+[fs-sim] >> rollout from t4 d0 cutoff=8  bf=[Slitherbore Pathway,Razorverge Thicket] hand=[Carrion Feeder,Chord of Calling,Melira, Sylvok Outcast,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire]
+[fs-sim]    t4 m1 land=(heuristic): Melira, Sylvok Outcast | after: bf=[Slitherbore Pathway(T),Razorverge Thicket(T),Melira, Sylvok Outcast] hand=[Carrion Feeder,Chord of Calling,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=20
+[fs-sim]    t4 m2 land=(heuristic):  | opp=20
+[fs-sim]    t5 m1 land=(heuristic):  | after: bf=[Slitherbore Pathway,Razorverge Thicket,Melira, Sylvok Outcast,Branchloft Pathway] hand=[Carrion Feeder,Chord of Calling,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=20
+[fs-sim]    t5 m2 land=(heuristic): Kitchen Finks | opp=18
+[fs-sim]    t6 m1 land=(heuristic): Chord of Calling(x1)>Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket,Melira, Sylvok Outcast(T),Branchloft Pathway(T),Kitchen Finks(T),Blooming Marsh(T),Carrion Feeder] hand=[Carrion Feeder,Chord of Calling,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=18
+[fs-sim]    t6 m2 land=(heuristic): Carrion Feeder + Carrion Feeder | opp=18
+[fs-sim]    t7 m1 land=(heuristic): Chord of Calling(x3)>Recruiter of the Guard + Ignoble Hierarch + Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket(T),Melira, Sylvok Outcast(T),Branchloft Pathway(T),Blooming Marsh(T),Carrion Feeder(T),Ignoble Hierarch,Recruiter of the Guard,Kitchen Finks] hand=[Carrion Feeder,Kitchen Finks,Birthing Pod,Bloodthrone Vampire,Birds of Paradise] opp=18
+[fs-sim]    t7 m2 land=(heuristic): Carrion Feeder | opp=18
+[fs-sim]    t8 m1 land=(heuristic): Birthing Pod + Birds of Paradise + Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket(T),Melira, Sylvok Outcast,Branchloft Pathway(T),Blooming Marsh(T),Carrion Feeder,Ignoble Hierarch(T),Recruiter of the Guard,Birds of Paradise,Birthing Pod,Kitchen Finks] hand=[Carrion Feeder,Kitchen Finks,Bloodthrone Vampire,Murderous Redcap] opp=18
+[fs-sim] << win=8
+[fs-sim] >> rollout from t4 d0 cutoff=8  bf=[Slitherbore Pathway] hand=[Carrion Feeder,Melira, Sylvok Outcast,Razorverge Thicket,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire]
+[fs-sim]    t4 m1 land=(heuristic):  | after: bf=[Slitherbore Pathway,Razorverge Thicket] hand=[Carrion Feeder,Melira, Sylvok Outcast,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=20
+[fs-sim]    t4 m2 land=(heuristic): Melira, Sylvok Outcast | opp=20
+[fs-sim]    t5 m1 land=(heuristic):  | after: bf=[Slitherbore Pathway,Razorverge Thicket,Melira, Sylvok Outcast,Branchloft Pathway] hand=[Carrion Feeder,Chord of Calling,Kitchen Finks,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=20
+[fs-sim]    t5 m2 land=(heuristic): Kitchen Finks | opp=18
+[fs-sim]    t6 m1 land=(heuristic): Chord of Calling(x1)>Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket,Melira, Sylvok Outcast(T),Branchloft Pathway(T),Kitchen Finks(T),Blooming Marsh(T),Carrion Feeder] hand=[Carrion Feeder,Kitchen Finks,Birthing Pod,Bloodthrone Vampire] opp=18
+[fs-sim]    t6 m2 land=(heuristic): Carrion Feeder + Carrion Feeder | opp=18
+[fs-sim]    t7 m1 land=(heuristic): Birthing Pod + Carrion Feeder | after: bf=[Slitherbore Pathway(T),Razorverge Thicket(T),Melira, Sylvok Outcast,Branchloft Pathway(T),Blooming Marsh(T),Carrion Feeder,Birthing Pod,Kitchen Finks] hand=[Carrion Feeder,Kitchen Finks,Bloodthrone Vampire,Ignoble Hierarch] opp=18
+[fs-sim] << win=7
+[fsw]  T1 d3 oppL=20 tc=-1 p=land=Darkbore Pathway; fresh=0 after=20 tail=7 best=8 cutoff=9
+[fsw-line] T1 d3 p=land=Darkbore Pathway; tail=7 | m2: | m1: | m2: | m1: | m2:
+[fs-root] tail win=7 bp=-1 pc=-1 val=0 land=Darkbore Pathway/back: 

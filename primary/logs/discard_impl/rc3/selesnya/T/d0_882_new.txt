@@ -1,0 +1,71 @@
+Loaded 60 mainboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1510883 t=1 m=1 route=clean pool=1 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Llanowar Elves
+[uo-state] gs=1510883 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *1} hand=Llanowar Elves|Selesnya Sanctuary|Genesis Wave|Feed the Clan|Accomplished Alchemist|Blossoming Bogbeast|Branchloft Pathway
+[exec-tap] T1 before Llanowar Elves: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Brushland
+[uo-cast] gs=1510883 t=1 m=1 d=0 card=Llanowar Elves num=40 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T1 Llanowar Elves tapped: Brushland  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves
+[uo-order] gs=1510883 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510883 t=1 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Selesnya Sanctuary|Genesis Wave|Feed the Clan|Accomplished Alchemist|Blossoming Bogbeast|Branchloft Pathway
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves
+[uo-order] gs=1510883 t=2 m=1 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Priest of Titania
+[uo-state] gs=1510883 t=2 cap=-1 pool{w0 u0 b0 r0 g2 c0 *1} hand=Selesnya Sanctuary|Genesis Wave|Feed the Clan|Accomplished Alchemist|Blossoming Bogbeast|Priest of Titania
+[exec-tap] T2 before Priest of Titania: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Brushland Llanowar Elves 1/1 Creature 1/1 Creature Branchloft Pathway
+[uo-cast] gs=1510883 t=2 m=1 d=0 card=Priest of Titania num=48 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T2 Priest of Titania tapped: Brushland Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Branchloft Pathway(T) Priest of Titania
+[uo-order] gs=1510883 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510883 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Selesnya Sanctuary|Genesis Wave|Feed the Clan|Accomplished Alchemist|Blossoming Bogbeast
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Branchloft Pathway Priest of Titania
+[uo-order] gs=1510883 t=3 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Blossoming Bogbeast
+[uo-state] gs=1510883 t=3 cap=-1 pool{w0 u0 b0 r0 g5 c0 *1} hand=Selesnya Sanctuary|Genesis Wave|Feed the Clan|Accomplished Alchemist|Blossoming Bogbeast
+[exec-tap] T3 before Blossoming Bogbeast: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Brushland Llanowar Elves 1/1 Creature 1/1 Creature Branchloft Pathway Priest of Titania 1/1 Creature 1/1 Creature Wirewood Lodge
+[uo-cast] gs=1510883 t=3 m=1 d=0 card=Blossoming Bogbeast num=10 staged=0 splice=0 paid=1 pool=1
+[exec-tap] T3 Blossoming Bogbeast tapped: Brushland Branchloft Pathway Priest of Titania Wirewood Lodge  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Branchloft Pathway(T) Priest of Titania(T) Wirewood Lodge(T) Blossoming Bogbeast
+[uo-order] gs=1510883 t=3 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510883 t=3 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Selesnya Sanctuary|Genesis Wave|Feed the Clan|Accomplished Alchemist
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Branchloft Pathway Priest of Titania Wirewood Lodge Blossoming Bogbeast
+[uo-order] gs=1510883 t=4 m=1 route=clean pool=6 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Accomplished Alchemist|Wellwisher
+[uo-state] gs=1510883 t=4 cap=-1 pool{w0 u0 b0 r0 g5 c0 *1} hand=Genesis Wave|Feed the Clan|Accomplished Alchemist|Wellwisher|Branchloft Pathway
+[exec-tap] T4 before Accomplished Alchemist: float{w0 u0 b0 r0 g1 c0 *0} untapped: 1/1 Creature 1/1 Creature Brushland Llanowar Elves 1/1 Creature 1/1 Creature Priest of Titania 1/1 Creature 1/1 Creature Wirewood Lodge Blossoming Bogbeast
+[uo-cast] gs=1510883 t=4 m=1 d=0 card=Accomplished Alchemist num=1 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T4 Accomplished Alchemist tapped: Brushland Llanowar Elves Priest of Titania  float{w0 u0 b0 r0 g1 c0 *0}
+[exec-tap] T4 before Wellwisher: float{w0 u0 b0 r0 g1 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Wirewood Lodge Blossoming Bogbeast Accomplished Alchemist
+[uo-cast] gs=1510883 t=4 m=1 d=0 card=Wellwisher num=58 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T4 Wellwisher tapped: Wirewood Lodge  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Priest of Titania(T) Wirewood Lodge(T) Blossoming Bogbeast Selesnya Sanctuary(T) Accomplished Alchemist Wellwisher
+[uo-order] gs=1510883 t=4 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510883 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Genesis Wave|Feed the Clan|Branchloft Pathway
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Priest of Titania(T) Wirewood Lodge(T) Blossoming Bogbeast(T) Selesnya Sanctuary(T) Accomplished Alchemist Wellwisher
+[uo-order] gs=1510883 t=4 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510883 t=4 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Genesis Wave|Feed the Clan|Branchloft Pathway
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Priest of Titania Wirewood Lodge Blossoming Bogbeast Selesnya Sanctuary Accomplished Alchemist Wellwisher
+[uo-order] gs=1510883 t=5 m=1 route=clean pool=13 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Genesis Wave
+[uo-state] gs=1510883 t=5 cap=-1 pool{w0 u0 b0 r0 g9 c0 *4} hand=Genesis Wave|Feed the Clan|Priest of Titania
+[exec-tap] T5 before Genesis Wave: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Brushland Llanowar Elves 1/1 Creature 1/1 Creature Priest of Titania 1/1 Creature 1/1 Creature Wirewood Lodge Blossoming Bogbeast Selesnya Sanctuary Accomplished Alchemist Wellwisher Branchloft Pathway
+[uo-cast] gs=1510883 t=5 m=1 d=0 card=Genesis Wave num=36 staged=0 splice=0 paid=1 pool=2
+[exec-tap] T5 Genesis Wave tapped: Brushland Llanowar Elves Priest of Titania Wirewood Lodge Selesnya Sanctuary Accomplished Alchemist Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland(T) Llanowar Elves(T) Priest of Titania(T) Wirewood Lodge(T) Blossoming Bogbeast(T) Selesnya Sanctuary(T) Accomplished Alchemist(T) Wellwisher(T) Branchloft Pathway(T) Brushland Wellwisher Forest Elvish Mystic Blighted Steppe Priest of Titania Blossoming Sands(T) Nykthos Paragon Ageless Entity
+[uo-order] gs=1510883 t=5 m=2 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510883 t=5 cap=-1 pool{w0 u0 b0 r0 g1 c1 *1} hand=Feed the Clan|Priest of Titania
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Brushland Llanowar Elves Priest of Titania Wirewood Lodge Blossoming Bogbeast Selesnya Sanctuary Accomplished Alchemist Wellwisher Branchloft Pathway Brushland Wellwisher Forest Elvish Mystic Blighted Steppe Priest of Titania Blossoming Sands Nykthos Paragon Ageless Entity
+[uo-order] gs=1510883 t=6 m=1 route=clean pool=31 n=2 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Nykthos Paragon|Feed the Clan
+[uo-state] gs=1510883 t=6 cap=-1 pool{w2 u0 b0 r0 g22 c1 *6} hand=Feed the Clan|Priest of Titania|Nykthos Paragon
+[exec-tap] T6 before Nykthos Paragon: float{w2 u0 b0 r0 g7 c0 *5} untapped: 1/1 Creature 1/1 Creature Brushland Llanowar Elves 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Wirewood Lodge Blossoming Bogbeast Wellwisher Wellwisher Elvish Mystic Blighted Steppe Priest of Titania Nykthos Paragon Ageless Entity
+[uo-cast] gs=1510883 t=6 m=1 d=0 card=Nykthos Paragon num=45 staged=0 splice=0 paid=1 pool=31
+[exec-tap] T6 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g7 c0 *1}
+[exec-tap] T6 before Feed the Clan: float{w0 u0 b0 r0 g7 c0 *1} untapped: 1/1 Creature 1/1 Creature Brushland Llanowar Elves 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Wirewood Lodge Blossoming Bogbeast Wellwisher Wellwisher Elvish Mystic Blighted Steppe Priest of Titania Nykthos Paragon Ageless Entity Nykthos Paragon
+[uo-cast] gs=1510883 t=6 m=1 d=0 card=Feed the Clan num=28 staged=0 splice=0 paid=1 pool=25
+[exec-tap] T6 Feed the Clan tapped:  float{w0 u0 b0 r0 g6 c0 *0}
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1510883
+Games played  : 1
+avg (turns)   : 6.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]

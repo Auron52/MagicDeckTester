@@ -1,0 +1,15 @@
+  edf              d0   gi=76    old=5 new=6 seed=1650077
+  edf              d0   gi=110   old=4 new=6 seed=1650111
+  edf              d0   gi=354   old=4 new=5 seed=1650355
+  edf              d0   gi=373   old=4 new=5 seed=1650374
+  edf              d0   gi=432   old=7 new=8 seed=1650433
+  edf              d0   gi=547   old=5 new=6 seed=1650548
+  edf              d0   gi=604   old=6 new=7 seed=1650605
+  edf              d0   gi=985   old=6 new=7 seed=1650986
+  edf              d0   gi=1031  old=6 new=7 seed=1651032
+  edf              d0   gi=1408  old=4 new=5 seed=1651409
+  edf              d0   gi=1475  old=7 new=8 seed=1651476
+  edf              d0   gi=1620  old=6 new=7 seed=1651621
+  edf              d0   gi=1676  old=4 new=5 seed=1651677
+  edf              d0   gi=1985  old=6 new=7 seed=1651986
+  edf              d3   gi=285   old=4 new=5 seed=1645286

@@ -1,0 +1,118 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge
+[tapdbg] tap Aether Hub col=4 energy=1
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[paydbg] cost={1}{G} ok=1 energy 1->0 taps: Aether Hub Shivan Gorge
+[exec-tap] T2 Living Wish tapped: Aether Hub Shivan Gorge  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T)
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T)
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen(T)
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen
+[exec-tap] T4 before Overgrowth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[paydbg] cost={2}{G} ok=1 energy 0->0 taps: Shivan Gorge Kitchen Mariposa Military Base
+[exec-tap] T4 Overgrowth tapped: Shivan Gorge Kitchen Mariposa Military Base  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge(T) Kitchen(T) Mariposa Military Base(T) Overgrowth
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth
+[exec-tap] T5 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth
+[tapdbg] tap Kitchen col=4 energy=0
+[paydbg] cost={G} ok=1 energy 0->0 taps: Kitchen
+[exec-tap] T5 Wild Growth tapped: Kitchen  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T5 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Mariposa Military Base Overgrowth Wild Growth
+[paydbg] cost={4}{U} ok=0 energy 0->0 taps:
+[exec-tap] T5 Peregrine Drake tapped: Aether Hub Shivan Gorge Mariposa Military Base  float{w0 u0 b0 r0 g3 c3 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub(T) Shivan Gorge(T) Kitchen(T) Mariposa Military Base(T) Overgrowth Wild Growth
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Wild Growth
+[exec-tap] T6 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Wild Growth
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[paydbg] cost={1}{G} ok=1 energy 0->0 taps: Shivan Gorge Kitchen
+[exec-tap] T6 Fertile Ground tapped: Shivan Gorge Kitchen  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 before Peregrine Drake: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Aether Hub Mariposa Military Base Overgrowth Wild Growth Fertile Ground
+[paydbg] cost={4}{U} ok=1 energy 0->0 taps:
+[exec-tap] T6 Peregrine Drake tapped: Aether Hub Mariposa Military Base  float{w0 u0 b0 r0 g1 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Wild Growth Fertile Ground Peregrine Drake
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Aether Hub Shivan Gorge Kitchen Mariposa Military Base Overgrowth Wild Growth Fertile Ground Peregrine Drake
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[tapdbg] tap Kitchen col=1 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Shivan Gorge col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+[tapdbg] tap Aether Hub col=5 energy=0
+[tapdbg] tap Kitchen col=4 energy=0
+[tapdbg] tap Mariposa Military Base col=5 energy=0
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/g1475_nobp
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

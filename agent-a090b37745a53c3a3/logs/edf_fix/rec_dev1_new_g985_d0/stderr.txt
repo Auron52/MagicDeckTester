@@ -1,0 +1,55 @@
+Loaded profile from /workspaces/MagicDeckTester/decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[edf-goff-cut] t1 no goff cand
+[tmp-edbg] T1 d0 plan pre=1 land= val=100 win=0: Wild Growth(k0,x0,h57) 
+[exec-tap] T1 before Wild Growth: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast
+[exec-tap] T1 Wild Growth tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth
+[edf-goff-cut] t2 no goff cand
+[tmp-edbg] T2 d0 plan pre=1 land= val=100 win=0: Living Wish(k0,x0,h0) 
+[exec-tap] T2 before Living Wish: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T2 Living Wish tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base
+[tmp-edbg] T2 d0 plan pre=1 land= val=-1 win=0: 
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base
+[edf-goff-cut] t3 no goff cand
+[tmp-edbg] T3 d0 plan pre=1 land= val=300 win=0: Cloud of Faeries(k0,x0,h0) Living Wish(k0,x0,h0) 
+[exec-tap] T3 before Cloud of Faeries: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base
+[exec-tap] T3 Cloud of Faeries tapped: Yavimaya Coast Mariposa Military Base  float{w0 u0 b0 r0 g1 c0 *0}
+[exec-tap] T3 before Living Wish: float{w0 u0 b0 r0 g1 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries
+[exec-tap] T3 Living Wish tapped: Mariposa Military Base  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base(T) Cloud of Faeries
+[tmp-edbg] T3 d0 plan pre=1 land= val=300 win=0: Dimensional Infiltrator(k0,x0,h0) 
+[exec-tap] T3 before Dimensional Infiltrator: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Cloud of Faeries
+[exec-tap] T3 Dimensional Infiltrator tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base(T) Cloud of Faeries Dimensional Infiltrator
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator
+[edf-goff-cut] t4 no goff cand
+[tmp-edbg] T4 d0 plan pre=1 land= val=101 win=0: Fertile Ground(k0,x0,h35) Dimensional Infiltrator(k26,x1,h0) 
+[exec-tap] T4 before Fertile Ground: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator
+[exec-tap] T4 Fertile Ground tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base(T) Cloud of Faeries(T) Dimensional Infiltrator(T) Fertile Ground
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator Fertile Ground
+[edf-goff-cut] t5 no goff cand
+[tmp-edbg] T5 d0 plan pre=1 land= val=102 win=0: Trace of Abundance(k0,x0,h35) Dimensional Infiltrator(k26,x2,h0) 
+[exec-tap] T5 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator Fertile Ground
+[exec-tap] T5 Trace of Abundance tapped: Yavimaya Coast Mariposa Military Base  float{w0 u0 b0 r0 g0 c2 *0}
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base(T) Cloud of Faeries(T) Dimensional Infiltrator(T) Fertile Ground Trace of Abundance
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator Fertile Ground Trace of Abundance
+[edf-goff-cut] t6 no goff cand
+[tmp-edbg] T6 d0 plan pre=1 land= val=400 win=0: Emiel the Blessed(k0,x0,h0) Trace of Abundance(k0,x0,h58) 
+[exec-tap] T6 before Trace of Abundance: float{w0 u0 b0 r0 g0 c0 *0} untapped: 2/2 Creature Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator Fertile Ground Trace of Abundance Yavimaya Coast
+[exec-tap] T6 Trace of Abundance tapped: Yavimaya Coast Mariposa Military Base  float{w0 u0 b0 r0 g0 c2 *1}
+[exec-tap] T6 before Emiel the Blessed: float{w0 u0 b0 r0 g0 c2 *1} untapped: 2/2 Creature Wild Growth Cloud of Faeries Dimensional Infiltrator Fertile Ground Trace of Abundance Yavimaya Coast Trace of Abundance
+[exec-tap] T6 Emiel the Blessed tapped: Yavimaya Coast  float{w0 u0 b0 r0 g0 c1 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast(T) Wild Growth Mariposa Military Base(T) Cloud of Faeries(T) Dimensional Infiltrator(T) Fertile Ground Trace of Abundance Yavimaya Coast(T) Trace of Abundance Emiel the Blessed
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Yavimaya Coast Wild Growth Mariposa Military Base Cloud of Faeries Dimensional Infiltrator Fertile Ground Trace of Abundance Yavimaya Coast Trace of Abundance Emiel the Blessed
+[edf-goff-cut] t7 k=45 projected=1 verified=1 opp_life=11 decked=1
+[tmp-edbg] T7 d0 plan pre=1 land= val=45 win=1: Emiel the Blessed(k25,x45,h0) 
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-a090b37745a53c3a3/logs/edf_fix/rec_dev1_new_g985_d0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0

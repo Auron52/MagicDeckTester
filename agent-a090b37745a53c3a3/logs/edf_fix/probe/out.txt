@@ -1,0 +1,5 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+edf_ship_on: played=4 avg=4.2500 digest=012df3e66b19b1f2 ms=11420 units=91741
+edf_d0_on: played=30 avg=5.9000 digest=0af7a7e540d813d2 ms=11112 units=0
+edf_d3_on: played=10 avg=4.2000 digest=d7c62a9901f82acf ms=109538 units=1260236
+=== BATCH done (3 jobs, 44 games) ===

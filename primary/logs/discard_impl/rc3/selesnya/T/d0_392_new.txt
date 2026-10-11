@@ -1,0 +1,85 @@
+Loaded 60 mainboard card(s)
+Loaded profile from /workspaces/MagicDeckTester/decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+[play] depth=0 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[exec-tap] T1 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own:
+[uo-order] gs=1510393 t=1 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=1 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Priest of Titania|Selesnya Sanctuary|Nykthos Paragon|Nykthos Paragon
+[exec-tap] T1 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway
+[uo-order] gs=1510393 t=1 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=1 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Priest of Titania|Selesnya Sanctuary|Nykthos Paragon|Nykthos Paragon
+[exec-tap] T2 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway
+[uo-order] gs=1510393 t=2 m=1 route=clean pool=2 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Priest of Titania
+[uo-state] gs=1510393 t=2 cap=-1 pool{w0 u0 b0 r0 g2 c0 *0} hand=Priest of Titania|Selesnya Sanctuary|Nykthos Paragon|Nykthos Paragon
+[exec-tap] T2 before Priest of Titania: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature Branchloft Pathway 1/1 Creature 1/1 Creature Branchloft Pathway
+[uo-cast] gs=1510393 t=2 m=1 d=0 card=Priest of Titania num=51 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T2 Priest of Titania tapped: Branchloft Pathway Branchloft Pathway  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T2 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Branchloft Pathway(T) Priest of Titania
+[uo-order] gs=1510393 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=2 cap=-1 pool{w0 u0 b0 r0 g0 c0 *0} hand=Selesnya Sanctuary|Nykthos Paragon|Nykthos Paragon
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Branchloft Pathway Priest of Titania
+[uo-order] gs=1510393 t=3 m=1 route=clean pool=3 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Llanowar Elves
+[uo-state] gs=1510393 t=3 cap=-1 pool{w0 u0 b0 r0 g3 c0 *0} hand=Nykthos Paragon|Nykthos Paragon|Llanowar Elves|Branchloft Pathway
+[exec-tap] T3 before Llanowar Elves: float{w0 u0 b0 r0 g1 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Branchloft Pathway Priest of Titania 1/1 Creature 1/1 Creature
+[uo-cast] gs=1510393 t=3 m=1 d=0 card=Llanowar Elves num=43 staged=0 splice=0 paid=1 pool=3
+[exec-tap] T3 Llanowar Elves tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T3 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania Selesnya Sanctuary(T) Llanowar Elves
+[uo-order] gs=1510393 t=3 m=1 route=clean pool=3 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=3 cap=-1 pool{w0 u0 b0 r0 g3 c0 *0} hand=Nykthos Paragon|Nykthos Paragon|Branchloft Pathway
+[exec-tap] T3 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania(T) Selesnya Sanctuary(T) Llanowar Elves
+[uo-order] gs=1510393 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=3 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Nykthos Paragon|Branchloft Pathway
+[exec-tap] T4 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania Selesnya Sanctuary Llanowar Elves
+[uo-order] gs=1510393 t=4 m=1 route=clean pool=7 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=4 cap=-1 pool{w0 u0 b0 r0 g5 c0 *2} hand=Nykthos Paragon|Nykthos Paragon|Forest
+[exec-tap] T4 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania(T) Selesnya Sanctuary Llanowar Elves(T) Branchloft Pathway
+[uo-order] gs=1510393 t=4 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=4 cap=-1 pool{w0 u0 b0 r0 g2 c0 *2} hand=Nykthos Paragon|Nykthos Paragon|Forest
+[exec-tap] T5 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania Selesnya Sanctuary Llanowar Elves Branchloft Pathway
+[uo-order] gs=1510393 t=5 m=1 route=clean pool=8 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=5 cap=-1 pool{w0 u0 b0 r0 g6 c0 *2} hand=Nykthos Paragon|Nykthos Paragon|Blossoming Sands
+[exec-tap] T5 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania(T) Selesnya Sanctuary Llanowar Elves(T) Branchloft Pathway Forest
+[uo-order] gs=1510393 t=5 m=2 route=clean pool=5 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=5 cap=-1 pool{w0 u0 b0 r0 g3 c0 *2} hand=Nykthos Paragon|Nykthos Paragon|Blossoming Sands
+[exec-tap] T6 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest
+[uo-order] gs=1510393 t=6 m=1 route=clean pool=8 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Genesis Wave
+[uo-state] gs=1510393 t=6 cap=-1 pool{w0 u0 b0 r0 g6 c0 *2} hand=Nykthos Paragon|Nykthos Paragon|Genesis Wave
+[exec-tap] T6 before Genesis Wave: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Branchloft Pathway Priest of Titania 1/1 Creature 1/1 Creature Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest
+[uo-cast] gs=1510393 t=6 m=1 d=0 card=Genesis Wave num=39 staged=0 splice=0 paid=1 pool=0
+[exec-tap] T6 Genesis Wave tapped: Branchloft Pathway Priest of Titania Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T6 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Priest of Titania(T) Selesnya Sanctuary(T) Llanowar Elves(T) Branchloft Pathway(T) Forest(T) Blossoming Sands(T) Elvish Mystic Blighted Steppe Accomplished Alchemist
+[uo-order] gs=1510393 t=6 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=6 cap=-1 pool{w0 u0 b0 r0 g0 c1 *0} hand=Nykthos Paragon|Nykthos Paragon
+[exec-tap] T7 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest Blossoming Sands Elvish Mystic Blighted Steppe Accomplished Alchemist
+[uo-order] gs=1510393 t=7 m=1 route=clean pool=14 n=2 pays=-1 ppays=1 mpos=-1 mearl=-1 seq=Nykthos Paragon|Nykthos Paragon
+[uo-state] gs=1510393 t=7 cap=-1 pool{w0 u0 b0 r0 g9 c1 *4} hand=Nykthos Paragon|Nykthos Paragon|Blossoming Bogbeast
+[exec-tap] T7 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Branchloft Pathway Priest of Titania 1/1 Creature 1/1 Creature Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest Blossoming Sands Elvish Mystic Blighted Steppe Accomplished Alchemist
+[uo-cast] gs=1510393 t=7 m=1 d=0 card=Nykthos Paragon num=45 staged=0 splice=0 paid=1 pool=8
+[exec-tap] T7 Nykthos Paragon tapped: Branchloft Pathway Selesnya Sanctuary Branchloft Pathway Blossoming Sands Blighted Steppe  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Priest of Titania 1/1 Creature 1/1 Creature Llanowar Elves Forest Elvish Mystic Accomplished Alchemist Nykthos Paragon
+[uo-cast] gs=1510393 t=7 m=1 d=0 card=Nykthos Paragon num=47 staged=0 splice=0 paid=0 pool=7
+[exec-tap] T7 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T7 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Priest of Titania(T) Selesnya Sanctuary(T) Llanowar Elves(T) Branchloft Pathway(T) Forest Blossoming Sands(T) Elvish Mystic(T) Blighted Steppe(T) Accomplished Alchemist(T) Nykthos Paragon
+[uo-order] gs=1510393 t=7 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=7 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Nykthos Paragon|Blossoming Bogbeast
+[exec-tap] T8 entry pre=1 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway Priest of Titania Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest Blossoming Sands Elvish Mystic Blighted Steppe Accomplished Alchemist Nykthos Paragon
+[uo-order] gs=1510393 t=8 m=1 route=clean pool=14 n=2 pays=-1 ppays=1 mpos=-1 mearl=-1 seq=Nykthos Paragon|Nykthos Paragon
+[uo-state] gs=1510393 t=8 cap=-1 pool{w0 u0 b0 r0 g9 c1 *4} hand=Nykthos Paragon|Blossoming Bogbeast|Nykthos Paragon
+[exec-tap] T8 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Branchloft Pathway Priest of Titania 1/1 Creature 1/1 Creature Selesnya Sanctuary Llanowar Elves Branchloft Pathway Forest Blossoming Sands Elvish Mystic Blighted Steppe Accomplished Alchemist Nykthos Paragon
+[uo-cast] gs=1510393 t=8 m=1 d=0 card=Nykthos Paragon num=47 staged=0 splice=0 paid=1 pool=8
+[exec-tap] T8 Nykthos Paragon tapped: Branchloft Pathway Selesnya Sanctuary Branchloft Pathway Blossoming Sands Blighted Steppe  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T8 before Nykthos Paragon: float{w0 u0 b0 r0 g0 c0 *0} untapped: 1/1 Creature 1/1 Creature 1/1 Creature 1/1 Creature Priest of Titania 1/1 Creature 1/1 Creature Llanowar Elves Forest Elvish Mystic Accomplished Alchemist Nykthos Paragon Nykthos Paragon
+[uo-cast] gs=1510393 t=8 m=1 d=0 card=Nykthos Paragon num=46 staged=0 splice=0 paid=0 pool=7
+[exec-tap] T8 Nykthos Paragon tapped:  float{w0 u0 b0 r0 g0 c0 *0}
+[exec-tap] T8 entry pre=0 float{w0 u0 b0 r0 g0 c0 *0} own: Branchloft Pathway(T) Priest of Titania(T) Selesnya Sanctuary(T) Llanowar Elves(T) Branchloft Pathway(T) Forest Blossoming Sands(T) Elvish Mystic(T) Blighted Steppe(T) Accomplished Alchemist(T) Nykthos Paragon(T) Nykthos Paragon
+[uo-order] gs=1510393 t=8 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-state] gs=1510393 t=8 cap=-1 pool{w0 u0 b0 r0 g1 c0 *0} hand=Blossoming Bogbeast|Nykthos Paragon
+[payable-order] site=apply in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[payable-order] site=enum in_domain=0 default_pays=0 bound_fail=0 hoist_rescue=0 perm_rescue=0 none_pays=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+Seed          : 1510393
+Games played  : 1
+avg (turns)   : 9.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+Unwon games (repro: --seed <s> --game-index <i> --games 1):
+  game 392  seed 1510393

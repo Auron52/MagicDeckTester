@@ -1,0 +1,168 @@
+Loaded profile from /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/decks/Dragonstorm/Dragonstorm.profile.json
+[play] depth=0 budget=10ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=24, affinity=24, requested=1)
+[uo-order] gs=7600011 t=1 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=1 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=2 m=1 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=2 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=3 m=1 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=3 m=2 route=clean pool=1 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=4 m=1 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=4 m=2 route=clean pool=4 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-order] gs=7600011 t=5 m=1 route=clean pool=6 n=1 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Scourge of Valkas
+[uo-cast] gs=7600011 t=5 m=1 d=0 card=Scourge of Valkas num=50 staged=0 splice=0 paid=1 pool=0
+[uo-order] gs=7600011 t=5 m=2 route=clean pool=0 n=0 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=
+[uo-solve-in] t6 pool=1 cands=Irencrag Feat(k0),Apex of Power(k0),Apex of Power(k0),Seething Song(k0),Pyretic Ritual(k0),Lotus Bloom(k7),Lotus Bloom(k7),
+[uo-consider] t6 ex=0 sel=Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Seething Song,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Seething Song,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-solve] t6 wins=0 val=300 pool=1 sel=Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,Pyretic Ritual,Lotus Bloom,Lotus Bloom,
+[uo-order] gs=7600011 t=6 m=1 route=opaque pool=7 n=3 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Pyretic Ritual|Seething Song|Apex of Power
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Pyretic Ritual num=37 staged=0 splice=0 paid=1 pool=7
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Seething Song num=54 staged=0 splice=0 paid=1 pool=8
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Apex of Power num=2 staged=0 splice=0 paid=1 pool=9
+[uo-solve-in] t6 pool=10 cands=Irencrag Feat(k0),Apex of Power(k0),Apex of Power(k0),Utvara Hellkite(k0),Ruby Medallion(k0),Seething Song(k0),
+[uo-consider] t6 ex=0 sel=Apex of Power,
+[uo-solve] t6 wins=0 val=100 pool=10 sel=Apex of Power,
+[uo-consider] t6 ex=0 sel=Apex of Power,
+[uo-solve] t6 wins=0 val=100 pool=10 sel=Apex of Power,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,
+[uo-solve] t6 wins=0 val=0 pool=10 sel=Utvara Hellkite,
+[uo-consider] t6 ex=0 sel=Ruby Medallion,
+[uo-solve] t6 wins=0 val=100 pool=10 sel=Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Apex of Power,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Apex of Power,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Apex of Power,Apex of Power,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Ruby Medallion,
+[uo-solve] t6 wins=0 val=100 pool=10 sel=Utvara Hellkite,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Apex of Power,Utvara Hellkite,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Apex of Power,Utvara Hellkite,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Apex of Power,Apex of Power,Utvara Hellkite,Ruby Medallion,
+[uo-consider] t6 ex=0 sel=Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Seething Song,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Seething Song,
+[uo-consider] t6 ex=0 sel=Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Ruby Medallion,Seething Song,
+[uo-solve] t6 wins=0 val=300 pool=10 sel=Apex of Power,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Ruby Medallion,Seething Song,
+[uo-solve] t6 wins=0 val=300 pool=10 sel=Apex of Power,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Apex of Power,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Apex of Power,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Apex of Power,Apex of Power,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Apex of Power,Utvara Hellkite,Ruby Medallion,Seething Song,
+[uo-order] gs=7600011 t=6 m=1 route=cont pool=10 n=3 pays=-1 ppays=-1 mpos=1 mearl=0 seq=Seething Song|Ruby Medallion|Apex of Power
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Seething Song num=53 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Ruby Medallion num=44 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Apex of Power num=4 staged=1 splice=0 paid=1 pool=10
+[uo-solve-in] t6 pool=1 cands=Irencrag Feat(k0),Apex of Power(k0),Utvara Hellkite(k0),Rite of Flame(k0),Seething Song(k0),Desperate Ritual(k0),Desperate Ritual(k0),Desperate Ritual(k0),Desperate Ritual(k0),
+[uo-consider] t6 ex=0 sel=Rite of Flame,
+[uo-consider] t6 ex=0 sel=Rite of Flame,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Rite of Flame,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Rite of Flame,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Apex of Power,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-solve] t6 wins=0 val=500 pool=1 sel=Apex of Power,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Rite of Flame,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Rite of Flame,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Apex of Power,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Apex of Power,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Rite of Flame,Seething Song,Desperate Ritual,Desperate Ritual,
+[uo-order] gs=7600011 t=6 m=1 route=cont pool=1 n=5 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Rite of Flame|Desperate Ritual|Desperate Ritual|Seething Song|Apex of Power
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Rite of Flame num=42 staged=1 splice=0 paid=1 pool=1
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Desperate Ritual num=6 staged=1 splice=0 paid=1 pool=2
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Desperate Ritual num=7 staged=1 splice=0 paid=1 pool=4
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Seething Song num=56 staged=1 splice=0 paid=1 pool=6
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Apex of Power num=1 staged=0 splice=0 paid=1 pool=9
+[uo-solve-in] t6 pool=10 cands=Irencrag Feat(k0),Utvara Hellkite(k0),Desperate Ritual(k0),Dragonstorm(k0),Dragonlord Kolaghan(k0),Pyretic Ritual(k0),Dragonstorm(k0),
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,
+[uo-solve] t6 wins=0 val=0 pool=10 sel=Utvara Hellkite,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Desperate Ritual,
+[uo-consider] t6 ex=0 sel=Dragonstorm,
+[uo-solve] t6 wins=1 val=100 pool=10 sel=Dragonstorm,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonstorm,
+[uo-solve] t6 wins=1 val=200 pool=10 sel=Desperate Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Dragonlord Kolaghan,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonlord Kolaghan,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Desperate Ritual,Dragonlord Kolaghan,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Desperate Ritual,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Desperate Ritual,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonstorm,Pyretic Ritual,
+[uo-solve] t6 wins=1 val=300 pool=10 sel=Desperate Ritual,Dragonstorm,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Dragonstorm,Pyretic Ritual,
+[uo-solve] t6 wins=1 val=400 pool=10 sel=Irencrag Feat,Desperate Ritual,Dragonstorm,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Desperate Ritual,Dragonstorm,Pyretic Ritual,
+[uo-solve] t6 wins=1 val=400 pool=10 sel=Irencrag Feat,Utvara Hellkite,Desperate Ritual,Dragonstorm,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonlord Kolaghan,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Dragonlord Kolaghan,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,Desperate Ritual,Dragonlord Kolaghan,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Desperate Ritual,Dragonlord Kolaghan,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonstorm,Dragonlord Kolaghan,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Dragonstorm,Dragonlord Kolaghan,Pyretic Ritual,
+[uo-consider] t6 ex=0 sel=Dragonstorm,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Pyretic Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Pyretic Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Utvara Hellkite,Desperate Ritual,Pyretic Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Dragonstorm,Pyretic Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Desperate Ritual,Dragonlord Kolaghan,Pyretic Ritual,Dragonstorm,
+[uo-consider] t6 ex=0 sel=Irencrag Feat,Desperate Ritual,Dragonlord Kolaghan,Pyretic Ritual,Dragonstorm,
+[uo-order] gs=7600011 t=6 m=1 route=cont pool=10 n=4 pays=-1 ppays=-1 mpos=-1 mearl=-1 seq=Desperate Ritual|Pyretic Ritual|Irencrag Feat|Dragonstorm
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Desperate Ritual num=5 staged=1 splice=0 paid=1 pool=10
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Pyretic Ritual num=35 staged=1 splice=0 paid=1 pool=12
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Irencrag Feat num=15 staged=0 splice=0 paid=1 pool=14
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Dragonstorm num=13 staged=1 splice=0 paid=1 pool=18
+[uo-solve-in] t6 pool=10 cands=Utvara Hellkite(k0),Dragonlord Kolaghan(k0),Dragonstorm(k0),
+[uo-consider] t6 ex=0 sel=Utvara Hellkite,
+[uo-solve] t6 wins=1 val=600 pool=10 sel=Utvara Hellkite,
+[uo-consider] t6 ex=0 sel=Dragonlord Kolaghan,
+[uo-consider] t6 ex=0 sel=Dragonstorm,
+[uo-solve] t6 wins=1 val=100 pool=10 sel=Dragonstorm,
+[uo-order] gs=7600011 t=6 m=1 route=clean pool=10 n=1 pays=0 ppays=-1 mpos=-1 mearl=-1 seq=Utvara Hellkite
+[uo-cast] gs=7600011 t=6 m=1 d=0 card=Utvara Hellkite num=60 staged=1 splice=0 paid=0 pool=10
+Game logs written to /workspaces/MagicDeckTester/.claude/worktrees/agent-aac6f548cc785c7e6/logs/userorder/repro/g10e/off
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=0 misses=0 clears=0
