@@ -47,7 +47,8 @@ declare -A DECK_FILE=(
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
-  [kittyv2]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.cod
+  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod
+  [kittyv3]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
@@ -79,7 +80,8 @@ declare -A DECK_PROF=(
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
-  [kittyv2]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.profile.json
+  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json
+  [kittyv3]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
@@ -232,9 +234,25 @@ SMOKE_CASES=(
   # `kitty`'s rows and v1's are dropped (user, 2026-10-02: "a second Kitty deck until adoption when
   # we drop the old one").
   #
-  # REPOINTED 2026-10-08 to v3-adelbert-gauntlets. The case KEY stays `kittyv2` deliberately: this
-  # row is "the candidate kitty list", and renaming it would churn every GT key for no gain while
-  # the promotion above is still pending. v3 is the SETTLED list -- four changes from v2 (Golem-Skin
+  # *** THE 2026-10-08 REPOINT OF THIS KEY TO v3 WAS REVERTED 2026-10-11, AT THE USER'S DIRECTION:
+  # "It should not be repointed to v3 yet. Unless we want to have both in there." BOTH IS WHAT WE
+  # HAVE: `kittyv2` means v2-puresteel-hammer (as it always did) and v3 has its OWN key, `kittyv3`.
+  #
+  # WHY THE REPOINT WAS WRONG, concretely, because the old comment argued it was free ("renaming it
+  # would churn every GT key for no gain"). The churn it avoided was cosmetic; the cost it created
+  # was that A CASE KEY SILENTLY CHANGED WHICH DECK IT MEASURES. GT's kittyv2 rows were last
+  # measured 2026-10-03 (8d165350) on v2-puresteel-hammer, five days BEFORE the repoint, so from
+  # 2026-10-08 every rebaseline compared v3's play against v2-puresteel's baseline. On 2026-10-11
+  # that read as a +2.2620 aggregate "regression" on an equip change -- an engine bug that did not
+  # exist -- and the only thing that distinguished it from a real one was a deterministic paired
+  # A/B (flags ON vs all five =0, --threads 1) showing IDENTICAL averages on every cell. A key
+  # whose meaning changes under a stable name cannot be rebaselined, only re-derived.
+  #
+  # So: one key per decklist, always. A list is never promoted by inheriting another list's key;
+  # when v3 is adopted it takes `kitty`'s ROWS by having its own key's counts raised, and the
+  # dropped list's key and GT rows are deleted in the same commit that drops it.
+  #
+  # v3 is the SETTLED list -- four changes from v2 (Golem-Skin
   # Gauntlets 3->4, Skateboard 2->1, Cid out, Adelbert Steiner in), decided by the user on 2026-10-08.
   # The 10th-creature slot was NOT settled on speed: `g4_cid` was faster at both std and 2hg
   # (+0.0064 / +0.0096 against this list), and the user took Adelbert for removal resilience the
@@ -269,6 +287,16 @@ SMOKE_CASES=(
   "kittyv2 0 1001 1000 0"
   "kittyv2 3 1001  100 10"
   "kittyv2 5 1001   50 20"
+  # kittyv3: the SETTLED list (see the kittyv2 block above for the full rationale and for why it has
+  # its own key). Same counts as kittyv2 -- it is the same archetype at the same artifact maturity
+  # (v3 ships a value leaf but NOT yet a keep table), and it must be a suite case before its
+  # mulligan profile can be generated at all (CLAUDE.md: suite membership gates generation).
+  # 3x RULE, measured fresh on 2026-10-11 under PGO on the current engine rather than inherited:
+  # worst searched cell d5 b20 = 75,690 ms / 50 games = 1,514 ms/game against the 3,100 ms/game
+  # budget (3x fivecolour) => 0.49x, so it passes with more margin than v2-puresteel did (0.79x).
+  "kittyv3 0 1001 1000 0"
+  "kittyv3 3 1001  100 10"
+  "kittyv3 5 1001   50 20"
   # dragons: mono-red Dragons ramp (Sol Ring/Dragonspeaker into 5-8 drops; wins ~T5.7-6.2, the
   # slowest clock in the suite after hinata). Same probe: d0 ~0.0004 s/game, d3 b10 ~0.98 s/game,
   # d5 b20 ~2.0 s/game -- 0.44x/0.52x minotaur. Defaults/static keep; ships a value leaf (no trust),
@@ -599,6 +627,12 @@ REGRESSION_CASES=(
   "kittyv2 3 3003  100 10"
   "kittyv2 5 2002   50 20"
   "kittyv2 5 3003   50 20"
+  # kittyv3: see the SMOKE block. The GATED cells, same shape as kittyv2.
+  "kittyv3 0 2002 1000 0"
+  "kittyv3 3 2002  100 10"
+  "kittyv3 3 3003  100 10"
+  "kittyv3 5 2002   50 20"
+  "kittyv3 5 3003   50 20"
   # dragons: same shape (~26 min ST added at the probed costs; pools inside the existing makespan).
   "dragons 0 2002 1000 0"
   "dragons 3 2002  300 10"
@@ -979,6 +1013,19 @@ OVERNIGHT_CASES=(
   "kittyv2 5 5005  125 40"
   "kittyv2 5 6006  125 40"
   "kittyv2 5 7007  125 40"
+  # kittyv3: see the SMOKE block. Same 4-seed shape as kittyv2.
+  "kittyv3 0  4004 2000 0"
+  "kittyv3 0  6006 2000 0"
+  "kittyv3 0  8008 2000 0"
+  "kittyv3 0 10010 2000 0"
+  "kittyv3 3 4004  250 20"
+  "kittyv3 3 5005  250 20"
+  "kittyv3 3 6006  250 20"
+  "kittyv3 3 7007  250 20"
+  "kittyv3 5 4004  125 40"
+  "kittyv3 5 5005  125 40"
+  "kittyv3 5 6006  125 40"
+  "kittyv3 5 7007  125 40"
   # dragons: same shape. Probed at b20/b40: d3 ~1.39 s/game, d5 ~3.60 s/game (0.54x/0.45x
   # minotaur) => ~3.6 core-hours added. Combined with kitty this is ~+5.4 core-hours on a tier
   # that ran ~9.6 core-hours, i.e. ~40 min wall on a free box against an 8 h budget.
