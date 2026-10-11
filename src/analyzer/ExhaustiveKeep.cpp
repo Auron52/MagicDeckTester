@@ -174,6 +174,61 @@ void StampRolloutCfg(nlohmann::json& meta, const RolloutCfg& rc)
     if (rc.opp_heads  >= 0) { meta["opp_heads"]  = rc.opp_heads; }
 }
 
+// ---- THE ADAPTIVE REFINEMENT SCHEDULE (flip_eps / r_batch / se_prior) -------------------------
+// These three "tune the schedule without being able to switch it off" (main.cpp's own words about
+// why the old R_FLOOR knob was removed and these were kept), and until now NOTHING fingerprinted
+// them -- not the 7-field journal chain, not RolloutCfg, and they were not even STAMPED into the
+// meta. So a journal rolled at flip_eps=0.02 RESUMED SILENTLY under 0.10, leaving cells refined
+// under one stop gate and cells refined under another inside one artifact, with nothing recording
+// that it happened.
+//
+// WHY IT MATTERS MORE THE HIGHER THE CAP (the user's point, 2026-10-11): flip_eps is the STOP gate
+// on refinement, and refinement climbs from floor R=2 toward the cap. A bigger cap is a longer
+// ladder for the gate to cut short, so the higher R is, the more of the table this knob decides.
+// Mixing two values inside one R=30 `fast` table is therefore materially worse than mixing them
+// inside an R=16 one -- which is exactly the run now being launched.
+//
+// ABSENT = UNVERIFIABLE, NOT A MISMATCH -- deliberately, following the start_life / opp_heads
+// precedent above: every journal and raw banked before this stamp existed carries no field and must
+// keep resuming, rather than being invalidated wholesale by a check that did not exist when it was
+// rolled.
+struct ScheduleCfg
+{
+    double flip_eps = -1.0, se_prior = -1.0;
+    int    r_batch  = -1;
+    bool present() const { return flip_eps >= 0.0 && se_prior >= 0.0 && r_batch >= 0; }
+    std::string str() const
+    {
+        if (!present()) { return std::string("<not recorded>"); }
+        char b[96];
+        std::snprintf(b, sizeof b, "flip_eps=%g/r_batch=%d/se_prior=%g", flip_eps, r_batch, se_prior);
+        return std::string(b);
+    }
+};
+
+inline ScheduleCfg ScheduleCfgOf(const ExhaustiveKeepConfig& cfg)
+{ return { cfg.flip_eps, cfg.se_prior, cfg.r_batch }; }
+
+inline ScheduleCfg ScheduleCfgFromMeta(const nlohmann::json& m)
+{ return { m.value("flip_eps", -1.0), m.value("se_prior", -1.0), m.value("r_batch", -1) }; }
+
+inline void StampScheduleCfg(nlohmann::json& meta, const ScheduleCfg& sc)
+{
+    if (!sc.present()) { return; }
+    meta["flip_eps"] = sc.flip_eps; meta["r_batch"] = sc.r_batch; meta["se_prior"] = sc.se_prior;
+}
+
+// Doubles, so compare with a tolerance rather than ==: these round-trip through JSON text and an
+// operator types "0.1", not a bit pattern. 1e-9 is far tighter than any meaningful setting.
+inline CfgVerdict ScheduleCfgCompare(const ScheduleCfg& mine, const ScheduleCfg& theirs)
+{
+    if (!theirs.present() || !mine.present()) { return CfgVerdict::Unverifiable; }
+    const bool same = std::fabs(mine.flip_eps - theirs.flip_eps) < 1e-9
+                   && std::fabs(mine.se_prior - theirs.se_prior) < 1e-9
+                   && mine.r_batch == theirs.r_batch;
+    return same ? CfgVerdict::Match : CfgVerdict::Differs;
+}
+
 CfgVerdict CompareRolloutCfg(const RolloutCfg& a, const RolloutCfg& b)
 {
     if (!a.present() || !b.present()) { return CfgVerdict::Unverifiable; }
@@ -1285,6 +1340,7 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
         StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));   // what the samples were searched at
+        StampScheduleCfg(root["meta"], ScheduleCfgOf(cfg)); // ...and how refinement was PACED
         // MIXED PROVENANCE. The raw is the POOLABLE artifact, so it is the one place a mixed origin must
         // never be inferable only from absence: `play_digest` names the engine that finished the table,
         // and this names every engine whose rollouts are in it. RunKeepMerge still gates on play_digest
@@ -3276,6 +3332,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Stamped on BOTH shapes: a checkpoint is resumed by this same run (so it must agree), and a
         // probe chunk is consumed by a later gen (so that gen must be able to check it).
         StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));
+        StampScheduleCfg(root["meta"], ScheduleCfgOf(cfg));
         if (as_probe) { root["meta"]["probe"] = true; root["meta"]["floor_complete"] = true; }
         json buckets = json::array();
         for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
@@ -3405,7 +3462,39 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                          "RESUME(journal)", journal_path, &retain_active)
                    // A restart at another depth is a different run, not a continuation of this one.
                    && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(m), "RESUME(journal)",
-                                       journal_path);
+                                       journal_path)
+                   // ...and NEITHER IS A RESTART AT ANOTHER REFINEMENT SCHEDULE. flip_eps decides
+                   // when a sub-cell stops refining, so resuming a 0.02 journal under 0.10 produces
+                   // ONE table holding cells settled by two different stop gates -- a mix nothing
+                   // in the artifact would have recorded. Checked here rather than folded into the
+                   // 7-field chain above so an UNVERIFIABLE (pre-stamp) journal still resumes.
+                   && [&]{
+                          const ScheduleCfg mine = ScheduleCfgOf(cfg);
+                          const ScheduleCfg theirs = ScheduleCfgFromMeta(m);
+                          switch (ScheduleCfgCompare(mine, theirs))
+                          {
+                          case CfgVerdict::Match: return true;
+                          case CfgVerdict::Unverifiable:
+                              std::cerr << "[keepgen] RESUME(journal): " << journal_path
+                                        << " predates the refinement-schedule stamp -- UNVERIFIABLE"
+                                           " (this run " << mine.str() << "). Resuming; if that"
+                                           " journal was rolled at a different flip_eps/r_batch/"
+                                           "se_prior the table will MIX schedules.\n" << std::flush;
+                              return true;
+                          case CfgVerdict::Differs:
+                          default:
+                              std::cerr << "[keepgen] RESUME(journal): " << journal_path
+                                        << " cannot be resumed -- REFINEMENT SCHEDULE differs"
+                                           " (journal " << theirs.str() << " vs this run "
+                                        << mine.str() << "). flip_eps is the refine STOP gate, so"
+                                           " mixing two values inside one table settles some cells"
+                                           " at one confidence and some at another -- and the"
+                                           " higher the cap R, the more of the table it decides."
+                                           " Relaunch at the journal's schedule to resume it.\n"
+                                        << std::flush;
+                              return false;
+                          }
+                      }();
             if (matched && retain_active)
             {
                 retain_foreign_digest = m.value("play_digest", std::string());
