@@ -45,11 +45,56 @@ _MTG_HARNESS_LIB=1
 # calls harness_pgo_ensure first, so it rebuilds PGO instead. MTG_PGO=0 pins Release everywhere -- use
 # it on BOTH arms of any wall-clock comparison, since a PGO arm against a Release arm measures the
 # compiler, not the change.
+#
+# THE FALLBACK IS LOUD WHEN A STALE PGO BUILD EXISTS, and that is not cosmetic. 2026-10-11 a width
+# screen built PGO at src 754892e5, a flag was then committed (src db6a402d) while the chain was
+# live, the stamp stopped matching, and every arm silently ran build/Release -- a binary in which the
+# newest flag under test did not even exist. Nothing printed, nothing changed exit status; it was
+# caught only because logs/kitty_tail_diag/ab2.sh echoes the binary it resolved. The dangerous case
+# is precisely "build/PGO exists but does not match": a machine with no PGO build at all is an
+# ordinary development cycle and must stay quiet, so the warning is gated on the stamp EXISTING.
+# MTG_PGO_REQUIRE=1 turns it into a hard failure for a measurement chain that must not proceed on
+# the wrong engine (harness_bin then returns 1 rather than naming Release).
 harness_pgo_fresh() {
     [ "${MTG_PGO:-1}" != 0 ] || return 1
     [ -f build/PGO/SRC_TREE ] && [ -x build/PGO/mtg ] && [ -x build/PGO/mtg-analyze ] || return 1
     [ "$(cat build/PGO/SRC_TREE)" = "$(git rev-parse HEAD:src 2>/dev/null)" ] || return 1
     [ -z "$(git status --porcelain --untracked-files=no -- src 2>/dev/null)" ]
+}
+
+# Why harness_pgo_fresh said no, as one line on stderr -- empty when PGO is fresh or not built at
+# all. Named reasons, because "it fell back" and "it fell back BECAUSE src moved under it" lead to
+# different fixes.
+harness_pgo_stale_reason() {
+    [ "${MTG_PGO:-1}" != 0 ] || return 0
+    [ -f build/PGO/SRC_TREE ] || return 0          # never built here: an ordinary dev cycle
+    harness_pgo_fresh && return 0
+    local want have dirty
+    want=$(git rev-parse HEAD:src 2>/dev/null)
+    have=$(cat build/PGO/SRC_TREE 2>/dev/null)
+    dirty=$(git status --porcelain --untracked-files=no -- src 2>/dev/null | wc -l)
+    if [ ! -x build/PGO/mtg ] || [ ! -x build/PGO/mtg-analyze ]; then
+        echo "build/PGO is stamped but its binaries are missing"
+    elif [ "$have" != "$want" ]; then
+        echo "build/PGO was built from src $have but HEAD:src is now $want"
+    elif [ "$dirty" != 0 ]; then
+        echo "src/ has $dirty uncommitted change(s), so the PGO stamp cannot be trusted"
+    else
+        echo "build/PGO is not usable"
+    fi
+}
+
+# One warning per shell, on the first binary resolution that falls back past a stale PGO build.
+harness_pgo_warn_once() {
+    [ -z "${_MTG_PGO_WARNED:-}" ] || return 0
+    local why; why=$(harness_pgo_stale_reason)
+    [ -n "$why" ] || return 0
+    _MTG_PGO_WARNED=1
+    echo "harness: $why -- FALLING BACK TO build/Release." >&2
+    echo "harness: MTG_PGO=1 selects PGO, it does not force it. Rebuild (./build.sh pgo) before" >&2
+    echo "harness: measuring, or set MTG_PGO_REQUIRE=1 to fail instead of silently switching engine." >&2
+    [ "${MTG_PGO_REQUIRE:-0}" = 0 ] || return 1
+    return 0
 }
 
 # For a LONG run (generation, a screen, the overnight tier): make build/PGO fresh, building it (~10-15
@@ -79,6 +124,7 @@ harness_bin() {
         echo "harness: MTG_BIN=$MTG_BIN does not exist" >&2; return 1
     fi
     harness_pgo_fresh && { printf '%s\n' ./build/PGO/mtg; return 0; }
+    harness_pgo_warn_once || return 1          # MTG_PGO_REQUIRE=1: refuse the silent downgrade
     for b in ./build/Release/mtg ./build/Release/mtg.exe; do
         [ -f "$b" ] && { printf '%s\n' "$b"; return 0; }
     done
@@ -91,6 +137,7 @@ harness_bin() {
 harness_analyze_bin() {
     local b
     harness_pgo_fresh && { printf '%s\n' ./build/PGO/mtg-analyze; return 0; }
+    harness_pgo_warn_once || return 1          # MTG_PGO_REQUIRE=1: refuse the silent downgrade
     for b in ./build/Release/mtg-analyze ./build/Release/mtg-analyze.exe; do
         [ -f "$b" ] && { printf '%s\n' "$b"; return 0; }
     done

@@ -1336,6 +1336,10 @@ static std::atomic<long long> g_fch_groups{0};   // MTG_FREE_CAST_HOIST: {0}-cas
 static std::atomic<long long> g_eqdom_drops{0};
 // MTG_EQUIP_ONE_HOST: frames where a single rider host was chosen and the host axis collapsed.
 static std::atomic<long long> g_onehost_frames{0};
+// MTG_METALCRAFT_HOIST_EXACT: frames the LOOSE promise admitted and the EXACT one refuses -- i.e.
+// the frames where the hoist was mis-pricing. This is the diagnostic that says how much of the
+// loose hoist's cost win was bought with the mis-pricing and how much survives the repair.
+static std::atomic<long long> g_mch_loose_only{0};
 // BuildFoldPrefixMap arming -- see the disarm note there. Printed under MTG_ROLLOUT_STATS.
 static std::atomic<long long> g_fold_armed{0}, g_fold_disarm_auto{0}, g_fold_disarm_ind{0};
 inline bool FreeEquipDiagOn() { static const bool v = EnvOn("MTG_FREE_EQUIP_DIAG"); return v; }
@@ -1349,6 +1353,8 @@ inline void FreeEquipDiagNoteEqcostDrop()
 { if (FreeEquipDiagOn()) { g_eqdom_drops.fetch_add(1, std::memory_order_relaxed); } }
 inline void FreeEquipDiagNoteOneHost()
 { if (FreeEquipDiagOn()) { g_onehost_frames.fetch_add(1, std::memory_order_relaxed); } }
+inline void FreeEquipDiagNoteHoistLooseOnly()
+{ if (FreeEquipDiagOn()) { g_mch_loose_only.fetch_add(1, std::memory_order_relaxed); } }
 
 static std::atomic<long long> g_iw_subsets{0}, g_iw_subsets_with_payoff{0};
 static std::mutex g_iw_mu;
@@ -2162,6 +2168,13 @@ namespace
             {
                 std::cerr << "METALCRAFT_EQUIP_HOIST frames=" << g_mch_frames.load()
                           << " hoisted_groups=" << g_mch_groups.load() << "\n";
+            }
+            if (g_mch_loose_only.load() > 0)
+            {
+                // Frames the loose existential promise admitted and the exact universal one
+                // refuses: precisely the mis-priced frames the repair gives up.
+                std::cerr << "METALCRAFT_HOIST_EXACT refused_loose_frames="
+                          << g_mch_loose_only.load() << "\n";
             }
             if (g_fch_groups.load() > 0)
             {
@@ -14388,6 +14401,117 @@ static bool HoldLineEnabled()
 {
     static const bool v = EnvOn("MTG_FREE_CAST_HOLD_LINE");   // DEFAULT OFF -- measuring
     return v;
+}
+
+// ---- THE METALCRAFT HOIST'S PROMISE, MADE EXACT (MTG_METALCRAFT_HOIST_EXACT) -------------------
+//
+// THE DEFECT THIS FIXES, root-caused from the hoist's own measured failures. On 20,000 paired
+// size-7 rollouts at the deck's shipped d2/b3 settings, MTG_METALCRAFT_EQUIP_HOIST is 0.360x on
+// cost and moves 1,463 win turns for a net +1,307 -- but the shape is not a drift, it is a
+// RESHUFFLE whose bad half is fatal: 998 rollouts got worse, and 512 of those (51.3%) end at
+// win_turn 9, the NO-WIN bucket, including 104 at 6->9, 52 at 5->9 and 18 at 4->9. A base that
+// finds a turn-4 kill against an arm that finds none in eight turns is not a precision trade.
+//
+// AND IT IS A SCORING ERROR, NOT TRUNCATION, which is what makes it fixable. The hoist moved ~4,100
+// decisions OFF the MTG_DECISION_WORK_X ceiling (committed-d1 population -9.2%, d2 +5.4%), so the
+// arm's searches ran DEEPER than base's while its answers got worse. The loss is in what the plans
+// were worth, exactly where MetalcraftWillFreeEquips' own soundness note says the optimism lives.
+//
+// WHERE THE MIS-PRICING COMES FROM -- two places, and both are the SAME mistake: the loose test is
+// an EXISTENTIAL ("some subset of this frame flips metalcraft") used to license a UNIVERSAL ("this
+// equip rides EVERY subset for free").
+//   1. THE REDUCER IS ONLY A CAST CANDIDATE. note_threshold() walks `cands`, so a Puresteel Paladin
+//      in HAND sets threshold=3 -- and in every subset that does not cast it there is no reducer at
+//      all, so the hoisted equips cost their full printed generic at any artifact count. Puresteel
+//      is the ONLY metalcraft source in this deck's main 60, and over eight turns a land-light hand
+//      draws one and holds it, which is exactly the slow population the screen is about.
+//   2. THE THRESHOLD IS REACHED BY CASTS A SUBSET CAN SKIP. `artifacts` adds EVERY artifact cast
+//      candidate, Colossus Hammer and Golem-Skin Gauntlets and Shadowspear included. A subset that
+//      skips them does not reach three artifacts, and again the equips are not free.
+//
+// THE REPAIR IS TO COUNT ONLY WHAT EVERY ENUMERATED SUBSET IS GUARANTEED TO HAVE. The reducer must
+// already be ON THE BATTLEFIELD, and the artifacts are those on the battlefield plus the {0}-cost
+// Equipment casts MTG_FREE_CAST_HOIST force-includes in every subset. Then the promise is universal
+// by construction: every subset holds the reducer, every subset holds those casts, so every subset
+// reaches the threshold and every hoisted equip really does cost {0}. There is no optimism left to
+// bound -- it is an identity fold, and the mana term it contributes nothing to is genuinely zero.
+//
+// IT IS NOT VACUOUS, which is the thing worth checking before building it (an earlier reading of
+// mine said "require metalcraft already on board" would be a no-op, and that reading was wrong
+// because it collapsed two different conditions into one). The plain AUTO-EQUIP collapse already
+// fires wherever the equip is free AT THE ENUMERATION STAMP, i.e. where EquipCostGenericNow(state)
+// already returns 0 -- reducer in play AND the threshold already met. The window this opens is the
+// one in between: reducer in play, threshold NOT yet met at the stamp, and met by the forced {0}
+// casts. On this deck that window is the common case rather than a corner -- it runs TWENTY {0}
+// Equipment (4x Cathar's Shield, 4x Accorder's Shield, 4x Kite Shield, 4x Spidersilk Net, 4x Bone
+// Saw) plus eight artifact lands (4x Ancient Den, 4x Remote Farm), so a board with Puresteel and
+// two artifacts plus one shield in hand is an ordinary mid-game position, and in it the stale stamp
+// is the only thing holding the equip groups in the odometer.
+//
+// The free-cast hoist must be LIVE for its casts to be counted, hence the parameter: it is itself a
+// flag (default ON since 2026-10-02, and the draw-watcher carve-out can disarm it frame-wide), and
+// counting casts that are not actually forced would reintroduce defect 2 by another door.
+static bool MetalcraftHoistExactEnabled()
+{
+    static const bool env_on = EnvOn("MTG_METALCRAFT_HOIST_EXACT");       // DEFAULT OFF
+    return heurarm::Flag(heurarm::METALCRAFT_HOIST_EXACT, env_on);
+}
+
+static bool MetalcraftFreesEverySubset(const GameState& state, const std::vector<Action>& cands,
+                                       const std::vector<std::vector<int>>& groups,
+                                       bool free_cast_hoist_live)
+{
+    const int controller = state.active_player_index;
+    // 1. THE REDUCER MUST ALREADY BE ON THE BATTLEFIELD. A reducer that is merely a cast candidate
+    //    is absent from every subset that declines to cast it, and there no artifact count makes an
+    //    equip free. Battlefield only -- that is the whole difference from note_threshold's loop.
+    int threshold = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const int t = d->params.metalcraft_equip_zero_artifacts;
+        if (t > 0 && (threshold == 0 || t < threshold)) { threshold = t; }
+    }
+    if (threshold <= 0) { return false; }
+    // 2. COUNT ONLY GUARANTEED ARTIFACTS: those already on the battlefield, plus the {0}-cost
+    //    Equipment casts the free-cast hoist pushes into auto_sel and therefore into every subset.
+    //    The predicate is the free-cast loop's own, so the two cannot drift: single-variant groups
+    //    (a multi-variant group is a MODE choice and is not hoisted) that pass
+    //    FreeEquipmentCastIsDominant. Equipment is an artifact subtype, but the type is asserted
+    //    rather than assumed -- the threshold counts ARTIFACTS, so a non-artifact slipping through
+    //    would overcount by exactly the amount that breaks the guarantee.
+    int artifacts = CountControlledArtifacts(state, controller);
+    if (free_cast_hoist_live)
+    {
+        for (const std::vector<int>& g : groups)
+        {
+            if (g.size() != 1) { continue; }
+            const Action& a = cands[g[0]];
+            if (!FreeEquipmentCastIsDominant(a)) { continue; }
+            if (a.def == nullptr || !a.def->card.HasType(CardType::Artifact)) { continue; }
+            ++artifacts;
+        }
+    }
+    return artifacts >= threshold;
+}
+
+// The frame-level hoist gate shared by Solve and its EnumeratePlans twin, so the two cannot drift
+// (the executor/rollout lockstep failure mode this file documents in several other places). Returns
+// the hoist decision and, under MTG_FREE_EQUIP_DIAG, counts the frames where the two tests disagree
+// -- the mis-priced frames, which is the number that says what the repair actually gave up.
+static bool MetalcraftHoistArmed(const GameState& state, const std::vector<Action>& cands,
+                                 const std::vector<std::vector<int>>& groups, bool auto_equip_on)
+{
+    if (!auto_equip_on || !MetalcraftEquipHoistEnabled())            { return false; }
+    if (FrameHasDoubleStrikeSource(state, cands))                    { return false; }
+    if (!MetalcraftWillFreeEquips(state, cands))                     { return false; }
+    if (!MetalcraftHoistExactEnabled())                              { return true; }
+    const bool fch_live = FreeCastHoistEnabled() && !HoldsEquipmentDrawWatcher(state);
+    if (MetalcraftFreesEverySubset(state, cands, groups, fch_live))   { return true; }
+    FreeEquipDiagNoteHoistLooseOnly();
+    return false;
 }
 
 // ---- THE GO-OFF CUT'S RE-VERIFY IS DUPLICATED WORK (2026-10-04) --------------------------------
@@ -34061,9 +34185,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                 && !HumanPlayActive();
         // Will this frame's own casts make the equips free? (MTG_METALCRAFT_EQUIP_HOIST, default
         // OFF.) Computed ONCE per call -- it is a property of the frame, not of a group.
-        const bool mc_hoist = auto_equip_on && MetalcraftEquipHoistEnabled()
-                           && !FrameHasDoubleStrikeSource(state, cands)
-                           && MetalcraftWillFreeEquips(state, cands);
+        // MTG_METALCRAFT_HOIST_EXACT tightens the promise from "some subset flips metalcraft" to
+        // "every subset does"; see MetalcraftHoistArmed for the defect and the repair.
+        const bool mc_hoist = MetalcraftHoistArmed(state, cands, groups, auto_equip_on);
         if (mc_hoist) { FreeEquipDiagNoteHoistFrame(); }
         if (auto_equip_on)
         {
@@ -34125,8 +34249,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 group_hand_index.erase(group_hand_index.begin() + g);
             }
             // Candidate order = subset apply order: keep the forced equips in enumeration order.
-            // FREE-CAST hoist (MTG_FREE_CAST_HOIST, default OFF): a {0}-mana Equipment cast is
-            // forced into every subset instead of powersetting take/skip over it. See
+            // FREE-CAST hoist (MTG_FREE_CAST_HOIST, default ON since 2026-10-02; `=0` disables):
+            // a {0}-mana Equipment cast is forced into every subset instead of powersetting
+            // take/skip over it. That default is load-bearing for MTG_METALCRAFT_HOIST_EXACT,
+            // which counts these forced casts as the artifacts EVERY subset is guaranteed. See
             // FreeEquipmentCastIsDominant for the dominance argument and its carve-outs. Runs in
             // the same block as the auto-equip collapse so auto_sel is sorted once, and BEFORE
             // CapGroupsBySituationalRank for the same reason that one does.
@@ -43928,10 +44054,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                 && ResolveProvider(state).ConsolidatesEquips()
                                 && !DecisionUnpruned(UnprunedGate::EquipHost)
                                 && !HumanPlayActive();
-        // Same frame-level hoist as Solve's twin; see MetalcraftWillFreeEquips.
-        const bool mc_hoist = auto_equip_on && MetalcraftEquipHoistEnabled()
-                           && !FrameHasDoubleStrikeSource(state, cands)
-                           && MetalcraftWillFreeEquips(state, cands);
+        // Same frame-level hoist as Solve's twin; see MetalcraftHoistArmed (which both call, so the
+        // exact-promise repair cannot land on one host and not the other).
+        const bool mc_hoist = MetalcraftHoistArmed(state, cands, groups, auto_equip_on);
         if (mc_hoist) { FreeEquipDiagNoteHoistFrame(); }
         if (auto_equip_on)
         {
@@ -43990,8 +44115,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 groups.erase(groups.begin() + g);
                 group_hand_index.erase(group_hand_index.begin() + g);
             }
-            // FREE-CAST hoist (MTG_FREE_CAST_HOIST, default OFF): a {0}-mana Equipment cast is
-            // forced into every subset instead of powersetting take/skip over it. See
+            // FREE-CAST hoist (MTG_FREE_CAST_HOIST, default ON since 2026-10-02; `=0` disables):
+            // a {0}-mana Equipment cast is forced into every subset instead of powersetting
+            // take/skip over it. That default is load-bearing for MTG_METALCRAFT_HOIST_EXACT,
+            // which counts these forced casts as the artifacts EVERY subset is guaranteed. See
             // FreeEquipmentCastIsDominant for the dominance argument and its carve-outs. Runs in
             // the same block as the auto-equip collapse so auto_sel is sorted once, and BEFORE
             // CapGroupsBySituationalRank for the same reason that one does.

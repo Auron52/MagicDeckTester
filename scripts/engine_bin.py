@@ -64,12 +64,54 @@ def pgo_ensure():
         print("engine_bin: ./build.sh pgo FAILED -- running on build/Release", file=sys.stderr)
 
 
+_warned = [False]
+
+
+def pgo_stale_reason():
+    """Why pgo_fresh() said no, or "" when PGO is fresh / was never built here. Mirrors
+    harness_pgo_stale_reason in test/lib/harness.sh -- keep the two in step."""
+    if os.environ.get("MTG_PGO", "1") == "0":
+        return ""
+    d = os.path.join(ROOT, "build", "PGO")
+    stamp = os.path.join(d, "SRC_TREE")
+    if not os.path.exists(stamp):
+        return ""                                  # never built here: an ordinary dev cycle
+    if pgo_fresh():
+        return ""
+    if not all(os.path.exists(os.path.join(d, b)) for b in ("mtg", "mtg-analyze")):
+        return "build/PGO is stamped but its binaries are missing"
+    have, want = open(stamp).read().strip(), _git("rev-parse", "HEAD:src")
+    if have != want:
+        return "build/PGO was built from src %s but HEAD:src is now %s" % (have, want)
+    if _src_dirty():
+        return "src/ has uncommitted changes, so the PGO stamp cannot be trusted"
+    return "build/PGO is not usable"
+
+
+def pgo_warn_once():
+    """Say so, ONCE, when a stale build/PGO is being stepped over. See the long note in
+    test/lib/harness.sh: a silent fallback measured a whole screen on the wrong engine. Raises under
+    MTG_PGO_REQUIRE=1 so a measurement chain fails rather than switching engine behind its back."""
+    why = pgo_stale_reason()
+    if not why:
+        return
+    if not _warned[0]:
+        _warned[0] = True
+        print("engine_bin: %s -- FALLING BACK TO build/Release.\n"
+              "engine_bin: MTG_PGO=1 selects PGO, it does not force it. Rebuild (./build.sh pgo)\n"
+              "engine_bin: before measuring, or set MTG_PGO_REQUIRE=1 to fail instead." % why,
+              file=sys.stderr, flush=True)
+    if os.environ.get("MTG_PGO_REQUIRE", "0") != "0":
+        raise RuntimeError("MTG_PGO_REQUIRE=1 and build/PGO is not usable: %s" % why)
+
+
 def engine_bin(name="mtg"):
     override = os.environ.get({"mtg": "MTG_BIN", "mtg-analyze": "MTG_ANALYZE_BIN"}.get(name, ""), "")
     if override:
         return override
     if pgo_fresh():
         return os.path.join(ROOT, "build", "PGO", name)
+    pgo_warn_once()
     for cand in (name, name + ".exe"):
         p = os.path.join(ROOT, "build", "Release", cand)
         if os.path.exists(p):
