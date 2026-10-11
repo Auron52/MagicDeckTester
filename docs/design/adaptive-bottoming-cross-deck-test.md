@@ -188,6 +188,55 @@ Three constraints carry over unchanged:
 
 ---
 
+## 3b. THE USER'S RULING, 2026-10-11 — `flip_eps = 0.10` for the v3 run, default still OPEN
+
+> **USER, 2026-10-11 ~09:35:** *"Okay, well, I guess we'll try 0.1 then once we have accepted it.
+> After this run I may want to do more tests to confirm what the default should be."*
+
+Two separate things, and only the first is settled:
+
+1. **This run:** KittyEquipment v3's mulligan generation runs with **`MTG_KEEP_FLIP_EPS=0.10`**,
+   launched **after** the equip-prune adoption is accepted into ground truth. The in-code default
+   (`src/analyzer/main.cpp:205`, `cfg.flip_eps`) stays **0.02** — this is a per-run setting, not a
+   default change. Do not edit the default to match the run.
+2. **The default:** still OPEN, explicitly pending **more tests after this run**. Nothing in the
+   cross-deck table below may be used to move the shipped default on its own.
+
+### What the measurement can and cannot say about *this* deck — state it plainly
+
+**The simulator cannot price v3.** It needs a completed full-bottom raw, and v3 has only the
+**cancelled** journal (`decks/KittyEquipment/v3-adelbert-gauntlets/*.journal`, R=16, 15 buckets,
+play_digest `3a5a92ae6f6e725c`, commit `766424d1`). The only KittyEquipment raw that exists is the
+**top-level v2** one (Aug 25, 18 buckets), which the sweep's `decks/*/*.raw.json.gz` glob picks up.
+So the row labelled "KittyEquipment" in the cross-deck table is **v2** — the nearest available proxy
+for v3, same archetype and largely the same cards, but not the list that will ship. The honest
+statement of the risk for v3 is therefore *"inferred from v2 plus the cross-deck distribution"*,
+never *"measured on v3"*.
+
+### The two decisions the saving comes from are NOT the same decision
+
+Conflating them overstates how safe `eps` is:
+
+- **Adaptive bottoming at all** (vs full bottoming) is where nearly all the saving lives, and its
+  cost is **deck-dependent**: slivers/kitty-reference **+0.0033** at R=30, **Angels +0.0106** at
+  R=40 — 3x.
+- **Widening `flip_eps` 0.02 → 0.10/0.20**, *given* adaptive bottoming, is very nearly free: Angels
+  moves +0.0106 → +0.0103 → +0.0107 (within ~4 se) while the saving grows 24.7–41.4% → 34.8–46.6%.
+
+"Nearly free" is a property of the **eps widening**, not of the dial as a whole.
+
+### What the follow-up tests after this run should do
+
+- **Quote absolute policy quality at each R, never the adaptive-vs-full delta at each R** (§1's
+  cap-R trap). A table that reports the delta ranks decks and caps by how little they had to lose.
+- **Price it at the R the run actually used.** The cancelled v3 journal is R=16, which is neither
+  `fast` (30) nor `complete` (40); whatever R the real run ends up using is the R the follow-up must
+  report, because the trap makes a low-R reading flatter itself.
+- **Prefer the real comparison (§3) to another simulation** if a window ever allows two runs. The
+  simulator's structural assumptions (Gaussian draws from stored mean+variance, refined cells
+  credited their true mean) are exactly what a measured artifact retires.
+- **Report the worst deck, not the average** — the risk is per deck.
+
 ## 4. Who decides
 
 Every dial here — cap R, `flip_eps`, `cutoff_P`, the bucket count, `MTG_DECISION_WORK_X` — is a
