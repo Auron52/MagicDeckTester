@@ -396,6 +396,7 @@ enum Slot : int
     PAYABLE_ORDER_DYNAMIC_DECLINE, // MTG_PAYABLE_ORDER_DYNAMIC_DECLINE MTG_PAYABLE_ORDER keeps an order holding a cast with a live DYNAMIC per-target discount (Hinata, Dawn-Crowned; Soulfire) as given -- its stamped cost is only right at the position the enumeration gave it -- the rule LadderProjectable already applies. Both sites. Default ON; =0 -> walked like any other order
     DRAGONSTORM_IRENCRAG_CLOSER, // MTG_DRAGONSTORM_IRENCRAG_CLOSER (USER order, rule 7) Irencrag Feat needs a CLOSER (Dragonstorm or a Dragon) after it: a Dragonstorm subset holding the restrictor, no closer and no Apex is refused, and the post-Apex merge does not cast a LEFTOVER Irencrag that no closer follows and no Apex precedes (it stays in hand) -- dragonstorm d0 s7000035 T5 cast it alone after an empty continuation. A subset WITH an Apex stays admitted (its exile may bring the closer: s8500074). Shared reader DragonstormIrencragCloserOn (EngineFlags.h). Default ON; =0 -> cast as before
     FB_HOLD_BANKED,           // MTG_FB_HOLD_BANKED the greedy combat pump (ApplyFirebreathing: Scourge {R}, Lathliss {1}{R}) does not tap a BANKED source -- a depletion land (Sandstone Needle: a counter per tap, sacrificed at zero) or a storage land (Mercadian Bazaar, Dwarven Hold: its banked counters, and the +1 it banks if left untapped) -- unless the full pump makes the attack lethal. The pump's "unused mana is lost" premise is false for those sources (dragonstorm d0 s1191687 T3: the Needle sacrificed to a non-lethal pump; s7600233: the Bazaar's bank). Executor + rollout, one helper (Combat.cpp). Default ON; =0 -> every source pumps
+    LINE_FLOAT_TAP_FIRST,     // MTG_LINE_FLOAT_TAP_FIRST (autonomous twin of the human-only MTG_PAY_LINE_FLOAT_HOLD) a payment whose GENERIC pips would spend floating colour the rest of the applying line still owes first tries tapping a SPARE source for them -- one whose mana for this payment no later pip wants ({C}, e.g. an Unclaimed Territory under a noncreature spell), never a depletion / storage / pay-sac source or a dork, and not a creature-only-colour land that is the only source of a colour the line still owes -- with a plain-payment fallback. dragonstorm d3 s7100081 T2: Medallion's {2} took the floating {R}{R} and left Pyretic's {R} to a Territory that cannot pay it. Executor + rollout + payability walks (shared payer). Not in human play. Default ON; =0 -> float first
     COUNT
 };
 
@@ -753,6 +754,7 @@ inline const char* Name(int slot)
         "MTG_PAYABLE_ORDER_DYNAMIC_DECLINE",
         "MTG_DRAGONSTORM_IRENCRAG_CLOSER",
         "MTG_FB_HOLD_BANKED",
+        "MTG_LINE_FLOAT_TAP_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
