@@ -100,6 +100,23 @@ inline bool SporeSourcePoolEnabled()
     return heurarm::Flag(heurarm::FUNGUS_SPORE_POOL, env_on);
 }
 
+// MTG_FOLD_XNAME -- DEFAULT OFF; =1 enables. Key a card's FOLD IDENTITY on its BEHAVIOUR
+// (CardDefinition::behaviour_identity) instead of on its NAME. Full rationale, the card-data
+// verification and the digest's failure direction are in the heurarm::FOLD_XNAME slot and at
+// HandCardContentHash (TurnSolver.cpp).
+//
+// SHARED READER PER THE LOCKSTEP RULE. Two TUs decide the same question about the same card:
+// TurnSolver's HandCardContentHash (the hand-cast fold, the permanent half, and the act-source
+// fold all reach it) and DecisionProviders' PurchaseKey (the equip route's DFS dedup). A
+// hand-cast fold that merged two names while the route's purchase key still split them would
+// have the two halves disagree about what ONE CARD is -- the executor/rollout lockstep failure
+// mode in miniature, and the exact shape convention 4 exists to prevent.
+inline bool FoldXnameOn()
+{
+    static const bool env_on = EnvOn("MTG_FOLD_XNAME");
+    return heurarm::Flag(heurarm::FOLD_XNAME, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

@@ -23547,12 +23547,30 @@ static std::uint64_t PurchaseKey(const TurnSolver::Plan& p)
     // hashed every paid cast identically, so "Ancient Den + Colossus Hammer", "+ Dragonfire Blade"
     // and "+ Skateboard" collapsed into ONE purchase and the DFS only ever tried whichever
     // representative won -- which is the Skateboard, i.e. the very choice this exists to escape.
+    // BEHAVIOUR, NOT NAME, when MTG_FOLD_XNAME is on (FoldXnameOn, EngineFlags.h -- shared reader;
+    // see the heurarm::FOLD_XNAME slot for the user report and the card-data verification). Two
+    // Equipment whose cards.json entries agree on everything but the name buy the SAME board for
+    // the same mana, so they are one purchase, not two: on KittyEquipment v3 that merges Cathar's
+    // Shield with Accorder's Shield, which this deck plays four of each. `behaviour_identity` is 0
+    // for a Register-built definition and 0 must never match, so that case keeps the name -- which
+    // is exactly the pre-existing key. The substituted token is a fixed-width digest rather than a
+    // name, so the separator argument below still holds by construction.
     std::vector<std::string> bought;
+    char idbuf[32];
     for (const Action& a : p.actions)
     {
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
         if (a.def->card.m_mana_cost.ManaValue() == 0) { continue; }   // forced, not a choice
-        bought.push_back(a.def->card.m_name.str());
+        if (FoldXnameOn() && a.def->behaviour_identity != 0)
+        {
+            std::snprintf(idbuf, sizeof idbuf, "b%llu",
+                          static_cast<unsigned long long>(a.def->behaviour_identity));
+            bought.push_back(idbuf);
+        }
+        else
+        {
+            bought.push_back(a.def->card.m_name.str());
+        }
     }
     std::sort(bought.begin(), bought.end());
     std::uint64_t h = 1469598103934665603ULL;

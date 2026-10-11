@@ -1331,6 +1331,9 @@ static std::atomic<long long> g_iw_drops{0}, g_iw_drops_with_payoff{0};
 static std::atomic<long long> g_mch_frames{0};
 static std::atomic<long long> g_mch_groups{0};
 static std::atomic<long long> g_fch_groups{0};   // MTG_FREE_CAST_HOIST: {0}-cast groups erased
+// MTG_EQUIP_EQCOST_DOMINANCE: (equip, host) pairs dropped because another unattached battlefield
+// equipment costs the SAME to equip onto that host and does >= on every visible dimension.
+static std::atomic<long long> g_eqdom_drops{0};
 // BuildFoldPrefixMap arming -- see the disarm note there. Printed under MTG_ROLLOUT_STATS.
 static std::atomic<long long> g_fold_armed{0}, g_fold_disarm_auto{0}, g_fold_disarm_ind{0};
 inline bool FreeEquipDiagOn() { static const bool v = EnvOn("MTG_FREE_EQUIP_DIAG"); return v; }
@@ -1340,6 +1343,8 @@ inline void FreeEquipDiagNoteHoistGroup()
 { if (FreeEquipDiagOn()) { g_mch_groups.fetch_add(1, std::memory_order_relaxed); } }
 inline void FreeEquipDiagNoteFreeCast()
 { if (FreeEquipDiagOn()) { g_fch_groups.fetch_add(1, std::memory_order_relaxed); } }
+inline void FreeEquipDiagNoteEqcostDrop()
+{ if (FreeEquipDiagOn()) { g_eqdom_drops.fetch_add(1, std::memory_order_relaxed); } }
 
 static std::atomic<long long> g_iw_subsets{0}, g_iw_subsets_with_payoff{0};
 static std::mutex g_iw_mu;
@@ -2157,6 +2162,10 @@ namespace
             if (g_fch_groups.load() > 0)
             {
                 std::cerr << "FREE_CAST_HOIST hoisted_groups=" << g_fch_groups.load() << "\n";
+            }
+            if (g_eqdom_drops.load() > 0)
+            {
+                std::cerr << "EQUIP_EQCOST_DOMINANCE dropped_pairs=" << g_eqdom_drops.load() << "\n";
             }
             if (g_fold_armed.load() > 0 || g_fold_disarm_auto.load() > 0
                 || g_fold_disarm_ind.load() > 0)
@@ -10601,12 +10610,61 @@ static bool FoldHandCastsOn()
 // placeholders have EMPTY masks"), so a placeholder never equals its own printed definition. The
 // fold silently did nothing, and only the accounting counters below said so.
 static void FoldMixCost(std::uint64_t& h, const ManaCost& c);   // defined with the fold sig below
+// MTG_FOLD_XNAME -- DEFAULT OFF; =1 enables. Key a card's fold identity on its BEHAVIOUR rather
+// than on its NAME, at every fold site that goes through HandCardContentHash.
+//
+// WHY THE NAME IS IN THIS HASH AT ALL, and why that is the defect. A hand card is a DeckLoader
+// PLACEHOLDER (CardDatabase.h: "placeholders have EMPTY masks"), so every content field below is
+// blank and the NAME is the only thing carrying the card's behaviour. That makes m_name_hash a
+// perfectly sound identity and a strictly too-fine one: two cards whose cards.json entries agree on
+// everything but the name are indistinguishable to every reader in this engine, yet they land in
+// different fold classes and their cross-name symmetry is never collapsed.
+//
+// USER, 2026-10-02 (from the play viewer) and again 2026-10-11: *"Cathar's Shield and Accorder's
+// Shield are duplicates... They are identical except for the name"* and *"all of the shields and
+// such should be deduplicatable"*. VERIFIED IN THE CARD DATA, not assumed: both are `{0}` with
+// parameters {is_equipment, equip_cost_generic:3, equip_tough_bonus:3, equip_grants_vigilance}, the
+// same types, subtypes and keywords -- byte-identical on every field the engine reads. KittyEquipment
+// v3 plays four of each, so the deck's fold classes are {4,4} where they should be {8}.
+//
+// AND THE APPARATUS ALREADY AGREES. The deck's own equivalence discovery (400 probes, 1% threshold)
+// puts "Accorder's Shield", "Cathar's Shield", "Kite Shield" and "Spidersilk Net" in ONE bucket, so
+// the mulligan generator folds those four names on measured evidence and then pays for a search that
+// branches four ways over them on every frame of every rollout it drives. This closes that gap for
+// the two names where the fold is an IDENTITY rather than a measured near-tie.
+//
+// SOUND BY THE DIGEST'S OWN FAILURE DIRECTION. behaviour_identity digests the WHOLE cards.json entry
+// MINUS name and oracle_text (CardDatabase.cpp), so an irrelevant key only makes two cards look
+// DIFFERENT -- declining a fold -- while a param invented tomorrow is covered with no edit here. It
+// is 0 for a Register-built definition (no JSON to digest) and 0 must NEVER match, so that case
+// falls back to the name, which is exactly the pre-existing key. Same primitive and same argument as
+// MTG_EQUIP_COPY_XNAME, which already uses it in BuildFungibleEquipClasses; this extends it to the
+// hand-cast fold (FOLD_HAND_CASTS, default ON, -11.5% greedy subsets across all 40 suite decks) and
+// to the permanent half, so all three sites share one notion of "the same card".
+//
+// DEFAULT OFF because the surviving representative can be a different PHYSICAL copy, so card numbers
+// and therefore play digests may move on a board that is merely isomorphic -- the same disclosure
+// MTG_EQUIP_COPY_COLLAPSE and MTG_EQUIP_COPY_XNAME carry. Byte-identical for every deck whose list
+// holds no two behaviourally-identical cards.
+//
+// The reader is FoldXnameOn() in EngineFlags.h, shared per the lockstep rule: this site and the
+// equip route's PurchaseKey (DecisionProviders.cpp) are different TUs deciding the SAME question,
+// and a hand-cast fold that merged two names while the route's purchase key still split them would
+// have the two halves disagree about what one card is.
 static std::uint64_t HandCardContentHash(const Card& c)
 {
     std::uint64_t h = 1469598103934665603ull;
     auto mix = [&h](std::uint64_t v)
     { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); };
-    mix(c.m_name_hash);
+    std::uint64_t ident = 0;
+    if (FoldXnameOn())
+    {
+        const CardDefinition* xd = CardDatabase::Instance().LookupCached(c);
+        if (xd != nullptr) { ident = xd->behaviour_identity; }
+    }
+    // 0 = no identity available (flag off, unknown card, or a Register-built definition): fall back
+    // to the name, the pre-existing key.
+    mix(ident != 0 ? ident : c.m_name_hash);
     mix(c.m_is_staged ? 1u : 0u);
     mix(static_cast<std::uint64_t>(c.m_staged_expiry));
     mix(c.m_impulse_no_land ? 1u : 0u);
@@ -10722,10 +10780,22 @@ static std::uint64_t ActionFoldSig(const Action& a)
     const bool src_is_sac = (a.kind != Action::Kind::CastFromHand);
     std::uint64_t h = 1469598103934665603ull;
     FoldMix(h, static_cast<std::uint64_t>(a.kind));
+    // MTG_FOLD_XNAME: when the card's BEHAVIOUR is the identity, the name and the `def` pointer are
+    // both replaced by one digest, and this site is why that is not optional. HandCastEquivTag now
+    // hands two behaviourally-identical cards the SAME TAG, so they meet in one class -- and
+    // CONDITION 1 below rejects any class whose members disagree on this signature. Leave the name
+    // or the def pointer in and the two names differ here, the class is dropped as "not
+    // field-identical" (bf_fold drop_sig), and the fold silently stops firing instead of merging:
+    // the exact failure its own header warns of for the source key ("the fold silently stops firing
+    // -- caught here by the branching census reading back the unfolded mean width").
+    const std::uint64_t xident = (FoldXnameOn() && a.def != nullptr)
+                               ? a.def->behaviour_identity : 0ull;
     // Interned names are canonical (NameRegistry.h: "pointer equality == string equality"), so the
     // ADDRESS identifies the name and costs a load instead of a full string hash. Same determinism
     // argument as `def` below: only compared within one call.
-    FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.card_name.str())));
+    FoldMix(h, xident != 0
+               ? xident
+               : static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.card_name.str())));
     FoldMixCost(h, a.cost);
     FoldMix(h, a.sacrifice_land ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.discard_lands));
@@ -10785,7 +10855,11 @@ static std::uint64_t ActionFoldSig(const Action& a)
     // never move, so every action naming one card carries the identical pointer. The hash value
     // varies run to run (ASLR) but this sig is only ever COMPARED to another sig computed in the
     // same call, and that comparison is deterministic. It never reaches a game key or a log.
-    FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(a.def)));
+    // Under MTG_FOLD_XNAME the digest stands in for it, for the reason given at `xident` above --
+    // two behaviourally-identical cards have different definitions and must still match here.
+    FoldMix(h, xident != 0
+               ? xident
+               : static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(a.def)));
     for (const Action& sub : a.breakpoint_casts) { FoldMix(h, ActionFoldSig(sub)); }
     return h;
 }
@@ -14050,6 +14124,16 @@ static bool ZeroPowerEquipFreeOnlyEnabled()
 {
     static const bool env_on = EnvOn("MTG_ZERO_POWER_EQUIP_FREE_ONLY");   // DEFAULT OFF
     return heurarm::Flag(heurarm::ZERO_POWER_EQUIP_FREE_ONLY, env_on);
+}
+
+// MTG_EQUIP_EQCOST_DOMINANCE -- DEFAULT OFF; =1 enables. The USER's 2026-10-11 rule: at EQUAL
+// equip cost the equipment that does strictly more can always be taken, because there is no mana
+// trade left for efficiency to win. Full argument, the componentwise partial order and the
+// comparability carve-outs are at the mask's construction in CollectActions.
+static bool EquipEqcostDominanceEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EQUIP_EQCOST_DOMINANCE");       // DEFAULT OFF
+    return heurarm::Flag(heurarm::EQUIP_EQCOST_DOMINANCE, env_on);
 }
 
 // Should this (equipment, host) pair be WITHHELD because it costs mana and the equipment adds no
@@ -23700,6 +23784,147 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // outright when the flag is off, so every other deck stays byte-identical.
             const bool s_zp_free_only = ZeroPowerEquipFreeOnlyEnabled();
             const bool s_zp_mc_free   = s_zp_free_only && MetalcraftWillFreeEquips(state, actions);
+
+            // ---- EQUAL-EQUIP-COST DOMINANCE (MTG_EQUIP_EQCOST_DOMINANCE, DEFAULT OFF) ----------
+            //
+            // USER RULING 2026-10-11: *"Same equip costs are the easiest to prioritize. The ones
+            // that do more can be always taken in that case."* and, on why that is the safe line to
+            // draw: *"That is dominant just because the extra damage cannot be overridden by mana
+            // efficiency."*
+            //
+            // WHY EQUAL COST IS THE WHOLE CONDITION. The user's own counter-example is what bounds
+            // this: *"Spidersilk Net vs Shield is a bit different... it is a real decision when its
+            // not free because the differing equip cost means we might have enough mana this turn
+            // for the shield and be able to equip the spidersilk next turn alongside other things.
+            // Mana efficiency takes priority."* So across UNEQUAL equip costs there is a genuine
+            // multi-turn allocation choice and nothing may be pruned. At EQUAL cost that trade does
+            // not exist -- both equips consume exactly the same mana, this turn and every later
+            // turn -- so the one that does strictly more cannot be beaten by any mana argument.
+            // That is a dominance, not a preference, and it is the reason this is not a repeat of
+            // MTG_ZERO_POWER_EQUIP_FREE_ONLY, which was REFUTED: that one asserted the shields are
+            // POOR (a projection, and the user's "nothing else to do with the mana" exception was
+            // load-bearing), while this one asserts only that a strictly better equip at the SAME
+            // PRICE is preferable, which has no exception.
+            //
+            // COMPONENTWISE, NOT BY THE WEIGHTED SCALAR, and that distinction is load-bearing.
+            // rider_delta above aggregates value with weights (+2 Kemba, +2 Jitte, +1 lifelink);
+            // comparing two equips through those weights would TRADE dimensions against each other
+            // on numbers nobody measured -- a projection. Compared at a FIXED host, two facts make
+            // a true partial order available instead:
+            //   * the double-strike flip is a property of the HOST reaching n_att + 1, identical
+            //     for any attach, so it cancels -- and with ds_after equal, the host's gain is
+            //     monotone in dpw, so the power term reduces to EquipAttachDeltaFor's first field;
+            //   * Kemba's per-equipment upkeep token is likewise a property of the host, so it
+            //     cancels too.
+            // What remains differing is power, Jitte-style combat charges and lifelink, and the
+            // test requires >= on every one of them with > somewhere. No weights are consulted.
+            //
+            // ON TOUGHNESS, VIGILANCE AND REACH. They are absent from the comparison because they
+            // are absent from `rider_delta`, which is the SHIPPED emission policy: the `rd > 0`
+            // gate already refuses to emit an equip whose only effect is toughness. This prune
+            // extends that existing policy from "zero rider" to "dominated rider at equal cost";
+            // it does not introduce the premise. (DecisionProvider.h on the goldfish: "correct for
+            // a goldfish with no blockers", and the user's own buckets.json ruling: "trample is
+            // inert in a goldfish, nothing blocks".) Still DEFAULT OFF and a USER decision, because
+            // unlike a pure identity fold it removes pairs the current search does emit.
+            //
+            // FREE EQUIPS ARE EXCLUDED, not forgotten. At cost 0 the AUTO-EQUIP collapse already
+            // force-includes every eligible equip in every subset, so there is no choice to make
+            // and a dominance prune there could only drop an equip that was going to be taken
+            // anyway. The user's rule is explicitly about *"when we need to pay the equip costs"*.
+            //
+            // COMPARABILITY IS ENFORCED, NOT ARGUED. A pair is compared only when BOTH sides are
+            // unattached BATTLEFIELD equipment (a MOVE trades away the current host's rider, and a
+            // hand-side equip needs its cast co-selected, so forcing either would strand a pair --
+            // the same two exclusions the AUTO-EQUIP collapse makes) and neither carries a
+            // dimension this comparison cannot see: haste (the benefit is the attack, not the
+            // rider), shroud (ordering and the parking dance), a re-host sacrifice (Grafted
+            // Wargear: the loss of the former host is unpriced), an equip_min_power restriction
+            // (conditional availability), an ETB tap rider (Skateboard), or hone counters on the
+            // physical equipment -- EquipAttachDeltaFor structurally cannot see those (Dwalin), a
+            // pre-existing emission gap this must not deepen.
+            const bool s_eqdom_open = EnvOn("MTG_EQUIP_ALL_HOSTS")
+                                   || DecisionUnpruned(UnprunedGate::EquipHost)
+                                   || HumanPlayActive();
+            const bool s_eqdom = EquipEqcostDominanceEnabled() && !s_eqdom_open
+                              && equips.size() > 1 && !hosts.empty();
+            // (equip, host) pairs the dominance drops. Flat index e * hosts.size() + hi.
+            std::vector<char> eq_dominated;
+            if (s_eqdom)
+            {
+                const int me_idx = state.active_player_index;
+                // The physical permanent behind equips[i], or nullptr when that card is in HAND.
+                auto bf_perm_of = [&](std::size_t i) -> const Permanent* {
+                    const int num = equips[i].second->m_number;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index == me_idx && p.card.m_number == num) { return &p; }
+                    }
+                    return nullptr;
+                };
+                auto comparable = [&](std::size_t i) -> bool {
+                    if (attached_to[i] != 0) { return false; }          // a MOVE, not an attach
+                    const CardParams& pr = equips[i].first->params;
+                    if (pr.equip_sacrifices_prior_host) { return false; }
+                    if (pr.equip_grants_shroud)         { return false; }
+                    if (pr.equip_grants_haste)          { return false; }
+                    if (pr.equip_min_power > 0)         { return false; }
+                    if (pr.etb_tap_target_permanent)    { return false; }
+                    const Permanent* p = bf_perm_of(i);
+                    if (p == nullptr)                   { return false; }   // hand-side
+                    if (p->hone_counters != 0)          { return false; }   // unpriced (Dwalin)
+                    return true;
+                };
+                static thread_local std::vector<char> cmp;
+                cmp.assign(equips.size(), 0);
+                int n_cmp = 0;
+                for (std::size_t i = 0; i < equips.size(); ++i)
+                {
+                    cmp[i] = comparable(i) ? 1 : 0;
+                    n_cmp += cmp[i];
+                }
+                if (n_cmp > 1)
+                {
+                    eq_dominated.assign(equips.size() * hosts.size(), 0);
+                    for (std::size_t hi = 0; hi < hosts.size(); ++hi)
+                    {
+                        const Host& h = hosts[hi];
+                        if (h.in_hand || h.id == 0) { continue; }
+                        for (std::size_t i = 0; i < equips.size(); ++i)
+                        {
+                            if (!cmp[i] || equips[i].second->m_number == h.id) { continue; }
+                            const CardParams& pi = equips[i].first->params;
+                            const int ci = EquipCostGenericNow(state, me_idx,
+                                                               *equips[i].first, h.id);
+                            if (ci == 0) { continue; }           // free: the collapse takes it
+                            const int pwi = EquipAttachDeltaFor(state, me_idx, h.id, pi).first;
+                            for (std::size_t j = 0; j < equips.size(); ++j)
+                            {
+                                if (i == j || !cmp[j]) { continue; }
+                                if (equips[j].second->m_number == h.id) { continue; }
+                                const CardParams& pj = equips[j].first->params;
+                                if (EquipCostGenericNow(state, me_idx, *equips[j].first, h.id) != ci)
+                                { continue; }                    // unequal price: a real decision
+                                const int pwj = EquipAttachDeltaFor(state, me_idx, h.id, pj).first;
+                                const bool ge = pwj >= pwi
+                                    && (pj.equip_combat_damage_charges > 0
+                                        || pi.equip_combat_damage_charges == 0)
+                                    && (pj.equip_grants_lifelink || !pi.equip_grants_lifelink);
+                                const bool gt = pwj > pwi
+                                    || (pj.equip_combat_damage_charges > 0
+                                        && pi.equip_combat_damage_charges == 0)
+                                    || (pj.equip_grants_lifelink && !pi.equip_grants_lifelink);
+                                if (ge && gt)
+                                {
+                                    eq_dominated[i * hosts.size() + hi] = 1;
+                                    FreeEquipDiagNoteEqcostDrop();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             for (std::size_t e = 0; e < equips.size(); ++e)
             {
                 const CardDefinition* ed = equips[e].first;
@@ -23737,6 +23962,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (equips[e].second->m_number == h.id)  { continue; }
                     if (ed->params.equip_grants_haste && h.fresh && !h.haste)
                     { ranked.push_back({ h.score, h.id }); }
+                    // Equal-equip-cost dominance: another unattached battlefield equipment costs
+                    // the SAME to equip onto this host and does >= on every dimension this
+                    // comparison can see, with > somewhere. See the mask's construction above.
+                    if (!eq_dominated.empty()
+                        && eq_dominated[e * hosts.size()
+                                        + static_cast<std::size_t>(&h - hosts.data())])
+                    { continue; }
                     const int rd = rider_delta(ed, h.id);
                     if (rd > 0) { ranked_rider.push_back({ rd, h.id }); }
                 }
@@ -23912,6 +24144,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (s_zp_free_only && !s_zp_mc_free && !open_all
                         && PaidPowerlessEquipWithheld(state, *ed, equips[e].second->m_number, h.id,
                                EquipCostGenericNow(state, state.active_player_index, *ed, h.id)))
+                    { continue; }
+                    // The USER's EQUAL-EQUIP-COST dominance, applied to THIS pair. Applied HERE as
+                    // well as in the ranking loop above, and that is not redundant: the `kept` gate
+                    // below re-admits a host through the unpark and Kemba exceptions, which bypass
+                    // the rankings entirely -- so a mask consulted only while building
+                    // ranked_rider would be silently overridden on exactly those frames. Dropped
+                    // AFTER the legality tests (equip_min_power and shroud are rules, never pruned)
+                    // and BEFORE the Action is built, so the digit never exists. The mask is empty
+                    // unless the flag is on, so this is one branch on a null vector otherwise.
+                    if (!eq_dominated.empty()
+                        && eq_dominated[e * hosts.size()
+                                        + static_cast<std::size_t>(&h - hosts.data())])
                     { continue; }
                     const bool haste_benefit = ed->params.equip_grants_haste && h.fresh && !h.haste;
                     if (!open_all)
