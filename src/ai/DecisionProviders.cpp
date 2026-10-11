@@ -27770,8 +27770,12 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
     static std::atomic<int> s_dbg_n{0};
     if (s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < s_dbg_bound)
     {
+        // `casting` carries one entry per selected action (Solve's consider pushes cands[j].def for
+        // every pick), so a non-cast action -- a land drop, an activation -- arrives as nullptr.
+        // The two scans above and below null-check through DefIsBlinkOutlet / DefIsUntapPayload;
+        // this print did not, and segfaulted every traced EDF game.
         std::string cs;
-        for (const CardDefinition* d : casting) { cs += d->card.m_name.str() + ","; }
+        for (const CardDefinition* d : casting) { cs += (d ? d->card.m_name.str() : std::string("-")) + ","; }
         std::fprintf(stderr, "[edf-prosp] t%d outlets=%zu payloads=%zu casting=[%s]\n",
                      s.turn_number, outlets.size(), payloads.size(), cs.c_str());
     }
@@ -27806,6 +27810,7 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
     ScanBoardSinks(s, controller, &best);
     for (const CardDefinition* d : casting)
     {
+        if (d == nullptr) { continue; }   // a non-cast pick (see the trace above) is no sink
         if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
         {
             const int mv = EffectiveActivationCost(s, controller, d->card,
@@ -36377,7 +36382,8 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
     long long avail = static_cast<long long>(have.Total());
     if (loop.prospective)
     {
-        for (const CardDefinition* d : casting) { avail -= d->card.m_mana_cost.ManaValue(); }
+        for (const CardDefinition* d : casting)
+        { if (d != nullptr) { avail -= d->card.m_mana_cost.ManaValue(); } }   // nullptr: a non-cast pick
         bool payload_cast = false;
         for (const CardDefinition* d : casting)
         { if (DefIsUntapPayload(d)) { payload_cast = true; break; } }
@@ -36394,7 +36400,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         if (s_dbg2 && loop.prospective && s_n2.fetch_add(1, std::memory_order_relaxed) < 30)
         {
             std::string cs;
-            for (const CardDefinition* d : casting) { cs += d->card.m_name.str() + ","; }
+            for (const CardDefinition* d : casting) { cs += (d ? d->card.m_name.str() : std::string("-")) + ","; }
             std::fprintf(stderr,
                          "[edf-loop] t%d net=%d cost=%d refund=%d pool=%u avail=%lld "
                          "gorge=%d/%d drain=%d/%d exile=%d casting=[%s]\n",
@@ -36493,6 +36499,7 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
         bool payload_cast = false;
         for (const CardDefinition* d : casting)
         {
+            if (d == nullptr) { continue; }   // a non-cast pick (see RecogniseFlickerLoopProspective)
             avail -= d->card.m_mana_cost.ManaValue();
             if (DefIsUntapPayload(d)) { payload_cast = true; }
         }
