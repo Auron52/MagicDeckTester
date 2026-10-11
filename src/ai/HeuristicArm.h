@@ -389,6 +389,7 @@ enum Slot : int
     HINATA_HOLD_LETHAL_BURN,  // MTG_HINATA_HOLD_LETHAL_BURN  the hold-a-lone-Crackle rule judges "wins this turn" with the subset walks' own projection (every cast's direct damage + the attack, on a payable subset) via HoldCastUnlessLethal, instead of XCandidates' Crackle-plus-attack estimate -- so a Magma Opus / Soulfire co-cast that makes the turn lethal is no longer held (Hinata d0 gi 157 / 196). docs/design/reality-spasm-crackle-classification.md. Default ON; =0 -> the XCandidates estimate, byte-identical
     HINATA_HOLD_NEEDS_HINATA, // MTG_HINATA_HOLD_NEEDS_HINATA the hold-a-lone-Crackle rule applies only while the combo is reachable: Hinata in play or castable from hand this turn (without her, Reality Spasm nets no mana and a lone Crackle is just burn). A SCOPE change to a USER-approved heuristic -> DEFAULT OFF until the USER decides; =1 is the measured arm
     HINATA_CASTABLE_MANA,     // MTG_HINATA_CASTABLE_MANA   HinataCastableFromHand asks whether the board's real mana (AvailableManaPool: Sol Ring 2, a bounce land 2, colour-aware CanPay) pays her cost, not whether the SOURCE COUNT reaches her mana value (2HG gi 254: Sol Ring + Izzet Boilerworks + Forbidden Orchard = 3 sources, 5 mana, read "not castable"). Gates Reality Spasm's emission and Crackle's X sizing under the same-subset credit. Default ON; =0 -> the source count
+    RESTRICTOR_ORDER_EXACT,   // MTG_RESTRICTOR_ORDER_EXACT  the subset walks' cast-restrictor test (Irencrag Feat: only max_casts_after casts after it) also asks whether the casts ranked before the restrictor, and the restrictor itself, can be paid WITHOUT its own float; if not, every payable order casts it ahead of one of them, so one more cast follows it. Stops the d0 runner committing unrealisable {Irencrag, ..., Crackle} lines (Hinata d0 gi 865 / 1773: Irencrag, then an Ornithopter took the one remaining cast; 2HG gi 254: Irencrag's {R}{R}{R} payable only by its own float, nothing cast for four turns). Rank-ordered decks only (not ordering-search decks). Default ON; =0 -> the rank-only count
     COUNT
 };
 
@@ -739,6 +740,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_HOLD_LETHAL_BURN",
         "MTG_HINATA_HOLD_NEEDS_HINATA",
         "MTG_HINATA_CASTABLE_MANA",
+        "MTG_RESTRICTOR_ORDER_EXACT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
