@@ -521,7 +521,37 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
         // distribution. Seeded off a fixed base: the SAME hands at every depth, which is what makes
         // the depth comparison paired (common random numbers) rather than a race between samples.
         const uint64_t hand_base = static_cast<uint64_t>(EnvInt("MTG_SCORE_HAND_SEED", 424242));
-        for (int h = 0; h < nhands; ++h)
+        // MTG_SCORE_HANDS_FILE=<path>: score the listed hands instead of dealing openers (one hand per
+        // line, `|`-separated card names, an optional `<label>:` prefix -- the format this mode prints).
+        // Lets a probe score hands drawn from a NON-natural distribution, e.g. uniform over the distinct
+        // compositions the keep generator's floor visits. MTG_SCORE_HANDS still gates hand mode; it is
+        // ignored as a count when a file is given.
+        if (const char* hf = std::getenv("MTG_SCORE_HANDS_FILE"); hf && *hf)
+        {
+            std::ifstream hin(hf);
+            if (!hin) { std::cerr << "MTG_SCORE_HANDS_FILE not readable\n"; return 1; }
+            std::string line;
+            while (std::getline(hin, line))
+            {
+                if (line.empty()) { continue; }
+                const std::size_t colon = line.find(':');
+                const std::string body = colon == std::string::npos ? line : line.substr(colon + 1);
+                std::vector<std::string> names;
+                std::size_t p = 0;
+                while (p <= body.size())
+                {
+                    const std::size_t bar = body.find('|', p);
+                    names.push_back(body.substr(p, bar == std::string::npos ? std::string::npos : bar - p));
+                    if (bar == std::string::npos) { break; }
+                    p = bar + 1;
+                }
+                const std::string lbl = colon == std::string::npos
+                                      ? "F" + std::to_string(items.size()) + ":" + body : line;
+                items.push_back({ lbl, {}, std::move(names) });
+            }
+        }
+        const int dealt = items.empty() ? nhands : 0;   // a hands file replaces the dealt openers
+        for (int h = 0; h < dealt; ++h)
         {
             const uint64_t hs = hand_base + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(h + 1);
             GameState s0 = GoldFishRunner::SetupGame(a.deck, hs);

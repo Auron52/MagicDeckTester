@@ -853,6 +853,7 @@ static std::atomic<long long> g_bp_condemn_drops_exec{0};
 static int BpCondemnDropMode();                          // defined with the mode's documentation
 static int BpSearchWidth();                              // wave-0 width W (defined far below)
 static int PlanDumpTurn();                               // MTG_PLAN_DUMP gate (defined at EOF)
+static bool PlanDumpSeedOk(uint64_t game_seed);           // MTG_PLAN_DUMP_SEED filter (defined at EOF)
 static bool BpCondemnNewOptByNameEnabled();              // defined with the guard it refines
 static bool BpCondemnNoWinTrunc();                       // defined with the watermark it gates
 // MTG_NOWIN_VERIFY -- recompute every NO-WIN cache hit fresh and report any that a real search
@@ -1237,12 +1238,21 @@ enum Site
     // APPEND LAST ONLY -- see the enum's note below; these ordinals index a persisted name table
     // and the census's u_* column order.
     kGreedyWalk,           // EnumeratePlans' subset walk, one unit per W visits (MTG_SOLVE_CHARGE)
+    // METER-ONLY sites: work billed to the per-decision meter (decisionwork, MTG_DECISION_WORK_X)
+    // on a host with NO SearchBudget -- the search's plan-scoring rollouts run budget=nullptr by
+    // design. Zero unless the meter is armed (the generation drivers arm it). They are NOT budget
+    // units, so `units_total` (budget units, read by lever_report/units_probe/wall_probe) excludes
+    // them; without them the census's u_* columns could not sum to its `units` (the decision
+    // meter's delta) on any armed run.
+    kMeterRolloutStep,     // SimulateToEnd step with budget == nullptr, billed to the meter
+    kMeterGreedyWalk,      // EnumeratePlans' subset walk with no budget, billed to the meter
     kSiteCount
 };
+static constexpr int kFirstMeterOnly = kMeterRolloutStep;
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
-    "fs_m2_wave", "greedy_walk"
+    "fs_m2_wave", "greedy_walk", "meter_rollout_step", "meter_greedy_walk"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -2367,8 +2377,13 @@ namespace
                 std::cerr << "\n";
             }
             long long site_tot = 0;
-            for (int i = 0; i < unitsite::kSiteCount; ++i) { site_tot += unitsite::g_units[i].load(); }
+            for (int i = 0; i < unitsite::kFirstMeterOnly; ++i) { site_tot += unitsite::g_units[i].load(); }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
+            {
+                long long meter_tot = 0;
+                for (int i = unitsite::kFirstMeterOnly; i < unitsite::kSiteCount; ++i) { meter_tot += unitsite::g_units[i].load(); }
+                if (meter_tot > 0) { std::cerr << "[rollout-stats] meter_only_units=" << meter_tot << " (unbudgeted work billed to MTG_DECISION_WORK_X's meter)\n"; }
+            }
             if (g_mch_frames.load() > 0 || g_mch_groups.load() > 0)
             {
                 std::cerr << "METALCRAFT_EQUIP_HOIST frames=" << g_mch_frames.load()
@@ -5461,6 +5476,36 @@ namespace m2yield
         else            { (searched ? g_br_s : g_br_g).fetch_add(1, std::memory_order_relaxed); }
     }
 
+    // PER-PATH split (index 0 = greedy, 1 = searched): the aggregate above cannot say whether the
+    // EMPTY share and the wall belong to the searched solves (one playout per m2 candidate) or the
+    // greedy horizon-leaf solves (one subset walk) -- two different costs with two different remedies.
+    // `equip_only` = a returned plan whose every action is an equip activation (no cast, no land).
+    inline std::atomic<uint64_t> g_p_solves[2] = {}, g_p_empty[2] = {}, g_p_ns[2] = {}, g_p_equip_only[2] = {};
+    // Candidates SCORED (la_cand units) inside each searched m2 solve, nested work included: the
+    // multiplier the searched m2 puts on every first-main candidate. Bumped at the la_cand charge
+    // site via t_lacand; histogram index = min(n, 15).
+    inline thread_local uint64_t t_lacand = 0;
+    inline std::atomic<uint64_t> g_fsleaf[4] = {};   // FSLineWin horizon: value / forced-heur / model-off / no-model
+    inline std::atomic<uint64_t> g_m2_cand_hist[16] = {}, g_m2_cand_sum{0};
+    inline void RecordCands(uint64_t n)
+    {
+        if (!Enabled()) { return; }
+        g_m2_cand_sum.fetch_add(n, std::memory_order_relaxed);
+        g_m2_cand_hist[n < 15 ? n : 15].fetch_add(1, std::memory_order_relaxed);
+    }
+    inline void RecordSplit(bool searched, const TurnSolver::Plan& p, uint64_t ns)
+    {
+        if (!Enabled()) { return; }
+        const int i = searched ? 1 : 0;
+        g_p_solves[i].fetch_add(1, std::memory_order_relaxed);
+        g_p_ns[i].fetch_add(ns, std::memory_order_relaxed);
+        if (p.actions.empty() && !p.land_decided) { g_p_empty[i].fetch_add(1, std::memory_order_relaxed); return; }
+        if (!p.land_decided
+            && std::all_of(p.actions.begin(), p.actions.end(),
+                           [](const Action& a) { return a.kind == Action::Kind::Equip; }))
+        { g_p_equip_only[i].fetch_add(1, std::memory_order_relaxed); }
+    }
+
     inline void Record(const TurnSolver::Plan& p)
     {
         if (!Enabled()) { return; }
@@ -5512,6 +5557,30 @@ namespace m2yield
                          (unsigned long long)g_br_d0.load(), (unsigned long long)g_br_d0s.load(),
                          (unsigned long long)g_ro_s.load(), (unsigned long long)g_ro_g.load(),
                          (unsigned long long)g_ro_d0.load());
+            for (int i = 1; i >= 0; --i)
+            {
+                const uint64_t n = g_p_solves[i].load();
+                std::fprintf(stderr,
+                             "=== M2 %s: %llu solves, %llu EMPTY (%.1f%%), %llu equip-only (%.1f%%), "
+                             "%.3f s wall (%.1f us mean) ===\n",
+                             i ? "SEARCHED" : "GREEDY  ", (unsigned long long)n,
+                             (unsigned long long)g_p_empty[i].load(),
+                             n ? 100.0 * double(g_p_empty[i].load()) / double(n) : 0.0,
+                             (unsigned long long)g_p_equip_only[i].load(),
+                             n ? 100.0 * double(g_p_equip_only[i].load()) / double(n) : 0.0,
+                             double(g_p_ns[i].load()) / 1e9, n ? double(g_p_ns[i].load()) / 1e3 / double(n) : 0.0);
+            }
+            {
+                uint64_t n = 0; for (int i = 0; i < 16; ++i) { n += g_m2_cand_hist[i].load(); }
+                std::fprintf(stderr, "=== M2 SEARCHED candidates scored per solve: %.2f mean over %llu; hist",
+                             n ? double(g_m2_cand_sum.load()) / double(n) : 0.0, (unsigned long long)n);
+                for (int i = 0; i < 16; ++i)
+                { if (g_m2_cand_hist[i].load()) { std::fprintf(stderr, " %d%s:%llu", i, i == 15 ? "+" : "", (unsigned long long)g_m2_cand_hist[i].load()); } }
+                std::fprintf(stderr, " ===\n");
+            }
+            std::fprintf(stderr, "=== FSLINE HORIZON LEAF: value=%llu forced-heuristic=%llu model-off=%llu no-model=%llu ===\n",
+                         (unsigned long long)g_fsleaf[0].load(), (unsigned long long)g_fsleaf[1].load(),
+                         (unsigned long long)g_fsleaf[2].load(), (unsigned long long)g_fsleaf[3].load());
             std::fprintf(stderr, "=== COMMITTED PASS (sub_depth):");
             for (int i = 0; i < 8; ++i)
             {
@@ -5841,6 +5910,7 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     const bool time_it = m2yield::Enabled();
     const std::chrono::steady_clock::time_point _t0 =
         time_it ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const uint64_t lacand0 = m2yield::t_lacand;
     const TurnSolver::Plan p =
         greedy_here
             ? TurnSolver::Solve(state, false,
@@ -5848,10 +5918,11 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
             : SearchedSecondMainMemoized(state, eff_depth, max_turns, budget, second_main, tt);
     if (time_it)
     {
-        m2yield::g_solve_ns.fetch_add(
-            (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now() - _t0).count(),
-            std::memory_order_relaxed);
+        const uint64_t ns = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - _t0).count();
+        m2yield::g_solve_ns.fetch_add(ns, std::memory_order_relaxed);
+        m2yield::RecordSplit(!greedy_here, p, ns);
+        if (!greedy_here) { m2yield::RecordCands(m2yield::t_lacand - lacand0); }
     }
     m2yield::Record(p);
     return p;
@@ -32188,12 +32259,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (dw <= 1)
             {
                 decisionwork::Add(1);
+                if (s_rollout_stats) { unitsite::g_units[unitsite::kMeterGreedyWalk].fetch_add(1, std::memory_order_relaxed); }
                 if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
             }
             else if (++decisionwork::t_charge_acc >= dw)
             {
                 decisionwork::t_charge_acc = 0;
                 decisionwork::Add(1);
+                if (s_rollout_stats) { unitsite::g_units[unitsite::kMeterGreedyWalk].fetch_add(1, std::memory_order_relaxed); }
                 if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
             }
         }
@@ -52857,7 +52930,11 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // decision meter is armed (MTG_DECISION_WORK_X), bill the step here and stop past the
         // ceiling -- every later rollout of this decision then returns no-win instantly, which
         // deterministically scores the un-rolled remainder as losses. Disarmed -> byte-identical.
-        if (!budget && decisionwork::Armed()) { decisionwork::Add(1); }
+        if (!budget && decisionwork::Armed())
+        {
+            decisionwork::Add(1);
+            if (s_rollout_stats) { unitsite::g_units[unitsite::kMeterRolloutStep].fetch_add(1, std::memory_order_relaxed); }
+        }
         if (decisionwork::Exceeded())
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
 
@@ -53335,6 +53412,38 @@ static unsigned long long CensusStateKey(const GameState& state)
     if (!turncensus::On()) { return 0; }
     const TranspositionTable::Key k = BuildDedupKey(state);
     return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
+
+// The census's `board` column (MTG_TURN_CENSUS only): what the decision LOOKED like, so cost can be
+// attributed to situations rather than subsystems. Opponent life, our hand, and our permanents (sorted;
+// `~t` = tapped, `@Host` = the Equipment / Aura's host). Built once per ROOT; never with the census off.
+static std::string CensusBoardDesc(const GameState& state)
+{
+    if (!turncensus::On()) { return std::string(); }
+    const int ap = state.active_player_index;
+    std::vector<std::string> hand, bf;
+    for (const Card& c : state.players[ap].hand) { hand.push_back(c.m_name.str()); }
+    auto host_name = [&](int num) -> std::string {
+        for (const Permanent& h : state.battlefield)
+        { if (h.card.m_number == num) { return h.card.m_name.str(); } }
+        return "?";
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != ap) { continue; }
+        std::string e = p.card.m_name.str();
+        if (p.tapped) { e += "~t"; }
+        if (p.equipped_to)      { e += "@" + host_name(p.equipped_to); }
+        if (p.aura_attached_to) { e += "@" + host_name(p.aura_attached_to); }
+        bf.push_back(std::move(e));
+    }
+    std::sort(hand.begin(), hand.end());
+    std::sort(bf.begin(), bf.end());
+    std::string out = "opp=" + std::to_string(state.players[1 - ap].life) + "|hand=";
+    for (std::size_t i = 0; i < hand.size(); ++i) { out += (i ? "," : "") + hand[i]; }
+    out += "|bf=";
+    for (std::size_t i = 0; i < bf.size(); ++i) { out += (i ? "," : "") + bf[i]; }
+    return out;
 }
 
 // Copy-permutation signature (MTG_DEDUP_CENSUS only). The plan's actions in order, carrying every
@@ -56336,6 +56445,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
                                       && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
+        if (m2yield::Enabled())
+        {
+            // WHY the horizon took the leaf it took (MTG_M2_YIELD_STATS): 0 value leaf, 1 forced
+            // heuristic, 2 UseValueModel() off, 3 no model attached / empty.
+            const int why = vm ? 0
+                          : g_force_heuristic_leaf ? 1
+                          : !(UseValueModel() || g_force_value_leaf) ? 2 : 3;
+            m2yield::g_fsleaf[why].fetch_add(1, std::memory_order_relaxed);
+        }
         // NO-LEAF applies with or WITHOUT a model attached. It used to be written `vm && (...)`,
         // which silently made g_force_constant_leaf a no-op on the pure-HEURISTIC arm -- the arm
         // with no sidecar, where the leaf is the expensive SimulateToEnd rollout and a leafless
@@ -59873,6 +59991,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // decision" this engine already commits to, and a census with its own notion of a decision
     // boundary would attribute work to turns the ceiling bills elsewhere. root=2 tags the hybrid
     // host so a row can be told from SolveWithLookahead's (root=1) without inferring it.
+    if (fs_decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
     turncensus::Scope _tc_fs(fs_decision_root, state.game_seed, state.turn_number,
                              second_main ? 0 : 1, /*root_kind=*/2, depth,
                              budget != nullptr ? budget->Limit() : 0,
@@ -59880,7 +59999,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // DECISION DUMP (MTG_PLAN_DUMP=<turn>): the same root predicate again, so the dump describes
     // exactly the decision the census bills and the work ceiling bounds -- not a rollout's copy of
     // it. Before the search runs, so the board printed is the board the menu was built from.
-    if (fs_decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number)
+    if (fs_decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number && PlanDumpSeedOk(state.game_seed))
     { TurnSolver::PlanDumpAt(state, !second_main, depth,
                              budget != nullptr ? budget->Limit() : 0); }
     static const bool s_dw_debug_fs = EnvOn("MTG_DECISION_WORK_DEBUG");
@@ -61844,11 +61963,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     decisionwork::Scope _dws((decision_root && s_decision_work_x > 0)
                              ? budget->Limit() * s_decision_work_x : 0);
     // PER-DECISION WORK CENSUS -- see the twin in FullSearchLineHybrid. root=1 is this host.
+    if (decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
     turncensus::Scope _tc(decision_root, state.game_seed, state.turn_number,
                           is_pre_combat ? 1 : 0, /*root_kind=*/1, depth,
                           budget != nullptr ? budget->Limit() : 0,
                           decision_root ? CensusStateKey(state) : 0);
-    if (decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number)
+    if (decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number && PlanDumpSeedOk(state.game_seed))
     { TurnSolver::PlanDumpAt(state, is_pre_combat, depth,
                              budget != nullptr ? budget->Limit() : 0); }
     static const bool s_dw_debug = EnvOn("MTG_DECISION_WORK_DEBUG");
@@ -62616,6 +62736,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
             ConsumeAt(budget, unitsite::kLookaheadCand);
+            if (m2yield::Enabled()) { ++m2yield::t_lacand; }
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
@@ -68762,6 +68883,8 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_fs_bp_node,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsBpNode]))             \
     X(u_fs_m2_wave,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsM2Wave]))             \
     X(u_greedy_walk,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kGreedyWalk]))           \
+    X(u_meter_rollout_step, MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterRolloutStep]))   \
+    X(u_meter_greedy_walk,  MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterGreedyWalk]))    \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
@@ -69029,6 +69152,15 @@ static int PlanDumpTurn()
     // Value-carrying, so it keeps the raw EnvInt read per the coding-conventions skill.
     static const int t = EnvInt("MTG_PLAN_DUMP", 0);
     return t;
+}
+// MTG_PLAN_DUMP_SEED=<game seed>: restrict the dump to one game (0/unset = every game). A hand-mode
+// or batch run plays many games, and the census names its heaviest decision by (seed, turn) -- this
+// is what lets that one decision be dumped in place, without a repro the harness cannot replay.
+static bool PlanDumpSeedOk(uint64_t game_seed)
+{
+    static const unsigned long long s = []{ const char* e = std::getenv("MTG_PLAN_DUMP_SEED");
+                                             return (e && *e) ? std::strtoull(e, nullptr, 10) : 0ULL; }();
+    return s == 0 || s == game_seed;
 }
 static int PlanDumpMax()
 {
