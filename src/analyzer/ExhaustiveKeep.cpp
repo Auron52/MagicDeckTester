@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -2816,12 +2817,42 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // as well as the logged tail. Same identity function as the gen (run_one), so reproducible.
         if (const int ns = EnvInt("MTG_KEEP_REPLAY_SAMPLE", 0); ns > 0)
         {
+            // MTG_KEEP_REPLAY_PICK=<i,j,k,...> -- keep ONLY these sample indices. DIAGNOSTIC ONLY.
+            //
+            // WHY IT EXISTS. A paired A/B over the sample names the rollouts whose win turn MOVED
+            // (e.g. "sample2397 w=33215 pd=1 r=21: 4 -> 5"), and the repo's adoption bar then asks
+            // the completeness question about exactly those: does the regression DISAPPEAR as the
+            // budget grows? A lever that only re-prices work is inert at a large budget; one that
+            // removed the line is not, and that is the lossy shape CLAUDE.md refuses. Without this
+            // filter the only way to re-run sample2397 is to re-run samples 0..2397 with it, which
+            // costs ~2,400 rollouts per budget per arm and buries the five cells under the noise of
+            // the other 2,395.
+            //
+            // THE INDEX MUST KEEP ITS IDENTITY, which is the one subtle part: the xorshift is
+            // advanced for EVERY k and only the wanted k are pushed, so sample2397 here is the same
+            // (w, pd, r) as sample2397 in a full run and the two are directly joinable. Filtering
+            // the sequence instead of the output would silently renumber every later cell.
+            std::set<int> pick;
+            if (const char* pk = std::getenv("MTG_KEEP_REPLAY_PICK"); pk && *pk)
+            {
+                const char* p = pk;
+                while (*p)
+                {
+                    while (*p && !std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
+                    if (!*p) { break; }
+                    pick.insert(std::atoi(p));
+                    while (std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
+                }
+                std::cerr << "[replay-list] PICK " << pick.size() << " of " << ns
+                          << " sample indices\n";
+            }
             std::vector<int> w7;
             for (int w = 0; w < static_cast<int>(work.size()); ++w) { if (work[w].H == HAND) { w7.push_back(w); } }
             std::uint64_t x = 0x243F6A8885A308D3ULL;
             for (int k = 0; k < ns && !w7.empty(); ++k)
             {
                 x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+                if (!pick.empty() && pick.count(k) == 0) { continue; }   // advance, do not emit
                 RItem it{};
                 it.w = w7[static_cast<std::size_t>(x % w7.size())];
                 it.pd = static_cast<int>((x >> 20) & 1ULL);
