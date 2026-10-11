@@ -149,6 +149,14 @@ inline bool FbHoldBankedOn()
     return heurarm::Flag(heurarm::FB_HOLD_BANKED, env_on);
 }
 
+// MTG_LINE_FLOAT_TAP_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware float rung
+// (TapForCostSharedImpl, ManaPayment.cpp). One payer for executor, rollout and the payability walks.
+inline bool LineFloatTapFirstOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_FLOAT_TAP_FIRST", true);
+    return heurarm::Flag(heurarm::LINE_FLOAT_TAP_FIRST, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

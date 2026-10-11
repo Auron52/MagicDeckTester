@@ -436,3 +436,59 @@ TEST_CASE("Combat pump keeps a depletion / storage land's mana unless the pump i
         }
     }
 }
+
+namespace
+{
+// Bind the applying line's unpaid total for one test payment (the plan-apply paths bind it in play).
+struct LineCostFu
+{
+    ManaCost prev;
+    explicit LineCostFu(const ManaCost& c) : prev(g_line_unpaid_cost) { g_line_unpaid_cost = c; }
+    ~LineCostFu() { g_line_unpaid_cost = prev; }
+};
+}   // namespace
+
+TEST_CASE("Line float: a spare source pays the generic before floating colour the line still owes (MTG_LINE_FLOAT_TAP_FIRST)")
+{
+    // s7100081 T2's shape: an Unclaimed Territory up, {R}{R} floating off Rite of Flame, and Ruby Medallion's {2}
+    // to pay with Pyretic Ritual ({1}{R}) still to come in the line. The Territory makes only {C} for the
+    // Medallion -- spare -- so it pays one generic and one {R} stays floating for Pyretic.
+    const GameState s0 = BoardFu({ "Unclaimed Territory" }, {}, 5);
+    ManaCost med;
+    med.generic = 2;
+    ManaCost owes_red = med;     // + Pyretic {1}{R}
+    owes_red.generic += 1;
+    owes_red.red = 1;
+    ManaCost owes_black = med;   // + Kolaghan's {B} (and generic): the Territory may be its only {B}
+    owes_black.generic += 5;
+    owes_black.black = 1;
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LINE_FLOAT_TAP_FIRST, on);
+        {
+            GameState s = s0;
+            s.floating_mana.red = 2;
+            LineCostFu line(owes_red);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(s.floating_mana.red == (on ? 1 : 0));
+            CHECK(PermFu(s, "Unclaimed Territory").tapped == on);
+        }
+        {
+            // The guard: the line owes {B} that neither the float nor another source makes -> the float pays.
+            GameState s = s0;
+            s.floating_mana.red = 2;
+            LineCostFu line(owes_black);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(s.floating_mana.red == 0);
+            CHECK_FALSE(PermFu(s, "Unclaimed Territory").tapped);
+        }
+        {
+            // No live line: the plain drain on both arms.
+            GameState s = s0;
+            s.floating_mana.red = 2;
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(s.floating_mana.red == 0);
+        }
+    }
+}
