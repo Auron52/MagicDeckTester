@@ -25113,10 +25113,22 @@ inline int HinataGenericDiscount(const CardDefinition& def, const GameState& sta
     return HinataGenericDiscountAssumed(def, state, chosen_x, crackle_targets);
 }
 
-// Is the reducer CASTABLE from the active player's hand this turn (in hand + the board's source
-// count covers her printed cost)? The gate for every "assume Hinata resolves first" emission /
-// credit below: cheap (one hand scan + the cached source count), and deliberately OPTIMISTIC on
-// colours -- the subset gate's CanPay and the per-cast apply both validate for real.
+// MTG_HINATA_CASTABLE_MANA (heurarm HINATA_CASTABLE_MANA). DEFAULT ON; =0 -> the source count.
+inline bool HinataCastableManaOn()
+{
+    static const bool on = EnvOn("MTG_HINATA_CASTABLE_MANA", true);
+    return heurarm::Flag(heurarm::HINATA_CASTABLE_MANA, on);
+}
+
+// Is the reducer CASTABLE from the active player's hand this turn (in hand + the board's mana pays
+// her printed cost)? The gate for every "assume Hinata resolves first" emission / credit below.
+// MTG_HINATA_CASTABLE_MANA: the board's REAL mana -- AvailableManaPool, the accounting pool every
+// payment gate uses (Sol Ring yields 2, a bounce land 2, the turn's float included) -- tested with the
+// pool's own colour-aware CanPay. The legacy test compared the SOURCE COUNT with her mana value, which
+// under-counts every multi-mana source (2HG gi 254: Sol Ring + Izzet Boilerworks + Forbidden Orchard
+// is three sources and five mana, {1}{U}{R}{W} payable, read "not castable") and ignores colours.
+// Still OPTIMISTIC in the pool's own sense (a multi-colour source is wild) -- the subset gate's
+// colour-exact test and the per-cast apply both validate for real.
 inline bool HinataCastableFromHand(const GameState& state)
 {
     const Player& ap = state.ActivePlayer();
@@ -25124,7 +25136,10 @@ inline bool HinataCastableFromHand(const GameState& state)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d && d->params.hinata_cost_reducer)
-        { return ManaSourceCount(state) >= d->card.m_mana_cost.ManaValue(); }
+        {
+            if (HinataCastableManaOn()) { return AvailableManaPool(state, nullptr).CanPay(d->card.m_mana_cost); }
+            return ManaSourceCount(state) >= d->card.m_mana_cost.ManaValue();
+        }
     }
     return false;
 }

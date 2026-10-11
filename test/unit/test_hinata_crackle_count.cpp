@@ -71,7 +71,8 @@ struct Pin
 };
 
 // Hinata, Dawn-Crowned + `lands` Islands on our side, `hand` in hand, opponent at 20.
-GameState HinataBoard(int lands, const std::vector<std::string>& hand, bool with_hinata = true)
+GameState HinataBoard(int lands, const std::vector<std::string>& hand, bool with_hinata = true,
+                      const char* land = "Island")
 {
     EnsureCardsHc();
     GameState s;
@@ -89,7 +90,7 @@ GameState HinataBoard(int lands, const std::vector<std::string>& hand, bool with
         s.battlefield.push_back(p);
     };
     if (with_hinata) { put("Hinata, Dawn-Crowned"); }
-    for (int i = 0; i < lands; ++i) { put("Island"); }
+    for (int i = 0; i < lands; ++i) { put(land); }
     for (const std::string& n : hand) { s.players[0].hand.push_back(PhHc(n, num++)); }
     s.players[1].life = 20;
     return s;
@@ -350,8 +351,11 @@ TEST_CASE("HOLD_NEEDS_HINATA: no Hinata in play or castable -> a lone Crackle is
     const CardDefinition& crackle = DefHc(kCrackle);
     // 4 Islands, no Hinata anywhere: X = 2 is 10 + 0 attack < 20 -> the estimate holds.
     const GameState none     = HinataBoard(4, { kCrackle, kSpasm }, /*with_hinata=*/false);
-    // ...Hinata in HAND with 4 sources (her mana value): castable this turn -> the combo is live.
-    const GameState castable = HinataBoard(4, { kCrackle, "Hinata, Dawn-Crowned" }, /*with_hinata=*/false);
+    // ...Hinata in HAND with four any-colour lands: {1}{U}{R}{W} pays -> castable, the combo is live.
+    // (Four Islands would NOT do since MTG_HINATA_CASTABLE_MANA: no {R} or {W} -- see
+    // test_restrictor_order.cpp.)
+    const GameState castable = HinataBoard(4, { kCrackle, "Hinata, Dawn-Crowned" }, /*with_hinata=*/false,
+                                           "Forbidden Orchard");
     // ...and in play.
     const GameState in_play  = HinataBoard(4, { kCrackle, kSpasm });
     for (bool lethal_burn : { true, false })
@@ -374,4 +378,59 @@ TEST_CASE("HOLD_NEEDS_HINATA: no Hinata in play or castable -> a lone Crackle is
     }
     // Default is OFF.
     CHECK_FALSE(heurarm::Flag(heurarm::HINATA_HOLD_NEEDS_HINATA, EnvOn("MTG_HINATA_HOLD_NEEDS_HINATA")));
+}
+
+// ---- MTG_HINATA_CASTABLE_MANA: "castable from hand" is a question about mana, not about sources ------------
+namespace
+{
+// `board` (untapped, ours, not summoning sick), `hand` in hand -- no Hinata on the battlefield.
+GameState CastableBoard(const std::vector<std::string>& board, const std::vector<std::string>& hand)
+{
+    EnsureCardsHc();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    int num = 1;
+    for (const std::string& n : board)
+    {
+        Permanent p;
+        p.card              = DefHc(n.c_str()).card;
+        p.card.m_number     = num++;
+        p.controller_index  = 0;
+        p.owner_index       = 0;
+        p.entered_this_turn = false;
+        s.battlefield.push_back(p);
+    }
+    for (const std::string& n : hand) { s.players[0].hand.push_back(PhHc(n, num++)); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("HINATA_CASTABLE_MANA: the board's real mana, not its source count, decides 'castable from hand'")
+{
+    const char* kHin = "Hinata, Dawn-Crowned";
+    // 2HG gi 254's turn-3 board: three sources, five mana ({C}{C} + {U}{R} + any) -- {1}{U}{R}{W} pays.
+    const GameState rich = CastableBoard({ "Sol Ring", "Izzet Boilerworks", "Forbidden Orchard" }, { kHin });
+    // Four Islands: four sources reach her mana value, but nothing makes {R} or {W}.
+    const GameState blue = CastableBoard({ "Island", "Island", "Island", "Island" }, { kHin });
+    {
+        Pin on(heurarm::HINATA_CASTABLE_MANA, true);
+        CHECK(HinataCastableFromHand(rich));
+        CHECK_FALSE(HinataCastableFromHand(blue));
+    }
+    {
+        Pin off(heurarm::HINATA_CASTABLE_MANA, false);   // the legacy source count
+        CHECK_FALSE(HinataCastableFromHand(rich));
+        CHECK(HinataCastableFromHand(blue));
+    }
+    // No Hinata in hand: never castable.
+    CHECK_FALSE(HinataCastableFromHand(CastableBoard({ "Sol Ring", "Izzet Boilerworks", "Forbidden Orchard" },
+                                                     { kCrackle })));
+    // ...and it is what the provider's untap-ritual gate reads under the same-subset credit: Reality Spasm
+    // is offered on the five-mana board (she resolves first), not on the four-Islands one.
+    const HinataProvider hp;
+    Pin credit(heurarm::HINATA_SUBSET_CREDIT, true);
+    Pin on(heurarm::HINATA_CASTABLE_MANA, true);
+    CHECK(hp.ShouldEmitUntapRitual(rich));
+    CHECK_FALSE(hp.ShouldEmitUntapRitual(blue));
 }
