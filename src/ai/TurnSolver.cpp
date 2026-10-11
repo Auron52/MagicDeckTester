@@ -14216,22 +14216,48 @@ static bool EquipEqcostDominanceEnabled()
 // stamp and metalcraft cases are the caller's (see the emission site): a cost of {0} is always
 // offered, and an equip the frame's own casts will free must not be judged on the stale enumeration
 // stamp -- that is the lesson SameTurnMetalcraftEquipCredit and MetalcraftWillFreeEquips exist for.
+// CAN A PURE POWER DELTA PRICE THIS EQUIP? ONE predicate, because TWO call sites ask exactly this
+// and having asked it with two different lists was a real defect.
+//
+// `false` means the equip carries a dimension EquipAttachDeltaFor structurally cannot see, so any
+// judgement built on its power delta alone is unsound -- whether that judgement is "a paid powerless
+// equip is poor" (PaidPowerlessEquipWithheld, a PROJECTION) or "this equip is dominated by a
+// cheaper-or-equal stronger one" (the EQCOST/PARETO dominance fold, a PRUNE). The two differ in
+// what they do with the answer; they do not differ in what the answer is.
+//
+// WHAT IT COST TO HAVE TWO LISTS. The dominance fold's own `comparable()` checked
+// sacrifices_prior_host / shroud / haste / min_power / etb_tap, and MISSED
+// scale_power_per_equipment, scale_power_per_artifact, grants_lifelink and combat_damage_charges --
+// all four of which this function had excluded for months. Golem-Skin Gauntlets
+// (scale_power_per_equipment) is in the live v3 deck, and the miss showed up as a win turn this
+// fold could not recover at ANY budget (sample2397: +1 flat across b48 -> b192 -> b768).
+//
+// `equip_power_bonus` is NOT a blind spot -- it is the quantity being compared -- so it stays out of
+// here and remains the dominance fold's actual signal. PaidPowerlessEquipWithheld tests it
+// separately, because for THAT question "adds power on its own" is a reason to keep the pair.
+static bool PowerDeltaCanPriceEquip(const CardParams& p)
+{
+    if (p.equip_scale_power_per_equipment > 0)  { return false; }   // Gauntlets: delta grows downstream
+    // Adaptive Omnitool: flat bonus 0 and per-equipment scaler 0, so WITHOUT this carve-out it
+    // reads as a powerless shield -- while in fact it is the opposite of powerless (+1/+1 per
+    // artifact you control, >= 3 whenever metalcraft makes the equip free, and the 4 Ancient Den
+    // are artifacts). Same reason the Gauntlets line above exists.
+    if (p.equip_scale_power_per_artifact > 0)   { return false; }
+    if (p.equip_grants_haste)                   { return false; }   // the benefit is the ATTACK
+    if (p.equip_grants_lifelink)                { return false; }   // Shadowspear: not power at all
+    if (p.equip_grants_shroud)                  { return false; }   // ordering / the parking dance
+    if (p.equip_combat_damage_charges > 0)      { return false; }   // Jitte's charge engine
+    if (p.equip_sacrifices_prior_host)          { return false; }   // Wargear: the search weighs it
+    return true;
+}
+
 static bool PaidPowerlessEquipWithheld(const GameState& state, const CardDefinition& ed,
                                        int equip_source_num, int host_num, int cost_generic)
 {
     if (cost_generic <= 0) { return false; }               // free: the user's own exception
     const CardParams& p = ed.params;
     if (p.equip_power_bonus > 0)                { return false; }   // adds power on its own
-    if (p.equip_scale_power_per_equipment > 0)  { return false; }   // Gauntlets itself always does
-    // Adaptive Omnitool: flat bonus 0 and per-equipment scaler 0, so WITHOUT this carve-out it
-    // reads as a powerless shield and a PAID equip is withheld -- while in fact it is the opposite
-    // of powerless (+1/+1 per artifact you control, >= 3 whenever metalcraft makes the equip free,
-    // and the 4 Ancient Den are artifacts). Same reason the Gauntlets line above exists.
-    if (p.equip_scale_power_per_artifact > 0)   { return false; }
-    if (p.equip_grants_haste)                   { return false; }   // the benefit is the ATTACK
-    if (p.equip_grants_lifelink)                { return false; }
-    if (p.equip_combat_damage_charges > 0)      { return false; }   // Jitte's charge engine
-    if (p.equip_sacrifices_prior_host)          { return false; }   // Wargear: the search weighs it
+    if (!PowerDeltaCanPriceEquip(p))            { return false; }   // shared rider test, see above
     const int controller = state.active_player_index;
     // Dwalin's hone counters ride the EQUIPMENT permanent and ARE power on attach (SpellEffects.h:
     // "pw += e.hone_counters"). EquipAttachDeltaFor structurally cannot see them -- it takes
@@ -24086,15 +24112,58 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 auto comparable = [&](std::size_t i) -> bool {
                     if (attached_to[i] != 0) { return false; }          // a MOVE, not an attach
                     const CardParams& pr = equips[i].first->params;
-                    if (pr.equip_sacrifices_prior_host) { return false; }
-                    if (pr.equip_grants_shroud)         { return false; }
-                    if (pr.equip_grants_haste)          { return false; }
-                    if (pr.equip_min_power > 0)         { return false; }
-                    if (pr.etb_tap_target_permanent)    { return false; }
+                    // THE RIDER TEST IS SHARED WITH PaidPowerlessEquipWithheld, AND IT MUST BE.
+                    // Both predicates ask the identical question -- "can a pure POWER delta price
+                    // this equip?" -- and they had DIFFERENT lists, which is the bug Gate 2 caught
+                    // at 256x the shipped budget (sample2397, +1 win turn flat from b48 to b768 =
+                    // a line this fold REMOVED, not re-priced).
+                    //
+                    // THE REPRO, and it is this deck's own card: Golem-Skin Gauntlets is
+                    // equip_cost_generic 2 / equip_power_bonus 0 / equip_scale_power_per_equipment 1
+                    // -- "+1/+0 for each OTHER Equipment attached to it". EquipAttachDeltaFor prices
+                    // it against the CURRENT attached count, so with nothing else on the host it
+                    // reads +0, and Shadowspear (equip 2, +1) dominates it at EQUAL cost. But the
+                    // dominance assertion covers the whole SUBTREE, in which further equips land on
+                    // that host and the Gauntlets delta climbs +1/+2/+3 while a flat equip's does
+                    // not. Pruning it at the one moment its delta reads lowest deletes exactly the
+                    // line that made it good. MTG_EQUIP_PARETO_DOMINANCE widens cost from == to <=,
+                    // so it widens the set of equips that can wrongly dominate it.
+                    //
+                    // PaidPowerlessEquipWithheld already refused every one of these for the SAME
+                    // reason ("Gauntlets itself always does"); this fold simply never read them.
+                    // Keep the two lists in lockstep -- a rider added to one and not the other is
+                    // this defect again. (equip_power_bonus is deliberately NOT here: it is the
+                    // quantity being compared, not a blind spot.)
+                    if (!PowerDeltaCanPriceEquip(pr))   { return false; }
+                    if (pr.equip_min_power > 0)         { return false; }   // conditional availability
+                    if (pr.etb_tap_target_permanent)    { return false; }   // Skateboard
                     const Permanent* p = bf_perm_of(i);
                     if (p == nullptr)                   { return false; }   // hand-side
                     if (p->hone_counters != 0)          { return false; }   // unpriced (Dwalin)
                     return true;
+                };
+                // A HOST can also make the CHOICE of equip irrelevant-but-the-COUNT decisive, and
+                // then "this equip is dominated" is false for a reason no equip-side rider shows:
+                // Balan's double_strike_min_equipment and Kor Duelist's double_strike_while_equipped
+                // double the host's WHOLE power on the attach that flips them, and Kemba's
+                // upkeep_tokens_per_equipment pays per Equipment attached. v3 has none of these, but
+                // this fold is engine-wide by construction (EquipmentProvider is the only provider
+                // with ConsolidatesEquips(), yet this site is gated only on MTG_EQUIP_ALL_HOSTS /
+                // UnprunedGate::EquipHost / HumanPlayActive), so the guard has to be here, not in
+                // the deck list. Same argument PaidPowerlessEquipWithheld's host_earns_it makes.
+                auto host_count_sensitive = [&](int host_id) -> bool {
+                    const int controller = state.active_player_index;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != controller || q.card.m_number != host_id)
+                        { continue; }
+                        const CardDefinition* hd = CardDatabase::Instance().LookupCached(q.card);
+                        if (hd == nullptr) { return true; }      // unknown: do not fold
+                        return hd->params.upkeep_tokens_per_equipment
+                            || hd->params.double_strike_while_equipped
+                            || hd->params.double_strike_min_equipment > 0;
+                    }
+                    return false;
                 };
                 static thread_local std::vector<char> cmp;
                 cmp.assign(equips.size(), 0);
@@ -24111,6 +24180,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         const Host& h = hosts[hi];
                         if (h.in_hand || h.id == 0) { continue; }
+                        // On a count-sensitive host the identity of the equip is not what the
+                        // attach buys, so no power comparison between two equips is a dominance.
+                        if (host_count_sensitive(h.id)) { continue; }
                         for (std::size_t i = 0; i < equips.size(); ++i)
                         {
                             if (!cmp[i] || equips[i].second->m_number == h.id) { continue; }
