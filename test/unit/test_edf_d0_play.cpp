@@ -233,11 +233,42 @@ TEST_CASE("EDF d0: an in-hand land Aura does not make an uncast {W} payable (MTG
         { { "Aether Hub" }, { "Mariposa Military Base" }, { "Kitchen" } },
         Filler(20), /*opp_life=*/20, /*energy=*/0);
 
+    // Pinned without MTG_SOLVE_UNTAP_CREDIT, so this case isolates the phantom {W}: once Cloud's ETB
+    // untap is credited, {Fertile Ground, Cloud, Displacer} becomes a REAL line on this board (next case).
+    heurarm::t_arm[heurarm::SOLVE_UNTAP_CREDIT] = 0;
     const TurnSolver::Plan off = SolveArm(b.s, heurarm::SOLVE_PENDING_AURA_EXACT, 0);
     const TurnSolver::Plan on  = SolveArm(b.s, heurarm::SOLVE_PENDING_AURA_EXACT, 1);
+    heurarm::t_arm[heurarm::SOLVE_UNTAP_CREDIT] = -1;
 
     CHECK_MESSAGE(Casts(off, "Eldrazi Displacer"), "precondition: the widened gates admit the phantom {W}");
     CHECK_FALSE(Casts(on, "Eldrazi Displacer"));
     CHECK(Casts(on, "Fertile Ground"));
     CHECK(Casts(on, "Cloud of Faeries"));
+}
+
+// The same board with Cloud of Faeries' untap credited (MTG_SOLVE_UNTAP_CREDIT): Fertile Ground goes on
+// the Hub, the Hub's Aura bonus pays Cloud's {U}, Cloud's ETB untaps the Hub, and the Hub's next tap
+// (its {C} plus the Aura's any colour) pays Displacer's {W}. Legal -- so Displacer may now be cast, but
+// only beside the Aura that makes its {W}, and execution must realise every declared cast.
+TEST_CASE("EDF d0: with Cloud's untap credited the {W} comes from a cast Aura, and it is real (MTG_SOLVE_PENDING_AURA_EXACT)")
+{
+    EdfBoard b = MakeBoard(
+        { "Eldrazi Displacer", "Eldrazi Displacer", "Fertile Ground", "Fertile Ground", "Cloud of Faeries" },
+        { { "Aether Hub" }, { "Mariposa Military Base" }, { "Kitchen" } },
+        Filler(20), /*opp_life=*/20, /*energy=*/0);
+
+    const TurnSolver::Plan on = SolveArm(b.s, heurarm::SOLVE_PENDING_AURA_EXACT, 1);
+    if (Casts(on, "Eldrazi Displacer"))
+    {
+        CHECK(Casts(on, "Fertile Ground"));
+        CHECK(Casts(on, "Cloud of Faeries"));
+    }
+    int displacers_cast = 0;
+    for (const Action& a : on.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Eldrazi Displacer") { ++displacers_cast; } }
+    TurnSolver::ApplyPlan(b.s, on, /*is_pre_combat=*/true);
+    int displacers_in_play = 0;
+    for (const Permanent& p : b.s.battlefield)
+    { if (p.card.m_name.str() == "Eldrazi Displacer") { ++displacers_in_play; } }
+    CHECK(displacers_in_play == displacers_cast);
 }

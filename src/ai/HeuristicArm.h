@@ -385,6 +385,7 @@ enum Slot : int
     SOLVE_PENDING_AURA_EXACT, // MTG_SOLVE_PENDING_AURA_EXACT Solve: an in-hand land Aura's colour credit applies only to a subset that casts a land Aura (and that subset must pass the real payer); stops a phantom {W} Displacer freezing the d0 runner (EDF gi 1261; defects doc s4). Default ON; =0 -> the widened gates
     ANTILIFE_TUTOR_BRANCH,    // MTG_ANTILIFE_TUTOR_BRANCH Anti-Lifegain tutor: the PROOF arm for the provider's one-option enabler-then-payoff narrowing (USER 2026-10-10: "we should have a narrowing tutor for anti-lifegain") -- return the enabler AND the payoff, ranked, so the tutor axis scores both. Default OFF (the narrowing is the default); delete once the paired A/B settles the prune
     DRAGONSTORM_USER_ORDER,   // MTG_DRAGONSTORM_USER_ORDER  Dragonstorm casts in the USER's order everywhere it is decided (USER 2026-10-10: "We should do things in the order I said, once they become available"): Ruby Medallion at its EARLIEST payable slot, Rite < Pyretic < Desperate < Seething < spliced Desperate, Apex, a hard-cast Dragon, Irencrag second-to-last, Dragonstorm last -- rank, comparator, set arrangement, exact payable walk and the searched orderings (docs/design/dragonstorm-user-cast-order.md). Default ON; =0 -> the generic ranks, byte-identical
+    SOLVE_UNTAP_CREDIT,       // MTG_SOLVE_UNTAP_CREDIT      the real payer (SubsetPayableWithFilters) credits an ETB-untap creature's same-turn land untap (tap-ahead, pay, untap, in the realised cast order), and Solve's MTG_SOLVE_PENDING_AURA_EXACT block sends a board-gate-failing subset that casts one to that payer instead of rejecting it: {Cloud of Faeries, Training Grounds} off one {U} land is legal (EDF gi 1408). Keyed on etb_untap_lands. Default ON; =0 -> no credit, byte-identical
     COUNT
 };
 
@@ -731,6 +732,7 @@ inline const char* Name(int slot)
         "MTG_SOLVE_PENDING_AURA_EXACT",
         "MTG_ANTILIFE_TUTOR_BRANCH",
         "MTG_DRAGONSTORM_USER_ORDER",
+        "MTG_SOLVE_UNTAP_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
