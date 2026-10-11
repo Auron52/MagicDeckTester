@@ -1,7 +1,11 @@
 # The adaptive-bottoming precision dial: deferred, and what to run instead
 
-**Status: DEFERRED by the user, 2026-10-11.** Not a rejection and not a parking of the idea — a
-re-ordering, plus a change in what the deliverable should be.
+**Status: ADOPTION deferred by the user, 2026-10-11. The cross-deck TEST (§2) is RUNNING at the
+user's request as of 2026-10-11 09:15** — *"I would be curious to see how that works on more decks
+for some confidence that it won't hurt here. But, at the same time, I don't want to dig into the
+generation time too much."* The test costs **no rollouts** (it reads banked raws), so it does not
+spend the generation window. Not a rejection and not a parking of the idea — a re-ordering, plus a
+change in what the deliverable should be.
 
 > **USER, 2026-10-11:** *"On the lossy change, I think that could be something to consider, but I
 > would rather address it after all of the more lossless/dominance pruning changes are in.
@@ -79,7 +83,7 @@ Melira Pod, Minotaur, Mirrorwing Dragon, Pirates, SelesnyaLifegain, StompySurpri
 burn, slivers_vial, treasure_hunt
 ```
 
-### *** STOP: THE OBVIOUS INVOCATION CORRUPTS EVERY DECK IT TOUCHES ***
+### *** STOP: ONE INVOCATION CORRUPTS EVERY DECK IT TOUCHES — AND IT IS NOT THE REAL ROUTE ***
 
 **Measured the hard way, 2026-10-11.** Running the simulator as
 
@@ -87,40 +91,51 @@ burn, slivers_vial, treasure_hunt
 <analyze-bin> decks/<Deck>/<Deck>.cod --cards-json ... --merge-keep <raw>     # DO NOT
 ```
 
-**overwrites `decks/<Deck>/<Deck>.profile.json`.** The analyzer's ordinary flow derives and writes a
-card-scores profile *before* the keep-merge branch runs, and `--merge-keep` does not suppress it. The
-log line is explicit — `Profile written to /workspaces/.../Angels.profile.json` — and the loop had
-rewritten **16 shipped profiles** with different `card_scores` (Angels' Archangel of Thune went
-−0.1680 → −0.0935) before it was caught by `git status`.
+**overwrites `decks/<Deck>/<Deck>.profile.json`.** The log line is explicit — `Profile written to
+/workspaces/.../Angels.profile.json` — and the loop had rewritten **16 shipped profiles** with
+different `card_scores` (Angels' Archangel of Thune went −0.1680 → −0.0935) before `git status`
+caught it. That is not cosmetic: `card_scores` feed the keep decision, so it silently re-fits the
+mulligan behaviour of every deck in the sweep — the "a generation can go LIVE mid-run and corrupt
+its neighbour" hazard, reached from a direction nothing was guarding.
 
-That is not cosmetic. `card_scores` feed the keep decision, so this silently re-fits the mulligan
-behaviour of every deck in the sweep — the "a generation can go LIVE mid-run and corrupt its
-neighbour" hazard, reached from a direction nothing was guarding. The sim's own header says it
-"writes nothing (a measurement) -> returns without a profile", and that is true of
-`RunAdaptiveBottomRegretSim` itself; it is **not** true of the process that calls it.
+**The cause is simpler and worse than first recorded, and the first diagnosis sent the next reader
+after an analyzer change that is not needed.** It is *not* that the keep-merge branch forgets to
+suppress a write. **`--merge-keep` IS NOT A FLAG THIS BINARY HAS** — grep `src/analyzer/main.cpp`:
+merge mode is dispatched by the environment (`MTG_KEEP_MERGE`), and there is no `"--merge"` argv
+parse anywhere. The analyzer ignores the unrecognised argument, falls through to **default** mode,
+runs a full 1000-game card-scores analysis and writes the profile at the tail of `main()`. So the
+stage did not merely corrupt profiles as a side effect of measuring — **it never measured anything
+at all**; all 16 "sim <deck> done" lines were full deck analyses, and the run produced no regret
+number whatsoever.
 
-**Before this sweep is ever run again, one of these must be true:**
+**The safe route already exists and needs no code change.** `main()` dispatches
+`if (EnvOn("MTG_KEEP_MERGE")) { return RunKeepMergeMode(a); }` **before** the profile write, and the
+sim returns from inside that before the merge's own write; `MTG_KEEP_NO_WRITE=1` additionally clears
+both output paths. Verified 2026-10-11 on Angels: the profile's md5 was unchanged and
+`git status --porcelain decks` stayed empty.
 
-1. the analyzer gains an explicit no-write route for a measurement-only merge (the right fix — then
-   the recipe above becomes safe and this warning can go), or
-2. every profile is restored afterwards, verified with `git status --porcelain decks`, **and** the
-   run happens with nothing else depending on those profiles (no generation, no suite run, no
-   viewer) — because between the write and the restore the decks are live with refitted scores.
+```
+MTG_KEEP_MERGE=1 MTG_KEEP_NO_WRITE=1 MTG_MERGE_INPUTS=<raw.gz> \
+MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_TRIALS=128 \
+MTG_KEEP_SIM_FLIP_EPS=<eps> MTG_KEEP_SIM_FLOOR=2 \
+  <analyze-bin> <deck> --cards-json src/cards/data/cards.json       # CORRECT, writes nothing
+```
 
-Option 2 is a workaround, not a fix, and it is **not safe to leave running unattended**. Option 1 is
-the deliverable. Until it exists, treat this cross-deck sweep as BLOCKED rather than merely pending —
-the measurement is cheap, but the way to obtain it is not yet safe.
+**The generalisable lesson, which is the part worth keeping:** this binary takes most of its modes
+from the environment, and it does **not** reject unknown `--flags`. An invented flag therefore does
+not fail loudly — it silently selects the *default* mode, which is the one mode that writes. Check a
+flag exists in `main.cpp` before putting it in a loop, and run `git status` after any sweep.
+`UN-BLOCKED` as of 2026-10-11; the sweep is `logs/kitty_tail_diag/sim_eps_crossdeck.sh`, which ends
+by asserting `git status --porcelain decks` is empty.
 
-### Shape of the run (once option 1 exists)
+### Shape of the run
 
 Per deck, over a grid of (cap R, `flip_eps`), with `MTG_KEEP_SIM_TRIALS` high enough that the
 Monte-Carlo floor-noise error is well below the effect (slivers used 128 and reported ±0.0001):
 
-```
-MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_TRIALS=<n> \
-MTG_KEEP_SIM_FLIP_EPS=<eps> MTG_KEEP_SIM_FLOOR=2 \
-  <analyze-bin> <deck> --cards-json src/cards/data/cards.json --merge-keep <raw>   # + no-write flag
-```
+Per deck, over a grid of (cap R, `flip_eps`), using the **correct invocation above** and with
+`MTG_KEEP_SIM_TRIALS` high enough that the Monte-Carlo floor-noise error is well below the effect
+(slivers used 128 and reported ±0.0001).
 
 Four things to get right, each of which has bitten something in this repo before:
 
