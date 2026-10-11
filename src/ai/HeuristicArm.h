@@ -429,6 +429,7 @@ enum Slot : int
     LINE_FLOAT_TAP_FIRST,     // MTG_LINE_FLOAT_TAP_FIRST (autonomous twin of the human-only MTG_PAY_LINE_FLOAT_HOLD) a payment whose GENERIC pips would spend floating colour the rest of the applying line still owes first tries tapping a SPARE source for them -- one whose mana for this payment no later pip wants ({C}, e.g. an Unclaimed Territory under a noncreature spell), never a depletion / storage / pay-sac source or a dork, and not a creature-only-colour land that is the only source of a colour the line still owes -- with a plain-payment fallback. dragonstorm d3 s7100081 T2: Medallion's {2} took the floating {R}{R} and left Pyretic's {R} to a Territory that cannot pay it. Executor + rollout + payability walks (shared payer). Not in human play. Default ON; =0 -> float first
     HINATA_CASTABLE_MANA,     // MTG_HINATA_CASTABLE_MANA   HinataCastableFromHand asks whether the board's real mana (AvailableManaPool: Sol Ring 2, a bounce land 2, colour-aware CanPay) pays her cost, not whether the SOURCE COUNT reaches her mana value (2HG gi 254: Sol Ring + Izzet Boilerworks + Forbidden Orchard = 3 sources, 5 mana, read "not castable"). Gates Reality Spasm's emission and Crackle's X sizing under the same-subset credit. Default ON; =0 -> the source count
     RESTRICTOR_ORDER_EXACT,   // MTG_RESTRICTOR_ORDER_EXACT  the subset walks' cast-restrictor test (Irencrag Feat: only max_casts_after casts after it) also asks whether the casts ranked before the restrictor, and the restrictor itself, can be paid WITHOUT its own float; if not, every payable order casts it ahead of one of them, so one more cast follows it. Stops the d0 runner committing unrealisable {Irencrag, ..., Crackle} lines (Hinata d0 gi 865 / 1773: Irencrag, then an Ornithopter took the one remaining cast; 2HG gi 254: Irencrag's {R}{R}{R} payable only by its own float, nothing cast for four turns). Rank-ordered decks only (not ordering-search decks). Default ON; =0 -> the rank-only count
+    SOLVE_UNTAP_CREDIT,       // MTG_SOLVE_UNTAP_CREDIT      the real payer (SubsetPayableWithFilters) credits an ETB-untap creature's same-turn land untap (tap-ahead, pay, untap, in the realised cast order), and Solve's MTG_SOLVE_PENDING_AURA_EXACT block sends a board-gate-failing subset that casts one to that payer instead of rejecting it: {Cloud of Faeries, Training Grounds} off one {U} land is legal (EDF gi 1408). Keyed on etb_untap_lands. Default ON; =0 -> no credit, byte-identical
     COUNT
 };
 
@@ -819,6 +820,7 @@ inline const char* Name(int slot)
         "MTG_LINE_FLOAT_TAP_FIRST",
         "MTG_HINATA_CASTABLE_MANA",
         "MTG_RESTRICTOR_ORDER_EXACT",
+        "MTG_SOLVE_UNTAP_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
