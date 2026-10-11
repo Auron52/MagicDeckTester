@@ -154,13 +154,16 @@ const std::string& GateNote();
 inline std::atomic<int>  g_live{0};
 inline std::atomic<bool> g_contended_ever{false};
 inline thread_local int  t_nest = 0;
+// The decision's board descriptor (TurnSolver's CensusBoardDesc), set by the root just before it opens
+// its Scope; the Scope copies it, so a nested root cannot overwrite the row it does not own.
+inline thread_local std::string t_board;
 
 // One row. Identity columns first (they are what you feed back to `--seed` to replay the turn),
 // then the counter deltas in FieldNames() order.
 inline void WriteRow(unsigned long long seed, int turn, int pre_combat, int root_kind, int depth,
                      long long budget_units, long long units, long long wall_us, int contended,
                      int site, int probe, unsigned long long skey,
-                     const std::vector<long long>& deltas)
+                     const std::vector<long long>& deltas, const std::string& board)
 {
     static std::mutex mu;
     std::lock_guard<std::mutex> lk(mu);
@@ -176,7 +179,7 @@ inline void WriteRow(unsigned long long seed, int turn, int pre_combat, int root
         std::fprintf(h, "seed\tturn\tpre\troot\tdepth\tbudget\tunits\twall_us\tcontended"
                         "\tsite\tprobe\tskey");
         for (const char* n : FieldNames()) { std::fprintf(h, "\t%s", n); }
-        std::fprintf(h, "\n");
+        std::fprintf(h, "\tboard\n");   // LAST, and the only string column (turn_census.py)
         return h;
     }();
     if (f == nullptr) { return; }
@@ -184,7 +187,7 @@ inline void WriteRow(unsigned long long seed, int turn, int pre_combat, int root
                  seed, turn, pre_combat, root_kind, depth, budget_units, units, wall_us, contended,
                  site, probe, skey);
     for (long long d : deltas) { std::fprintf(f, "\t%lld", d); }
-    std::fprintf(f, "\n");
+    std::fprintf(f, "\t%s\n", board.c_str());
     // Flushed per row: a census run is routinely killed once its tail is interesting enough, and a
     // buffered last-few-thousand rows is exactly the part worth having. Rows are decision-scale
     // (milliseconds apart at minimum), so the fflush is not on any hot path.
@@ -205,6 +208,7 @@ struct Scope
     int                                   site = kSiteMain;
     int                                   probe = 0;
     unsigned long long                    skey = 0;
+    std::string                           board;
 
     Scope(bool is_root, unsigned long long seed_, int turn_, int pre_combat, int root_kind,
           int depth_, long long budget_units, unsigned long long state_key = 0)
@@ -216,6 +220,7 @@ struct Scope
         seed = seed_; turn = turn_; pre = pre_combat; root = root_kind; depth = depth_;
         budget = budget_units;
         site = t_site; probe = t_probe > 0 ? 1 : 0; skey = state_key;
+        board = t_board;
         units0 = decisionwork::t_used;
         if (g_live.fetch_add(1, std::memory_order_acq_rel) != 0)
         {
@@ -255,7 +260,7 @@ struct Scope
         std::vector<long long> deltas(n, 0);
         for (std::size_t i = 0; i < n; ++i) { deltas[i] = now[i] - before[i]; }
         WriteRow(seed, turn, pre, root, depth, budget, units, wall_us, contended, site, probe,
-                 skey, deltas);
+                 skey, deltas, board);
     }
 
 private:
