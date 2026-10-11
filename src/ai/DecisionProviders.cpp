@@ -259,8 +259,12 @@ bool UseValueModel()
 // entries instead of a std::unordered_set<std::string> that hashed and heap-allocated every card of
 // the zone -- this list is rebuilt on every greedy tutor resolution inside the search's rollouts
 // (Prevent Damage perf, 2026-09-28: 5.7% of a d5 game). Same names, same order: byte-identical.
+// `defs` (optional): each returned name's definition, index-aligned -- the walk already holds it, and
+// a caller that re-reads definitions per rule (Prevent Damage's Wish / Beseech doctrine) would
+// otherwise re-hash every name string for each of them.
 static std::vector<std::string> GenericTutorList(const GameState& s, int controller,
-                                                 const CardParams& pp, bool nonlands_first)
+                                                 const CardParams& pp, bool nonlands_first,
+                                                 std::vector<const CardDefinition*>* defs = nullptr)
 {
     const Player& ap = s.players[controller];
     // A WISH searches OUTSIDE THE GAME (the sideboard); every other tutor searches the library.
@@ -270,7 +274,9 @@ static std::vector<std::string> GenericTutorList(const GameState& s, int control
                                        : pp.tutor_from_graveyard ? &ap.graveyard : nullptr;
     std::vector<std::string>        all;
     std::vector<std::string>        lands;   // nonlands_first only: the second half
+    std::vector<const CardDefinition*> land_defs;
     std::vector<const std::string*> seen;
+    if (defs != nullptr) { defs->clear(); }
     // Beseech the Queen's land-count cap (0 slack = no param, and no hand walk).
     const int land_slack = pp.tutor_max_mv_is_lands ? TutorLandCapSlack(s, controller) : 0;
     for (const Card& lc : TutorZoneView(ap, wish_pool))
@@ -292,8 +298,13 @@ static std::vector<std::string> GenericTutorList(const GameState& s, int control
         // The Prevent Damage partition's own predicate: its name's definition is a land.
         const bool to_lands = nonlands_first && def != nullptr && def->card.IsLand();
         (to_lands ? lands : all).push_back(lc.m_name);
+        if (defs != nullptr) { (to_lands ? land_defs : *defs).push_back(def); }
     }
-    if (nonlands_first) { all.insert(all.end(), lands.begin(), lands.end()); }
+    if (nonlands_first)
+    {
+        all.insert(all.end(), lands.begin(), lands.end());
+        if (defs != nullptr) { defs->insert(defs->end(), land_defs.begin(), land_defs.end()); }
+    }
     return all;
 }
 
@@ -11937,8 +11948,10 @@ PdTamanoaFacts PdTamanoaMana(const GameState& s, int controller)
     return f;
 }
 
-std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
-                                           std::vector<std::string> names)
+// Ranks `names` in place; `defs` is its index-aligned definition list (GenericTutorList's) and is
+// permuted with it, so no rule here looks a name up by string.
+void PdRankEngineTutor(const GameState& s, int controller, std::vector<std::string>& names,
+                       std::vector<const CardDefinition*>& defs)
 {
     const Player& ap = s.players[controller];
     int gain = 0, drain = 0;
@@ -12034,15 +12047,13 @@ std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
     }
     // Colours the lands must still supply: the engine cards in hand, plus the top engine pick.
     unsigned need = hand_need;
-    for (const std::string& nm : names)
+    for (const CardDefinition* d : defs)
     {
-        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
         if (PdEngineRole(d) == order[0]) { need |= PdCostColours(d->card.m_mana_cost); break; }
     }
     const unsigned missing = need & ~producible;
-    auto key = [&](const std::string& nm) -> int
+    auto key = [&](const CardDefinition* d) -> int
     {
-        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
         const int role = PdEngineRole(d);
         if (role >= 0) { return role_rank[role]; }                                    // 0..7
         if (d != nullptr && d->card.IsLand())
@@ -12055,9 +12066,19 @@ std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
         }
         return 100;
     };
-    std::stable_sort(names.begin(), names.end(),
-                     [&](const std::string& a, const std::string& b) { return key(a) < key(b); });
-    return names;
+    // Each key ONCE, then sort (key, original index): exactly stable_sort's order by key, without
+    // re-deriving two keys (a land's EffectiveProduces included) on every comparison.
+    std::vector<std::pair<int, std::size_t>> keyed;
+    keyed.reserve(names.size());
+    for (std::size_t i = 0; i < names.size(); ++i) { keyed.emplace_back(key(defs[i]), i); }
+    std::sort(keyed.begin(), keyed.end());
+    std::vector<std::string> ranked;
+    std::vector<const CardDefinition*> ranked_defs;
+    ranked.reserve(names.size());
+    ranked_defs.reserve(names.size());
+    for (const auto& [k, i] : keyed) { ranked.push_back(std::move(names[i])); ranked_defs.push_back(defs[i]); }
+    names.swap(ranked);
+    defs.swap(ranked_defs);
 }
 }   // namespace
 
@@ -12069,7 +12090,12 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     // put-onto-battlefield single tutor, and it would have been undone by the partition's stable
     // regrouping only in its land/nonland grouping -- keep it exact by falling back when it is live.
     static const bool s_ranked = EnvOn("MTG_TUTOR_RANKED_DEFAULT");
+    // `defs` rides index-aligned with `all` through every rule below (each name is looked up ONCE):
+    // this list is rebuilt on every greedy tutor resolution inside the rollouts, and the rules used to
+    // re-hash each name string up to ~7 times (perf, PD keep-gen d2/b3 2026-10-11: by-name Lookup was
+    // 3.6% of all CPU, most of it here). Same names, same order -- byte-identical.
     std::vector<std::string> all;
+    std::vector<const CardDefinition*> defs;
     if (s_ranked && pp.tutor_to_battlefield_single)
     {
         all = GenericProvider::TutorCandidates(s, controller, pp);
@@ -12078,10 +12104,11 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
             const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
             return d == nullptr || !d->card.IsLand();
         });
+        for (const std::string& nm : all) { defs.push_back(CardDatabase::Instance().Lookup(nm)); }
     }
     else
     {
-        all = GenericTutorList(s, controller, pp, /*nonlands_first=*/true);
+        all = GenericTutorList(s, controller, pp, /*nonlands_first=*/true, &defs);
     }
     // THE ENGINE-ROLE RANKING (see PdRankEngineTutor), Living Wish only: MTG_PD_WISH_RANK, DEFAULT
     // ON (=0 = the nonlands-first sideboard order above, exactly). Applies in human play too, so the
@@ -12096,7 +12123,7 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     //     (the USER's Beseech doctrine below: engine creatures only, no duplicates).
     static const bool s_wish_env = EnvOn("MTG_PD_WISH_RANK", true);
     if (pp.wish_from_sideboard && all.size() > 1 && heurarm::Flag(heurarm::PD_WISH_RANK, s_wish_env))
-    { all = PdRankEngineTutor(s, controller, std::move(all)); }
+    { PdRankEngineTutor(s, controller, all, defs); }
     // THE USEFUL-TARGET RESTRICTION (USER 2026-09-29: "We should restrict the search to just the
     // useful wish targets"; the doctrine: "In goldfish nothing else is relevant"). The AUTONOMOUS
     // search offers Living Wish only the engine creatures (Tamanoa / Vito / Dina / Rhox Faithmender,
@@ -12110,10 +12137,12 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
         && heurarm::Flag(heurarm::PD_WISH_USEFUL, s_useful_env))
     {
         std::vector<std::string> useful;
-        for (const std::string& nm : all)
+        std::vector<const CardDefinition*> useful_defs;
+        for (std::size_t i = 0; i < all.size(); ++i)
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-            if (PdEngineRole(d) != kPdNoRole || (d != nullptr && d->card.IsLand())) { useful.push_back(nm); }
+            const CardDefinition* d = defs[i];
+            if (PdEngineRole(d) != kPdNoRole || (d != nullptr && d->card.IsLand()))
+            { useful.push_back(all[i]); useful_defs.push_back(d); }
         }
         // SITUATIONAL TRIM (USER 2026-09-29, "reduce unnecessary branching"): sub-lever
         // MTG_PD_WISH_TRIM, default ON.
@@ -12150,9 +12179,8 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
             { if (p.controller_index == controller) { see(CardDatabase::Instance().LookupCached(p.card), false); } }
             for (const Card& c : ap.hand)
             { if (!c.m_is_staged) { see(CardDatabase::Instance().LookupCached(c), true); } }
-            for (const std::string& nm : useful)
+            for (const CardDefinition* d : useful_defs)
             {
-                const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
                 const int role = PdEngineRole(d);
                 if (role == kPdNoRole) { continue; }
                 if ((role == kPdVito && held_vito) || (role == kPdDina && held_dina)) { continue; }
@@ -12162,8 +12190,8 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
             // and no Ancient Tomb (USER 2026-09-29: "Tamanoa > Rhox if we can play the Tamanoa easily").
             const PdTamanoaFacts tf = PdTamanoaMana(s, controller);
             bool tamanoa_fetchable = false;
-            for (const std::string& nm : useful)
-            { if (PdEngineRole(CardDatabase::Instance().Lookup(nm)) == kPdGain) { tamanoa_fetchable = true; } }
+            for (const CardDefinition* d : useful_defs)
+            { if (PdEngineRole(d) == kPdGain) { tamanoa_fetchable = true; } }
             const bool drop_rhox = tamanoa_fetchable && tf.rgw_ok && !tf.tomb;
             // VITO OVER DINA (USER 2026-09-29, "maybe just testing it first"): in 1v1, while Vito is
             // fetchable and not already held, Dina goes -- Vito's drain is the amount gained, Dina's is
@@ -12171,22 +12199,24 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
             // default OFF (a measurement lever until the A/B says otherwise).
             static const bool s_vod_env = EnvOn("MTG_PD_WISH_VITO_OVER_DINA", false);
             bool vito_fetchable = false;
-            for (const std::string& nm : useful)
-            { if (PdEngineRole(CardDatabase::Instance().Lookup(nm)) == kPdVito) { vito_fetchable = true; } }
+            for (const CardDefinition* d : useful_defs)
+            { if (PdEngineRole(d) == kPdVito) { vito_fetchable = true; } }
             const bool drop_dina = vito_fetchable && !held_vito && gamesetup::OpponentHeads() == 1
                                 && heurarm::Flag(heurarm::PD_WISH_VITO_OVER_DINA, s_vod_env);
             const int lands_wanted = (s.players[controller].lands_played_this_turn == 0 ? 1 : 0) + 1;
             const bool lands_done = (need & ~producible) == 0 && hand_lands >= lands_wanted;
             std::vector<std::string> trimmed;
-            for (const std::string& nm : useful)
+            std::vector<const CardDefinition*> trimmed_defs;
+            for (std::size_t i = 0; i < useful.size(); ++i)
             {
-                const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                const CardDefinition* d = useful_defs[i];
                 const int role = PdEngineRole(d);
                 if (d != nullptr && d->card.IsLand() && lands_done) { continue; }
                 if ((role == kPdVito && held_vito) || (role == kPdDina && held_dina)) { continue; }
                 if (role == kPdAmp && drop_rhox) { continue; }
                 if (role == kPdDina && drop_dina) { continue; }
-                trimmed.push_back(nm);
+                trimmed.push_back(useful[i]);
+                trimmed_defs.push_back(d);
             }
             // ONE land at most (USER 2026-09-29: "choose only one of them ... always take Battlefield
             // Forge when available ... because you already have green if you cast Living Wish"): the
@@ -12195,9 +12225,10 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
             // first-ranked land (the ranking puts the missing-colour fixer first).
             {
                 std::string keep_land;
-                for (const std::string& nm : trimmed)
+                for (std::size_t i = 0; i < trimmed.size(); ++i)
                 {
-                    const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                    const std::string& nm = trimmed[i];
+                    const CardDefinition* d = trimmed_defs[i];
                     if (d == nullptr || !d->card.IsLand()) { continue; }
                     if (nm == "Battlefield Forge") { keep_land = nm; break; }
                     if (keep_land.empty()) { keep_land = nm; }
@@ -12252,15 +12283,20 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
                         if (n > best) { best = n; keep_land = nm; }
                     }
                 }
-                trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), [&](const std::string& nm)
+                std::size_t w = 0;
+                for (std::size_t i = 0; i < trimmed.size(); ++i)
                 {
-                    const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-                    return d != nullptr && d->card.IsLand() && nm != keep_land;
-                }), trimmed.end());
+                    const CardDefinition* d = trimmed_defs[i];
+                    if (d != nullptr && d->card.IsLand() && trimmed[i] != keep_land) { continue; }
+                    if (w != i) { trimmed[w] = std::move(trimmed[i]); trimmed_defs[w] = d; }
+                    ++w;
+                }
+                trimmed.resize(w);
+                trimmed_defs.resize(w);
             }
-            if (!trimmed.empty()) { useful = std::move(trimmed); }
+            if (!trimmed.empty()) { useful = std::move(trimmed); useful_defs = std::move(trimmed_defs); }
         }
-        if (!useful.empty()) { all = std::move(useful); }
+        if (!useful.empty()) { all = std::move(useful); defs = std::move(useful_defs); }
     }
     // BESEECH THE QUEEN -- THE USER'S DOCTRINE (USER 2026-10-09: "Engine creatures only and skip
     // duplicates", then, after the recovery check, "we could do the beseech rule you mentioned" -- the
@@ -12292,9 +12328,10 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
         for (const Card& c : s.players[controller].hand)
         { if (!c.m_is_staged) { hold(CardDatabase::Instance().LookupCached(c)); } }
         std::vector<std::string> engine, fresh, support;
-        for (const std::string& nm : all)
+        for (std::size_t i = 0; i < all.size(); ++i)
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            const std::string& nm = all[i];
+            const CardDefinition* d = defs[i];
             const bool dup = std::find(held.begin(), held.end(), nm) != held.end();
             if (PdEngineRole(d) != kPdNoRole)
             {

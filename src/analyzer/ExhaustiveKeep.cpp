@@ -2811,8 +2811,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
           return 1000.0 * static_cast<double>(ts.tv_sec) + static_cast<double>(ts.tv_nsec) / 1.0e6;
 #endif
         };
+        // MTG_KEEP_BENCH_SEQ=<start>: CONSECUTIVE cells from <start> instead (both play/draw of each) --
+        // the order the floor pass feeds them, so a live run's early rate can be priced on the cells it
+        // actually visited rather than on the uniform mean.
+        const int seq_start = EnvInt("MTG_KEEP_BENCH_SEQ", -1);
         for (int i = 0; i < bench_n; ++i)
-        { cell[i] = static_cast<int>((static_cast<uint64_t>(i) * 2654435761ULL + 12345ULL) % static_cast<uint64_t>(n7)); }
+        {
+            cell[i] = (seq_start >= 0)
+                ? (seq_start + i / 2) % n7
+                : static_cast<int>((static_cast<uint64_t>(i) * 2654435761ULL + 12345ULL) % static_cast<uint64_t>(n7));
+        }
         std::atomic<int> next{0};
         // Marker for an external profiler to start collecting at (e.g. callgrind --instr-atstart=no +
         // callgrind_control -i on): everything above is setup, everything below is the sample.
