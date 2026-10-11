@@ -395,6 +395,11 @@ public:
     // costs a card, {R} and possibly pain: dominated by not casting it (or discarding it). A
     // provider narrowing, lossless for this list.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    // Pyrohemia's ping count (MTG_PD_PYRO_NO_OVERKILL): the generic 1..max_affordable, less every
+    // count past our creatures' survival ceiling unless the pings alone kill the opponent -- the
+    // XCandidates NO_OVERKILL rule for the repeatable {R} ping. Other modes: the generic menu.
+    std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                              PermAbilityMode mode, int max_affordable) const override;
     // MTG_PD_ALL_M2 (USER 2026-09-29, measurement lever, default OFF): every hand cast is Main2 --
     // attack first, then cast (a sweeper no longer throws away the attack of the bodies it kills,
     // and no creature here has haste or feeds combat when cast). Activations stay in main 1.

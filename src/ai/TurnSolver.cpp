@@ -46014,6 +46014,84 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
     }
 
+    // PYROHEMIA TOP-K (MTG_PD_PYRO_TOP_K, default ON 2026-10-11, PROVISIONAL; USER 2026-10-11: "Then we should
+    // instead collapse it just like we did for earthquake."). The TOP-X rule above, for the repeatable {R} ping
+    // (a PingAll activation; its count rides Action::chosen_x, and the plan signature keys on it, so blanking it
+    // makes twins collide exactly as the quake's X does). Among plans that differ ONLY in that count, keep the
+    // largest count at or below the plan's survival ceiling: our board creatures, the creatures this plan casts
+    // (conservative, as above), less any quake X the same plan casts -- both damage every creature. Keeping the
+    // LARGEST is safe because the apply loop (SpellEffects' repeat-activation payer) fires min(count, what the
+    // turn can still pay) and stops before a ping that would kill us: the kept plan pings at least as often as
+    // any dropped twin, and never past the ceiling. Counts above the ceiling are untouched (that is
+    // MTG_PD_PYRO_NO_OVERKILL's business, in the provider's count menu). Search only.
+    {
+        static const bool s_topk_env = EnvOn("MTG_PD_PYRO_TOP_K", true);   // DEFAULT ON; =0 disables
+        if (heurarm::Flag(heurarm::PD_PYRO_TOP_K, s_topk_env) && !s_human_play_sig
+            && !DecisionUnpruned(UnprunedGate::BlinkTarget))
+        {
+            // Dead work unless some plan pings -- the same early-out as the quake's board walk.
+            bool any_ping = false;
+            for (const TurnSolver::Plan& qp : deduped)
+            {
+                for (const Action& qa : qp.actions)
+                {
+                    if (qa.kind == Action::Kind::ActivatePermAbility
+                        && qa.ability_mode == Action::AbilityMode::PingAll)
+                    { any_ping = true; break; }
+                }
+                if (any_ping) { break; }
+            }
+            if (any_ping)
+            {
+                const int me = state.active_player_index;
+                int board_ceil = 1 << 20;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+                    if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+                    board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
+                }
+                std::unordered_map<std::string, std::pair<std::size_t, int>> best;
+                std::vector<char> drop(deduped.size(), 0);
+                for (std::size_t i = 0; i < deduped.size(); ++i)
+                {
+                    const TurnSolver::Plan& p = deduped[i];
+                    int pi = -1, ceil = board_ceil, quake_x = 0;
+                    for (std::size_t k = 0; k < p.actions.size(); ++k)
+                    {
+                        const Action& a = p.actions[k];
+                        if (a.kind == Action::Kind::ActivatePermAbility
+                            && a.ability_mode == Action::AbilityMode::PingAll)
+                        { if (pi >= 0) { pi = -2; break; } pi = static_cast<int>(k); continue; }
+                        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                        if (a.def->params.x_damage_each_creature_and_player)
+                        { quake_x += std::max(0, a.chosen_x); continue; }
+                        if (a.def->card.IsCreature() && a.def->card.m_toughness.has_value()
+                            && !a.def->card.HasKeyword(Keyword::Indestructible))
+                        { ceil = std::min(ceil, std::max(0, *a.def->card.m_toughness - 1)); }
+                    }
+                    if (pi < 0) { continue; }              // no ping, or two sources (left alone)
+                    const Action& pa = p.actions[static_cast<std::size_t>(pi)];
+                    const int amt = (pa.def != nullptr) ? std::max(1, pa.def->params.ping_all_amount) : 1;
+                    const int ceil_k = std::max(0, ceil - quake_x) / amt;
+                    const int kk = pa.chosen_x;
+                    if (kk <= 0 || kk > ceil_k) { continue; }   // overkill untouched
+                    TurnSolver::Plan key_plan = p;
+                    key_plan.actions[static_cast<std::size_t>(pi)].chosen_x = -99;
+                    const std::string key = plan_signature(key_plan);
+                    auto it = best.find(key);
+                    if (it == best.end()) { best.emplace(key, std::make_pair(i, kk)); continue; }
+                    if (kk > it->second.second) { drop[it->second.first] = 1; it->second = { i, kk }; }
+                    else                        { drop[i] = 1; }
+                }
+                std::size_t w = 0;
+                for (std::size_t i = 0; i < deduped.size(); ++i)
+                { if (!drop[i]) { if (w != i) { deduped[w] = std::move(deduped[i]); } ++w; } }
+                deduped.resize(w);
+            }
+        }
+    }
+
     // Branching diagnostics (off by default): attribute this call's odometer size + plan count to
     // the card driving the biggest option-group and to a coarse situation label.
     if (branchstats::Enabled())

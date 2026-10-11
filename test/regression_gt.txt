@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0c79268f  date 2026-10-10
+# Regression ground truth -- commit c6b20df3  date 2026-10-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -151,9 +151,9 @@ selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
 soldiers_smoke_d0_s1001=4.4320/0c7926df614c90b5
 soldiers_smoke_d3_s1001=4.2800/50e56ed79872f3b3
 soldiers_smoke_d5_s1001=4.2933/abf388e9f9e0a413
-pd_smoke_d0_s1001=7.6030/b8ff69a34f6a7050
+pd_smoke_d0_s1001=7.6010/ca948b07738b2e8e
 pd_smoke_d3_s1001=5.6800/07956644f801198e
-pd_smoke_d5_s1001=5.8000/2e6adbb6659f076c
+pd_smoke_d5_s1001=5.8000/454448f62cf78fc5
 bruna2hg_smoke_d3_s1001=5.4400/6da23fed9a801f75
 bruna_smoke_d0_s1001=6.2260/6016b1f0c37640e6
 bruna_smoke_d3_s1001=4.8400/0d14d9861947a98b
@@ -319,11 +319,11 @@ soldiers_regression_d3_s2002=4.2400/557e65914a556944
 soldiers_regression_d3_s3003=4.2600/a3977f7005460030
 soldiers_regression_d5_s2002=4.2400/3b4c36f18f7cf84c
 soldiers_regression_d5_s3003=4.2800/cc9dbdf77c219ad0
-pd_regression_d0_s2002=7.5240/0dbf29f08572bdd4
+pd_regression_d0_s2002=7.5220/6d5fe9c827f94eb7
 pd_regression_d3_s2002=5.6500/60b4020bde322cee
-pd_regression_d3_s3003=5.7750/210a8504369ccbd0
+pd_regression_d3_s3003=5.7750/ac25024411ac997c
 pd_regression_d5_s2002=5.6800/e93bd3264de8cad8
-pd_regression_d5_s3003=5.8400/596fac9a90e99497
+pd_regression_d5_s3003=5.8400/08d27809f63051be
 bruna_regression_d0_s2002=6.2560/2a9f924c5e8ccde7
 bruna_regression_d3_s2002=5.1333/9e0057cbeffb9702
 bruna_regression_d3_s3003=5.0600/4c36df88e4afb9fd

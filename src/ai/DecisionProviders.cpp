@@ -11562,6 +11562,111 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
     return xs;
 }
 
+// PYROHEMIA NO-OVERKILL (MTG_PD_PYRO_NO_OVERKILL, default ON 2026-10-11, PROVISIONAL). USER 2026-10-11:
+// "Then we should instead collapse it just like we did for earthquake." The generic PingAll menu is the
+// whole 1..max_affordable range (DecisionProvider.h: K decides WHICH of our creatures die and whether we
+// do, so the cap of 3 would steal a real decision) -- one action per count, each crossed with every
+// other choice in the plan. This is XCandidates' NO_OVERKILL for that axis: drop every count past the
+// survival ceiling (the most pings every one of OUR board creatures survives) unless the pings alone kill
+// the opponent (count x amount x heads >= their life; the smallest such count is kept). Counts at or
+// under the ceiling stay -- which of them a plan keeps is MTG_PD_PYRO_TOP_K's business (TurnSolver).
+// The maximum count is also kept when it could be lethal WITH the drain (below), and a menu the rule
+// would empty is left whole.
+std::vector<int> PreventDamageProvider::ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                                                 PermAbilityMode mode, int max_affordable) const
+{
+    std::vector<int> ks = DeckProvider::ManaSinkActivationCounts(s, source, mode, max_affordable);
+    if (mode != PermAbilityMode::PingAll || ks.empty()) { return ks; }
+    static const bool s_env = EnvOn("MTG_PD_PYRO_NO_OVERKILL", true);   // DEFAULT ON; =0 disables
+    if (!heurarm::Flag(heurarm::PD_PYRO_NO_OVERKILL, s_env)) { return ks; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+    const int amt = (d != nullptr) ? std::max(1, d->params.ping_all_amount) : 1;
+    const int me = s.active_player_index;
+    const int kNone = 1 << 20;
+    int board_ceil = kNone;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+        if (p.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        board_ceil = std::min(board_ceil, std::max(0, LethalToughness(p, s) - p.damage - 1));
+    }
+    // No creature of ours on the board: nothing to protect, every count "survives" (NO_OVERKILL keeps the
+    // whole menu; MAX_SAFE offers the maximum).
+    const int ceil_k = (board_ceil >= kNone) ? kNone : board_ceil / amt;
+    const int heads = std::max(1, gamesetup::OpponentHeads());
+    const int per_ping = amt * heads;
+    const int lethal_k = (s.players[1 - me].life + per_ping - 1) / per_ping;
+    // The smallest count past the ceiling that is lethal -- needed only when no surviving count is (a
+    // lethal count at or under the ceiling already kills without costing a creature).
+    int kill_k = -1;
+    if (lethal_k > ceil_k)
+    {
+        for (int k : ks) { if (k >= lethal_k) { kill_k = k; break; } }
+    }
+    // MTG_PD_PYRO_MAX_SAFE (measurement lever, default OFF; USER 2026-10-11: "We should also test the
+    // maximum that doesn't kill our creatures"): only the largest surviving count (+ the lethal one).
+    static const bool s_max_env = EnvOn("MTG_PD_PYRO_MAX_SAFE", false);
+    const bool max_safe = heurarm::Flag(heurarm::PD_PYRO_MAX_SAFE, s_max_env);
+    int top_safe = -1;
+    for (int k : ks) { if (k <= ceil_k) { top_safe = k; } }
+    // THE MAXIMUM, WHEN IT COULD BE LETHAL (USER 2026-10-11: "But the maximum is also a consideration if
+    // it would be lethal."). kill_k covers the pings ALONE; what it cannot see is the DRAIN every ping
+    // also drives. Tamanoa gains once per damage EVENT for the event's TOTAL, and one ping is one event
+    // that hits every player AND every creature -- so a ping gains (players + creatures) x amount, not
+    // the 1 that hit us. Vito ("loses that much") and Dina ("loses 1" per gain) turn the life into
+    // opponent life loss, Rhox doubles the gain, and Manabarbs adds a self-hit of its own for the land
+    // tapped to pay the {R} (its own damage event, so its own gain). So the
+    // largest count is ALSO offered when an OPTIMISTIC per-ping bound -- every engine piece alive for
+    // every ping -- reaches the opponent's life. Optimistic on purpose: the bound only adds an option, and
+    // the search (not this bound) decides whether the block really kills, creatures it kills mid-block
+    // included.
+    int max_lethal_k = -1;
+    const int k_top = ks.back();
+    if (k_top > ceil_k && k_top != kill_k)
+    {
+        bool gain_engine = false; int mult = 1, vito = 0, dina = 0, barbs = 0, creatures = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.IsCreature()) { ++creatures; }             // every creature takes the ping
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr) { continue; }
+            barbs += std::max(0, pd->params.land_tap_damage_each_player);   // hits US, whoever controls it
+            if (p.controller_index != me) { continue; }
+            if (pd->params.noncreature_damage_lifegain)          { gain_engine = true; }
+            if (pd->params.lifegain_multiplier > 1)              { mult *= pd->params.lifegain_multiplier; }
+            if (pd->params.lifegain_target_opp_loses_that_much)  { ++vito; }
+            dina += std::max(0, pd->params.lifegain_each_opp_loses);
+        }
+        long long per = static_cast<long long>(per_ping);
+        if (gain_engine)
+        {
+            const int events = 1 + (barbs > 0 ? 1 : 0);         // the ping's event, and Manabarbs' hit
+            const long long ping_total = static_cast<long long>(amt) * (heads + 1 + creatures);
+            per += static_cast<long long>(vito) * (ping_total + barbs) * mult
+                 + static_cast<long long>(dina) * heads * events;
+        }
+        if (static_cast<long long>(k_top) * per >= s.players[1 - me].life) { max_lethal_k = k_top; }
+    }
+    std::vector<int> out;
+    // Under MAX_SAFE the menu is exactly the USER's two counts -- the largest that kills none of our
+    // creatures, and the maximum when it could be lethal ("Nothing else needs to be considered ... beyond
+    // taking into account that other spells might want to use our mana, so it needs to fit with them":
+    // it does, because only ONE ping is on the subset's books and the trailing activation pass pays the
+    // rest from what the plan's casts left). The smallest pings-alone-lethal count is then redundant:
+    // whenever it kills, the maximum does too.
+    if (max_safe && kill_k >= 0 && max_lethal_k < 0 && k_top > ceil_k) { max_lethal_k = k_top; }
+    for (int k : ks)
+    {
+        if (k == max_lethal_k)                      { out.push_back(k); continue; }
+        if (k == kill_k && !max_safe)               { out.push_back(k); continue; }
+        if (k > ceil_k)                             { continue; }
+        if (max_safe && k != top_safe)              { continue; }
+        out.push_back(k);
+    }
+    if (!out.empty()) { ks.swap(out); }
+    return ks;
+}
+
 std::optional<DecisionProvider::MainPhase>
 PreventDamageProvider::MainPhaseOverride(const GameState&, const CardDefinition&) const
 {

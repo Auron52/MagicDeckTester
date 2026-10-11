@@ -352,6 +352,9 @@ enum Slot : int
     COMBAT_PIN_FOLD,          // MTG_COMBAT_PIN_FOLD        a candidate carrying a combat pin whose POST-COMBAT state an earlier sibling already reached is folded (its future is that sibling's: the pin is consumed by combat). IDENTITY fold, default ON; =0 scores every pinned variant
     EQUIP_INERT_FOLD,         // MTG_EQUIP_INERT_FOLD       the SEARCH drops an Equip of a pure haste/shroud {0} Equipment (Lightning Greaves) onto a creature that is not summoning-sick, unless it releases a creature this plan targets (TurnSolver.cpp DropInertHasteShroudEquips; provider opt-in FoldsInertHasteShroudEquips). Sound dominance, default ON; =0 offers every pair
     EQUIP_INERT_FOLD_GREEDY,  // MTG_EQUIP_INERT_FOLD_GREEDY  ...and the same drop in the GREEDY policy (Solve: d0 runner + rollout leaves), where the move's eval of 1 made the greedy take an idle Greaves move in a third of its plans. A playout-policy change, measured on held-out seeds (d0 -0.031 turn/game, searched neutral); default ON, =0 restores the old greedy
+    PD_PYRO_NO_OVERKILL,      // MTG_PD_PYRO_NO_OVERKILL   Prevent Damage: Pyrohemia's ping COUNT never kills one of OUR board creatures (above the survival ceiling) unless the pings alone are lethal to the opponent -- MTG_PD_QUAKE_NO_OVERKILL's twin for the repeatable {R} ping (USER 2026-10-11: "we should instead collapse it just like we did for earthquake"). Default ON, PROVISIONAL
+    PD_PYRO_TOP_K,            // MTG_PD_PYRO_TOP_K         Prevent Damage: among plans IDENTICAL except for Pyrohemia's ping count, keep only the LARGEST count at or below the plan's survival ceiling (board creatures AND creatures the plan casts, less a quake X in the same plan) -- MTG_PD_QUAKE_TOP_X's twin (USER 2026-10-11). Counts above the ceiling untouched. Default ON, PROVISIONAL
+    PD_PYRO_MAX_SAFE,         // MTG_PD_PYRO_MAX_SAFE      Prevent Damage (inside the PingAll count menu): offer ONLY the largest count every one of OUR board creatures survives (capped at what the pool affords), plus the maximum count when it could be lethal (pings alone, or an optimistic drain bound) -- the MTG_PD_QUAKE_NO_UNDERSHOOT twin. USER 2026-10-11: "We should also test the maximum that doesn't kill our creatures" + "the maximum is also a consideration if it would be lethal". The apply loop fires min(count, what the turn can still pay), so this reads as "ping with the plan's leftover mana, up to the ceiling". Measurement lever, default OFF
     COUNT
 };
 
@@ -665,6 +668,9 @@ inline const char* Name(int slot)
         "MTG_COMBAT_PIN_FOLD",
         "MTG_EQUIP_INERT_FOLD",
         "MTG_EQUIP_INERT_FOLD_GREEDY",
+        "MTG_PD_PYRO_NO_OVERKILL",
+        "MTG_PD_PYRO_TOP_K",
+        "MTG_PD_PYRO_MAX_SAFE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
