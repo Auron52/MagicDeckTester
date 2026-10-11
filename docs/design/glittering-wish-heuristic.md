@@ -771,3 +771,30 @@ it 16 better / 8 worse on held-out (-8 turns) and it lost both f5 counterexample
 control T5, Wings-only T6). Tried and REVERTED: "Linvala stays when she is castable THIS turn" -- read at
 the wish's resolution it depends on which lands the (unsearched) payer tapped for the wish, and it did not
 recover s4004 gi65 even at d8 b0 (see the Bruna-over-Linvala losses below, which are exactly that state).
+
+## TUTOR FIT (USER 2026-10-11) -- `MTG_BRUNA_TUTOR_FIT`, default ON
+
+USER: *"drop things that do not fit the current situation. So if you have enough auras in hand to kill you
+skip wishing for auras, if you have creatures on board we may be able to drop our cheap creatures as we
+already have a target ... Same with Open the Armory, there we can skip power auras if we don't need one."*
+Motive: a tutor in hand is 78% of Bruna's search wall, all of it candidate count
+(`docs/design/bruna-mullgen-cost-tree.md`).
+
+* **Aura roles** (the Wish's primary + cheap Aura; the Armory's power Aura) drop when the payload Auras in
+  hand + graveyard kill once a REACHABLE Bruna gathers them (on our battlefield, in hand, or fetchable by a
+  Glittering Wish; her trigger is free, so next turn's mana is not asked) **and** the hand already holds an
+  Aura at least as strong as the one offered. The LETHAL NOW cheap Aura stays.
+* **Body roles** (Linvala, Vexing Shusher) drop while we control any creature, a mana dork included.
+
+Measured (hand scorer, d1 b3, R=4, paired, 288 hands, seeds 4001-4012): win turn **+0.0004 +- 0.0014**
+(6 worse / 5 better); 144 concurrent paired hands: **1.05x** CPU, +0.002 +- 0.002.
+
+**Tried and dropped** (both lost turns, root-caused on the losing hands):
+* *Aura cut without the strength clause*: +0.0065 alone. Held-out 4007 H22 (Conscription x2 + Mythic +
+  Wings + Mother of Runes + Armory): the Auras kill through Bruna, but Armory for Colossification + Wings
+  onto Mother kills turns before Bruna's six mana -- a STRONGER Aura is not redundant.
+* *Troyan / Wild Growth ignore the tutor's own alternative fetch* (and, further, ignore Auras a reachable
+  Bruna or Wings would put on free): +0.004 / +0.014 total. Losing hands hold Glittering Wish +
+  Colossification + mana creatures: Wish for Troyan, then HARD-CAST Colossification with Troyan's big-spell
+  mana, beats waiting for Bruna; two-Wish hands also lose "Troyan now, Bruna with the second Wish". The
+  Troyan / Wild Growth mana-short test is unchanged.
