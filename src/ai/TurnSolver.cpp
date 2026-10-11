@@ -14414,6 +14414,17 @@ static bool EquipPowerFirstEnabled()
 // equip cost the equipment that does strictly more can always be taken, because there is no mana
 // trade left for efficiency to win. Full argument, the componentwise partial order and the
 // comparability carve-outs are at the mask's construction in CollectActions.
+// MTG_EQUIP_PARETO_DOMINANCE -- DEFAULT OFF; widens MTG_EQUIP_EQCOST_DOMINANCE's cost condition
+// from "equal" to "no more expensive". Inert unless EQCOST_DOMINANCE is also on. The user's own
+// headline example (Gauntlets equip {2} against the shields' {3}) is UNEQUAL cost, so the
+// equal-only rule cannot make the one comparison the ruling named first. Full argument, including
+// why it preserves the Spidersilk counter-example, at the comparison in CollectActions.
+static bool EquipParetoDominanceEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EQUIP_PARETO_DOMINANCE");       // DEFAULT OFF
+    return heurarm::Flag(heurarm::EQUIP_PARETO_DOMINANCE, env_on);
+}
+
 static bool EquipEqcostDominanceEnabled()
 {
     static const bool env_on = EnvOn("MTG_EQUIP_EQCOST_DOMINANCE");       // DEFAULT OFF
@@ -24449,6 +24460,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                    || HumanPlayActive();
             const bool s_eqdom = EquipEqcostDominanceEnabled() && !s_eqdom_open
                               && equips.size() > 1 && !hosts.empty();
+            // Widen the cost condition from == to <=; see the long note at the comparison. Default
+            // OFF so the conservative equal-cost arm stays separately measurable.
+            const bool s_pareto = EquipParetoDominanceEnabled();
             // (equip, host) pairs the dominance drops. Flat index e * hosts.size() + hi.
             std::vector<char> eq_dominated;
             if (s_eqdom)
@@ -24504,8 +24518,61 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 if (i == j || !cmp[j]) { continue; }
                                 if (equips[j].second->m_number == h.id) { continue; }
                                 const CardParams& pj = equips[j].first->params;
-                                if (EquipCostGenericNow(state, me_idx, *equips[j].first, h.id) != ci)
-                                { continue; }                    // unequal price: a real decision
+                                const int cj = EquipCostGenericNow(state, me_idx,
+                                                                   *equips[j].first, h.id);
+                                // THE COST CONDITION, and it is the whole difference between the
+                                // USER'S RULING AS A PRUNE AND AS A NEAR-NULL.
+                                //
+                                // EQUAL ONLY (s_pareto off) is the conservative reading: both
+                                // equips consume identical mana on every turn, so no mana argument
+                                // can beat the one that does more. Safe, and it MISSES THE USER'S
+                                // OWN HEADLINE EXAMPLE -- *"if you have the choice to play
+                                // Gauntlets or a shield you would always ensure Gauntlets is
+                                // equipped first"*. Golem-Skin Gauntlets is equip {2}; Cathar's,
+                                // Accorder's and Kite Shield are equip {3}. Unequal, so the
+                                // equal-cost arm declines, and the one comparison the user named
+                                // first is the one it cannot make.
+                                //
+                                // PARETO (s_pareto on) is cost <= instead of cost ==, which is
+                                // sound for a sharper reason than the equal case: when the better
+                                // equip is ALSO the CHEAPER one there is no mana-efficiency
+                                // objection available -- the dominated equip costs more AND does
+                                // less, on every turn and in every subset, so no ordering of the
+                                // two can ever favour it. The equal-cost rule needed an argument
+                                // ("the extra damage cannot be overridden by mana efficiency");
+                                // this one needs none, because nothing is being traded.
+                                //
+                                // AND IT PRESERVES THE USER'S COUNTER-EXAMPLE EXACTLY, which is the
+                                // test that matters. *"Spidersilk Net vs Shield is a bit
+                                // different... it is a real decision when its not free because the
+                                // differing equip cost means we might have enough mana this turn
+                                // for the shield and be able to equip the spidersilk next turn
+                                // alongside other things. Mana efficiency takes priority."*
+                                // Spidersilk is {2}/+0 power and the shields are {3}/+0: cheaper,
+                                // but NOT strictly better on any dimension the goldfish can see.
+                                // The `gt` test below requires a STRICT improvement somewhere, so
+                                // neither prunes the other and the real decision stays searched.
+                                // Cheaper-and-equal is explicitly NOT dominance here.
+                                //
+                                // WHAT IT ADDS ON v3, concretely: Bone Saw ({1}, +1 power) and
+                                // Deconstruction Hammer ({1}, +1/+1) dominate all sixteen
+                                // zero-power equips; Gauntlets ({2}, +1 per Equipment on its own
+                                // host) and Shadowspear ({2}, +1 + lifelink) dominate the twelve
+                                // {3} shields. That matters most on exactly the board where the
+                                // shields are offered at all: the pre-existing `rd > 0` ranking
+                                // already refuses a paid equip whose only effect is toughness, so a
+                                // shield reaches this comparison only on a host carrying Gauntlets
+                                // -- and there Bone Saw is both cheaper and strictly better, since
+                                // it adds its own +1 on top of the same per-Gauntlets increment.
+                                //
+                                // NOT a replacement for the ORDERING (MTG_EQUIP_POWER_FIRST). Where
+                                // the better equip costs MORE -- Colossus Hammer {8}/+10 against
+                                // Gauntlets {2}/+E -- neither Pareto-dominates, which is precisely
+                                // the case the user flagged as *"trickier when we have to consider
+                                // mana efficiency"*. Pruning there would be a projection; ordering
+                                // there is not. So the prune takes the comparable pairs and the
+                                // ordering takes the incomparable ones.
+                                if (s_pareto ? (cj > ci) : (cj != ci)) { continue; }
                                 const int pwj = EquipAttachDeltaFor(state, me_idx, h.id, pj).first;
                                 const bool ge = pwj >= pwi
                                     && (pj.equip_combat_damage_charges > 0
