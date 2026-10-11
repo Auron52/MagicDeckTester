@@ -7458,6 +7458,12 @@ static bool SolveUntapCreditOn()
     static const bool s_env = EnvOn("MTG_SOLVE_UNTAP_CREDIT", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::SOLVE_UNTAP_CREDIT, s_env);
 }
+// MTG_SOLVE_AURA_PAYER_CHECK (DEFAULT ON; =0 disables): see the PAE block in SolveUncached.
+static bool SolveAuraPayerCheckOn()
+{
+    static const bool s_env = EnvOn("MTG_SOLVE_AURA_PAYER_CHECK", true);
+    return heurarm::Flag(heurarm::SOLVE_AURA_PAYER_CHECK, s_env);
+}
 static bool IsEtbUntapCast(const Action& a)
 {
     return a.kind == Action::Kind::CastFromHand && a.def != nullptr
@@ -36356,6 +36362,33 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     if (cand_land_aura[uj] || (untap_credit && cand_untapper[uj])) { to_payer = true; break; }
                 }
                 if (!to_payer || !SubsetPayableWithFilters(state, cands, sel)) { mc_store_reject(); return; }
+            }
+            // A LAND-AURA SUBSET THE BOARD GATES PASS STILL MEETS THE REAL PAYER
+            // (MTG_SOLVE_AURA_PAYER_CHECK, DEFAULT ON; =0 restores the gate-only verdict byte-identically).
+            //
+            // The board-only gates are presence / assignment tests over the sources as they stand, so
+            // they cannot see the two things a land-Aura line turns on: WHICH land carries the Aura
+            // (its bonus is spendable this turn only if that land is still untapped after paying for
+            // it) and what the board's flexible units are really worth (an Aether Hub with no {E} is a
+            // {C} source, while the flat pool still credits its whole colour set -- the disclosed
+            // PARTIAL on that card). EDF gi 1475 (seed 1651476, d0) t7: Aether Hub carrying Overgrowth,
+            // Wild Growth and Fertile Ground, no {E}; Kitchen, Mariposa and Shivan Gorge beside it; hand
+            // Trace of Abundance + Eldrazi Displacer. Trace's {R/W} can come only off the Fertile Ground
+            // on the Hub, so the Hub pays for Trace -- and the plan the walk picked put Trace ON the Hub,
+            // where its bonus arrives already tapped. Displacer's {W} had no source; the executor cast
+            // Trace and dropped Displacer. The same pair with Trace on Kitchen is payable (Kitchen then
+            // taps for its {G} plus Trace's {W}). The gates passed both; the payer (the executor's own
+            // TapForCostDirect on a copy, host reserved, Aura attached where the plan declared it)
+            // passes only the second -- which is what execution can do, per the rules.
+            //
+            // Executor-agreement, not a heuristic: it can only REJECT a subset the payer cannot pay.
+            // Same gate as the board-failing branch above (only when a land Aura is pending in hand,
+            // so every deck without one is byte-identical).
+            else if (SolveAuraPayerCheckOn())
+            {
+                bool casts_aura = false;
+                for (int j : sel) { if (cand_land_aura[static_cast<std::size_t>(j)]) { casts_aura = true; break; } }
+                if (casts_aura && !SubsetPayableWithFilters(state, cands, sel)) { mc_store_reject(); return; }
             }
         }
         if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
