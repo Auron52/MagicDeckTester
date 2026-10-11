@@ -487,6 +487,9 @@ MATRIX_TXT=$VLQ/matrix.txt          # per-run: a single-deck run must not overwr
 # fleet default (logs/vlq/slow_games.log) and every single-deck run appended to the same shared file
 # -- the FiveColour run's 17 slow games landed there while its own queue dir showed none.
 SLOW_GAME_LOG=$VLQ/slow_games.log
+# Questions a phase put to a human WITHOUT stopping (never block on a question): the default it took
+# and what to do instead. Printed by `status` and at COMPLETE until a human deletes the file.
+SIGNOFF=$VLQ/SIGNOFF_OWED.txt
 
 log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$VLQ/driver.log"; }
 done_p() { [ -e "$DONE/$1" ]; }
@@ -918,17 +921,34 @@ phase_matrix() {
 # It does NOT auto-raise the ceiling. Three outcomes with different remedies: a filter-decided verdict
 # wants more CEILING, a noise-dominated one wants more GAMES, and a pile of condemnations is an
 # ENGINE-optimisation signal that a bigger ceiling would only hide (user: "If we have a ton of
-# condemnations it means we need more optimizations"). Deferring is a real answer, not a failure.
+# condemnations it means we need more optimizations").
+#
+# IT NEVER STOPS THE RUN (USER 2026-10-11: "Why does it pause? it shouldn't pause."). A DEFER (rc 4)
+# used to `return 1` here -- "a human decides. Stopping before the derivation reads this table" --
+# which halted the whole pipeline until someone came back. That is the NEVER BLOCK ON A QUESTION rule
+# (CLAUDE.md) in script form: the sign-off is still owed, but it is COLLECTED, not waited for. So the
+# run takes the gate's default (the table AS MEASURED -- condemned cells stay reference-only, which the
+# phase-D derivation already honours via the `*` marker), records the question in $SIGNOFF, and goes
+# on. `status` and the COMPLETE line print $SIGNOFF until a human deletes it. Prevent Damage
+# 2026-10-11 sat stopped at this line over two noise-level pairs (|shift| << SE) that no amount of
+# ceiling could settle. A RERUN recommendation (rc 3) is recorded the same way, since nothing
+# auto-launches it either.
 phase_riskgate() {
     done_p C_riskgate && return 0
     log "PHASE C.5: matrix risk gate"
-    python3 scripts/matrix_risk_gate.py "$VLQ" 2>&1 | tee -a "$VLQ/driver.log"
-    local rc=${PIPESTATUS[0]}
+    python3 scripts/matrix_risk_gate.py "$VLQ" > "$VLQ/riskgate.txt" 2>&1
+    local rc=$?
+    tee -a "$VLQ/driver.log" < "$VLQ/riskgate.txt"
     case "$rc" in
       0) log "PHASE C.5: CLEAN -- the filter cannot have changed a verdict" ;;
-      3) log "PHASE C.5: RERUN RECOMMENDED -- see the gate output above; NOT auto-launched" ;;
-      4) log "PHASE C.5: DEFER -- a human decides. Stopping before the derivation reads this table."
-         return 1 ;;
+      3|4)
+         local what="SIGN-OFF OWED"; [ "$rc" = 3 ] && what="RERUN RECOMMENDED (not auto-launched)"
+         log "PHASE C.5: $what -- CONTINUING with the table as measured (the gate's default);"
+         log "  the question is recorded in $SIGNOFF and shown by \`status\` until a human clears it."
+         { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE C.5 risk gate: $what"
+           echo "    default TAKEN: the matrix table as measured (condemned cells reference-only)."
+           echo "    to act on it instead: see the gate output below; clear this file once decided."
+           sed 's/^/    /' "$VLQ/riskgate.txt"; echo; } >> "$SIGNOFF" ;;
       *) log "PHASE C.5: gate failed (rc=$rc)"; return 1 ;;
     esac
     mark C_riskgate
@@ -1141,6 +1161,7 @@ finish|run)
         $ph || { log "STOPPED at $ph"; exit 1; }
     done
     log "=== COMPLETE -- nothing adopted; review the A/B + sweep reports above ==="
+    [ -s "$SIGNOFF" ] && log "=== SIGN-OFF OWED: defaults were taken without stopping -- read $SIGNOFF ==="
     ;;
 status)
     # A real progress report: where the run is, what is left, and how to resume. Reads only files the
@@ -1248,6 +1269,11 @@ PY
     echo "             only in-flight games. To redo one phase, delete its marker and re-run."
     echo "             If the CLOCK (not the data) ran out inside phase A, use 'finish' instead:"
     echo "             it accepts the rows on disk as final and runs B..E on them."
+    if [ -s "$SIGNOFF" ]; then
+        echo
+        echo "SIGN-OFF OWED ($SIGNOFF) -- the run did NOT stop; it took these defaults:"
+        grep -E '^=== |default TAKEN' "$SIGNOFF" | sed 's/^/  /'
+    fi
     tail -5 "$VLQ/driver.log" 2>/dev/null
     exit 0
     ;;

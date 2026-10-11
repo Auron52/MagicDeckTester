@@ -31,10 +31,13 @@ common game set.
 EXIT CODES
   0  CLEAN  -- proceed to phase D.
   3  RERUN  -- risky cells found and they are cheap enough to re-measure; the command is printed.
-  4  DEFER  -- the call is consequential (many condemned cells, or risky cells that are expensive to
-               re-run). Stop and put it to a human. Deferring is not failure: raising the ceiling
-               costs hours and lowering the sample costs correctness, and that trade is not the
-               pipeline's to make silently.
+  4  SIGN-OFF OWED -- the call is consequential (many condemned cells, or risky cells that are
+               expensive to re-run), so it is put to a human -- but NOT waited for (USER 2026-10-11:
+               "it shouldn't pause"; CLAUDE.md, never block on a question). valueleaf.sh continues
+               with the DEFAULT, the table as measured (condemned cells reference-only), and records
+               the question in <queue>/SIGNOFF_OWED.txt. Raising the ceiling costs hours and lowering
+               the sample costs correctness; that trade is the human's, and it is collected, not
+               blocked on.
 """
 import argparse
 import collections
@@ -203,7 +206,7 @@ def main():
     # and it hides the real finding, which is that the engine is too slow for this deck at this depth.
     # So this case is reported as an ENGINE signal, not as a threshold to retune.
     if n_dead > args.max_condemned:
-        print("DEFER TO A HUMAN -- %d condemned cell(s), which is an OPTIMIZATION signal, not a\n"
+        print("SIGN-OFF OWED (the run CONTINUES with the table as measured) -- %d condemned cell(s), which is an OPTIMIZATION signal, not a\n"
               "ceiling one. These cells could not finish a game inside the wall-clock limit at all;\n"
               "a bigger ceiling would only turn one-hour games into two-hour games and make the run\n"
               "less repeatable while hiding the cause." % n_dead)
@@ -216,7 +219,7 @@ def main():
         return 4
 
     if flips and len(risky_cells) > args.rerun_budget_cells:
-        print("DEFER TO A HUMAN -- %d comparison(s) are decided by the filter, across %d cells, which\n"
+        print("SIGN-OFF OWED (the run CONTINUES with the table as measured) -- %d comparison(s) are decided by the filter, across %d cells, which\n"
               "is more than can be re-measured unattended." % (len(flips), len(risky_cells)))
         print("  cells: %s" % cellset)
         return 4
@@ -231,7 +234,7 @@ def main():
     # Nothing is decided by the filter, but something is too noisy to call. Raising the ceiling is the
     # WRONG lever here and saying so is the point of this branch.
     if unresolved:
-        print("DEFER TO A HUMAN -- %d comparison(s) flip sides of tol, but the gap is far smaller than\n"
+        print("SIGN-OFF OWED (the run CONTINUES with the table as measured) -- %d comparison(s) flip sides of tol, but the gap is far smaller than\n"
               "its own sampling error, so the filter is not what decided them. MORE GAMES would settle\n"
               "these; a higher ceiling would not." % len(unresolved))
         for a, b in unresolved:
