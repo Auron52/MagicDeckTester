@@ -36873,6 +36873,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // same ">3 means recognized" rule the human FINISH plan rides). Top-level main only, same as
     // the storm cut. Rides the shared toggles + its own MTG_NO_EDF_GOFF_CUT.
     static const bool s_no_edf_goff_cut = EnvOn("MTG_NO_EDF_GOFF_CUT");
+    // MTG_EDF_GOFF_VERIFY_UNPROJECTED (DEFAULT ON; =0 disables): see the !projected branch below.
+    static const bool s_goff_verify_unproj_env = EnvOn("MTG_EDF_GOFF_VERIFY_UNPROJECTED", true);
+    auto EdfGoffVerifyUnprojectedOn = [&]()
+    { return heurarm::Flag(heurarm::EDF_GOFF_VERIFY_UNPROJECTED, s_goff_verify_unproj_env); };
     if (has_extra_lethal && state.spells_cast_this_turn == 0
         && !s_no_edf_goff_cut && !s_no_goff_shortcircuit && !s_no_combo_line
         && !DecisionUnpruned(UnprunedGate::ComboLine))
@@ -36915,10 +36919,53 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 }
                 if (verified) { return best; }   // verified lethal -> skip the powerset (materialized above)
             }
-            else if (s_goff_cut_dbg)
+            else
             {
-                std::fprintf(stderr, "[edf-goff-cut] t%d k=%d projected=0\n",
-                             state.turn_number, blink_k);
+                if (s_goff_cut_dbg)
+                {
+                    std::fprintf(stderr, "[edf-goff-cut] t%d k=%d projected=0\n",
+                                 state.turn_number, blink_k);
+                }
+                // AN UNPROJECTED KILL IS STILL A KILL (MTG_EDF_GOFF_VERIFY_UNPROJECTED, DEFAULT ON;
+                // =0 restores the projected-only gate byte-identically).
+                //
+                // The projection is optimistic by contract, but it is also INCOMPLETE: the blink
+                // apply (ApplyBlinkLoop) digs with the loop's mana and deploys a finisher it finds
+                // (Living Wish -> Essence Depleter), a route ExtraLethalDamage / ProjectsAlternateWin
+                // do not model. EDF gi 1676 (seed 1651677, d0) t4: Cloud + Displacer live, Mariposa
+                // and Conservatory for draws, k=53 on the menu, "projected=0" -- so the cut never ran
+                // its verify and the walk spent the pool on two Fertile Grounds (win t5). The old arm
+                // reached the same apply by accident (a failed Emiel left the pool whole for the
+                // post-cast auto go-off) and won t4.
+                //
+                // So run the same execution check on the unprojected candidate: one apply of the
+                // maximal blink line on a copy, the one consider() just scored (it still owns
+                // feasibility: a candidate it rejects is never applied). Only a REAL kill is taken --
+                // the opponent lost and we are alive (a route that kills us is not a win; see
+                // RouteWon) -- and a this-turn win dominates every plan, so returning it is the same
+                // sound dominance the projected branch above applies, not a greedy pick: the plan is
+                // the one execution proved, and every non-kill falls through to the walk unchanged.
+                if (EdfGoffVerifyUnprojectedOn()
+                    && best_sel.size() == 1 && best_sel[0] == blink_j)
+                {
+                    GameState copy = state;
+                    ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
+                    verified = OpponentHasLost(copy)
+                            && copy.players[state.active_player_index].life > 0;
+                    if (s_goff_cut_dbg)
+                    {
+                        std::fprintf(stderr,
+                                     "[edf-goff-cut] t%d k=%d projected=0 applied verified=%d opp_life=%d decked=%d\n",
+                                     state.turn_number, blink_k, verified ? 1 : 0,
+                                     copy.players[1 - state.active_player_index].life,
+                                     copy.opponent_decked ? 1 : 0);
+                    }
+                    if (verified)
+                    {
+                        best.wins_this_turn = true;   // execution-verified: the plan wins this turn
+                        return best;                  // materialized above
+                    }
+                }
             }
             best      = saved_best;
             best_mask = saved_mask;
