@@ -79,7 +79,39 @@ Melira Pod, Minotaur, Mirrorwing Dragon, Pirates, SelesnyaLifegain, StompySurpri
 burn, slivers_vial, treasure_hunt
 ```
 
-### Shape of the run
+### *** STOP: THE OBVIOUS INVOCATION CORRUPTS EVERY DECK IT TOUCHES ***
+
+**Measured the hard way, 2026-10-11.** Running the simulator as
+
+```
+<analyze-bin> decks/<Deck>/<Deck>.cod --cards-json ... --merge-keep <raw>     # DO NOT
+```
+
+**overwrites `decks/<Deck>/<Deck>.profile.json`.** The analyzer's ordinary flow derives and writes a
+card-scores profile *before* the keep-merge branch runs, and `--merge-keep` does not suppress it. The
+log line is explicit — `Profile written to /workspaces/.../Angels.profile.json` — and the loop had
+rewritten **16 shipped profiles** with different `card_scores` (Angels' Archangel of Thune went
+−0.1680 → −0.0935) before it was caught by `git status`.
+
+That is not cosmetic. `card_scores` feed the keep decision, so this silently re-fits the mulligan
+behaviour of every deck in the sweep — the "a generation can go LIVE mid-run and corrupt its
+neighbour" hazard, reached from a direction nothing was guarding. The sim's own header says it
+"writes nothing (a measurement) -> returns without a profile", and that is true of
+`RunAdaptiveBottomRegretSim` itself; it is **not** true of the process that calls it.
+
+**Before this sweep is ever run again, one of these must be true:**
+
+1. the analyzer gains an explicit no-write route for a measurement-only merge (the right fix — then
+   the recipe above becomes safe and this warning can go), or
+2. every profile is restored afterwards, verified with `git status --porcelain decks`, **and** the
+   run happens with nothing else depending on those profiles (no generation, no suite run, no
+   viewer) — because between the write and the restore the decks are live with refitted scores.
+
+Option 2 is a workaround, not a fix, and it is **not safe to leave running unattended**. Option 1 is
+the deliverable. Until it exists, treat this cross-deck sweep as BLOCKED rather than merely pending —
+the measurement is cheap, but the way to obtain it is not yet safe.
+
+### Shape of the run (once option 1 exists)
 
 Per deck, over a grid of (cap R, `flip_eps`), with `MTG_KEEP_SIM_TRIALS` high enough that the
 Monte-Carlo floor-noise error is well below the effect (slivers used 128 and reported ±0.0001):
@@ -87,8 +119,7 @@ Monte-Carlo floor-noise error is well below the effect (slivers used 128 and rep
 ```
 MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_TRIALS=<n> \
 MTG_KEEP_SIM_FLIP_EPS=<eps> MTG_KEEP_SIM_FLOOR=2 \
-  <analyze-bin> decks/<Deck>/<Deck>.<ext> --cards-json src/cards/data/cards.json \
-  --merge-keep decks/<Deck>/<Deck>.keepmodel.exhaustive.raw.json.gz
+  <analyze-bin> <deck> --cards-json src/cards/data/cards.json --merge-keep <raw>   # + no-write flag
 ```
 
 Four things to get right, each of which has bitten something in this repo before:
@@ -97,16 +128,13 @@ Four things to get right, each of which has bitten something in this repo before
   (`"pooled sidecars lack per-cell sumsq ... Nothing done."`). Part of the deliverable is the list of
   decks whose banked sidecars predate it — a deck that cannot be simulated must be reported as
   **un-run**, never silently dropped from the average.
-- **It is a MEASUREMENT and must write nothing.** The block returns without producing a profile. Keep
-  it that way: a keep table or value sidecar appearing beside a decklist *is* adoption in this repo
-  (presence-gated), so a sim that wrote one would change play for that deck.
+- **It must write nothing.** See the warning above; this is the one that actually failed.
 - **Do not average regret across decks and quote one number.** Decks differ in how much of their
-  generation is bottoming at all (Snow: 59.6% of units; others far less), so the quantity the user
-  asked about — how much this *helps* — is per deck `saving x (bottoming share)`, and the *risk* is
-  per deck regret. Report the joint distribution, and name the worst deck.
-- **Report it against each deck's own shipped cap**, not a common R. Decks ship different R
-  (`fast` = 30, `complete` = 40), and the trap in §1 means a common-R table would rank decks by how
-  little they had to lose.
+  generation is bottoming at all (Snow: 59.6% of units), so the quantity the user asked about — how
+  much this *helps* — is per deck `saving x (bottoming share)`, and the *risk* is per deck regret.
+  Report the joint distribution and name the worst deck.
+- **Report it against each deck's own shipped cap**, not a common R, because the §1 trap means a
+  common-R table would rank decks by how little they had to lose.
 
 ### Why this is worth doing even if v3 never needs the dial
 
