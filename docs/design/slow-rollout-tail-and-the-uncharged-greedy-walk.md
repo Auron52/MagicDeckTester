@@ -1457,3 +1457,89 @@ label-by-label and value-by-value. That converts "flip_eps 0.10 accepts more ris
 wrong bottoming line" from a sentence into a measured count of **how many cells changed label and by
 how much value** — which is exactly what the user needs in order to rule on the dial for kitty, and
 it costs hours on a fast deck instead of days on this one.
+
+## 2026-10-11 RESULTS — LATEMAIN_UNITS IS REFUTED, and the right instrument for the lossy dials
+
+### `MTG_EQUIP_ROUTE_LATEMAIN_UNITS` measured SLOWER. The "best candidate" call was wrong.
+
+Paired, unbiased, N=20,000 uniform size-7 draws at d2/b3 on PGO, one arm at a time on an idle box
+(`ab2.sh`):
+
+| arm | sum core-ms | vs base | units_total |
+|---|---|---|---|
+| base | 44,165,907 | — | 168,023,829 |
+| `LATEMAIN_UNITS=4` | 45,518,539 | **1.031x (SLOWER)** | 172,076,523 |
+
+3.1% slower, which clears the ~1% noise floor. **The mechanism is already documented one function
+up, and it should have been predicted rather than measured:** the equip route is a lethal DETECTOR
+whose *success* fires the go-off cut and collapses the frame to one plan. `NodeUnits`' own adoption
+note records exactly this for price 8 — "it runs out of links MID-detection, so it produces no
+certificate, the cut does not fire, and the decision pays the FULL enumeration -- the worst case
+available" (gi=371 t3: 70,077 → 18,006 units when the price went 8 → 4). Raising the *later-main*
+price does the same thing to later-main frames. Pricing a detector higher starves the detection that
+was going to pay for itself.
+
+So "equip_route is 26-33% of units, therefore pricing it will help" was a bad inference: a big unit
+share does not mean the work is wasted. On this deck the route's units are the cheapest work in the
+run, because each success deletes an enumeration. Note also that `units_total` is not a clean work
+axis for a re-pricing arm — the price multiplies units-per-link, so a +2.4% units reading alongside
+a +3.1% ms reading means FEWER links each charged MORE. Only ms answers the question.
+
+This does not touch `LATEMAIN_UNITS`' soundness argument (it remains inert at an unlimited root);
+it simply does not buy anything here. `lm16`/`lm64` are expected to be worse for the same reason.
+
+### THE LOSSY DIALS DO NOT NEED A REGENERATION — there is a validated offline simulator
+
+`RunAdaptiveBottomRegretSim` (ExhaustiveKeep.cpp ~5411-5755, `MTG_KEEP_SIM_ADAPTIVE_BOTTOM`) prices
+the adaptive-bottoming dials **offline from an existing full-bottom raw, with no rollouts**, and
+reports **regret in TURNS with a standard error** alongside the rollout saving. Its own provenance:
+
+> VALIDATION: slivers full-bottom raw -> +~0.006 (in-game was +0.0057)
+
+i.e. it reproduces a real in-game A/B to three significant figures. Knobs: `MTG_KEEP_SIM_FLIP_EPS`
+(the near-tie gate), **`MTG_KEEP_SIM_CAP`** (model a cheaper gen whose sub-tables only reach R=k —
+the cap-R dial), `MTG_KEEP_SIM_FLOOR`, `MTG_KEEP_SIM_TRIALS`, `MTG_KEEP_SIM_SEED`. Invocation is the
+merge path:
+
+```
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<raw.gz> MTG_KEEP_NO_WRITE=1 \
+MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_FLIP_EPS=<eps> MTG_KEEP_SIM_CAP=<R> \
+  mtg-analyze <deck>.txt --cards-json src/cards/data/cards.json
+```
+
+It returns without writing a profile, and `MTG_KEEP_NO_WRITE=1` blanks both output paths as well, so
+it cannot go near a journal. Driver: `logs/kitty_tail_diag/sim_lossy_dials.sh`.
+
+### WHICH DECK, and why the obvious reason was the wrong one
+
+USER: *"Probably a trusted deck (Slivers, etc.) would be the fastest for comparison"* and, crucially,
+*"Though R being too low would be troublesome for the adaptive change, since it would reduce the
+impact."* The R objection is correct and binding: a wave's batch is `min(r_batch 16, r_max - c)`, so
+a low-R base leaves no room to refine and understates the dial.
+
+But **slivers is fast in PLAY, not in GENERATION** — it runs at d5/b10, which makes it the third
+most expensive table in the repo to rebuild. Relative regeneration cost (`cells x R x depth x
+budget_ms`):
+
+| deck | K | effective_R | cells | dep/bms | rel-cost |
+|---|---|---|---|---|---|
+| burn | 10 | 60 | 10,945 | 1/3 | **2.0M** |
+| CritterLifegain | 13 | 40 | 28,997 | 1/3 | 3.5M |
+| Giants / Fluctuator / Fungus | 13-14 | 30-40 | 36-55k | 1/3 | 4.3-5.0M |
+| *kitty v3 target* | *15* | *30* | *85,584* | *2/3* | *15.4M* |
+| slivers_vial | 10 | **100** | **7,758** | 5/10 | 38.8M |
+
+**And then it does not matter, because nothing is regenerated.** For the OFFLINE sim the selection
+criteria invert, and slivers wins all three:
+  * it is the deck the simulator was **validated against**;
+  * it has the **full-bottom raw** the sim requires (it refuses without per-cell `sumsq`);
+  * its **R=100 is the highest in the repo** (burn 60, critter 40, kitty-`fast` 30), so every lower
+    cap is modelled DOWNWARD from truth instead of extrapolated upward from a cramped base — which
+    is the user's R objection answered by construction rather than by argument.
+
+burn (R=60) and CritterLifegain (R=40) are the fallbacks if slivers' shipped raw turns out to be
+adaptive rather than full-bottom, and both are in the suite with raw sidecars present.
+
+The queued sweep prices `flip_eps` ∈ {0.02, 0.05, 0.10, 0.20} **at kitty's own cap R=30** (the
+directly transferable reading), cap R ∈ {raw 100, 40, 20, 16} at the default gate, and the exact
+**(eps 0.20, cap R 16)** corner this agent launched without approval on 2026-10-10.
