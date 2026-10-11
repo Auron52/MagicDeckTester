@@ -377,3 +377,62 @@ TEST_CASE("Irencrag needs a closer after it: subset and post-Apex leftovers (MTG
         }
     }
 }
+
+namespace
+{
+// Scourge of Valkas (4/4, "{R}: +1/+0") attacking with two Mountains up and one BANKED land: a Sandstone
+// Needle with two depletion counters or a Mercadian Bazaar with three storage counters.
+GameState PumpBoardFu(const std::string& banked, int opp_life)
+{
+    GameState s = BoardFu({ "Mountain", "Mountain", banked }, {}, 6);
+    Permanent& b = s.battlefield.back();
+    if (banked == "Sandstone Needle") { PutDepletionCounters(s, b, 2); }
+    else                              { b.storage_counters = 3; }
+    PutFu(s, "Scourge of Valkas", 400);
+    s.players[1].life = opp_life;
+    return s;
+}
+
+const Permanent& PermFu(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return p; } }
+    FAIL("not on the battlefield: " << name);
+    return s.battlefield.front();
+}
+
+int DepletionFu(const Permanent& p)
+{
+    int n = 0;
+    for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { n += c.count; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("Combat pump keeps a depletion / storage land's mana unless the pump is lethal (MTG_FB_HOLD_BANKED)")
+{
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::FB_HOLD_BANKED, on);
+        {
+            // Not lethal (20 life): the Mountains pump twice (4 + 2); the Needle's two counters stay unless off.
+            GameState s = PumpBoardFu("Sandstone Needle", 20);
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == (on ? 14 : 12));
+            CHECK(DepletionFu(PermFu(s, "Sandstone Needle")) == (on ? 2 : 1));
+        }
+        {
+            // Lethal only WITH the Needle (8 life = 4 + 2 Mountains + 2 Needle): it is spent on both arms.
+            GameState s = PumpBoardFu("Sandstone Needle", 8);
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life <= 0);
+        }
+        {
+            // The Bazaar's three banked counters, the same rule.
+            GameState s = PumpBoardFu("Mercadian Bazaar", 20);
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == (on ? 14 : 11));
+            CHECK(PermFu(s, "Mercadian Bazaar").storage_counters == (on ? 3 : 0));
+        }
+    }
+}
