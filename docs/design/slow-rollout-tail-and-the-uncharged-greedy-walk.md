@@ -1577,41 +1577,91 @@ while one that does not pays all `max_turns = 8` turns at full price.
 `equip_route` is 26–33% of units *because* each success deletes an enumeration. This was predictable
 from the `NodeUnits` price-8 note one function up and should not have needed measuring.
 
-## 2. 63% of all units are a CEILING being hit, and no price can touch them
+## 2. CORRECTED — 63% of units sit in BUDGET-SATURATED decisions, not in a work-X ceiling
 
-The per-committed-depth ladder census across the same four arms:
+**The first version of this section was WRONG and is withdrawn in full.** It claimed the 63% was
+`MTG_DECISION_WORK_X` being hit. It is not, and §1 of this very document already contained the
+refutation, which is the part worth remembering: *"a ceiling so high nothing trips... Nominal budget
+**2,700 units** (3 ms x 900/virtual-ms)"*, with the median decision at **0.5x budget**.
 
-| arm | d1 n | **d1 commit units** | **d1 leaf-TT lookups/dec** | d2 n | d2 commit units | d2 units/dec |
-|---|---|---|---|---|---|---|
-| base | 44,981 | 105,532,422 | 328.606 | 113,126 | 36,111,217 | 319 |
-| lm4 | 45,308 | 105,742,073 | 329.178 | 113,043 | 39,852,592 | 352 |
-| lm16 | 45,817 | 105,447,607 | 328.447 | 112,947 | 47,181,839 | 417 |
-| lm64 | 46,407 | 104,718,527 | 328.423 | 112,808 | 57,082,431 | 506 |
+The arithmetic, which takes one line and was never done:
 
-**d1 is flat to four significant figures** — 328.606 → 328.423 lookups per decision across a 12%
-swing in total units — while every bit of the pricing damage lands on d2 (+58%). A natural cost
-moves when prices move; a cost that does not move is hitting a ceiling.
+| | |
+|---|---|
+| `SearchBudget::NODES_PER_VIRTUAL_MS` | 900 |
+| v3 generation budget (`mull_gen_budget_ms`) | 3 ms ⇒ `budget->Limit()` = **2,700 units** |
+| `MTG_DECISION_WORK_X` (pinned by `mullgen.sh`) | 1000 ⇒ ceiling = `2700 * 1000` = **2,700,000 units** |
+| measured d1 spend | **2,346 units/decision** = **0.087% of that ceiling** |
 
-`DecisionWorkMeter.h` names the mechanism: `limit = base_budget_units * MTG_DECISION_WORK_X`, and
-*"when the ceiling trips, running passes bail through the EXISTING mid-pass overrun path and
-iterative deepening commits the deepest completed pass"*. So **d1 is not "a shallow decision" — it
-is a decision that exhausted its work ceiling and fell back**, and the flat ~2,346 units/decision is
-the limit rather than a measured cost. `mullgen.sh` pins `MTG_DECISION_WORK_X=1000`.
+Three orders of magnitude of headroom at the mean. The ceiling cannot be what d1 is hitting.
 
-Three consequences, and the third is the one that matters:
+### What d1 actually is
 
-1. **It explains why the price lever failed.** 63% of the work is in a population that spends a
-   fixed ceiling regardless of what anything costs. Re-pricing cannot reduce it by construction.
-2. **It is a QUALITY problem, not only a cost one.** Those 45k decisions commit *truncated*
-   answers, and those truncated searches are what label the keep table.
-3. **A width prune must therefore be judged on `sum_wt` and the d1/d2 split, NOT on
-   `units_total`.** A pinned decision does not get cheaper when the menu narrows; it uses the same
-   ceiling to reach a deeper commit. Judging the width prunes on units alone would refute them for
-   the wrong reason — the LATEMAIN mistake in a new costume.
+The same table, read correctly — and with `mch_lm16`, whose arm was never collected before:
 
-The screen brackets the ceiling (`MTG_DECISION_WORK_X` ∈ {250, 1000, 2000}) to confirm pinning
-directly rather than inferring it. Note X is a **precision dial**, so moving it is a USER ruling and
-is reported, never adopted.
+| arm | d1 n | d1 units | **d1 u/dec** | d2 n | d2 units | **d2 u/dec** | units total | **core_s** |
+|---|---|---|---|---|---|---|---|---|
+| base | 44,981 | 105,532,422 | 2,346 | 113,126 | 36,111,217 | 319 | 168,023,829 | 44,155.9 |
+| lm4 | 45,308 | 105,742,073 | 2,333 | 113,043 | 39,852,592 | 352 | 172,076,523 | 45,508.6 |
+| lm16 | 45,817 | 105,447,607 | 2,301 | 112,947 | 47,181,839 | 417 | 179,159,152 | 45,021.9 |
+| lm64 | 46,407 | 104,718,527 | 2,256 | 112,808 | 57,082,431 | 506 | 188,434,179 | 46,915.6 |
+| **mch** | **40,858** | 89,892,729 | 2,200 | **119,202** | 31,135,520 | 261 | 146,761,558 | **15,894.2** |
+| mch_lm16 | 42,019 | 91,701,318 | 2,182 | 118,853 | 40,961,793 | 344 | — | — |
+
+**2,346 is 86.9% of the 2,700-unit budget.** That is the mechanism: a decision that cannot *complete*
+a depth-2 pass spends essentially its whole budget trying, then iterative deepening commits depth 1.
+A decision that *can* complete depth 2 does so in **319 units — 11.8% of budget**. The population is
+bimodal, and the modes are "the frame fit" and "the frame did not".
+
+So d1's per-decision cost is governed by the BUDGET, not by the menu width, and **narrowing a frame
+cannot make a d1 decision cheaper** — it will spend its budget either way, just getting further into
+the depth-2 pass before it stops. This is the opposite of what the withdrawn version concluded.
+
+### The consequence, and it is the actionable one
+
+**A width prune's only route to a cost win is to move decisions from d1-commit to d2-commit** — 2,346
+units becomes 319, a factor of **7.3**. Not "narrow the frame a bit"; *narrow it until depth 2 fits*.
+
+The target is therefore quantifiable, which the withdrawn version made impossible:
+
+| wanted total cost | required d1 u/dec | cut needed |
+|---|---|---|
+| 0.75x | 1,999 | 15% |
+| 0.60x | 1,438 | 39% |
+| **0.50x** | **1,065** | **55%** |
+
+### What the four pricing arms really did
+
+Read as a d1/d2 *migration* the LATEMAIN family is refuted even more sharply than §1 says. Pricing
+the route pushed decisions the WRONG WAY — d1 n 44,981 → 46,407 (**+1,426 decisions got worse
+answers**) — while inflating the d2 decisions that survived by **+59%** (319 → 506 u/dec). Both
+directions are losses, which is why every one of the four axes moved against it monotonically.
+
+### And `mch` did the right thing by the wrong means
+
+`mch` is the only arm that moved the split the GOOD way: d1 n **−9.2%** (44,981 → 40,858) and d2 n
+**+5.4%** — about **4,100 decisions promoted from a budget-saturated depth-1 commit to a completed
+depth-2 one**. That is the exact mechanism this section says is the only one available, and it is why
+the arm was fast. Its 512 lost games were never a property of the mechanism; they came from the
+hoist's freeness promise being an existential used as a universal (§5), which is repairable and is
+repaired by `MTG_METALCRAFT_HOIST_EXACT`.
+
+### A SECOND finding, and it changes which axis to judge on
+
+`mch` is **0.874x on `units_total` and 0.360x on wall**. Wall fell **2.4x further than charged
+units**. A large part of the real cost is therefore **not unit-charged at all** — which is the
+uncharged greedy walk this document is named after, reached from a new direction.
+
+**So `units_total` systematically UNDERSTATES a prune on this deck, and `ms` is the honest axis** —
+which is what `ab2.sh` already argues for its own metric choice, on different grounds. A lever that
+removes 1.6% of units may be removing several times that in wall. Conversely, do not convert a wall
+win into a units claim or vice versa; quote both, as the table above now does.
+
+`MTG_DECISION_WORK_X` is still worth what §1 measured it at — **0.172% of decisions tripped, 24.6%
+of units removed, 1.33x, play digest UNCHANGED** — but that is a tail clip on the extreme, not the
+explanation for the bulk. The screen's `wx250` / `wx2000` arms test it directly on this sample; if
+all three bracket arms land together, X never binds here at all. X is a precision dial either way,
+so it is a USER ruling and is reported, never adopted.
 
 ## 3. METALCRAFT_EQUIP_HOIST is 2.78x faster, and its quality cost is a SCORING error
 
