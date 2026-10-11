@@ -111,9 +111,18 @@ inline bool SporeSourcePoolEnabled()
 // hand-cast fold that merged two names while the route's purchase key still split them would
 // have the two halves disagree about what ONE CARD is -- the executor/rollout lockstep failure
 // mode in miniature, and the exact shape convention 4 exists to prevent.
+// DEFAULT ON since 2026-10-11; `=0` disables. Adopted as an IDENTITY FOLD on the strongest evidence
+// shape available: over 5,000 paired rollouts it moved ZERO win turns (changed=0) at 0.986x, and
+// Gate 1 (MTG_FOLD_VERIFY + MTG_BF_CENSUS, the recoverability bar) PASSED non-vacuously with
+// 569,286 recoverable rejections and UNRECOVERABLE=0 -- 24,108 MORE rejections than the control,
+// every one with a legal enumerable twin. Gate 2 PASSED 6 of 6 cells at b768.
+// Suite scope was MEASURED rather than predicted: 106 of 114 cases byte-identical, and only ONE
+// non-Equipment deck moves (stompy d3, aggregate unchanged) -- because the fold needs two
+// behaviourally-identical cards LIVE AT ONCE, not merely present in the decklist. Static analysis
+// had put the ceiling at 15 cases.
 inline bool FoldXnameOn()
 {
-    static const bool env_on = EnvOn("MTG_FOLD_XNAME");
+    static const bool env_on = EnvOn("MTG_FOLD_XNAME", true);             // DEFAULT ON
     return heurarm::Flag(heurarm::FOLD_XNAME, env_on);
 }
 
