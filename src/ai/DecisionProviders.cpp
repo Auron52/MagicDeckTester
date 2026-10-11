@@ -29345,6 +29345,86 @@ static int BrunaAuraPower(const BrunaCensus& cen, const CardDefinition& d)
     return best;
 }
 
+// ---- TUTOR FIT (USER 2026-10-11, MTG_BRUNA_TUTOR_FIT, DEFAULT ON; =0 = the 2026-10-08 rules) -------------
+// USER: "drop things that do not fit the current situation. So if you have enough auras in hand to kill you
+// skip wishing for auras, if you have creatures on board we may be able to drop our cheap creatures as we
+// already have a target ... Same with Open the Armory, there we can skip power auras if we don't need one."
+// Measured motive (docs/design/bruna-mullgen-cost-tree.md): a tutor in hand is 78% of the search's wall, all
+// of it candidate COUNT, and with Bruna in the Wish's set the search took her 225 of 261 times.
+static bool BrunaTutorFit()
+{
+    static const bool env = EnvOn("MTG_BRUNA_TUTOR_FIT", true);   // DEFAULT ON (USER-directed); =0 hatch
+    return heurarm::Flag(heurarm::BRUNA_TUTOR_FIT, env);
+}
+
+// The strongest payload Aura in our HAND (power on its best host). TUTOR FIT's Aura cut needs it: enough
+// Auras to kill through Bruna does NOT make a STRONGER Aura redundant -- a single Colossification swapped by
+// Arcanum Wings onto a creature we have kills turns before Bruna's six mana (held-out 4007 H22: Armory for
+// Colossification + Wings onto Mother of Runes, lost 3 rollouts a turn each when the cut dropped it).
+static int BrunaBestHandAuraPower(const GameState& s, int me, const BrunaCensus& cen)
+{
+    int best = std::numeric_limits<int>::min();
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && IsWishPayloadAura(d->params)) { best = std::max(best, BrunaAuraPower(cen, *d)); }
+    }
+    return best;
+}
+
+// ENOUGH AURAS TO KILL, timing aside: a gatherer we can REACH -- on our battlefield, in hand, or `fetchable`
+// (the sideboard Bruna through a Glittering Wish) -- gathering every payload Aura in our hand AND graveyard
+// (her attack trigger: no mana, so next turn's supply is not asked) reaches the opponent's life with the
+// power of our creatures beside her. When it holds, another Aura is not what is missing; she is.
+static bool BrunaAurasSuffice(const GameState& s, int me, const BrunaCensus& cen, const CardDefinition* fetchable)
+{
+    CardDatabase& db = CardDatabase::Instance();
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    int flat = 0, setter = std::numeric_limits<int>::min(), n = 0;
+    auto add = [&](const Card& c)
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d == nullptr || !IsWishPayloadAura(d->params)) { return; }
+        ++n;
+        flat += d->params.aura_power_bonus;
+        if (d->params.aura_set_base_power >= 0) { setter = std::max(setter, d->params.aura_set_base_power); }
+    };   // colour grants depend on the host: colour_gain below
+    for (const Card& c : ap.hand)      { add(c); }
+    for (const Card& c : ap.graveyard) { add(c); }
+    if (n == 0) { return false; }
+    auto colour_gain = [&](const Card& host)
+    {
+        int g = 0;
+        auto one = [&](const Card& c)
+        {
+            const CardDefinition* d = db.LookupCached(c);
+            if (d == nullptr || !IsWishPayloadAura(d->params)) { return; }
+            for (const CardParams::AuraColorBonus& cb : d->params.aura_color_bonuses)
+            { if (host.HasColor(cb.color)) { g += cb.power; } }
+        };
+        for (const Card& c : ap.hand)      { one(c); }
+        for (const Card& c : ap.graveyard) { one(c); }
+        return g;
+    };
+    auto gain = [&](int base, const Card& host) { return flat + colour_gain(host) + (setter > base ? setter - base : 0); };
+    const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+    int board_power = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == me && q.card.IsCreature()) { board_power += std::max(0, CombatPowerOf(q, s)); } }
+    for (const Permanent& q : s.battlefield)   // a gatherer already ours: her power is in board_power
+    {
+        if (q.controller_index != me || !q.card.IsCreature() || q.def_absent) { continue; }
+        const CardDefinition* d = db.LookupCached(q.card);
+        if (d == nullptr || !d->params.attack_gather_auras) { continue; }
+        int base = q.card.m_power.value_or(0) + DynamicBasePower(*d, s, me);
+        if (q.is_animated) { base += d->params.animate_power; }
+        if (board_power + gain(base, q.card) >= opp_life) { return true; }
+    }
+    auto from_outside = [&](const CardDefinition* d)
+    { return d != nullptr && board_power + d->card.m_power.value_or(0) + gain(d->card.m_power.value_or(0), d->card) >= opp_life; };
+    return from_outside(cen.gatherer_hand_d) || from_outside(fetchable);
+}
+
 // The rule above over `legal` (GenericProvider's list: every fetchable name, sideboard order).
 static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
                                                     const std::vector<std::string>& legal)
@@ -29573,10 +29653,16 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
         }
     }
     const bool hand_lethal = lethal_on_board || lethal_reach;
+    // TUTOR FIT: the Auras already kill once a reachable Bruna gathers them AND the hand holds an Aura at least
+    // as strong as the primary -> no Aura role (the primary and the cheap Aura; the LETHAL NOW cheap Aura
+    // below is a kill THIS turn and stays).
+    const bool fit = BrunaTutorFit();
+    const bool auras_suffice = fit && BrunaAurasSuffice(s, me, cen, bruna_d)
+        && (primary == nullptr || BrunaBestHandAuraPower(s, me, cen) >= primary_pw);
 
     // ---- MANA SHORT (Troyan) -- the shared test (BrunaManaShort): the 5+ spells we mean to cast, plus what
     // this wish would otherwise fetch -- Bruna, and the primary Aura when it is offered.
-    const bool primary_offered = primary != nullptr && !hand_lethal;
+    const bool primary_offered = primary != nullptr && !hand_lethal && !auras_suffice;
     int need_nc = 0, need_cr = 0;
     const bool short_mana = BrunaManaShort(s, me, cen,
         primary_offered ? primary_d->card.m_mana_cost.ManaValue() : 0,
@@ -29590,7 +29676,8 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     // BODY (Linvala): nothing can carry the Auras (no non-dork creature or Aura-wearer on our battlefield,
     // none of mana value <= 3 in hand), and Bruna cannot come down next turn instead. USER 2026-10-07:
     // "if I have the choice to cast bruna or Linvala next turn then we should definitely cast Bruna."
-    const bool need_body = !body_bf && !cheap_body_hand && !bruna_next;
+    // TUTOR FIT: any creature of ours (a mana dork included) is already a target for the Auras.
+    const bool need_body = !body_bf && !cheap_body_hand && !bruna_next && !(fit && creature_bf);
     if (body != nullptr && need_body)                       { out.push_back(*body); }
     // CHEAP BODY (Vexing Shusher), BESIDE Linvala (after her in the order), when the body role is live and
     // `shusher_cond` holds -- see the rule's comment.
@@ -29624,7 +29711,7 @@ static std::vector<std::string> BrunaWishCandidates(const GameState& s, int me,
     const bool cheap_closes = cheap != nullptr && ready > 0 && ready < opp_life && ready + cheap_pw >= opp_life;
     // ...worn by ANY creature of ours, a mana dork included (2026-10-07, train s2002 d3 gi76: Unflinching
     // Courage on Avacyn's Pilgrim with Wings + Greaves in hand was the control's turn-sooner line).
-    if (cheap != nullptr && creature_bf && (cheap_closes || (primary_offered && !cheat))) { out.push_back(*cheap); }
+    if (cheap != nullptr && creature_bf && (cheap_closes || (primary_offered && !cheat && !auras_suffice))) { out.push_back(*cheap); }
     if (regrowth != nullptr && !cheat && payload_hand)      { out.push_back(*regrowth); }
     // NOTHING MISSING (every role filled or skipped): the wish's fetch cannot matter, so ONE name -- the
     // primary Aura (else the first legal name) -- rather than the whole pool.
@@ -29734,7 +29821,7 @@ static std::vector<std::string> BrunaArmoryCandidates(const GameState& s, int me
     for (const Card& c : ap.graveyard) { see(c); }
     for (const Permanent& q : s.battlefield) { if (q.controller_index == me && !q.def_absent) { see(q.card); } }
 
-    const bool primary_ok = top != nullptr && top_pw >= best_out && !cen.is_owned(*top);
+    bool primary_ok = top != nullptr && top_pw >= best_out && !cen.is_owned(*top);
     const bool swap_ok    = swap != nullptr && !cen.swap_bf && cen.swap_hand_mv < 0;
     // Bruna reachable through a Glittering Wish in hand: a non-duplicate gatherer in the sideboard.
     const CardDefinition* wish_bruna = nullptr;
@@ -29747,6 +29834,11 @@ static std::vector<std::string> BrunaArmoryCandidates(const GameState& s, int me
                 && !(d->card.HasSupertype(Supertype::Legendary) && cen.is_owned(c.m_name.str()))) { wish_bruna = d; break; }
         }
     }
+    // TUTOR FIT: no power Aura when the Auras already kill once a reachable Bruna gathers them and the hand
+    // holds one at least as strong.
+    const bool fit = BrunaTutorFit();
+    if (primary_ok && fit && BrunaAurasSuffice(s, me, cen, wish_bruna)
+        && BrunaBestHandAuraPower(s, me, cen) >= top_pw) { primary_ok = false; }
     int need_n = 0, need_cr = 0;
     const bool short_mana = BrunaManaShort(s, me, cen,
         primary_ok ? top_d->card.m_mana_cost.ManaValue() : 0,

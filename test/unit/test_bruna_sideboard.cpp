@@ -533,6 +533,15 @@ struct WishFullWidthArm
     ~WishFullWidthArm() { heurarm::t_arm[heurarm::WISH_FULL_WIDTH] = prev; }
 };
 
+// MTG_BRUNA_TUTOR_FIT (USER 2026-10-11): the cases written for the 2026-10-08 rules pin it OFF.
+struct TutorFitArm
+{
+    std::int8_t prev;
+    explicit TutorFitArm(bool on) : prev(heurarm::t_arm[heurarm::BRUNA_TUTOR_FIT])
+    { heurarm::t_arm[heurarm::BRUNA_TUTOR_FIT] = on ? 1 : 0; }
+    ~TutorFitArm() { heurarm::t_arm[heurarm::BRUNA_TUTOR_FIT] = prev; }
+};
+
 std::vector<std::string> WishCands(const BoardSb& b)
 {
     return BrunaSb().TutorCandidates(b.s, 0, DefSb("Glittering Wish").params);
@@ -690,6 +699,7 @@ TEST_CASE("Glittering Wish rule: the regrowths keep GenericProvider's list; the 
 TEST_CASE("Glittering Wish rule: the BODY is Linvala only, when nothing can carry the Auras and Bruna cannot come down next turn")
 {
     WishFullWidthArm off(false);
+    TutorFitArm fit_off(false);   // the 2026-10-08 rules; TUTOR FIT has its own case below
     // No creature at all, Colossification in hand, two lands (Bruna is six mana away): Linvala joins -- and
     // the cheap Aura does NOT (nothing to wear it). Vexing Shusher joins too: a host-tapping Aura in hand is
     // the CHEAP-BODY condition (adopted 2026-10-08; its own test is below).
@@ -897,6 +907,7 @@ TEST_CASE("Glittering Wish rule: a REGROWTH only when it restores a cheat path (
 TEST_CASE("Glittering Wish rule: a cheat path needs its COLOURS (Arcanum Wings with no blue source is not one)")
 {
     WishFullWidthArm off(false);
+    TutorFitArm fit_off(false);   // the 2026-10-08 rules; TUTOR FIT has its own case below
     // s4004 d3 gi904 shape (held-out, 2026-10-06): Wings + Colossification in hand, Mother of Runes out,
     // five mana next turn but NO blue source -- Wings can be neither cast nor swapped, so there is no
     // cheat path and the cheap second Aura (Unflinching Courage) the control won with is offered.
@@ -941,6 +952,7 @@ TEST_CASE("Glittering Wish rule: a cheat path needs its COLOURS (Arcanum Wings w
 TEST_CASE("Glittering Wish rule: a mana dork wearing an Aura is a BODY; any creature can wear the cheap Aura")
 {
     WishFullWidthArm off(false);
+    TutorFitArm fit_off(false);   // the 2026-10-08 rules; TUTOR FIT has its own case below
     // s7007 d3 gi933 shape (held-out, 2026-10-06): Mythic Proportions on Avacyn's Pilgrim, Wings in hand
     // with no blue source. The control's kill was Wish -> Unflinching Courage for the last 2 points.
     BoardSb b;
@@ -1306,4 +1318,54 @@ TEST_CASE("Open the Armory rule: nothing missing -> ONE name (the top payload), 
     const std::vector<std::string> c = ArmoryCands(b);
     REQUIRE(c.size() == 1);
     CHECK(c.front() == "Colossification");
+}
+
+TEST_CASE("Bruna TUTOR FIT (USER 2026-10-11): roles that do not fit the situation drop out")
+{
+    WishFullWidthArm wish_off(false);
+    ArmoryFullWidthArm armory_off(false);
+    TutorFitArm fit(true);
+    // A mana dork is already a creature the Auras can go on: no body role (the 2026-10-08 rules offered
+    // Linvala + Shusher here -- the BODY case above).
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Avacyn's Pilgrim");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK_FALSE(Has(c, "Linvala, Shield of Sea Gate"));
+        CHECK_FALSE(Has(c, "Vexing Shusher"));
+        CHECK(Has(c, "Bruna, Light of Alabaster"));
+    }
+    // Colossification in hand + Mother of Runes: a fetched Bruna gathering it is lethal (5 + 20 + 1), and the
+    // hand's Aura outclasses any wishable one -> no Aura role (the s4004 gi904 shape in the COLOURS case
+    // above offered Unflinching Courage under the 2026-10-08 rules).
+    {
+        BoardSb b;
+        for (const std::string& n : kNewSideboard) { b.Side(n); }
+        b.Put("Forest");
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Plains");
+        b.Put("Mother of Runes");
+        b.Hand("Forest");
+        b.Hand("Arcanum Wings");
+        b.Hand("Colossification");
+        const std::vector<std::string> c = WishCands(b);
+        CHECK(Has(c, "Bruna, Light of Alabaster"));
+        CHECK_FALSE(Has(c, "Unflinching Courage"));
+        CHECK_FALSE(Has(c, "Almost Perfect"));
+    }
+    // Held-out 4007 H22: Auras enough through Bruna (Conscription x2 + Mythic), but the library's
+    // Colossification is STRONGER than any of them -- Armory for it + Wings onto Mother of Runes kills turns
+    // before Bruna's six mana. The power Aura stays.
+    {
+        BoardSb b = ArmoryBoard();
+        b.Put("Mother of Runes");
+        b.Hand("Eldrazi Conscription");
+        b.Hand("Eldrazi Conscription");
+        b.Hand("Mythic Proportions");
+        b.Hand("Glittering Wish");
+        CHECK(Has(ArmoryCands(b), "Colossification"));
+    }
 }
