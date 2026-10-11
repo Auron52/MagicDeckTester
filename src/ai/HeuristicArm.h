@@ -425,6 +425,7 @@ enum Slot : int
     ATTACK_TAP_ABILITY_KINDS, // MTG_ATTACK_TAP_ABILITY_KINDS the attack-tap ability discount also covers the OTHER {T}-source activation kinds -- Garth One-Eye's conjure (GarthActivate), Krenko's tokens (TapForTokens), Deathrite's exile (GraveyardExileAbility), Stoneforge's put (PutFromHandAbility), Kaldring's replay (GraveyardPlayAbility): each taps its creature, which then cannot attack (FiveColour d0 gi123: an uncharged Garth tap made Unite + Black Lotus read lethal). Default ON; =0 -> ActivatePermAbility only
     ATTACK_TAP_PAYER_ORDER,   // MTG_ATTACK_TAP_PAYER_ORDER  the attack-tap discount spends attacking mana creatures in the EXECUTOR's tap order -- the provider's ManaSourceRank / ManaSourceHoldValue under this plan's attack-turn traits (a subtype scaler first, the flat dorks, a domain grower, Deathrite last) -- not lowest power first (Stompy d0 held-out: Craterhoof read as tapping four 2-power Elves where the payment taps Archdruid + one). Default ON; =0 -> lowest power first
     SOLVE_ATTACK_ONLY_WIN,    // MTG_SOLVE_ATTACK_ONLY_WIN   Solve (d0 + playout leaves) scores the ATTACK-ONLY plan when the board is already lethal: its walk skips the empty selection, so on a lethal board where every castable plan taps an attacker (none projects a win) it cast the best-eval spell and lost the lethal (Snow d0 gi1384: the Frost Augur look). Seeded through consider(); any winning cast plan still replaces it (ties included), so only turns where nothing else wins change. Default ON; =0 -> not scored
+    FB_HOLD_BANKED,           // MTG_FB_HOLD_BANKED the greedy combat pump (ApplyFirebreathing: Scourge {R}, Lathliss {1}{R}) does not tap a BANKED source -- a depletion land (Sandstone Needle: a counter per tap, sacrificed at zero) or a storage land (Mercadian Bazaar, Dwarven Hold: its banked counters, and the +1 it banks if left untapped) -- unless the full pump makes the attack lethal. The pump's "unused mana is lost" premise is false for those sources (dragonstorm d0 s1191687 T3: the Needle sacrificed to a non-lethal pump; s7600233: the Bazaar's bank). Executor + rollout, one helper (Combat.cpp). Default ON; =0 -> every source pumps
     COUNT
 };
 
@@ -811,6 +812,7 @@ inline const char* Name(int slot)
         "MTG_ATTACK_TAP_ABILITY_KINDS",
         "MTG_ATTACK_TAP_PAYER_ORDER",
         "MTG_SOLVE_ATTACK_ONLY_WIN",
+        "MTG_FB_HOLD_BANKED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

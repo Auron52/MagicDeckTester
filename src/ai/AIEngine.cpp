@@ -7125,7 +7125,8 @@ void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
     // are refused for pumps exactly as they are for non-dragon casts.
     const FbPayer payer = FirebreatheTapsEnabled()
         ? +[](GameState& s, const ManaCost& c) -> bool
-          { ManaPool avail = AvailableManaPool(s); return TapForCostShared(s, c, false, &avail, false); }
+          { FbPumpPayHold _fbh(s);   // MTG_FB_HOLD_BANKED (a no-op unless the scope below is on)
+            ManaPool avail = AvailableManaPool(s); return TapForCostShared(s, c, false, &avail, false); }
         : nullptr;
     if (g_play_firebreathe_chooser)
     {
@@ -7148,6 +7149,10 @@ void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
     // (TurnSolver's SimulateCombat) reads the SAME hook, so executor and rollout pump alike.
     const std::vector<int> fb = ResolveProvider(state).FirebreatheActivations(state);
     const int fb_k = fb.empty() ? -1 : fb.front();
+    // MTG_FB_HOLD_BANKED: a non-lethal pump keeps the depletion / storage lands (see Combat.h). The
+    // human-chooser path above is left to the human. Lockstep twin in the rollout's SimulateCombat.
+    FbBankedHoldScope _fb_banked(g_play_firebreathe_chooser == nullptr
+                                 && FbHoldBankedThisCombat(state, attacker_indices, payer));
     if (fb_k < 0) { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, std::numeric_limits<int>::max(), payer); }
     else          { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k, payer); }
 }
