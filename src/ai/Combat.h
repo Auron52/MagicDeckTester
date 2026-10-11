@@ -16,6 +16,7 @@
 // so it cannot move CountExalted or the attacker count -- and passing the bonus in preserves each
 // side's sequence exactly rather than silently picking one.
 #include "../core/GameState.h"
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -39,3 +40,51 @@ struct CombatDamageResult
 // only when exactly one creature attacks).
 CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>& atk_idx,
                                        int exalted_bonus, bool collect_descs);
+
+// ---- MTG_FB_HOLD_BANKED: the combat pump keeps BANKED mana unless the pump is lethal ----------------
+//
+// ApplyFirebreathing spends ALL leftover mana on attacker pumps, on the premise that combat is the
+// turn's last mana use, so mana left unspent is lost. That premise is false for a BANKED source:
+//   * a depletion land (Sandstone Needle, Peat Bog): each tap spends a counter, and the land is
+//     sacrificed at zero -- the pump buys +2 damage with half a land;
+//   * a storage land (Mercadian Bazaar, Dwarven Hold): the tap releases counters banked over turns,
+//     and an untapped storage land banks +1 at end of turn.
+// So a NON-lethal pump holds those sources back; a pump that makes the attack lethal still spends
+// everything (the game ends). Lethality is judged on a COPY: the full pump with the caller's own
+// payer, then the shared ResolveCombatDamage. The later declare-attackers triggers (Skyhunter dig,
+// Flinger fling) are not replayed in the probe -- the conservative direction is only possible for a
+// deck that holds both such a trigger and a banked land, and none does.
+// dragonstorm d0 s1191687 T3 (the Needle sacrificed to a non-lethal Scourge pump; kill T7 vs the old
+// T6) and s7600233 (the Bazaar's bank pumped away a turn before the storm needed it).
+
+// The pump payer's type (the same alias SpellEffects.h declares; redeclaring an alias to the same type is
+// well-formed, and it keeps this header off SpellEffects.h).
+using FbPayer = bool (*)(GameState&, const ManaCost&);
+
+// Bits (battlefield index < 64) of the active player's UNTAPPED banked sources.
+std::uint64_t FbBankedSourceMask(const GameState& state);
+
+// Should this combat's pump hold the banked sources? Lever on, a banked source untapped, and the full
+// pump (with `payer`, on a copy) NOT lethal. False (byte-identical) whenever no banked source is up.
+bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer);
+
+// The hold is published per thread for the duration of one pump (both sites) ...
+struct FbBankedHoldScope
+{
+    bool prev;
+    explicit FbBankedHoldScope(bool on);
+    ~FbBankedHoldScope();
+    FbBankedHoldScope(const FbBankedHoldScope&)            = delete;
+    FbBankedHoldScope& operator=(const FbBankedHoldScope&) = delete;
+};
+
+// ... and each pump PAYMENT installs it as a pay hold (recomputed per payment, so a pay-sac erase that
+// shifts battlefield indices cannot misdirect it). A no-op unless an FbBankedHoldScope is on.
+struct FbPumpPayHold
+{
+    std::uint64_t prev;
+    explicit FbPumpPayHold(const GameState& s);
+    ~FbPumpPayHold();
+    FbPumpPayHold(const FbPumpPayHold&)            = delete;
+    FbPumpPayHold& operator=(const FbPumpPayHold&) = delete;
+};
