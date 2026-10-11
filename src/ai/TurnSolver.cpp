@@ -45573,8 +45573,11 @@ static void SimulateCombat(GameState& state)
         // lands and projects an illegal double-spend line the executor then realises.
         const FbPayer fb_payer = FirebreatheTapsEnabled()
             ? +[](GameState& s, const ManaCost& c) -> bool
-              { return TapForCostDirect(s, c, /*for_creature=*/false); }
+              { FbPumpPayHold _fbh(s);   // MTG_FB_HOLD_BANKED (a no-op unless the scope below is on)
+                return TapForCostDirect(s, c, /*for_creature=*/false); }
             : nullptr;
+        // MTG_FB_HOLD_BANKED: a non-lethal pump keeps the depletion / storage lands (Combat.h).
+        FbBankedHoldScope _fb_banked(FbHoldBankedThisCombat(state, atk_idx, fb_payer));
         if (fb_k < 0) { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state),
                                            std::numeric_limits<int>::max(), fb_payer); }
         else          { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state), fb_k,

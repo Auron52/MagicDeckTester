@@ -140,6 +140,15 @@ inline bool DragonstormIrencragCloserOn()
     return heurarm::Flag(heurarm::DRAGONSTORM_IRENCRAG_CLOSER, env_on);
 }
 
+// MTG_FB_HOLD_BANKED (DEFAULT ON; =0 disables) -- the combat pump holds BANKED sources (depletion and
+// storage lands) back unless the full pump is lethal. Read by both pump sites (AIEngine::Firebreathe and
+// the rollout's SimulateCombat) through FbHoldBankedThisCombat (Combat.cpp) -> lockstep.
+inline bool FbHoldBankedOn()
+{
+    static const bool env_on = EnvOn("MTG_FB_HOLD_BANKED", true);
+    return heurarm::Flag(heurarm::FB_HOLD_BANKED, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

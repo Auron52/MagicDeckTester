@@ -4,6 +4,10 @@
 #include "../cards/CardDatabase.h"
 #include "../core/GameLogger.h"
 #include "../core/SpellEffects.h"
+#include "../core/DamageEvents.h"   // dmgev::t_pay_hold (MTG_FB_HOLD_BANKED)
+#include "EngineFlags.h"
+#include "ManaPayment.h"           // AvailableManaPool
+#include <limits>
 
 // LOWER BOUND on the combat damage `p` would deal if it attacked right now, mirroring the base_pw
 // build in ResolveCombatDamage below. Two terms are deliberately omitted, BOTH of which only ever
@@ -269,3 +273,51 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     }
     return out;
 }
+
+// ---- MTG_FB_HOLD_BANKED (see Combat.h) -------------------------------------------------------------
+
+static thread_local bool t_fb_hold_banked = false;
+
+std::uint64_t FbBankedSourceMask(const GameState& state)
+{
+    std::uint64_t m = 0;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n && i < 64; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        bool banked = d->params.storage_land || d->params.enters_tapped_with_depletion > 0;
+        if (!banked)
+        { for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { banked = true; break; } } }
+        if (banked) { m |= (1ull << i); }
+    }
+    return m;
+}
+
+bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer)
+{
+    if (payer == nullptr || atk_idx.empty() || !FbHoldBankedOn()) { return false; }
+    if (FbBankedSourceMask(state) == 0) { return false; }
+    // Lethal with EVERYTHING? The full pump on a copy, the caller's own payer (no hold is live yet),
+    // then the shared damage resolution. Speculative: no play-viewer events from the probe.
+    TapSpeculationScope _spec;
+    GameState probe = state;
+    std::vector<int> pidx = atk_idx;
+    const int active = probe.active_player_index;
+    ApplyFirebreathing(probe, active, pidx, AvailableManaPool(probe), std::numeric_limits<int>::max(), payer);
+    const int exalted = (static_cast<int>(pidx.size()) == 1) ? CountExalted(probe.battlefield, active) : 0;
+    ResolveCombatDamage(probe, pidx, exalted, /*collect_descs=*/false);
+    const bool lethal = probe.Opponent().life <= 0 || dmgev::OpponentLostRaw(probe);
+    return !lethal;
+}
+
+FbBankedHoldScope::FbBankedHoldScope(bool on) : prev(t_fb_hold_banked) { t_fb_hold_banked = on; }
+FbBankedHoldScope::~FbBankedHoldScope() { t_fb_hold_banked = prev; }
+
+FbPumpPayHold::FbPumpPayHold(const GameState& s) : prev(dmgev::t_pay_hold)
+{
+    if (t_fb_hold_banked) { dmgev::t_pay_hold = prev | FbBankedSourceMask(s); }
+}
+FbPumpPayHold::~FbPumpPayHold() { dmgev::t_pay_hold = prev; }
