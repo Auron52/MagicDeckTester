@@ -14369,6 +14369,16 @@ static bool ZeroPowerEquipFreeOnlyEnabled()
     return heurarm::Flag(heurarm::ZERO_POWER_EQUIP_FREE_ONLY, env_on);
 }
 
+// MTG_EQUIP_POWER_FIRST -- DEFAULT OFF; =1 enables. Offer the equips that threaten lethal before
+// the ones that do not, ranked by damage PER MANA (the USER's Gauntlets-over-Hammer tiebreak). An
+// ORDERING, never a prune: nothing is removed, so every line stays findable and the lever is inert
+// at an unlimited budget. Full argument at the ordering pass in CollectActions.
+static bool EquipPowerFirstEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EQUIP_POWER_FIRST");            // DEFAULT OFF
+    return heurarm::Flag(heurarm::EQUIP_POWER_FIRST, env_on);
+}
+
 // MTG_EQUIP_EQCOST_DOMINANCE -- DEFAULT OFF; =1 enables. The USER's 2026-10-11 rule: at EQUAL
 // equip cost the equipment that does strictly more can always be taken, because there is no mana
 // trade left for efficiency to win. Full argument, the componentwise partial order and the
@@ -24008,13 +24018,68 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         && d->params.equip_min_power > 0) { return 1; }
                     return 0;
                 };
+                // MTG_EQUIP_POWER_FIRST (DEFAULT OFF): within the ORDINARY class, offer the equips
+                // that actually threaten lethal before the ones that do not.
+                //
+                // USER, 2026-10-11: *"I would prioritize paying equip costs for Gauntlets because
+                // it will always do enough damage here except perhaps over a hammer equip"*, and
+                // then the tiebreak: *"But hammer is so expensive to equip that the gauntlets will
+                // generally be what you choose."* So the ranking is damage PER MANA, not raw
+                // damage -- a Colossus Hammer is +10 for equip {8} while a Golem-Skin Gauntlets is
+                // +1 per Equipment already on the host for equip {2}, and on the boards this deck
+                // actually reaches the Gauntlets is the better buy.
+                //
+                // THIS IS AN ORDERING, NOT A PRUNE, and that is why it is allowed to be heuristic
+                // at all. Nothing is removed: every equip still appears, so every line stays
+                // findable and the lever is inert at an unlimited budget by construction (the
+                // search exhausts the menu whatever order it is in). What it changes is WHICH line
+                // a BINDING budget reaches first -- the sanctioned shape under "a budget may
+                // re-price work, it may not make a line unfindable". Subset apply order ==
+                // candidate order, so this is also the order the plans are built in.
+                //
+                // WHY IT CAN SHOW UP AS A COST WIN and not only a quality one: on this deck cost
+                // IS games that do not win (a hand that goes off wins turn 3 for nothing; one that
+                // does not pays all 8 turns at full price). Reaching the lethal assignment earlier
+                // fires the go-off cut earlier, which collapses the frame instead of enumerating
+                // it. The same coupling the LATEMAIN_UNITS refutation measured from the other
+                // direction -- pricing the detector cost 1.062x AND moved 470 win turns later.
+                //
+                // Static, from the card's own params -- no board scan, because this pass runs once
+                // per CollectActions on the hot path and the per-host marginal is recomputed
+                // properly a few lines below by EquipAttachDeltaFor for the rankings that need it.
+                auto power_rank = [&](const CardDefinition* d) -> int
+                {
+                    if (!EquipPowerFirstEnabled()) { return 0; }
+                    const CardParams& p = d->params;
+                    // A per-equipment or per-artifact scaler has no fixed bonus, and on an
+                    // equipment deck its marginal is the board's width -- the Gauntlets case the
+                    // user names. Ranked top, ahead of any flat bonus.
+                    if (p.equip_scale_power_per_equipment > 0
+                        || p.equip_scale_power_per_artifact > 0) { return -1000; }
+                    if (p.equip_power_bonus <= 0) { return 0; }      // shields: no threat, last
+                    // Damage per mana, scaled to stay integral; cheaper equips win ties. A {0}
+                    // equip cost cannot happen here (the AUTO-EQUIP collapse has already erased
+                    // the free groups), but guard it anyway rather than divide by zero.
+                    const int cost = p.equip_cost_generic > 0 ? p.equip_cost_generic : 1;
+                    return -(p.equip_power_bonus * 16) / cost;
+                };
                 for (int pass = 0; pass < 3; ++pass)
                 {
+                    // Collect this class, then STABLE-sort it by rank. Stability is what keeps the
+                    // flag byte-identical when off: every rank is 0, so the sort is a no-op and
+                    // the original order survives intact.
+                    std::vector<std::size_t> idx;
                     for (std::size_t i = 0; i < equips.size(); ++i)
                     {
                         if (order_class(equips[i].first) != pass) { continue; }
-                        eq2.push_back(equips[i]); at2.push_back(attached_to[i]);
+                        idx.push_back(i);
                     }
+                    std::stable_sort(idx.begin(), idx.end(),
+                                     [&](std::size_t a, std::size_t b)
+                                     { return power_rank(equips[a].first)
+                                            < power_rank(equips[b].first); });
+                    for (std::size_t i : idx)
+                    { eq2.push_back(equips[i]); at2.push_back(attached_to[i]); }
                 }
                 equips.swap(eq2); attached_to.swap(at2);
             }
