@@ -1334,6 +1334,8 @@ static std::atomic<long long> g_fch_groups{0};   // MTG_FREE_CAST_HOIST: {0}-cas
 // MTG_EQUIP_EQCOST_DOMINANCE: (equip, host) pairs dropped because another unattached battlefield
 // equipment costs the SAME to equip onto that host and does >= on every visible dimension.
 static std::atomic<long long> g_eqdom_drops{0};
+// MTG_EQUIP_ONE_HOST: frames where a single rider host was chosen and the host axis collapsed.
+static std::atomic<long long> g_onehost_frames{0};
 // BuildFoldPrefixMap arming -- see the disarm note there. Printed under MTG_ROLLOUT_STATS.
 static std::atomic<long long> g_fold_armed{0}, g_fold_disarm_auto{0}, g_fold_disarm_ind{0};
 inline bool FreeEquipDiagOn() { static const bool v = EnvOn("MTG_FREE_EQUIP_DIAG"); return v; }
@@ -1345,6 +1347,8 @@ inline void FreeEquipDiagNoteFreeCast()
 { if (FreeEquipDiagOn()) { g_fch_groups.fetch_add(1, std::memory_order_relaxed); } }
 inline void FreeEquipDiagNoteEqcostDrop()
 { if (FreeEquipDiagOn()) { g_eqdom_drops.fetch_add(1, std::memory_order_relaxed); } }
+inline void FreeEquipDiagNoteOneHost()
+{ if (FreeEquipDiagOn()) { g_onehost_frames.fetch_add(1, std::memory_order_relaxed); } }
 
 static std::atomic<long long> g_iw_subsets{0}, g_iw_subsets_with_payoff{0};
 static std::mutex g_iw_mu;
@@ -2166,6 +2170,10 @@ namespace
             if (g_eqdom_drops.load() > 0)
             {
                 std::cerr << "EQUIP_EQCOST_DOMINANCE dropped_pairs=" << g_eqdom_drops.load() << "\n";
+            }
+            if (g_onehost_frames.load() > 0)
+            {
+                std::cerr << "EQUIP_ONE_HOST frames=" << g_onehost_frames.load() << "\n";
             }
             if (g_fold_armed.load() > 0 || g_fold_disarm_auto.load() > 0
                 || g_fold_disarm_ind.load() > 0)
@@ -14126,6 +14134,16 @@ static bool ZeroPowerEquipFreeOnlyEnabled()
     return heurarm::Flag(heurarm::ZERO_POWER_EQUIP_FREE_ONLY, env_on);
 }
 
+// MTG_EQUIP_ONE_HOST -- DEFAULT OFF; =1 enables. The USER's 2026-10-11 ruling: with no double
+// strike, choose exactly ONE creature (not summoning-sick preferred) and put every rider on it.
+// Strictly stronger than the per-equipment width caps, which still let each equipment pick its own
+// host. Gated on FrameHasDoubleStrikeSource. Full argument at the selection in CollectActions.
+static bool EquipOneHostEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EQUIP_ONE_HOST");               // DEFAULT OFF
+    return heurarm::Flag(heurarm::EQUIP_ONE_HOST, env_on);
+}
+
 // MTG_EQUIP_POWER_FIRST -- DEFAULT OFF; =1 enables. Offer the equips that threaten lethal before
 // the ones that do not, ranked by damage PER MANA (the USER's Gauntlets-over-Hammer tiebreak). An
 // ORDERING, never a prune: nothing is removed, so every line stays findable and the lever is inert
@@ -23990,6 +24008,86 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                 }
             }
+            // ---- ONE HOST FOR EVERY RIDER (MTG_EQUIP_ONE_HOST, DEFAULT OFF) -------------------
+            //
+            // USER RULING 2026-10-11: *"There is no double strike so we should always choose exactly
+            // one creature to equip (not summoning-sick preferred) and put everything on that
+            // creature."* And on its standing: *"That is one of the easiest decisions possible."*
+            //
+            // THIS IS STRICTLY STRONGER THAN THE WIDTH CAPS, and the difference is the whole point.
+            // MTG_EQUIP_HOST_WIDTH / MTG_EQUIP_RIDER_WIDTH cap how many hosts EACH equipment may be
+            // offered, so with both at 1 every equipment still picks its OWN top host and the board
+            // can still end up with the pile split across two creatures. This removes the host axis
+            // instead of narrowing it: one creature is chosen for the frame and every rider is
+            // offered only onto it. The menu is (equipment x hosts) PAIRS and the odometer powersets
+            // take/skip over them, so the host count is an EXPONENT on the equip axis -- collapsing
+            // it to 1 is a radix removal, not a trim.
+            //
+            // WHY IT IS DOMINANCE ON THIS LIST AND NOT A PROJECTION. Two independent reasons, both
+            // checked rather than argued:
+            //   * NO DOUBLE STRIKE. Splitting only beats concentrating when some host multiplies the
+            //     rider, and double strike is the multiplier this engine models. Gated on
+            //     FrameHasDoubleStrikeSource -- the SAME predicate the metalcraft hoist already uses
+            //     for the same precondition -- so a frame holding Kor Duelist or Balan is untouched.
+            //     On KittyEquipment v3 the only double_strike_while_equipped card near the list, Kor
+            //     Duelist, is SIDEBOARD ONLY.
+            //   * GOLEM-SKIN GAUNTLETS MAKES CONCENTRATION STRICTLY BETTER, not merely equal. It
+            //     grants +1/+0 per Equipment attached TO ITS OWN HOST and v3 runs four, so every
+            //     piece moved off the pile costs each Gauntlets a point. With G Gauntlets and E
+            //     pieces on one host the bonus is G*E, which is superadditive: splitting E across
+            //     two hosts strictly reduces the total. Kemba's per-equipment upkeep token points
+            //     the same way.
+            // AND THE CONVERSE IS STRUCTURAL, not merely unmeasured. USER 2026-10-11: *"There is
+            // never a reason in goldfishing to spread it out. Even in real play you probably don't
+            // want to a good chunk of the time because this weakens the Gauntlets. (but you may
+            // occasionally in place of evasion or to protect a creature)"* -- and BOTH named
+            // real-play reasons require an opponent that BLOCKS or REMOVES. This engine's opponent
+            // does neither (DecisionProvider.h: "correct for a goldfish with no blockers"; there is
+            // no blocker-declaration path in the core engine at all), so spreading has no payoff
+            // the estimand can even express. In a goldfish nothing blocks, total damage is the SUM
+            // of powers, and a flat rider is worth the same wherever it sits -- which is exactly
+            // what leaves the two multipliers above as the only axes that care, and both favour one
+            // host. So this is not "a dominance that happens to hold for v3"; for the goldfish it
+            // is complete, and the double-strike gate is what keeps it honest for any other list.
+            //
+            // "NOT SUMMONING-SICK PREFERRED" IS THE RANKING, in the user's own order: a creature
+            // that cannot attack this turn banks the rider for later, so prefer one that can
+            // (!fresh || haste), then the creature already carrying the most Equipment (the
+            // Gauntlets argument above compounds on the existing pile), then the richer body, then
+            // the lowest card number so the choice is deterministic. If NOTHING can attack, the same
+            // ranking still picks one host and still concentrates -- a winless turn is exactly when
+            // building a single pile for next turn is right.
+            //
+            // CARVE-OUTS, ENFORCED RATHER THAN ARGUED. The rule binds RIDERS only:
+            //   * a HASTE equip is exempt, because its benefit IS the choice of creature -- hasting
+            //     a summoning-sick body is the one case where a second host is the whole point;
+            //   * shroud granters and the unpark move keep every host (the parking dance needs
+            //     somewhere to park, and a shrouded host makes every later equip an illegal target);
+            //   * equip_sacrifices_prior_host (Grafted Wargear) keeps every host by design, since
+            //     its static ranking cannot price the loss of the former host;
+            //   * open sets are never narrowed (MTG_EQUIP_ALL_HOSTS, MTG_UNPRUNED/equiphost, human
+            //     play) -- the viewer must offer the human every legal pair.
+            // A MOVE toward the chosen host is deliberately still offered: consolidating a piece off
+            // another creature onto the pile is literally "put everything on that creature".
+            int one_host_id = 0;
+            if (EquipOneHostEnabled() && !s_eqdom_open && !hosts.empty()
+                && !FrameHasDoubleStrikeSource(state, actions))
+            {
+                long long best_key = -1;
+                for (const Host& h : hosts)
+                {
+                    if (h.in_hand || h.id == 0) { continue; }
+                    const int att = CountEquipmentAttachedTo(state, state.active_player_index, h.id);
+                    // can-attack dominates, then the existing pile, then the body. Packed so the
+                    // comparison is one integer and the tiebreak order is explicit.
+                    const long long key = (static_cast<long long>((!h.fresh || h.haste) ? 1 : 0) << 40)
+                                        | (static_cast<long long>(att & 0xFFFF) << 24)
+                                        | static_cast<long long>(std::max(0, std::min(h.score, 0xFFFF)) << 8);
+                    if (key > best_key || (key == best_key && h.id < one_host_id))
+                    { best_key = key; one_host_id = h.id; }
+                }
+                if (one_host_id != 0) { FreeEquipDiagNoteOneHost(); }
+            }
             for (std::size_t e = 0; e < equips.size(); ++e)
             {
                 const CardDefinition* ed = equips[e].first;
@@ -24033,6 +24131,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (!eq_dominated.empty()
                         && eq_dominated[e * hosts.size()
                                         + static_cast<std::size_t>(&h - hosts.data())])
+                    { continue; }
+                    // ONE HOST for every rider (see the selection above). Placed AFTER the haste
+                    // push deliberately: a haste equip's benefit is precisely the choice of
+                    // creature, so its ranking must survive the collapse.
+                    if (one_host_id != 0 && h.id != one_host_id
+                        && !ed->params.equip_grants_shroud
+                        && !ed->params.equip_sacrifices_prior_host
+                        && !ed->params.equip_grants_haste)
                     { continue; }
                     const int rd = rider_delta(ed, h.id);
                     if (rd > 0) { ranked_rider.push_back({ rd, h.id }); }
@@ -24223,6 +24329,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                         + static_cast<std::size_t>(&h - hosts.data())])
                     { continue; }
                     const bool haste_benefit = ed->params.equip_grants_haste && h.fresh && !h.haste;
+                    // ONE HOST, applied at the emission gate too. Same reason the dominance mask is
+                    // applied twice: the `kept` gate below re-admits hosts through the unpark and
+                    // Kemba exceptions, which bypass the rankings entirely. A haste-benefit pair is
+                    // exempt -- that IS the second-host case -- as are the shroud and re-host
+                    // equipment, whose own exceptions need somewhere else to go.
+                    if (one_host_id != 0 && h.id != one_host_id && !haste_benefit
+                        && !ed->params.equip_grants_shroud
+                        && !ed->params.equip_sacrifices_prior_host)
+                    { continue; }
                     if (!open_all)
                     {
                         // Offer only an equip that DOES something, from the width-capped rankings
