@@ -13862,12 +13862,22 @@ static bool EquipCopyCollapseEnabled()
 }
 
 // MTG_EQUIP_COPY_XNAME -- class fungible equip copies by BEHAVIOURAL IDENTITY rather than by card
-// name, so two Equipment that differ only in their name share one class. Default OFF: it widens the
-// fold's reach, and the parent collapse is already documented as able to move play digests (the
-// surviving representative may be a different physical copy). See the heurarm slot.
+// name, so two Equipment that differ only in their name share one class. DEFAULT ON since
+// 2026-10-11; `=0` disables.
+//
+// ADOPTED AS AN IDENTITY FOLD, which is the strongest evidence shape available: over 5,000 paired
+// rollouts it moved ZERO win turns (changed=0) while measuring 0.924x alone -- i.e. it removes work
+// without changing a single answer, exactly what "COLLAPSE WASTED SEARCH UNCONDITIONALLY" is for.
+// Gate 1 (fold twin recoverability, MTG_FOLD_VERIFY + MTG_BF_CENSUS) PASSED non-vacuously:
+// 545,167 rejected selections, UNRECOVERABLE=0, every one with a legal enumerable twin. Gate 2
+// PASSED 6 of 6 cells at b768. Note the earlier `changed=0` is what makes the "surviving
+// representative may be a different physical copy" caveat above harmless in practice -- measured,
+// not assumed. It contributes nothing in COMBINATION (the adopted levers overlap on the same
+// equipment menu), and is kept anyway per the collapse doctrine: wasted work is wasted work, and
+// every folded branch sharpens the enumeration census that finds the next defect.
 static bool EquipCopyXnameEnabled()
 {
-    static const bool env = EnvOn("MTG_EQUIP_COPY_XNAME");
+    static const bool env = EnvOn("MTG_EQUIP_COPY_XNAME", true);          // DEFAULT ON
     return heurarm::Flag(heurarm::EQUIP_COPY_XNAME, env);   // per-JOB so one pooled batch runs both arms
 }
 
@@ -14390,44 +14400,77 @@ static bool ZeroPowerEquipFreeOnlyEnabled()
     return heurarm::Flag(heurarm::ZERO_POWER_EQUIP_FREE_ONLY, env_on);
 }
 
-// MTG_EQUIP_ONE_HOST -- DEFAULT OFF; =1 enables. The USER's 2026-10-11 ruling: with no double
-// strike, choose exactly ONE creature (not summoning-sick preferred) and put every rider on it.
-// Strictly stronger than the per-equipment width caps, which still let each equipment pick its own
-// host. Gated on FrameHasDoubleStrikeSource. Full argument at the selection in CollectActions.
+// MTG_EQUIP_ONE_HOST -- DEFAULT ON since 2026-10-11; `=0` disables. The USER's 2026-10-11 ruling:
+// with no double strike, choose exactly ONE creature (not summoning-sick preferred) and put every
+// rider on it. Strictly stronger than the per-equipment width caps, which still let each equipment
+// pick its own host. Gated on FrameHasDoubleStrikeSource. Full argument at the selection in
+// CollectActions.
+//
+// ADOPTED ON THE EVIDENCE: Gate 2 (large-budget completeness) PASSED on 6 of 6 regressed cells at
+// b48, b192 AND b768 -- 256x the shipped b3 -- so it re-prices work without making any line
+// unfindable. Alone it measures 1.032x (it spends the freed budget going deeper, which the collapse
+// doctrine says to keep anyway); in combination it is the biggest single contributor to the adopted
+// set. 4 of 5,000 paired rollouts moved, 4 better / 0 worse, 0 into a no-win.
+// It beat the engine's OWN width caps (rw1 0.871x and w11 0.831x) on BOTH axes, because those two
+// each removed 5 lines into a no-win while this removes none.
 static bool EquipOneHostEnabled()
 {
-    static const bool env_on = EnvOn("MTG_EQUIP_ONE_HOST");               // DEFAULT OFF
+    static const bool env_on = EnvOn("MTG_EQUIP_ONE_HOST", true);         // DEFAULT ON
     return heurarm::Flag(heurarm::EQUIP_ONE_HOST, env_on);
 }
 
-// MTG_EQUIP_POWER_FIRST -- DEFAULT OFF; =1 enables. Offer the equips that threaten lethal before
-// the ones that do not, ranked by damage PER MANA (the USER's Gauntlets-over-Hammer tiebreak). An
-// ORDERING, never a prune: nothing is removed, so every line stays findable and the lever is inert
-// at an unlimited budget. Full argument at the ordering pass in CollectActions.
+// MTG_EQUIP_POWER_FIRST -- DEFAULT OFF, AND DELIBERATELY NOT ADOPTED 2026-10-11. =1 enables.
+// Offer the equips that threaten lethal before the ones that do not, ranked by damage PER MANA.
+//
+// *** THE "INERT AT UNLIMITED BUDGET" CLAIM IN THIS COMMENT WAS FALSE, AND GATE 2 DISPROVED IT. ***
+// The reasoning was: an ordering removes nothing, so every line stays findable. That is wrong when
+// the ordering sits in FRONT OF A FIXED-WIDTH CAP -- the cap then drops whatever the reorder pushed
+// past the width, so the loss is BUDGET-INDEPENDENT and raising the budget never recovers it.
+// Measured: sample892 and sample925 are each +1 win turn and FLAT across b48 -> b192 -> b768 (a 16x
+// and then 256x budget range). A re-pricing narrows as the budget grows; a flat gap is a REMOVED
+// LINE, which CLAUDE.md forbids outright ("a budget may re-price work, it may not make a line
+// unfindable").
+//
+// It is also not what was asked for. USER, 2026-10-11: *"My ideas were actual prunes, not
+// ordering."* The prune the ruling actually named is MTG_EQUIP_PARETO_DOMINANCE, which is adopted.
+// Keep this OFF. If it is ever revisited, the only legitimate shape is a budget-staged admission
+// order (a WAVE), not a pre-cap reorder -- see the waves paragraph in CLAUDE.md.
 static bool EquipPowerFirstEnabled()
 {
-    static const bool env_on = EnvOn("MTG_EQUIP_POWER_FIRST");            // DEFAULT OFF
+    static const bool env_on = EnvOn("MTG_EQUIP_POWER_FIRST");            // DEFAULT OFF -- lossy
     return heurarm::Flag(heurarm::EQUIP_POWER_FIRST, env_on);
 }
 
-// MTG_EQUIP_EQCOST_DOMINANCE -- DEFAULT OFF; =1 enables. The USER's 2026-10-11 rule: at EQUAL
-// equip cost the equipment that does strictly more can always be taken, because there is no mana
-// trade left for efficiency to win. Full argument, the componentwise partial order and the
-// comparability carve-outs are at the mask's construction in CollectActions.
-// MTG_EQUIP_PARETO_DOMINANCE -- DEFAULT OFF; widens MTG_EQUIP_EQCOST_DOMINANCE's cost condition
-// from "equal" to "no more expensive". Inert unless EQCOST_DOMINANCE is also on. The user's own
-// headline example (Gauntlets equip {2} against the shields' {3}) is UNEQUAL cost, so the
-// equal-only rule cannot make the one comparison the ruling named first. Full argument, including
-// why it preserves the Spidersilk counter-example, at the comparison in CollectActions.
+// MTG_EQUIP_EQCOST_DOMINANCE -- DEFAULT ON since 2026-10-11; `=0` disables. The USER's 2026-10-11
+// rule: at EQUAL equip cost the equipment that does strictly more can always be taken, because
+// there is no mana trade left for efficiency to win. Full argument, the componentwise partial order
+// and the comparability carve-outs are at the mask's construction in CollectActions.
+//
+// MTG_EQUIP_PARETO_DOMINANCE -- DEFAULT ON since 2026-10-11; `=0` disables. Widens
+// EQCOST_DOMINANCE's cost condition from "equal" to "no more expensive", and is inert unless
+// EQCOST_DOMINANCE is also on. The user's own headline example (Gauntlets equip {2} against the
+// shields' {3}) is UNEQUAL cost, so the equal-only rule could never make the one comparison the
+// ruling named FIRST. Full argument, including why it preserves the Spidersilk counter-example
+// (cheaper-but-equal is deliberately NOT dominance -- `gt` requires a strict improvement), at the
+// comparison in CollectActions.
+//
+// ADOPTED ON THE EVIDENCE, AFTER A REAL BUG WAS FIXED FIRST. The widening fires 2.24x more than
+// equal-cost alone (dropped_pairs 4.00M -> 8.94M) and is worth ~4.5% on its own (eqd 0.760x ->
+// eqdp 0.726x). But Gate 2 initially FAILED one cell for BOTH arms -- sample2397, +1 win turn flat
+// to b768 -- which was NOT a trade to accept: it was the dominance claim being wrong, because
+// comparable() judged Golem-Skin Gauntlets by a power delta that cannot see
+// equip_scale_power_per_equipment. Fixed in c098a10f by sharing ONE rider predicate
+// (PowerDeltaCanPriceEquip) with PaidPowerlessEquipWithheld. AFTER the fix: 6 of 6 cells PASS at
+// b48, b192 and b768 for eqd, eqdp and the full adopted set. 3 of 5,000 paired rollouts move.
 static bool EquipParetoDominanceEnabled()
 {
-    static const bool env_on = EnvOn("MTG_EQUIP_PARETO_DOMINANCE");       // DEFAULT OFF
+    static const bool env_on = EnvOn("MTG_EQUIP_PARETO_DOMINANCE", true); // DEFAULT ON
     return heurarm::Flag(heurarm::EQUIP_PARETO_DOMINANCE, env_on);
 }
 
 static bool EquipEqcostDominanceEnabled()
 {
-    static const bool env_on = EnvOn("MTG_EQUIP_EQCOST_DOMINANCE");       // DEFAULT OFF
+    static const bool env_on = EnvOn("MTG_EQUIP_EQCOST_DOMINANCE", true); // DEFAULT ON
     return heurarm::Flag(heurarm::EQUIP_EQCOST_DOMINANCE, env_on);
 }
 
